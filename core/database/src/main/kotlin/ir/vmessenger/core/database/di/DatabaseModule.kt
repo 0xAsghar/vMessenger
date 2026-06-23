@@ -9,8 +9,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import ir.vmessenger.core.database.VMessengerDatabase
 import ir.vmessenger.core.database.dao.AppMetadataDao
-import net.sqlcipher.database.SQLiteDatabase
-import net.sqlcipher.database.SupportFactory
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
+import java.nio.charset.StandardCharsets
 import javax.inject.Singleton
 
 @Module
@@ -22,7 +22,7 @@ object DatabaseModule {
     @Singleton
     fun provideDatabasePassphrase(): ByteArray {
         // Phase 2 replaces this with a Keystore-wrapped key.
-        return SQLiteDatabase.getBytes("vmessenger-phase1-placeholder".toCharArray())
+        return "vmessenger-phase1-placeholder".toByteArray(StandardCharsets.UTF_8)
     }
 
     @Provides
@@ -31,7 +31,7 @@ object DatabaseModule {
         @ApplicationContext context: Context,
         passphrase: ByteArray,
     ): VMessengerDatabase {
-        val factory = SupportFactory(passphrase)
+        val factory = SupportOpenHelperFactory(passphrase)
         return Room.databaseBuilder(
             context,
             VMessengerDatabase::class.java,

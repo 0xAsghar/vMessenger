@@ -6,7 +6,7 @@ composeBom = "2024.12.01"
 hilt = "2.52"
 hiltNavigationCompose = "1.2.0"
 room = "2.6.1"
-sqlcipher = "4.5.4"
+sqlcipher = "4.16.0"
 protobuf = "4.28.3"
 protobufPlugin = "0.9.4"
 navigation = "2.8.5"
@@ -60,7 +60,7 @@ room-gradle-plugin = { group = "androidx.room", name = "room-gradle-plugin", ver
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
-sqlcipher = { group = "net.zetetic", name = "android-database-sqlcipher", version.ref = "sqlcipher" }
+sqlcipher = { group = "net.zetetic", name = "sqlcipher-android", version.ref = "sqlcipher" }
 sqlite = { group = "androidx.sqlite", name = "sqlite", version.ref = "room" }
 
 protobuf-gradle-plugin = { group = "com.google.protobuf", name = "protobuf-gradle-plugin", version.ref = "protobufPlugin" }

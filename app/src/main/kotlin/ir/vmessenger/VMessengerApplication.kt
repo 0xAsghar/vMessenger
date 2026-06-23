@@ -4,4 +4,9 @@ import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
-class VMessengerApplication : Application()
+class VMessengerApplication : Application() {
+    override fun onCreate() {
+        System.loadLibrary("sqlcipher")
+        super.onCreate()
+    }
+}

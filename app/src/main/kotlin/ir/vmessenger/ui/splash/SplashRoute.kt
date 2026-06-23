@@ -18,10 +18,18 @@ fun SplashRoute() {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
-        Image(
-            painter = painterResource(R.mipmap.ic_launcher),
-            contentDescription = stringResource(R.string.app_name),
-            modifier = Modifier.size(96.dp),
-        )
+        // Use raster mipmaps — adaptive-icon XML (ic_launcher) is not supported by painterResource.
+        Box(modifier = Modifier.size(96.dp)) {
+            Image(
+                painter = painterResource(R.mipmap.ic_launcher_background),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Image(
+                painter = painterResource(R.mipmap.ic_launcher_foreground),
+                contentDescription = stringResource(R.string.app_name),
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
