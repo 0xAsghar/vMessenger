@@ -1,3 +1,27 @@
+# Gradle
+.gradle/
+build/
+**/build/
+local.properties
+.jdk/
+.android-sdk/
+
+# Android
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Kotlin
+.kotlin/
+
+# OS
 .DS_Store
-vMessenger-icon/.DS_Store
-vMessenger-icon/mipmap/.DS_Store
+
+# Secrets
+*.keystore
+*.jks
+
+# Room schemas are committed; generated outputs are not
+**/intermediates/

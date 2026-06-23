@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">vMessenger</string>
+    <string name="tab_chats">گفتگوها</string>
+    <string name="tab_contacts">مخاطبین</string>
+    <string name="tab_location">موقعیت</string>
+    <string name="tab_settings">تنظیمات</string>
+</resources>

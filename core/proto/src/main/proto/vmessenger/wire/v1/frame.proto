@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package vmessenger.wire.v1;
+
+option java_package = "ir.vmessenger.core.proto.wire.v1";
+option java_multiple_files = true;
+
+message Frame {
+  uint32 version = 1;
+  FrameType type = 2;
+  bytes body = 3;
+}
+
+enum FrameType {
+  FRAME_TYPE_UNSPECIFIED = 0;
+  FRAME_TYPE_HANDSHAKE = 1;
+  FRAME_TYPE_SECURE = 2;
+  FRAME_TYPE_ACK = 3;
+  FRAME_TYPE_CLOSE = 4;
+  FRAME_TYPE_KEEPALIVE = 5;
+}
