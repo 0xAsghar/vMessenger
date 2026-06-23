@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.vmessenger.android.library)
+    alias(libs.plugins.vmessenger.android.hilt)
 }
 
 android {
@@ -8,5 +9,5 @@ android {
 
 dependencies {
     implementation(project(":core:common"))
-    implementation(project(":core:designsystem"))
+    implementation(libs.androidx.core.ktx)
 }

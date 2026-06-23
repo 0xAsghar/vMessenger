@@ -7,7 +7,7 @@ vMessenger is a privacy-first communication platform where each Android device i
 - Bundle ID: `ir.vmessenger.android`
 - Platform: Android 8.0+ (API 26+)
 - UI language: Persian (RTL), Material 3, light/dark
-- Status: Design phase. This repository currently contains the architecture and protocol documentation only. Production code begins after these documents are approved.
+- Status: **MVP 0.1.0-rc1** — identity, pairing, DHT discovery, E2EE messaging, live location, and settings/debug ship in this repo.
 
 ---
 
@@ -119,11 +119,33 @@ vMessenger/
   domain/              <- pure Kotlin domain layer
   feature/             <- feature UI modules (Compose)
   network/             <- networking stack modules
+  node/                <- host-run bootstrap/DHT reference node (dev)
+  scripts/             <- emulator-connect.sh for two-emulator TCP
   docs/                <- architecture and protocol documentation
   vMessenger-icon/     <- app launcher icons and brand logos
 ```
 
-Phase 1 (scaffolding + design system) is complete. See [docs/Roadmap.md](docs/Roadmap.md) for the next phases.
+Phases 1–7 (MVP) are implemented. See [docs/Roadmap.md](docs/Roadmap.md) for post-MVP work.
+
+---
+
+## Two-emulator dev test (Mac)
+
+Two emulators cannot reach each other directly. Use a host bootstrap node plus `adb` port forwarding:
+
+1. **Terminal A** — start the reference DHT node:
+   ```bash
+   ./gradlew :node:run
+   ```
+2. **Terminal B** — forward ports (run once per emulator session):
+   ```bash
+   ./scripts/emulator-connect.sh
+   ```
+3. **Both emulators** — uninstall/reinstall the app, create identity, pair via **User Hash** (Contacts → add by hash).
+4. Open **Debug** (Settings) on each device — confirm DHT joined and endpoint published (`10.0.2.2:<port>`).
+5. Send an encrypted message; share live location from a conversation.
+
+Uninstall the app before retesting identity creation. Emulator extended controls can set GPS for location tests.
 
 ---
 
@@ -131,7 +153,7 @@ Phase 1 (scaffolding + design system) is complete. See [docs/Roadmap.md](docs/Ro
 
 Requirements:
 
-- JDK 17 (Gradle toolchain; CI uses Temurin 17)
+- JDK 21 (Gradle toolchain; CI uses Temurin 21)
 - Android SDK 35 with Build Tools 35
 - `local.properties` with `sdk.dir` pointing at your Android SDK
 

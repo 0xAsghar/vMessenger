@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="feature_chat_placeholder">گفتگوها — به‌زودی</string>
+    <string name="feature_chat_title">گفتگوها</string>
+    <string name="feature_chat_empty">گفتگویی وجود ندارد. ابتدا یک مخاطب اضافه کنید.</string>
+    <string name="feature_chat_conversation">گفتگو</string>
+    <string name="feature_chat_back">بازگشت</string>
+    <string name="feature_chat_hint">پیام…</string>
+    <string name="feature_chat_send">ارسال</string>
+    <string name="feature_chat_status_queued">در صف</string>
+    <string name="feature_chat_status_sent">ارسال شد</string>
+    <string name="feature_chat_status_delivered">تحویل شد</string>
+    <string name="feature_chat_status_read">خوانده شد</string>
+    <string name="feature_chat_status_failed">ناموفق</string>
 </resources>

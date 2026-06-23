@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package vmessenger.app.v1;
+
+option java_package = "ir.vmessenger.core.proto.app.v1";
+option java_multiple_files = true;
+
+message MessageEnvelope {
+  bytes message_id = 1;
+  bytes sender_identity_hash = 2;
+  int64 sent_at_unix_ms = 3;
+  uint64 counter = 4;
+
+  oneof content {
+    ChatMessage chat = 10;
+    Receipt receipt = 11;
+    LocationPacket location = 12;
+    Control control = 13;
+  }
+}
+
+message ChatMessage {
+  string text = 1;
+  bytes reply_to_message_id = 2;
+}
+
+message Receipt {
+  bytes ref_message_id = 1;
+  ReceiptType type = 2;
+  int64 at_unix_ms = 3;
+}
+
+enum ReceiptType {
+  RECEIPT_TYPE_UNSPECIFIED = 0;
+  RECEIPT_TYPE_DELIVERED = 1;
+  RECEIPT_TYPE_READ = 2;
+}
+
+message Control {
+  ControlType type = 1;
+  bytes ref_message_id = 2;
+}
+
+enum ControlType {
+  CONTROL_TYPE_UNSPECIFIED = 0;
+  CONTROL_TYPE_TYPING = 1;
+  CONTROL_TYPE_LOCATION_SHARE_START = 2;
+  CONTROL_TYPE_LOCATION_SHARE_STOP = 3;
+}
+
+message Ack {
+  bytes ref_message_id = 1;
+  AckStatus status = 2;
+}
+
+enum AckStatus {
+  ACK_STATUS_UNSPECIFIED = 0;
+  ACK_STATUS_ACCEPTED = 1;
+  ACK_STATUS_REJECTED = 2;
+}
+
+message LocationPacket {
+  bytes share_id = 1;
+  double latitude = 2;
+  double longitude = 3;
+  float accuracy_m = 4;
+  float speed_mps = 5;
+  float heading_deg = 6;
+  int32 battery_pct = 7;
+  int64 sampled_at_unix_ms = 8;
+  bool is_final = 9;
+}

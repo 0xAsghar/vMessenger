@@ -10,6 +10,8 @@ android {
 
 dependencies {
     implementation(project(":core:common"))
+    implementation(project(":core:crypto"))
+    implementation(project(":core:datastore"))
     implementation(libs.sqlcipher)
     implementation(libs.sqlite)
     implementation(libs.kotlinx.coroutines.core)

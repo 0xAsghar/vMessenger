@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package vmessenger.dht.v1;
+
+option java_package = "ir.vmessenger.core.proto.dht.v1";
+option java_multiple_files = true;
+
+message Endpoint {
+  string transport = 1;
+  string address = 2;
+}
+
+message EndpointRecord {
+  bytes identity_hash = 1;
+  bytes identity_pub = 2;
+  repeated Endpoint endpoints = 3;
+  int64 published_at_unix_ms = 4;
+  int64 ttl_ms = 5;
+  uint64 sequence = 6;
+  bytes signature = 7;
+}
+
+message DhtNodeInfo {
+  bytes node_id = 1;
+  string address = 2;
+}
+
+message PingRequest {
+  bytes node_id = 1;
+}
+
+message PingResponse {
+  bytes node_id = 1;
+}
+
+message FindNodeRequest {
+  bytes target_key = 1;
+}
+
+message FindNodeResponse {
+  repeated DhtNodeInfo nodes = 1;
+}
+
+message StoreRequest {
+  EndpointRecord record = 1;
+}
+
+message StoreResponse {
+  bool accepted = 1;
+}
+
+message FindValueRequest {
+  bytes key = 1;
+}
+
+message FindValueResponse {
+  bool found = 1;
+  EndpointRecord record = 2;
+  repeated DhtNodeInfo nodes = 3;
+}
+
+message DhtRpcRequest {
+  oneof payload {
+    PingRequest ping = 1;
+    FindNodeRequest find_node = 2;
+    StoreRequest store = 3;
+    FindValueRequest find_value = 4;
+  }
+}
+
+message DhtRpcResponse {
+  oneof payload {
+    PingResponse ping = 1;
+    FindNodeResponse find_node = 2;
+    StoreResponse store = 3;
+    FindValueResponse find_value = 4;
+  }
+}

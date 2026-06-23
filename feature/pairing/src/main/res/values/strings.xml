@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="feature_pairing_placeholder">جفت‌سازی — به‌زودی</string>
+    <string name="pairing_no_identity">ابتدا هویت بسازید</string>
+    <string name="add_by_hash_title">افزودن با شناسه کاربری</string>
+    <string name="add_by_hash_label">شناسه کاربری (User Hash)</string>
+    <string name="add_by_hash_action">افزودن</string>
+    <string name="add_contact_success">مخاطب اضافه شد</string>
+    <string name="add_contact_done">بازگشت</string>
+    <string name="camera_permission_required">برای اسکن QR به دوربین نیاز است</string>
 </resources>

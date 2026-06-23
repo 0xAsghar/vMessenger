@@ -15,6 +15,7 @@ dependencies {
     implementation(project(":network:transport"))
     implementation(project(":network:messaging"))
     implementation(project(":core:database"))
+    implementation(project(":core:crypto"))
     implementation(project(":core:storage"))
     implementation(project(":core:datastore"))
     implementation(project(":core:proto"))

@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="feature_about_placeholder">درباره — به‌زودی</string>
+    <string name="feature_about_title">درباره</string>
+    <string name="feature_about_app_name">vMessenger</string>
+    <string name="feature_about_version">نسخه %1$s</string>
+    <string name="feature_about_description">پیام‌رسان غیرمتمرکز با رمزنگاری سرتاسری. بدون حساب کاربری، بدون سرور مرکزی.</string>
+    <string name="feature_about_docs_hint">مستندات کامل در پوشه docs/ مخزن موجود است.</string>
 </resources>

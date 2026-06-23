@@ -17,6 +17,7 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
                 configureAndroid(this)
             }
             configureKotlinAndroid()
+            configureJavaToolchain()
         }
     }
 }

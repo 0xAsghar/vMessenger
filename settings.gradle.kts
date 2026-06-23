@@ -13,6 +13,10 @@ pluginManagement {
     }
 }
 
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "0.9.0"
+}
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
@@ -52,3 +56,5 @@ include(":feature:location")
 include(":feature:settings")
 include(":feature:debug")
 include(":feature:about")
+
+include(":node")

@@ -9,4 +9,5 @@ android {
 
 dependencies {
     implementation(project(":core:common"))
+    api(libs.protobuf.java.lite)
 }

@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="feature_identity_placeholder">هویت — به‌زودی</string>
+    <string name="create_identity_title">هویت شما</string>
+    <string name="create_identity_body">وی‌مسنجر بدون حساب کاربری و شماره تلفن کار می‌کند. کلیدهای رمزنگاری فقط روی این دستگاه ساخته و نگهداری می‌شوند.</string>
+    <string name="create_identity_action">ساخت هویت من</string>
+    <string name="create_identity_creating">در حال ساخت هویت…</string>
+    <string name="create_identity_success_title">هویت شما ساخته شد</string>
+    <string name="create_identity_user_hash_label">شناسه کاربری (User Hash)</string>
+    <string name="create_identity_continue">ادامه</string>
+    <string name="create_identity_retry">تلاش دوباره</string>
+    <string name="my_identity_title">هویت من</string>
+    <string name="my_identity_none">هویتی یافت نشد</string>
 </resources>

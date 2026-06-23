@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="feature_contacts_placeholder">مخاطبین — به‌زودی</string>
+    <string name="contacts_title">مخاطبین</string>
+    <string name="contacts_empty">هنوز مخاطبی ندارید</string>
+    <string name="contacts_empty_hint">با QR یا شناسه کاربری مخاطب اضافه کنید</string>
+    <string name="contacts_add">افزودن مخاطب</string>
+    <string name="contacts_my_qr">QR من</string>
+    <string name="contacts_scan_qr">اسکن QR</string>
 </resources>

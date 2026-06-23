@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package vmessenger.wire.v1;
+
+option java_package = "ir.vmessenger.core.proto.wire.v1";
+option java_multiple_files = true;
+
+message Capabilities {
+  uint32 protocol_major = 1;
+  uint32 protocol_minor = 2;
+  repeated string features = 3;
+}
+
+message HandshakeMessage {
+  uint32 step = 1;
+  bytes ephemeral_pub = 2;
+  bytes static_pub = 3;
+  bytes identity_pub = 4;
+  bytes signature = 5;
+  Capabilities capabilities = 6;
+  bytes payload = 7;
+}

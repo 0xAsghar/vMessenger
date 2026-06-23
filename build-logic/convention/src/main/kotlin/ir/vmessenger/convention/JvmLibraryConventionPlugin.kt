@@ -1,6 +1,6 @@
 package ir.vmessenger.convention
 
-import ir.vmessenger.convention.configureKotlinAndroid
+import ir.vmessenger.convention.configureKotlinJvm
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.plugins.JavaPluginExtension
@@ -14,10 +14,10 @@ class JvmLibraryConventionPlugin : Plugin<Project> {
 
             extensions.configure<JavaPluginExtension> {
                 toolchain {
-                    languageVersion.set(JavaLanguageVersion.of(17))
+                    languageVersion.set(JavaLanguageVersion.of(21))
                 }
             }
-            configureKotlinAndroid()
+            configureKotlinJvm()
         }
     }
 }

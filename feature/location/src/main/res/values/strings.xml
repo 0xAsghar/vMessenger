@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="feature_location_placeholder">موقعیت زنده — به‌زودی</string>
+    <string name="feature_location_title">موقعیت زنده</string>
+    <string name="feature_location_map_placeholder">نقشه — موقعیت پس از شروع اشتراک‌گذاری نمایش داده می‌شود</string>
+    <string name="feature_location_coords">عرض: %1$.5f — طول: %2$.5f</string>
+    <string name="feature_location_sharing_hint">اشتراک‌گذاری موقعیت رمزنگاری‌شده از طریق جلسه پیام‌رسانی ارسال می‌شود.</string>
+    <string name="feature_location_start">شروع اشتراک‌گذاری</string>
+    <string name="feature_location_stop">توقف اشتراک‌گذاری</string>
 </resources>

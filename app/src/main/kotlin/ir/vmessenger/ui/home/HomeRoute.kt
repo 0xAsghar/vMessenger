@@ -34,7 +34,7 @@ private data class HomeTab(
 )
 
 @Composable
-fun HomeRoute() {
+fun HomeRoute(navigation: HomeNavigation = HomeNavigation()) {
     val tabs = listOf(
         HomeTab(Routes.CHATS, R.string.tab_chats) {
             Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
@@ -55,36 +55,68 @@ fun HomeRoute() {
     val currentRoute = backStackEntry?.destination?.route ?: Routes.CHATS
 
     Scaffold(
-        bottomBar = {
-            NavigationBar {
-                tabs.forEach { tab ->
-                    NavigationBarItem(
-                        selected = currentRoute == tab.route,
-                        onClick = {
-                            navController.navigate(tab.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = tab.icon,
-                        label = { Text(text = stringResource(tab.labelRes)) },
-                    )
-                }
-            }
-        },
+        bottomBar = { HomeBottomBar(tabs, currentRoute, navController) },
     ) { padding ->
-        NavHost(
+        HomeTabNavHost(
             navController = navController,
-            startDestination = Routes.CHATS,
+            navigation = navigation,
             modifier = Modifier.padding(padding),
-        ) {
-            composable(Routes.CHATS) { ChatRoute() }
-            composable(Routes.CONTACTS) { ContactsRoute() }
-            composable(Routes.LOCATION) { LocationRoute() }
-            composable(Routes.SETTINGS) { SettingsRoute() }
+        )
+    }
+}
+
+@Composable
+private fun HomeBottomBar(
+    tabs: List<HomeTab>,
+    currentRoute: String,
+    navController: androidx.navigation.NavHostController,
+) {
+    NavigationBar {
+        tabs.forEach { tab ->
+            NavigationBarItem(
+                selected = currentRoute == tab.route,
+                onClick = {
+                    navController.navigate(tab.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                icon = tab.icon,
+                label = { Text(text = stringResource(tab.labelRes)) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeTabNavHost(
+    navController: androidx.navigation.NavHostController,
+    navigation: HomeNavigation,
+    modifier: Modifier = Modifier,
+) {
+    NavHost(
+        navController = navController,
+        startDestination = Routes.CHATS,
+        modifier = modifier,
+    ) {
+        composable(Routes.CHATS) { ChatRoute() }
+        composable(Routes.CONTACTS) {
+            ContactsRoute(
+                onMyQr = navigation.onMyQr,
+                onScanQr = navigation.onScanQr,
+                onAddByHash = navigation.onAddByHash,
+            )
+        }
+        composable(Routes.LOCATION) { LocationRoute() }
+        composable(Routes.SETTINGS) {
+            SettingsRoute(
+                onNavigateToDebug = navigation.onNavigateToDebug,
+                onNavigateToAbout = navigation.onNavigateToAbout,
+                onNavigateToIdentity = navigation.onNavigateToIdentity,
+            )
         }
     }
 }
