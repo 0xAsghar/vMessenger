@@ -1,6 +1,7 @@
 package ir.vmessenger.convention
 
 import com.android.build.api.dsl.ApplicationExtension
+import java.util.Properties
 import ir.vmessenger.convention.configureAndroid
 import ir.vmessenger.convention.configureKotlinAndroid
 import ir.vmessenger.convention.libs
@@ -14,12 +15,16 @@ class AndroidApplicationConventionPlugin : Plugin<Project> {
             pluginManager.apply("com.android.application")
             pluginManager.apply("org.jetbrains.kotlin.android")
 
+            val versionProperties = Properties().apply {
+                rootProject.file("gradle/version.properties").inputStream().use { load(it) }
+            }
+
             extensions.configure<ApplicationExtension> {
                 configureAndroid(this)
                 defaultConfig {
                     targetSdk = libs.findVersion("targetSdk").get().requiredVersion.toInt()
-                    versionCode = 1
-                    versionName = "0.1.0-rc1"
+                    versionCode = versionProperties.getProperty("versionCode").toInt()
+                    versionName = versionProperties.getProperty("versionName")
                 }
             }
             configureKotlinAndroid()
