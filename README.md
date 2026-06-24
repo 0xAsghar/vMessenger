@@ -169,14 +169,21 @@ Install on a device or emulator:
 
 ### Release APKs (CI)
 
-Pushing a **version tag** (`v0.1.0-rc1`) or updating [`gradle/version.properties`](gradle/version.properties) on `main` triggers the [Release APK](.github/workflows/release-apk.yml) workflow. It builds signed release APKs for:
+Updating [`gradle/version.properties`](gradle/version.properties) on `main` runs a **build-only** check. To **publish** APKs, push a matching version tag:
+
+```bash
+git tag v0.1.0-rc1   # must match versionName in gradle/version.properties
+git push origin v0.1.0-rc1
+```
+
+The [Release APK](.github/workflows/release-apk.yml) workflow attaches per-architecture release APKs to the GitHub Release:
 
 - `armeabi-v7a` (32-bit ARM)
 - `arm64-v8a` (64-bit ARM, most phones)
 - `x86` / `x86_64` (emulators)
 - `universal` (all ABIs in one APK)
 
-Artifacts are uploaded to the GitHub Actions run. Tag pushes also create a GitHub Release with the APKs attached.
+APKs are published as **GitHub Release assets** (not Actions artifacts), which avoids the Actions artifact storage quota.
 
 Optional repository secrets for Play-ready signing: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without them, CI signs with the debug keystore.
 

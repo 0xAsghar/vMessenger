@@ -63,7 +63,7 @@ jobs:
       - name: Build release APKs (per ABI + universal)
         run: ./gradlew :app:assembleRelease --no-daemon
 
-      - name: Rename APK artifacts
+      - name: Package APKs for release
         run: |
           VERSION="${{ steps.version.outputs.name }}"
           OUT="app/build/outputs/apk/release"
@@ -83,14 +83,8 @@ jobs:
           done
           ls -la dist/
 
-      - name: Upload APK artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: vmessenger-apks-${{ steps.version.outputs.name }}
-          path: dist/*.apk
-          if-no-files-found: error
-          retention-days: 90
-
+      # GitHub Actions artifact storage is limited on free plans; publish APKs via
+      # GitHub Releases on version tags instead of upload-artifact.
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -101,3 +95,10 @@ jobs:
           files: dist/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build-only summary
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        run: |
+          echo "Release APK build succeeded for version ${{ steps.version.outputs.name }}."
+          echo "Push a version tag (e.g. v${{ steps.version.outputs.name }}) to publish APKs on GitHub Releases."
+          echo "APKs are not uploaded to Actions artifacts (avoids artifact storage quota)."
