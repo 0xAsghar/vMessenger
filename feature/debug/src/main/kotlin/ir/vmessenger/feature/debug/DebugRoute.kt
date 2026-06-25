@@ -2,15 +2,20 @@ package ir.vmessenger.feature.debug
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -23,6 +28,7 @@ import ir.vmessenger.core.designsystem.theme.UserHashTextStyle
 @Composable
 fun DebugRoute(
     onNavigateBack: () -> Unit = {},
+    onNavigateToLogs: () -> Unit = {},
     viewModel: DebugViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -51,8 +57,24 @@ fun DebugRoute(
             )
             state.lastError?.let { Text(text = it, color = MaterialTheme.colorScheme.error) }
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text = stringResource(R.string.feature_debug_dev_mode))
+                Switch(
+                    checked = state.devMode,
+                    onCheckedChange = viewModel::setDevMode,
+                )
+            }
+
             Button(onClick = { viewModel.joinAndPublish() }) {
                 Text(text = stringResource(R.string.feature_debug_join_publish))
+            }
+
+            OutlinedButton(onClick = onNavigateToLogs, modifier = Modifier.fillMaxWidth()) {
+                Text(text = stringResource(R.string.feature_debug_view_logs))
             }
 
             Text(

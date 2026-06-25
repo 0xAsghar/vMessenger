@@ -3,6 +3,7 @@ package ir.vmessenger.network.messaging
 import com.google.protobuf.ByteString
 import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
 import ir.vmessenger.core.common.network.TransportIds
 import ir.vmessenger.core.crypto.CryptoEngine
@@ -144,12 +145,20 @@ class MessagingService @Inject constructor(
     ): AppResult<Unit> {
         var lastError: AppError? = null
         for (endpoint in endpoints) {
+            AppLogger.info("Messaging", "try ${endpoint.transport.value}:${endpoint.address}")
             sessionMutex.withLock { sessions.remove(contactId) }
             when (val result = sendToEndpoint(contactId, self, peer, endpoint, envelope)) {
-                is AppResult.Success -> return result
-                is AppResult.Error -> lastError = result.error
+                is AppResult.Success -> {
+                    AppLogger.info("Messaging", "sent via ${endpoint.transport.value}")
+                    return result
+                }
+                is AppResult.Error -> {
+                    AppLogger.warn("Messaging", "failed ${endpoint.transport.value}: ${result.error.message}")
+                    lastError = result.error
+                }
             }
         }
+        AppLogger.error("Messaging", "all transports failed for contact=$contactId")
         return AppResult.Error(lastError ?: AppError.Network("ارسال ناموفق"))
     }
 

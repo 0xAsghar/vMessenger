@@ -1,5 +1,6 @@
 package ir.vmessenger.network.messaging
 
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.WebSocketFrameClient
 import ir.vmessenger.core.proto.relay.v1.RelayEvent
@@ -61,6 +62,7 @@ class RelayListener @Inject constructor(
     fun start() {
         if (running) return
         running = true
+        AppLogger.info("Relay", "listener starting on ${NetworkConfig.relayAddress}")
         scope.launch { maintainControlChannel() }
     }
 
@@ -69,7 +71,7 @@ class RelayListener @Inject constructor(
         scope.cancel()
     }
 
-    @Suppress("SwallowedException", "TooGenericExceptionCaught")
+    @Suppress("TooGenericExceptionCaught")
     private suspend fun maintainControlChannel() {
         var backoffMs = 1_000L
         while (running && scope.isActive) {
@@ -83,7 +85,9 @@ class RelayListener @Inject constructor(
             try {
                 connectControlChannel(hash, pub, key)
                 backoffMs = 1_000L
-            } catch (_: Exception) {
+                AppLogger.info("Relay", "control channel connected")
+            } catch (e: Exception) {
+                AppLogger.warn("Relay", "control channel lost: ${e.message}, retry in ${backoffMs}ms")
                 delay(backoffMs)
                 backoffMs = (backoffMs * 2).coerceAtMost(60_000L)
             }
@@ -109,6 +113,7 @@ class RelayListener @Inject constructor(
                 val event = runCatching { RelayEvent.parseFrom(bytes.toByteArray()) }.getOrNull() ?: return
                 when (event.type) {
                     RelayEventType.RELAY_EVENT_TYPE_INCOMING -> {
+                        AppLogger.info("Relay", "incoming circuit ${event.circuitId}")
                         scope.launch { acceptCircuit(event.circuitId) }
                     }
                     RelayEventType.RELAY_EVENT_TYPE_ERROR -> {

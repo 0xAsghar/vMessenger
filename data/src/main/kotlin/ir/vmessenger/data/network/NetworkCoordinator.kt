@@ -1,5 +1,7 @@
 package ir.vmessenger.data.network
 
+import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.data.di.IoDispatcher
 import ir.vmessenger.domain.repository.IdentityRepository
@@ -33,12 +35,25 @@ class NetworkCoordinator @Inject constructor(
         directPort: Int? = null,
     ) {
         scope.launch {
-            joinNetworkUseCase()
-            publishNetworkEndpointsUseCase(directHost = directHost, directPort = directPort)
+            AppLogger.info("Network", "coordinator start listenPort=$listenPort dev=${directHost != null}")
+            when (val join = joinNetworkUseCase()) {
+                is AppResult.Success ->
+                    AppLogger.info("Network", "join network OK")
+                is AppResult.Error ->
+                    AppLogger.error("Network", "join network failed: ${join.error.message}")
+            }
+            when (val publish = publishNetworkEndpointsUseCase(directHost = directHost, directPort = directPort)) {
+                is AppResult.Success ->
+                    AppLogger.info("Network", "publish endpoints OK")
+                is AppResult.Error ->
+                    AppLogger.error("Network", "publish endpoints failed: ${publish.error.message}")
+            }
             configureInbound()
             incomingMessageCollector.start()
             messagingService.startListening(listenPort)
+            AppLogger.info("Network", "TCP listener started on $listenPort")
             startRelayListener()
+            AppLogger.info("Network", "relay listener started")
         }
     }
 

@@ -11,6 +11,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -77,10 +78,20 @@ fun QrScannerRoute(
                 )
                 QrScanFrameOverlay()
             } else if (!hasCamera) {
-                Text(
-                    text = stringResource(R.string.camera_permission_required),
-                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                )
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = stringResource(R.string.camera_permission_required),
+                        modifier = Modifier.padding(bottom = 16.dp),
+                    )
+                    Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
+                        Text(stringResource(R.string.camera_permission_grant))
+                    }
+                }
             }
             QrScannerStatusOverlay(uiState = uiState, onDone = onDone)
         }

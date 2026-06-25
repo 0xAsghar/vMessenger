@@ -13,5 +13,6 @@ object Routes {
     const val PAIRING_SCAN = "pairing_scan"
     const val PAIRING_HASH = "pairing_hash"
     const val DEBUG = "debug"
+    const val LOGS = "logs"
     const val ABOUT = "about"
 }

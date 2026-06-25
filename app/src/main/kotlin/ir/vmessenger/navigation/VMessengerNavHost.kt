@@ -6,12 +6,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import ir.vmessenger.feature.about.AboutRoute
 import ir.vmessenger.feature.debug.DebugRoute
+import ir.vmessenger.feature.debug.LogsRoute
 import ir.vmessenger.feature.identity.CreateIdentityRoute
 import ir.vmessenger.feature.identity.IdentityRoute
 import ir.vmessenger.feature.pairing.AddByHashRoute
@@ -76,12 +78,22 @@ fun VMessengerNavHost(
         composable(Routes.IDENTITY) {
             IdentityRoute(onNavigateBack = { navController.popBackStack() })
         }
-        composable(Routes.DEBUG) {
-            DebugRoute(onNavigateBack = { navController.popBackStack() })
-        }
+        debugRoutes(navController)
         composable(Routes.ABOUT) {
             AboutRoute(onNavigateBack = { navController.popBackStack() })
         }
+    }
+}
+
+private fun NavGraphBuilder.debugRoutes(navController: NavHostController) {
+    composable(Routes.DEBUG) {
+        DebugRoute(
+            onNavigateBack = { navController.popBackStack() },
+            onNavigateToLogs = { navController.navigate(Routes.LOGS) },
+        )
+    }
+    composable(Routes.LOGS) {
+        LogsRoute(onNavigateBack = { navController.popBackStack() })
     }
 }
 

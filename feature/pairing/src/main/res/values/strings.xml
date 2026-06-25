@@ -12,4 +12,5 @@
     <string name="add_contact_success">مخاطب اضافه شد</string>
     <string name="add_contact_done">بازگشت</string>
     <string name="camera_permission_required">برای اسکن QR به دوربین نیاز است</string>
+    <string name="camera_permission_grant">اجازه دسترسی به دوربین</string>
 </resources>

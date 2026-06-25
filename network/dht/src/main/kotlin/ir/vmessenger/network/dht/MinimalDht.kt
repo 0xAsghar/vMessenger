@@ -1,6 +1,7 @@
 package ir.vmessenger.network.dht
 
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.LengthPrefixedFrames
 import ir.vmessenger.core.common.network.WebSocketFrameClient
 import ir.vmessenger.core.proto.dht.v1.DhtRpcRequest
@@ -16,12 +17,21 @@ import javax.inject.Singleton
 
 @Singleton
 class DhtRpcClient @Inject constructor() {
+    @Suppress("TooGenericExceptionCaught")
     suspend fun send(address: String, request: DhtRpcRequest): DhtRpcResponse = withContext(Dispatchers.IO) {
-        if (address.startsWith("ws://") || address.startsWith("wss://")) {
-            val responseBytes = WebSocketFrameClient.sendBinary(address, request.toByteArray())
-            DhtRpcResponse.parseFrom(responseBytes)
-        } else {
-            sendTcp(address, request)
+        val started = System.currentTimeMillis()
+        try {
+            val response = if (address.startsWith("ws://") || address.startsWith("wss://")) {
+                val responseBytes = WebSocketFrameClient.sendBinary(address, request.toByteArray())
+                DhtRpcResponse.parseFrom(responseBytes)
+            } else {
+                sendTcp(address, request)
+            }
+            AppLogger.debug("DhtRpc", "OK $address in ${System.currentTimeMillis() - started}ms")
+            response
+        } catch (e: Exception) {
+            AppLogger.error("DhtRpc", "FAIL $address: ${e.message}")
+            throw e
         }
     }
 
@@ -64,6 +74,7 @@ class MinimalDht @Inject constructor(
 
     override suspend fun bootstrap(nodes: List<ir.vmessenger.network.bootstrap.BootstrapNode>): AppResult<Unit> =
         runCatching {
+            AppLogger.info("Dht", "bootstrap ${nodes.size} node(s): ${nodes.joinToString { it.address }}")
             for (node in nodes) {
                 val response = rpcClient.send(
                     node.address,
@@ -79,9 +90,11 @@ class MinimalDht @Inject constructor(
                 }
             }
             check(knownNodes.isNotEmpty()) { "Bootstrap failed" }
+            AppLogger.info("Dht", "bootstrap OK, knownNodes=${knownNodes.size}")
         }.fold(
             onSuccess = { AppResult.Success(Unit) },
             onFailure = {
+                AppLogger.error("Dht", "bootstrap failed: ${it.message}")
                 AppResult.Error(ir.vmessenger.core.common.AppError.Network(it.message ?: "Bootstrap failed"))
             },
         )
@@ -102,9 +115,11 @@ class MinimalDht @Inject constructor(
                 if (response.hasStore() && response.store.accepted) stored = true
             }
             check(stored) { "Store rejected" }
+            AppLogger.info("Dht", "publish/store OK")
         }.fold(
             onSuccess = { AppResult.Success(Unit) },
             onFailure = {
+                AppLogger.error("Dht", "publish failed: ${it.message}")
                 AppResult.Error(ir.vmessenger.core.common.AppError.Network(it.message ?: "Publish failed"))
             },
         )

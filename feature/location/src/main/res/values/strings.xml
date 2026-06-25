@@ -6,4 +6,5 @@
     <string name="feature_location_sharing_hint">اشتراک‌گذاری موقعیت رمزنگاری‌شده از طریق جلسه پیام‌رسانی ارسال می‌شود.</string>
     <string name="feature_location_start">شروع اشتراک‌گذاری</string>
     <string name="feature_location_stop">توقف اشتراک‌گذاری</string>
+    <string name="feature_location_permission_required">برای اشتراک‌گذاری موقعیت به دسترسی مکان نیاز است</string>
 </resources>

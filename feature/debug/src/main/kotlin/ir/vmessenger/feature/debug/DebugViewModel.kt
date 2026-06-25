@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.domain.repository.DiscoveryRepository
 import ir.vmessenger.domain.usecase.discovery.JoinNetworkUseCase
@@ -22,6 +23,7 @@ data class DebugUiState(
     val lastError: String? = null,
     val listenPort: Int = 48_555,
     val forwardPort: Int = 48_555,
+    val devMode: Boolean = false,
 )
 
 @HiltViewModel
@@ -48,15 +50,36 @@ class DebugViewModel @Inject constructor(
         }
     }
 
+    fun setDevMode(enabled: Boolean) {
+        _uiState.update { it.copy(devMode = enabled) }
+        AppLogger.info("Debug", "devMode=$enabled")
+    }
+
     fun joinAndPublish() {
         viewModelScope.launch {
-            when (joinNetworkUseCase()) {
-                is AppResult.Success -> Unit
-                is AppResult.Error -> return@launch
+            val devMode = _uiState.value.devMode
+            AppLogger.info("Debug", "joinAndPublish started (devMode=$devMode)")
+            when (val join = joinNetworkUseCase()) {
+                is AppResult.Success -> AppLogger.info("Debug", "join network success")
+                is AppResult.Error -> {
+                    AppLogger.error("Debug", "join network failed: ${join.error.message}")
+                    return@launch
+                }
             }
-            NetworkConfig.useDevBootstrap = true
-            val port = _uiState.value.forwardPort
-            publishNetworkEndpointsUseCase(directHost = "10.0.2.2", directPort = port)
+            val publish = if (devMode) {
+                NetworkConfig.useDevBootstrap = true
+                val port = _uiState.value.forwardPort
+                AppLogger.info("Debug", "publishing dev endpoints 10.0.2.2:$port")
+                publishNetworkEndpointsUseCase(directHost = "10.0.2.2", directPort = port)
+            } else {
+                NetworkConfig.useDevBootstrap = false
+                AppLogger.info("Debug", "publishing production relay endpoint")
+                publishNetworkEndpointsUseCase()
+            }
+            when (publish) {
+                is AppResult.Success -> AppLogger.info("Debug", "publish success")
+                is AppResult.Error -> AppLogger.error("Debug", "publish failed: ${publish.error.message}")
+            }
         }
     }
 }
