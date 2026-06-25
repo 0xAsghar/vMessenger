@@ -2,6 +2,7 @@ package ir.vmessenger.core.crypto
 
 import com.goterl.lazysodium.LazySodium
 import com.goterl.lazysodium.interfaces.AEAD
+import com.goterl.lazysodium.interfaces.Sign
 import com.goterl.lazysodium.utils.Key
 import java.security.MessageDigest
 import javax.crypto.Mac
@@ -13,21 +14,23 @@ class LazysodiumCryptoEngine(
 ) : CryptoEngine {
 
     override fun generateEd25519KeyPair(): KeyPair {
-        val keyPair = lazySodium.cryptoSignKeypair()
-        return KeyPair(keyPair.publicKey.asBytes, keyPair.secretKey.asBytes)
+        val publicKey = ByteArray(Sign.PUBLICKEYBYTES)
+        val secretKey = ByteArray(Sign.SECRETKEYBYTES)
+        check(lazySodium.cryptoSignKeypair(publicKey, secretKey)) { "ed25519 keypair generation failed" }
+        return KeyPair(publicKey, secretKey)
     }
 
     override fun signEd25519(message: ByteArray, privateKey: ByteArray): ByteArray {
-        val messageHex = LazySodium.toHex(message)
-        val signatureHex = lazySodium.cryptoSignDetached(messageHex, Key.fromBytes(privateKey))
-        return LazySodium.toBin(signatureHex)
+        val secretKey = ed25519SecretKeyBytes(privateKey)
+        val signature = ByteArray(Sign.BYTES)
+        check(
+            lazySodium.cryptoSignDetached(signature, message, message.size.toLong(), secretKey),
+        ) { "ed25519 sign failed" }
+        return signature
     }
 
-    override fun verifyEd25519(message: ByteArray, signature: ByteArray, publicKey: ByteArray): Boolean {
-        val messageHex = LazySodium.toHex(message)
-        val signatureHex = LazySodium.toHex(signature)
-        return lazySodium.cryptoSignVerifyDetached(signatureHex, messageHex, Key.fromBytes(publicKey))
-    }
+    override fun verifyEd25519(message: ByteArray, signature: ByteArray, publicKey: ByteArray): Boolean =
+        lazySodium.cryptoSignVerifyDetached(signature, message, message.size, publicKey)
 
     override fun generateX25519KeyPair(): KeyPair {
         val keyPair = lazySodium.cryptoBoxKeypair()
@@ -90,6 +93,19 @@ class LazysodiumCryptoEngine(
         MessageDigest.getInstance("SHA-256").digest(data)
 
     override fun randomBytes(length: Int): ByteArray = lazySodium.randomBytesBuf(length)
+
+    private fun ed25519SecretKeyBytes(privateKey: ByteArray): ByteArray = when (privateKey.size) {
+        Sign.SECRETKEYBYTES -> privateKey
+        Sign.SEEDBYTES -> {
+            val publicKey = ByteArray(Sign.PUBLICKEYBYTES)
+            val secretKey = ByteArray(Sign.SECRETKEYBYTES)
+            check(lazySodium.cryptoSignSeedKeypair(publicKey, secretKey, privateKey)) {
+                "ed25519 seed keypair expansion failed"
+            }
+            secretKey
+        }
+        else -> privateKey
+    }
 
     private fun hmacSha256(key: ByteArray, data: ByteArray): ByteArray {
         val mac = Mac.getInstance("HmacSHA256")

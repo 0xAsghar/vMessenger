@@ -3,6 +3,7 @@ package ir.vmessenger.network.dht
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.LengthPrefixedFrames
+import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.WebSocketFrameClient
 import ir.vmessenger.core.proto.dht.v1.DhtRpcRequest
 import ir.vmessenger.core.proto.dht.v1.DhtRpcResponse
@@ -101,7 +102,7 @@ class MinimalDht @Inject constructor(
 
     override suspend fun publish(record: ir.vmessenger.core.proto.dht.v1.EndpointRecord): AppResult<Unit> =
         runCatching {
-            val targets = knownNodes.ifEmpty { throw IllegalStateException("Not bootstrapped") }
+            val targets = rpcTargets().ifEmpty { throw IllegalStateException("Not bootstrapped") }
             var stored = false
             for (address in targets) {
                 val response = rpcClient.send(
@@ -134,7 +135,7 @@ class MinimalDht @Inject constructor(
 
     override suspend fun lookup(identityHash: ByteArray): AppResult<ir.vmessenger.core.proto.dht.v1.EndpointRecord?> =
         runCatching {
-            val targets = knownNodes.ifEmpty { throw IllegalStateException("Not bootstrapped") }
+            val targets = rpcTargets().ifEmpty { throw IllegalStateException("Not bootstrapped") }
             for (address in targets) {
                 val response = rpcClient.send(
                     address,
@@ -150,7 +151,9 @@ class MinimalDht @Inject constructor(
                     if (verifier.verify(record)) return@runCatching record
                 }
                 if (response.hasFindValue()) {
-                    response.findValue.nodesList.forEach { knownNodes.add(it.address) }
+                    response.findValue.nodesList.forEach { node ->
+                        normalizeDhtRpcAddress(node.address)?.let { knownNodes.add(it) }
+                    }
                 }
             }
             null
@@ -162,4 +165,13 @@ class MinimalDht @Inject constructor(
         )
 
     fun knownNodeCount(): Int = knownNodes.size
+
+    private fun rpcTargets(): Set<String> = knownNodes.mapNotNull(::normalizeDhtRpcAddress).toSet()
+}
+
+private fun normalizeDhtRpcAddress(address: String): String? = when {
+    address.startsWith("ws://") || address.startsWith("wss://") -> address
+    address == "${NetworkConfig.RELAY_HOST}:8443" -> NetworkConfig.DEFAULT_DHT_URL
+    address == NetworkConfig.DEV_BOOTSTRAP_ADDRESS -> address
+    else -> null
 }
