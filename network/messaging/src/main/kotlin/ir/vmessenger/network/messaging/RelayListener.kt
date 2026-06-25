@@ -18,6 +18,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import okio.ByteString.Companion.toByteString
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -101,7 +102,7 @@ class RelayListener @Inject constructor(
         val socketHolder = arrayOfNulls<WebSocket>(1)
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send(ByteString.of(hello.toByteArray()))
+                webSocket.send(hello.toByteArray().toByteString())
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {

@@ -20,6 +20,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import okio.ByteString.Companion.toByteString
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -65,7 +66,7 @@ class RelayTransport @Inject constructor() : Transport {
         val socketHolder = arrayOfNulls<WebSocket>(1)
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send(ByteString.of(hello.toByteArray()))
+                webSocket.send(hello.toByteArray().toByteString())
                 if (!awaitReady) {
                     val connection = RelayConnection(remote, webSocket, dataMode = true)
                     connectionRef[0] = connection
@@ -163,7 +164,7 @@ class RelayConnection(
     override suspend fun write(frame: ByteArray): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             check(_state.value == ConnectionState.OPEN) { "Connection closed" }
-            val sent = webSocket.send(ByteString.of(frame))
+            val sent = webSocket.send(frame.toByteString())
             check(sent) { "WebSocket send failed" }
         }
     }

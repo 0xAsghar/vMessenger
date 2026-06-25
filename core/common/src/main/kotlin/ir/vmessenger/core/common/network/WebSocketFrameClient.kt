@@ -7,6 +7,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import okio.ByteString.Companion.toByteString
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -27,7 +28,7 @@ object WebSocketFrameClient {
             val socketRef = arrayOfNulls<WebSocket>(1)
             val listener = object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
-                    webSocket.send(ByteString.of(payload))
+                    webSocket.send(payload.toByteString())
                 }
 
                 override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
