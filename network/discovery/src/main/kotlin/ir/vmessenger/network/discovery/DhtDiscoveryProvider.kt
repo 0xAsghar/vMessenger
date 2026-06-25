@@ -1,6 +1,7 @@
 package ir.vmessenger.network.discovery
 
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
 import ir.vmessenger.network.dht.Dht
 import ir.vmessenger.network.dht.EndpointRecordSigner
@@ -12,16 +13,40 @@ import javax.inject.Singleton
 class DhtDiscoveryProvider @Inject constructor(
     private val dht: Dht,
     private val signer: EndpointRecordSigner,
+    private val sequenceStore: PublishSequenceStore,
 ) : DiscoveryProvider {
     override val id = DiscoveryProviderId("dht")
-    private var sequence = 0L
 
     override suspend fun announce(
         self: DiscoveryIdentity,
         endpoints: List<Endpoint>,
         ed25519PrivateKey: ByteArray,
     ): AppResult<Unit> {
-        sequence += 1
+        var sequence = sequenceStore.nextSequence(self.identityHash)
+        var result = publishAtSequence(self, endpoints, ed25519PrivateKey, sequence)
+        if (result is AppResult.Error && result.error.message?.contains("Store rejected") == true) {
+            val remoteSequence = when (val lookup = dht.lookup(self.identityHash)) {
+                is AppResult.Success -> lookup.data?.sequence ?: 0L
+                is AppResult.Error -> 0L
+            }
+            if (remoteSequence >= sequence) {
+                sequence = sequenceStore.bumpToAtLeast(self.identityHash, remoteSequence + 1)
+                AppLogger.info(
+                    "Discovery",
+                    "retry publish with seq=$sequence (remote had $remoteSequence)",
+                )
+                result = publishAtSequence(self, endpoints, ed25519PrivateKey, sequence)
+            }
+        }
+        return result
+    }
+
+    private suspend fun publishAtSequence(
+        self: DiscoveryIdentity,
+        endpoints: List<Endpoint>,
+        ed25519PrivateKey: ByteArray,
+        sequence: Long,
+    ): AppResult<Unit> {
         val now = System.currentTimeMillis()
         val record = signer.sign(
             identityHash = self.identityHash,

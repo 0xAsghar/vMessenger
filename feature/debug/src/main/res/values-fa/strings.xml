@@ -1,11 +1,2 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="feature_debug_title">اشکال‌زدایی</string>
-    <string name="feature_debug_dht_section">وضعیت DHT</string>
-    <string name="feature_debug_bootstrapped">بوت‌استرپ: %1$s</string>
-    <string name="feature_debug_known_nodes">نودهای شناخته‌شده: %1$d</string>
-    <string name="feature_debug_endpoint">endpoint منتشرشده: %1$s</string>
-    <string name="feature_debug_join_publish">پیوستن و انتشار endpoint</string>
-    <string name="feature_debug_adb_section">راه‌اندازی adb (دو امولاتور)</string>
-    <string name="feature_debug_adb_instructions">ابتدا نود مرجع را روی میزبان اجرا کنید: ./gradlew :node:run سپس اسکریپت scripts/emulator-connect.sh را اجرا کنید.</string>
-</resources>
+<resources />

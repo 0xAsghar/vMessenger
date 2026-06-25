@@ -11,6 +11,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import ir.vmessenger.R
+import ir.vmessenger.core.designsystem.R as DesignR
 
 @Composable
 fun SplashRoute() {
@@ -18,18 +19,10 @@ fun SplashRoute() {
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
-        // Use raster mipmaps — adaptive-icon XML (ic_launcher) is not supported by painterResource.
-        Box(modifier = Modifier.size(96.dp)) {
-            Image(
-                painter = painterResource(R.mipmap.ic_launcher_background),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-            )
-            Image(
-                painter = painterResource(R.mipmap.ic_launcher_foreground),
-                contentDescription = stringResource(R.string.app_name),
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+        Image(
+            painter = painterResource(DesignR.drawable.ic_vmessenger_logo),
+            contentDescription = stringResource(R.string.app_name),
+            modifier = Modifier.size(96.dp),
+        )
     }
 }

@@ -112,10 +112,18 @@ class MinimalDht @Inject constructor(
                         )
                         .build(),
                 )
-                if (response.hasStore() && response.store.accepted) stored = true
+                when {
+                    response.hasStore() && response.store.accepted -> stored = true
+                    response.hasStore() ->
+                        AppLogger.warn(
+                            "Dht",
+                            "store rejected seq=${record.sequence} at $address",
+                        )
+                    else -> AppLogger.warn("Dht", "store response missing at $address")
+                }
             }
-            check(stored) { "Store rejected" }
-            AppLogger.info("Dht", "publish/store OK")
+            check(stored) { "Store rejected (seq=${record.sequence})" }
+            AppLogger.info("Dht", "publish/store OK seq=${record.sequence}")
         }.fold(
             onSuccess = { AppResult.Success(Unit) },
             onFailure = {

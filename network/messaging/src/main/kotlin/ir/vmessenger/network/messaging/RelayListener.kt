@@ -7,6 +7,7 @@ import ir.vmessenger.core.proto.relay.v1.RelayEvent
 import ir.vmessenger.core.proto.relay.v1.RelayEventType
 import ir.vmessenger.network.transport.Connection
 import ir.vmessenger.network.transport.RelayTransport
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,7 +33,7 @@ class RelayListener @Inject constructor(
     private val relayTransport: RelayTransport,
     private val relayHelloFactory: RelayHelloFactory,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var handler: InboundConnectionHandler? = null
 
     @Volatile
@@ -62,6 +63,9 @@ class RelayListener @Inject constructor(
     fun start() {
         if (running) return
         running = true
+        if (!scope.isActive) {
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        }
         AppLogger.info("Relay", "listener starting on ${NetworkConfig.relayAddress}")
         scope.launch { maintainControlChannel() }
     }
@@ -85,7 +89,8 @@ class RelayListener @Inject constructor(
             try {
                 connectControlChannel(hash, pub, key)
                 backoffMs = 1_000L
-                AppLogger.info("Relay", "control channel connected")
+                AppLogger.info("Relay", "control channel ended, reconnecting in ${backoffMs}ms")
+                delay(backoffMs)
             } catch (e: Exception) {
                 AppLogger.warn("Relay", "control channel lost: ${e.message}, retry in ${backoffMs}ms")
                 delay(backoffMs)
@@ -102,11 +107,13 @@ class RelayListener @Inject constructor(
         val url = NetworkConfig.relayAddress
         val hello = relayHelloFactory.buildListenerHello(identityHash, identityPub, ed25519PrivateKey)
         val request = Request.Builder().url(url).build()
-        val latch = kotlinx.coroutines.CompletableDeferred<Unit>()
-        val socketHolder = arrayOfNulls<WebSocket>(1)
+        val openLatch = CompletableDeferred<Unit>()
+        val closeLatch = CompletableDeferred<Unit>()
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 webSocket.send(hello.toByteArray().toByteString())
+                AppLogger.info("Relay", "control channel connected")
+                openLatch.complete(Unit)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
@@ -117,6 +124,7 @@ class RelayListener @Inject constructor(
                         scope.launch { acceptCircuit(event.circuitId) }
                     }
                     RelayEventType.RELAY_EVENT_TYPE_ERROR -> {
+                        AppLogger.warn("Relay", "relay error: ${event.message}")
                         webSocket.close(1000, event.message)
                     }
                     else -> Unit
@@ -124,15 +132,28 @@ class RelayListener @Inject constructor(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (!latch.isCompleted) latch.complete(Unit)
+                if (!openLatch.isCompleted) {
+                    openLatch.completeExceptionally(
+                        IllegalStateException("closed before open: $code $reason"),
+                    )
+                }
+                closeLatch.complete(Unit)
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                if (!latch.isCompleted) latch.completeExceptionally(t)
+                if (!openLatch.isCompleted) {
+                    openLatch.completeExceptionally(t)
+                }
+                closeLatch.complete(Unit)
             }
         }
-        socketHolder[0] = WebSocketFrameClient.httpClient().newWebSocket(request, listener)
-        latch.await()
+        val webSocket = WebSocketFrameClient.httpClient().newWebSocket(request, listener)
+        try {
+            openLatch.await()
+            closeLatch.await()
+        } finally {
+            webSocket.cancel()
+        }
     }
 
     private suspend fun acceptCircuit(circuitId: String) {

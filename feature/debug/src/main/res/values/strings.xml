@@ -1,15 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="feature_debug_title">اشکال‌زدایی</string>
-    <string name="feature_debug_dht_section">وضعیت DHT</string>
+    <string name="feature_debug_dht_section">وضعیت شبکه</string>
     <string name="feature_debug_bootstrapped">بوت‌استرپ: %1$s</string>
+    <string name="feature_debug_bootstrapped_label">بوت‌استرپ</string>
     <string name="feature_debug_known_nodes">نودهای شناخته‌شده: %1$d</string>
+    <string name="feature_debug_known_nodes_label">نودهای شناخته‌شده</string>
     <string name="feature_debug_endpoint">endpoint منتشرشده: %1$s</string>
+    <string name="feature_debug_endpoint_label">endpoint منتشرشده</string>
+    <string name="feature_debug_not_published">منتشر نشده</string>
+    <string name="feature_debug_status_yes">بله</string>
+    <string name="feature_debug_status_no">خیر</string>
+    <string name="feature_debug_actions_section">عملیات</string>
     <string name="feature_debug_join_publish">پیوستن و انتشار endpoint</string>
     <string name="feature_debug_dev_mode">حالت توسعه (امولاتور)</string>
+    <string name="feature_debug_dev_mode_hint">برای تست روی امولاتور با آدرس 10.0.2.2</string>
     <string name="feature_debug_view_logs">مشاهده لاگ‌ها</string>
     <string name="feature_debug_adb_section">راه‌اندازی adb (دو امولاتور)</string>
     <string name="feature_debug_adb_instructions">ابتدا نود مرجع را روی میزبان اجرا کنید: ./gradlew :node:run سپس اسکریپت scripts/emulator-connect.sh را اجرا کنید.</string>
+    <string name="feature_debug_copy_adb">کپی دستورات</string>
     <string name="feature_logs_title">لاگ عملکرد</string>
     <string name="feature_logs_export_share">خروجی و اشتراک</string>
     <string name="feature_logs_clear">پاک‌کردن لاگ</string>
