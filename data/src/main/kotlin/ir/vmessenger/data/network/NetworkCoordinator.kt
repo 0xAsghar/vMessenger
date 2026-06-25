@@ -13,6 +13,7 @@ import ir.vmessenger.network.messaging.PeerIdentity
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -57,11 +58,7 @@ class NetworkCoordinator @Inject constructor(
         directHost: String?,
         directPort: Int?,
     ) {
-        val identityWithKey = awaitIdentityWithKey() ?: run {
-            AppLogger.warn("Network", "identity unavailable; skipping publish and relay listener")
-            return
-        }
-        val (identity, privateKey) = identityWithKey
+        val (identity, privateKey) = awaitIdentityWithKey()
         when (
             val publish = publishNetworkEndpointsUseCase(directHost = directHost, directPort = directPort)
         ) {
@@ -75,20 +72,31 @@ class NetworkCoordinator @Inject constructor(
             identityPub = identity.ed25519PublicKey,
             ed25519PrivateKey = privateKey,
         )
-        AppLogger.info("Network", "relay listener started")
+        AppLogger.info("Network", "relay listener starting")
     }
 
-    private suspend fun awaitIdentityWithKey(): Pair<Identity, ByteArray>? {
-        resolveIdentityWithKey(identityRepository.getIdentity())?.let { return it }
-        AppLogger.info("Network", "waiting for identity before publish/relay")
-        val identity = identityRepository.observeIdentity().filterNotNull().first()
-        return resolveIdentityWithKey(identity)
-    }
-
-    private suspend fun resolveIdentityWithKey(identity: Identity?): Pair<Identity, ByteArray>? =
-        identity?.let { id ->
-            identityRepository.getEd25519PrivateKey()?.let { key -> id to key }
+    private suspend fun awaitIdentityWithKey(): Pair<Identity, ByteArray> {
+        var loggedWait = false
+        while (true) {
+            val identity = identityRepository.getIdentity()
+            val privateKey = if (identity != null) identityRepository.getEd25519PrivateKey() else null
+            if (identity != null && privateKey != null) {
+                if (loggedWait) {
+                    AppLogger.info("Network", "identity and keys ready for publish/relay")
+                }
+                return identity to privateKey
+            }
+            if (!loggedWait) {
+                AppLogger.info("Network", "waiting for identity and keys before publish/relay")
+                loggedWait = true
+            }
+            if (identity == null) {
+                identityRepository.observeIdentity().filterNotNull().first()
+            } else {
+                delay(KEY_POLL_MS)
+            }
         }
+    }
 
     private suspend fun configureInbound() {
         messagingService.configureInbound(
@@ -114,5 +122,9 @@ class NetworkCoordinator @Inject constructor(
                 contactDao.getByIdentityHash(identityHash)?.id
             },
         )
+    }
+
+    companion object {
+        private const val KEY_POLL_MS = 100L
     }
 }
