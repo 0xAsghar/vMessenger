@@ -6,7 +6,7 @@
     <string name="theme_dark">تیره</string>
     <string name="theme_system">خودکار</string>
     <string name="settings_privacy_section">حریم خصوصی</string>
-    <string name="settings_screen_security">امنیت صفحه (FLAG_SECURE)</string>
+    <string name="settings_screen_security">امنیت صفحه</string>
     <string name="settings_hide_notifications">مخفی‌کردن محتوای اعلان</string>
     <string name="settings_secure_wipe">پاک‌سازی امن داده‌ها</string>
     <string name="settings_wipe_confirm_title">پاک‌سازی امن</string>

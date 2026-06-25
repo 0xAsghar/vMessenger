@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hash_copied">شناسه کپی شد</string>
+    <string name="hash_share_chooser">اشتراک‌گذاری شناسه</string>
+    <string name="hash_copy">کپی شناسه</string>
+    <string name="hash_share">اشتراک‌گذاری</string>
+    <string name="nav_back">بازگشت</string>
+    <string name="vmessenger_logo">لوگوی وی‌مسنجر</string>
+    <string name="user_hash_label">شناسه کاربری</string>
+</resources>

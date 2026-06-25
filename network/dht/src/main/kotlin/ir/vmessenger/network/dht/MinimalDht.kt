@@ -2,6 +2,7 @@ package ir.vmessenger.network.dht
 
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.network.LengthPrefixedFrames
+import ir.vmessenger.core.common.network.WebSocketFrameClient
 import ir.vmessenger.core.proto.dht.v1.DhtRpcRequest
 import ir.vmessenger.core.proto.dht.v1.DhtRpcResponse
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +17,15 @@ import javax.inject.Singleton
 @Singleton
 class DhtRpcClient @Inject constructor() {
     suspend fun send(address: String, request: DhtRpcRequest): DhtRpcResponse = withContext(Dispatchers.IO) {
+        if (address.startsWith("ws://") || address.startsWith("wss://")) {
+            val responseBytes = WebSocketFrameClient.sendBinary(address, request.toByteArray())
+            DhtRpcResponse.parseFrom(responseBytes)
+        } else {
+            sendTcp(address, request)
+        }
+    }
+
+    private fun sendTcp(address: String, request: DhtRpcRequest): DhtRpcResponse {
         val (host, port) = address.splitHostPort()
         Socket().use { socket ->
             socket.connect(InetSocketAddress(host, port), TIMEOUT_MS)
@@ -24,7 +34,7 @@ class DhtRpcClient @Inject constructor() {
             LengthPrefixedFrames.writeFrame(out, request.toByteArray())
             val responseBytes = LengthPrefixedFrames.readFrame(input)
                 ?: error("Empty DHT response from $address")
-            DhtRpcResponse.parseFrom(responseBytes)
+            return DhtRpcResponse.parseFrom(responseBytes)
         }
     }
 

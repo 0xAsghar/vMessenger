@@ -9,6 +9,7 @@ interface DiscoveryRepository {
     fun observeStatus(): Flow<DiscoveryStatus>
     suspend fun joinNetwork(): AppResult<Unit>
     suspend fun publishEndpoint(endpoint: Endpoint): AppResult<Unit>
+    suspend fun publishEndpoints(endpoints: List<Endpoint>): AppResult<Unit>
     suspend fun resolveEndpoints(identityHash: ByteArray): AppResult<List<Endpoint>>
     suspend fun getPublishedEndpoint(): String?
 }

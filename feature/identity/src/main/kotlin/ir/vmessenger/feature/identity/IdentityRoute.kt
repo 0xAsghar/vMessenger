@@ -19,41 +19,55 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.designsystem.component.UserHashLabel
+import ir.vmessenger.core.designsystem.component.UserHashShareRow
+import ir.vmessenger.core.designsystem.component.UserHashText
+import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 
 @Composable
 fun IdentityRoute(
+    onNavigateBack: () -> Unit = {},
     viewModel: IdentityViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Top,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = stringResource(R.string.my_identity_title),
-            style = MaterialTheme.typography.headlineMedium,
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        when (val state = uiState) {
-            IdentityUiState.Loading -> CircularProgressIndicator()
-            IdentityUiState.None -> Text(text = stringResource(R.string.my_identity_none))
-            is IdentityUiState.Loaded -> {
-                OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = stringResource(R.string.create_identity_user_hash_label),
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = state.identity.userHash,
-                            style = MaterialTheme.typography.titleMedium,
-                        )
+    VMessengerScaffold(
+        title = stringResource(R.string.my_identity_title),
+        onNavigateBack = onNavigateBack,
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.Top,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            when (val state = uiState) {
+                IdentityUiState.Loading -> CircularProgressIndicator()
+                IdentityUiState.None -> Text(text = stringResource(R.string.my_identity_none))
+                is IdentityUiState.Loaded -> {
+                    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            UserHashLabel()
+                            UserHashText(
+                                text = state.identity.userHash,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                            UserHashShareRow(userHash = state.identity.userHash)
+                        }
                     }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(R.string.my_identity_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }

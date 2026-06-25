@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
@@ -16,11 +18,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.designsystem.R as DesignR
+import ir.vmessenger.core.designsystem.component.UserHashLabel
+import ir.vmessenger.core.designsystem.component.UserHashShareRow
+import ir.vmessenger.core.designsystem.component.UserHashText
 
 @Composable
 fun CreateIdentityRoute(
@@ -31,7 +38,7 @@ fun CreateIdentityRoute(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(horizontal = 24.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -52,12 +59,19 @@ fun CreateIdentityRoute(
 
 @Composable
 private fun CreateIdentityIntro(onCreate: () -> Unit) {
+    Icon(
+        painter = painterResource(DesignR.drawable.ic_vmessenger_logo),
+        contentDescription = stringResource(DesignR.string.vmessenger_logo),
+        modifier = Modifier.size(72.dp),
+        tint = MaterialTheme.colorScheme.onBackground,
+    )
+    Spacer(modifier = Modifier.height(24.dp))
     Text(
         text = stringResource(R.string.create_identity_title),
-        style = MaterialTheme.typography.headlineMedium,
+        style = MaterialTheme.typography.headlineSmall,
         textAlign = TextAlign.Center,
     )
-    Spacer(modifier = Modifier.height(16.dp))
+    Spacer(modifier = Modifier.height(12.dp))
     Text(
         text = stringResource(R.string.create_identity_body),
         style = MaterialTheme.typography.bodyLarge,
@@ -86,13 +100,18 @@ private fun CreateIdentitySuccess(userHash: String, onContinue: () -> Unit) {
     )
     Spacer(modifier = Modifier.height(16.dp))
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = stringResource(R.string.create_identity_user_hash_label),
-                style = MaterialTheme.typography.labelMedium,
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            UserHashLabel()
+            UserHashText(
+                text = userHash,
+                modifier = Modifier.padding(top = 8.dp),
             )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(text = userHash, style = MaterialTheme.typography.titleMedium)
+            UserHashShareRow(userHash = userHash)
         }
     }
     Spacer(modifier = Modifier.height(24.dp))

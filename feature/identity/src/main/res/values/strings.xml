@@ -11,4 +11,5 @@
     <string name="create_identity_retry">تلاش دوباره</string>
     <string name="my_identity_title">هویت من</string>
     <string name="my_identity_none">هویتی یافت نشد</string>
+    <string name="my_identity_hint">این شناسه را با مخاطبان خود به اشتراک بگذارید تا بتوانند شما را اضافه کنند.</string>
 </resources>

@@ -11,7 +11,7 @@ import ir.vmessenger.domain.model.DiscoveryStatus
 import ir.vmessenger.domain.repository.DiscoveryRepository
 import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.network.bootstrap.BootstrapManager
-import ir.vmessenger.network.bootstrap.BuiltInBootstrapProvider
+import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.network.dht.Dht
 import ir.vmessenger.network.dht.toEndpoints
 import ir.vmessenger.network.discovery.DhtDiscoveryProvider
@@ -66,20 +66,24 @@ class DiscoveryRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun publishEndpoint(endpoint: Endpoint): AppResult<Unit> {
+    override suspend fun publishEndpoint(endpoint: Endpoint): AppResult<Unit> =
+        publishEndpoints(listOf(endpoint))
+
+    override suspend fun publishEndpoints(endpoints: List<Endpoint>): AppResult<Unit> {
         val identity = identityRepository.getIdentity()
         val privateKey = identityRepository.getEd25519PrivateKey()
         val result = when {
             identity == null -> AppResult.Error(AppError.NotFound("هویت یافت نشد"))
             privateKey == null -> AppResult.Error(AppError.Crypto("کلید خصوصی در دسترس نیست"))
+            endpoints.isEmpty() -> AppResult.Error(AppError.Validation("هیچ endpointی برای انتشار وجود ندارد"))
             else -> {
                 val discoveryIdentity = DiscoveryIdentity(identity.identityHash, identity.ed25519PublicKey)
-                dhtDiscoveryProvider.announce(discoveryIdentity, listOf(endpoint), privateKey)
+                dhtDiscoveryProvider.announce(discoveryIdentity, endpoints, privateKey)
             }
         }
         when (result) {
             is AppResult.Success -> _status.value = _status.value.copy(
-                publishedEndpoint = endpoint.address,
+                publishedEndpoint = endpoints.joinToString { "${it.transport.value}:${it.address}" },
                 lastError = null,
             )
             is AppResult.Error -> _status.value = _status.value.copy(lastError = result.error.message)
@@ -105,7 +109,7 @@ class DiscoveryRepositoryImpl @Inject constructor(
     private suspend fun seedBootstrapNodes() {
         bootstrapNodeDao.upsert(
             BootstrapNodeEntity(
-                address = BuiltInBootstrapProvider.DEFAULT_ADDRESS,
+                address = NetworkConfig.effectiveBootstrapAddress(),
                 publicKey = null,
                 source = "BUILT_IN",
                 enabled = true,

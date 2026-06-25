@@ -73,7 +73,7 @@ sequenceDiagram
 - Live Location sharing with a foreground service and encrypted location packets.
 - Encrypted local storage (Room over SQLCipher) and contact management.
 
-Designed for but intentionally deferred to later phases: groups, voice/video calls, file and image transfer, Bluetooth and Wi-Fi Direct transports, mesh networking, geofencing, location history analytics, SOS mode, team and family management, plugin system, and DHT/NAT/relay optimizations.
+Designed for but intentionally deferred to later phases: groups, voice/video calls, file and image transfer, Bluetooth and Wi-Fi Direct transports, mesh networking, geofencing, location history analytics, SOS mode, team and family management, plugin system, and full Kademlia/NAT hole-punching. **Relay fallback** via `relay.vmessenger.ir` (DHT + circuit relay, E2E only) is implemented — see [deploy/README.md](deploy/README.md).
 
 ---
 

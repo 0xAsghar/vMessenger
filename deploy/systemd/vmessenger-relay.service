@@ -1,0 +1,16 @@
+[Unit]
+Description=vMessenger DHT + Relay Node
+After=network.target
+
+[Service]
+Type=simple
+User=vmessenger
+WorkingDirectory=/opt/vmessenger
+Environment=VMESSENGER_NODE_PORT=8443
+Environment=VMESSENGER_PUBLIC_HOST=relay.vmessenger.ir
+ExecStart=/opt/vmessenger/bin/node
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -58,16 +58,30 @@ fun VMessengerNavHost(
                 ),
             )
         }
-        composable(Routes.PAIRING_MY_QR) { MyQrRoute() }
+        composable(Routes.PAIRING_MY_QR) {
+            MyQrRoute(onNavigateBack = { navController.popBackStack() })
+        }
         composable(Routes.PAIRING_SCAN) {
-            QrScannerRoute(onDone = { navController.popBackStack() })
+            QrScannerRoute(
+                onDone = { navController.popBackStack() },
+                onNavigateBack = { navController.popBackStack() },
+            )
         }
         composable(Routes.PAIRING_HASH) {
-            AddByHashRoute(onDone = { navController.popBackStack() })
+            AddByHashRoute(
+                onDone = { navController.popBackStack() },
+                onNavigateBack = { navController.popBackStack() },
+            )
         }
-        composable(Routes.IDENTITY) { IdentityRoute() }
-        composable(Routes.DEBUG) { DebugRoute() }
-        composable(Routes.ABOUT) { AboutRoute() }
+        composable(Routes.IDENTITY) {
+            IdentityRoute(onNavigateBack = { navController.popBackStack() })
+        }
+        composable(Routes.DEBUG) {
+            DebugRoute(onNavigateBack = { navController.popBackStack() })
+        }
+        composable(Routes.ABOUT) {
+            AboutRoute(onNavigateBack = { navController.popBackStack() })
+        }
     }
 }
 

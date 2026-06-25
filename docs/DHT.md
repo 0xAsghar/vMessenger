@@ -93,6 +93,8 @@ flowchart TD
 
 Join the network by contacting one or more bootstrap nodes, learning initial routing contacts, and seeding the local routing table. Full flow in [Bootstrap.md](Bootstrap.md).
 
+Production bootstrap: `wss://relay.vmessenger.ir/dht` (WebSocket-secure through Arvan CDN + nginx TLS). Emulator dev may use raw TCP `10.0.2.2:46555` via `NetworkConfig.useDevBootstrap`.
+
 ### 4.2 publish (announce)
 
 - Compute the set of nodes closest to our identity hash (iterative node lookup over the XOR metric).

@@ -94,7 +94,8 @@ flowchart TD
 These are designed-for in the current architecture and added without breaking existing code.
 
 ### Connectivity hardening
-- NAT traversal (ICE/STUN-style hole punching) and relay-assisted fallback so peers behind carrier-grade NAT connect reliably; phones become full DHT nodes.
+- **Done (MVP):** WebSocket-secure DHT node + circuit relay at `relay.vmessenger.ir`; app prefers direct `INTERNET` then falls back to `RELAY`; listener registers on relay for inbound NAT'd peers.
+- Remaining: NAT hole punching (ICE/STUN/DCUtR) for direct mobile-to-mobile without relay; phones as full DHT routing nodes.
 - Full Kademlia routing table (k-buckets, replication across closest k, parallel lookups), addressing the MVP simplifications in [DHT.md](DHT.md) Section 8.
 
 ### Cryptography upgrade

@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package vmessenger.relay.v1;
+
+option java_package = "ir.vmessenger.core.proto.relay.v1";
+option java_multiple_files = true;
+
+enum RelayRole {
+  RELAY_ROLE_UNSPECIFIED = 0;
+  RELAY_ROLE_LISTENER = 1;
+  RELAY_ROLE_DIALER = 2;
+  RELAY_ROLE_ACCEPT = 3;
+}
+
+message RelayHello {
+  RelayRole role = 1;
+  bytes listener_id = 2;
+  bytes target_id = 3;
+  string circuit_id = 4;
+  bytes identity_pub = 5;
+  bytes proof = 6;
+  int64 ts = 7;
+}
+
+enum RelayEventType {
+  RELAY_EVENT_TYPE_UNSPECIFIED = 0;
+  RELAY_EVENT_TYPE_INCOMING = 1;
+  RELAY_EVENT_TYPE_READY = 2;
+  RELAY_EVENT_TYPE_ERROR = 3;
+}
+
+message RelayEvent {
+  RelayEventType type = 1;
+  string circuit_id = 2;
+  string message = 3;
+}

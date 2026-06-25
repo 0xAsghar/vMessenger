@@ -8,8 +8,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.theme.UserHashTextStyle
 import java.security.MessageDigest
 
 @Composable
@@ -25,8 +25,7 @@ fun SafetyNumberDisplay(
         Text(text = "شماره امنیتی", style = MaterialTheme.typography.titleMedium)
         Text(
             text = fingerprint,
-            style = MaterialTheme.typography.bodyLarge,
-            fontFamily = FontFamily.Monospace,
+            style = UserHashTextStyle,
             modifier = Modifier.padding(top = 8.dp),
         )
     }

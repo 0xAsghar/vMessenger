@@ -10,16 +10,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.QrCode
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.outlined.QrCode2
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -30,9 +28,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.Identicon
 import ir.vmessenger.core.designsystem.component.SafetyNumberDisplay
+import ir.vmessenger.core.designsystem.component.UserHashText
+import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.domain.model.Contact
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactsRoute(
     onMyQr: () -> Unit,
@@ -42,25 +41,29 @@ fun ContactsRoute(
     viewModel: ContactsViewModel = hiltViewModel(),
 ) {
     val contacts by viewModel.contacts.collectAsStateWithLifecycle()
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.contacts_title)) },
-                actions = {
-                    IconButton(onClick = onMyQr) {
-                        Icon(Icons.Default.QrCode, contentDescription = stringResource(R.string.contacts_my_qr))
-                    }
-                    IconButton(onClick = onScanQr) {
-                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.contacts_scan_qr))
-                    }
-                },
-            )
+    VMessengerScaffold(
+        title = stringResource(R.string.contacts_title),
+        actions = {
+            IconButton(onClick = onMyQr) {
+                Icon(
+                    imageVector = Icons.Outlined.QrCode2,
+                    contentDescription = stringResource(R.string.contacts_my_qr),
+                )
+            }
+            IconButton(onClick = onScanQr) {
+                Icon(
+                    imageVector = Icons.Outlined.QrCodeScanner,
+                    contentDescription = stringResource(R.string.contacts_scan_qr),
+                )
+            }
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = onAddByHash,
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                icon = { Icon(Icons.Default.PersonAdd, contentDescription = null) },
                 text = { Text(stringResource(R.string.contacts_add)) },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
             )
         },
     ) { padding ->
@@ -74,6 +77,7 @@ fun ContactsRoute(
                 Text(
                     text = stringResource(R.string.contacts_empty_hint),
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
@@ -98,7 +102,10 @@ fun ContactDetailRoute(
             Identicon(seed = contact.identityHash, size = 56.dp)
             Column(modifier = Modifier.padding(start = 16.dp)) {
                 Text(text = contact.displayName, style = MaterialTheme.typography.titleLarge)
-                Text(text = contact.userHash, style = MaterialTheme.typography.bodySmall)
+                UserHashText(
+                    text = contact.userHash,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                )
             }
         }
         if (localPublicKey != null && contact.ed25519PublicKey.any { it != 0.toByte() }) {
@@ -123,7 +130,10 @@ private fun ContactRow(contact: Contact, onClick: () -> Unit) {
         Identicon(seed = contact.identityHash)
         Column(modifier = Modifier.padding(start = 16.dp)) {
             Text(text = contact.displayName, style = MaterialTheme.typography.titleMedium)
-            Text(text = contact.userHash, style = MaterialTheme.typography.bodySmall)
+            UserHashText(
+                text = contact.userHash,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+            )
         }
     }
 }

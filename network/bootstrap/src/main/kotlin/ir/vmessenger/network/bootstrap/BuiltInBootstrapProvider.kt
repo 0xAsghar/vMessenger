@@ -1,6 +1,7 @@
 package ir.vmessenger.network.bootstrap
 
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.network.NetworkConfig
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -12,14 +13,15 @@ class BuiltInBootstrapProvider @Inject constructor() : BootstrapProvider {
     override suspend fun nodes(): AppResult<List<BootstrapNode>> = AppResult.Success(
         listOf(
             BootstrapNode(
-                address = DEFAULT_ADDRESS,
+                address = NetworkConfig.effectiveBootstrapAddress(),
                 source = id,
             ),
         ),
     )
 
     companion object {
-        const val DEFAULT_ADDRESS = "10.0.2.2:46555"
+        const val DEFAULT_ADDRESS = NetworkConfig.DEFAULT_DHT_URL
         const val DEFAULT_PORT = 46555
+        const val DEV_ADDRESS = NetworkConfig.DEV_BOOTSTRAP_ADDRESS
     }
 }

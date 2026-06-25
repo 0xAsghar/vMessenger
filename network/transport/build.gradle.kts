@@ -9,8 +9,10 @@ android {
 
 dependencies {
     implementation(project(":core:common"))
+    implementation(project(":core:proto"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.okhttp)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

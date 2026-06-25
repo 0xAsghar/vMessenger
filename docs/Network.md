@@ -169,7 +169,10 @@ For the MVP only the Internet transport is registered, so selection trivially re
 - Reliable, ordered byte stream over TCP, carrying length-delimited frames (see [Protocol.md](Protocol.md)). TLS-style transport encryption is unnecessary because every frame is already end-to-end encrypted; the Encryption layer authenticates the peer by identity key, which is stronger than CA-based TLS for this use case.
 - Listens on a local port and registers its address as an `Endpoint` published via the DHT discovery provider.
 - Connection reuse: an established connection is cached per peer and reused for subsequent messages and location packets.
-- MVP reachability assumption: the peer's published endpoint is directly reachable (public IP, IPv6, port-forwarded, or same network). NAT traversal and relay fallback are future transports/strategies (see [Roadmap.md](Roadmap.md)).
+- **Direct-first, relay-fallback:** the app tries `INTERNET` endpoints before `RELAY`. The production relay at `wss://relay.vmessenger.ir/relay` bridges opaque E2E-encrypted frames when direct TCP fails (NAT/carrier-grade NAT). The relay never decrypts message content.
+- DHT bootstrap and store/find use `wss://relay.vmessenger.ir/dht` through Arvan CDN + nginx TLS.
+- Local emulator dev can use raw TCP bootstrap (`10.0.2.2:46555`) via `NetworkConfig.useDevBootstrap`.
+- Full mobile-to-mobile hole punching (DCUtR/ICE) and full Kademlia remain future work (see [Roadmap.md](Roadmap.md)).
 
 ---
 

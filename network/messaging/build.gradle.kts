@@ -12,10 +12,11 @@ dependencies {
     implementation(project(":network:discovery"))
     implementation(project(":core:crypto"))
     implementation(project(":core:proto"))
-    implementation(project(":core:database"))
     implementation(project(":core:common"))
+    implementation(project(":core:database"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.okhttp)
 
     testImplementation(libs.junit)
     testImplementation(libs.lazysodium.java)

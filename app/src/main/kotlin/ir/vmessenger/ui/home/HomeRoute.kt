@@ -2,19 +2,22 @@ package ir.vmessenger.ui.home
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.filled.Contacts
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.outlined.Contacts
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -37,16 +40,16 @@ private data class HomeTab(
 fun HomeRoute(navigation: HomeNavigation = HomeNavigation()) {
     val tabs = listOf(
         HomeTab(Routes.CHATS, R.string.tab_chats) {
-            Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null)
+            Icon(Icons.AutoMirrored.Outlined.Chat, contentDescription = null)
         },
         HomeTab(Routes.CONTACTS, R.string.tab_contacts) {
-            Icon(Icons.Default.Contacts, contentDescription = null)
+            Icon(Icons.Outlined.Contacts, contentDescription = null)
         },
         HomeTab(Routes.LOCATION, R.string.tab_location) {
-            Icon(Icons.Default.LocationOn, contentDescription = null)
+            Icon(Icons.Outlined.LocationOn, contentDescription = null)
         },
         HomeTab(Routes.SETTINGS, R.string.tab_settings) {
-            Icon(Icons.Default.Settings, contentDescription = null)
+            Icon(Icons.Outlined.Settings, contentDescription = null)
         },
     )
 
@@ -55,6 +58,7 @@ fun HomeRoute(navigation: HomeNavigation = HomeNavigation()) {
     val currentRoute = backStackEntry?.destination?.route ?: Routes.CHATS
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = { HomeBottomBar(tabs, currentRoute, navController) },
     ) { padding ->
         HomeTabNavHost(
@@ -71,7 +75,10 @@ private fun HomeBottomBar(
     currentRoute: String,
     navController: androidx.navigation.NavHostController,
 ) {
-    NavigationBar {
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.background,
+        tonalElevation = 0.dp,
+    ) {
         tabs.forEach { tab ->
             NavigationBarItem(
                 selected = currentRoute == tab.route,
@@ -86,6 +93,13 @@ private fun HomeBottomBar(
                 },
                 icon = tab.icon,
                 label = { Text(text = stringResource(tab.labelRes)) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.onBackground,
+                    selectedTextColor = MaterialTheme.colorScheme.onBackground,
+                    indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
             )
         }
     }

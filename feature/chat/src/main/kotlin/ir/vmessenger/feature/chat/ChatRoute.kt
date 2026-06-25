@@ -10,13 +10,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,10 +25,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.domain.model.DeliveryStatus
 import ir.vmessenger.domain.model.MessageDirection
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatRoute(
     viewModel: ChatListViewModel = hiltViewModel(),
@@ -45,17 +42,18 @@ fun ChatRoute(
             onBack = { selectedConversationId = null },
         )
     } else {
-        Scaffold(
-            topBar = {
-                TopAppBar(title = { Text(text = stringResource(R.string.feature_chat_title)) })
-            },
+        VMessengerScaffold(
+            title = stringResource(R.string.feature_chat_title),
         ) { padding ->
             if (conversations.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize().padding(padding),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(text = stringResource(R.string.feature_chat_empty))
+                    Text(
+                        text = stringResource(R.string.feature_chat_empty),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             } else {
                 LazyColumn(modifier = Modifier.padding(padding)) {
@@ -63,13 +61,17 @@ fun ChatRoute(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
                             onClick = { selectedConversationId = conversation.id },
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Text(text = conversation.contactName, style = MaterialTheme.typography.titleMedium)
                                 conversation.lastMessagePreview?.let {
-                                    Text(text = it, style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        text = it,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                             }
                         }
@@ -80,7 +82,6 @@ fun ChatRoute(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationRoute(
     conversationId: String,
@@ -94,17 +95,9 @@ fun ConversationRoute(
         viewModel.load(conversationId)
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(text = stringResource(R.string.feature_chat_conversation)) },
-                navigationIcon = {
-                    TextButton(onClick = onBack) {
-                        Text(text = stringResource(R.string.feature_chat_back))
-                    }
-                },
-            )
-        },
+    VMessengerScaffold(
+        title = stringResource(R.string.feature_chat_conversation),
+        onNavigateBack = onBack,
     ) { padding ->
         Column(
             modifier = Modifier
@@ -158,6 +151,7 @@ private fun MessageBubble(message: ir.vmessenger.domain.model.ChatMessage) {
                 Text(
                     text = statusLabel(message.status),
                     style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

@@ -5,6 +5,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import ir.vmessenger.core.designsystem.R
 
@@ -50,4 +51,31 @@ val VMessengerTypography = Typography(
         fontSize = 14.sp,
         lineHeight = 20.sp,
     ),
+    labelMedium = TextStyle(
+        fontFamily = Vazirmatn,
+        fontWeight = FontWeight.Medium,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+    ),
+    titleMedium = TextStyle(
+        fontFamily = Vazirmatn,
+        fontWeight = FontWeight.Medium,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
+    ),
+    headlineSmall = TextStyle(
+        fontFamily = Vazirmatn,
+        fontWeight = FontWeight.Medium,
+        fontSize = 24.sp,
+        lineHeight = 32.sp,
+    ),
+)
+
+val UserHashTextStyle = TextStyle(
+    fontFamily = FontFamily.Monospace,
+    fontWeight = FontWeight.Normal,
+    fontSize = 14.sp,
+    lineHeight = 22.sp,
+    letterSpacing = 0.5.sp,
+    textAlign = TextAlign.Center,
 )

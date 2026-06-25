@@ -149,6 +149,52 @@ class SecureChannelFactory @Inject constructor(
             ActiveSecureSession(expectedPeer, state, ratchet, connection)
         }
 
+    suspend fun acceptResolving(
+        connection: Connection,
+        self: PeerIdentity,
+        resolvePeer: suspend (identityPub: ByteArray, staticPub: ByteArray) -> PeerIdentity?,
+    ): Result<SecureSession> = runCatching {
+        val step1 = readHandshake(connection)
+        require(step1.step == 1) { "Expected handshake step 1" }
+        val eph = cryptoEngine.generateX25519KeyPair()
+        val dh1 = cryptoEngine.x25519SharedSecret(eph.privateKey, step1.ephemeralPub.toByteArray())
+        val step2 = HandshakeMessage.newBuilder()
+            .setStep(2)
+            .setEphemeralPub(ByteString.copyFrom(eph.publicKey))
+            .setStaticPub(ByteString.copyFrom(self.x25519StaticPublicKey))
+            .setIdentityPub(ByteString.copyFrom(self.ed25519PublicKey))
+            .setSignature(
+                ByteString.copyFrom(
+                    cryptoEngine.signEd25519(
+                        buildTranscript(step1, null),
+                        self.ed25519PrivateKey!!,
+                    ),
+                ),
+            )
+            .setCapabilities(defaultCapabilities())
+            .build()
+        sendHandshake(connection, step2)
+        val step3 = readHandshake(connection)
+        require(step3.step == 3) { "Expected handshake step 3" }
+        val identityPub = step3.identityPub.toByteArray()
+        val staticPub = step3.staticPub.toByteArray()
+        val peer = resolvePeer(identityPub, staticPub)
+            ?: error("Unknown peer identity")
+        verifyPeer(step3, peer.copy(x25519StaticPublicKey = staticPub))
+        val dh2 = cryptoEngine.x25519SharedSecret(
+            self.x25519StaticPrivateKey!!,
+            step1.ephemeralPub.toByteArray(),
+        )
+        val root = cryptoEngine.hkdfSha256(
+            dh1 + dh2,
+            ByteArray(0),
+            "vmessenger-handshake".toByteArray(),
+            32,
+        )
+        val state = ratchet.initFromRoot(root, isInitiator = false)
+        ActiveSecureSession(peer.copy(x25519StaticPublicKey = staticPub), state, ratchet, connection)
+    }
+
     private fun verifyPeer(message: HandshakeMessage, expected: PeerIdentity) {
         val identityPub = message.identityPub.toByteArray()
         require(identityPub.contentEquals(expected.ed25519PublicKey)) {

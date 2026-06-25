@@ -2,8 +2,12 @@
 <resources>
     <string name="feature_pairing_placeholder">جفت‌سازی — به‌زودی</string>
     <string name="pairing_no_identity">ابتدا هویت بسازید</string>
-    <string name="add_by_hash_title">افزودن با شناسه کاربری</string>
-    <string name="add_by_hash_label">شناسه کاربری (User Hash)</string>
+    <string name="my_qr_title">QR من</string>
+    <string name="scan_qr_title">اسکن QR</string>
+    <string name="scan_qr_hint">QR مخاطب را داخل کادر قرار دهید</string>
+    <string name="add_by_hash_title">افزودن با شناسه</string>
+    <string name="add_by_hash_hint">شناسه کاربری مخاطب را وارد کنید.</string>
+    <string name="add_by_hash_label">شناسه کاربری</string>
     <string name="add_by_hash_action">افزودن</string>
     <string name="add_contact_success">مخاطب اضافه شد</string>
     <string name="add_contact_done">بازگشت</string>

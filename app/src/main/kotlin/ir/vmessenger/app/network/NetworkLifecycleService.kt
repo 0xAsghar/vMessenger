@@ -4,55 +4,37 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import dagger.hilt.android.AndroidEntryPoint
-import ir.vmessenger.data.di.IoDispatcher
-import ir.vmessenger.domain.usecase.discovery.JoinNetworkUseCase
-import ir.vmessenger.domain.usecase.discovery.PublishEndpointUseCase
-import ir.vmessenger.network.messaging.MessagingService
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
+import ir.vmessenger.core.common.network.NetworkConfig
+import ir.vmessenger.data.network.NetworkCoordinator
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class NetworkLifecycleService : Service() {
     @Inject
-    lateinit var joinNetworkUseCase: JoinNetworkUseCase
-
-    @Inject
-    lateinit var publishEndpointUseCase: PublishEndpointUseCase
-
-    @Inject
-    lateinit var messagingService: MessagingService
-
-    @Inject
-    @IoDispatcher
-    lateinit var ioDispatcher: CoroutineDispatcher
-
-    private val scope by lazy { CoroutineScope(SupervisorJob() + ioDispatcher) }
+    lateinit var networkCoordinator: NetworkCoordinator
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val listenPort = intent?.getIntExtra(EXTRA_LISTEN_PORT, DEFAULT_LISTEN_PORT) ?: DEFAULT_LISTEN_PORT
         val forwardPort = intent?.getIntExtra(EXTRA_FORWARD_PORT, listenPort) ?: listenPort
-        scope.launch {
-            joinNetworkUseCase()
-            publishEndpointUseCase(host = "10.0.2.2", port = forwardPort)
-            messagingService.startListening(listenPort)
-        }
+        val useDevBootstrap = intent?.getBooleanExtra(EXTRA_USE_DEV_BOOTSTRAP, false) ?: false
+        NetworkConfig.useDevBootstrap = useDevBootstrap
+        val directHost = if (useDevBootstrap) DEV_EMULATOR_HOST else null
+        val directPort = if (useDevBootstrap) forwardPort else null
+        networkCoordinator.start(
+            listenPort = listenPort,
+            directHost = directHost,
+            directPort = directPort,
+        )
         return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onDestroy() {
-        scope.cancel()
-        super.onDestroy()
-    }
-
     companion object {
         const val EXTRA_LISTEN_PORT = "listen_port"
         const val EXTRA_FORWARD_PORT = "forward_port"
+        const val EXTRA_USE_DEV_BOOTSTRAP = "use_dev_bootstrap"
         const val DEFAULT_LISTEN_PORT = 48555
+        private const val DEV_EMULATOR_HOST = "10.0.2.2"
     }
 }

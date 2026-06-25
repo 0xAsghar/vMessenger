@@ -9,15 +9,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,11 +30,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.datastore.ThemeMode
+import ir.vmessenger.core.designsystem.component.SettingsDivider
+import ir.vmessenger.core.designsystem.component.SettingsSection
+import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 
 private data class SettingsNavigation(
     val onDebug: () -> Unit,
@@ -38,7 +47,6 @@ private data class SettingsNavigation(
     val onSecureWipe: () -> Unit,
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsRoute(
     onNavigateToDebug: () -> Unit = {},
@@ -48,10 +56,8 @@ fun SettingsRoute(
 ) {
     var showWipeDialog by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text(text = stringResource(R.string.settings_title)) })
-        },
+    VMessengerScaffold(
+        title = stringResource(R.string.settings_title),
     ) { padding ->
         SettingsContent(
             viewModel = viewModel,
@@ -89,51 +95,134 @@ private fun SettingsContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Text(text = stringResource(R.string.settings_theme_section))
-        ThemeMode.entries.forEach { mode ->
-            FilterChip(
-                selected = themeMode == mode,
-                onClick = { viewModel.setThemeMode(mode) },
-                label = { Text(text = mode.label()) },
+        SettingsSection(title = stringResource(R.string.settings_theme_section)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ThemeMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = themeMode == mode,
+                        onClick = { viewModel.setThemeMode(mode) },
+                        label = { Text(text = mode.label()) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+
+        SettingsSection(title = stringResource(R.string.settings_privacy_section)) {
+            SettingsToggleRow(
+                label = stringResource(R.string.settings_screen_security),
+                icon = Icons.Outlined.Security,
+                checked = screenSecurity,
+                onCheckedChange = viewModel::setScreenSecurity,
+            )
+            SettingsDivider()
+            SettingsToggleRow(
+                label = stringResource(R.string.settings_hide_notifications),
+                icon = Icons.Outlined.NotificationsOff,
+                checked = hideNotifications,
+                onCheckedChange = viewModel::setHideNotificationContent,
+            )
+            SettingsDivider()
+            SettingsActionRow(
+                label = stringResource(R.string.settings_secure_wipe),
+                icon = Icons.Outlined.DeleteForever,
+                onClick = navigation.onSecureWipe,
+                destructive = true,
             )
         }
 
-        HorizontalDivider()
-        Text(text = stringResource(R.string.settings_privacy_section))
-        SettingsSwitchRow(
-            label = stringResource(R.string.settings_screen_security),
-            checked = screenSecurity,
-            onCheckedChange = viewModel::setScreenSecurity,
-        )
-        SettingsSwitchRow(
-            label = stringResource(R.string.settings_hide_notifications),
-            checked = hideNotifications,
-            onCheckedChange = viewModel::setHideNotificationContent,
-        )
-        TextButton(onClick = navigation.onSecureWipe) {
-            Text(text = stringResource(R.string.settings_secure_wipe))
+        SettingsSection(title = stringResource(R.string.settings_network_section)) {
+            SettingsActionRow(
+                label = stringResource(R.string.settings_debug),
+                icon = Icons.Outlined.BugReport,
+                onClick = navigation.onDebug,
+            )
         }
 
-        HorizontalDivider()
-        Text(text = stringResource(R.string.settings_network_section))
-        SettingsLinkRow(
-            label = stringResource(R.string.settings_debug),
-            onClick = navigation.onDebug,
-        )
+        SettingsSection(title = stringResource(R.string.settings_identity_section)) {
+            SettingsActionRow(
+                label = stringResource(R.string.settings_identity),
+                icon = Icons.Outlined.Fingerprint,
+                onClick = navigation.onIdentity,
+            )
+            SettingsDivider()
+            SettingsActionRow(
+                label = stringResource(R.string.settings_about),
+                icon = Icons.AutoMirrored.Outlined.HelpOutline,
+                onClick = navigation.onAbout,
+            )
+        }
+    }
+}
 
-        HorizontalDivider()
-        Text(text = stringResource(R.string.settings_identity_section))
-        SettingsLinkRow(
-            label = stringResource(R.string.settings_identity),
-            onClick = navigation.onIdentity,
+@Composable
+private fun SettingsToggleRow(
+    label: String,
+    icon: ImageVector,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(text = label, style = MaterialTheme.typography.bodyLarge)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun SettingsActionRow(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    destructive: Boolean = false,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (destructive) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
         )
-        SettingsLinkRow(
-            label = stringResource(R.string.settings_about),
-            onClick = navigation.onAbout,
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground,
         )
     }
 }
@@ -157,33 +246,6 @@ private fun WipeConfirmDialog(
                 Text(text = stringResource(R.string.settings_wipe_cancel))
             }
         },
-    )
-}
-
-@Composable
-private fun SettingsSwitchRow(
-    label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text = label, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@Composable
-private fun SettingsLinkRow(label: String, onClick: () -> Unit) {
-    Text(
-        text = label,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
     )
 }
 

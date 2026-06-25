@@ -4,6 +4,7 @@ plugins {
 
 dependencies {
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.okhttp)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.junit)
 }

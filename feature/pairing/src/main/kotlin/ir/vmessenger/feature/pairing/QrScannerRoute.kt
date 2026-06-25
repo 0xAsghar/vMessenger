@@ -9,10 +9,15 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -22,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -32,11 +38,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
+import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import java.util.concurrent.Executors
 
 @Composable
 fun QrScannerRoute(
     onDone: () -> Unit,
+    onNavigateBack: () -> Unit,
     viewModel: QrScanViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -57,19 +65,45 @@ fun QrScannerRoute(
         onDispose { }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        if (hasCamera && uiState !is AddContactUiState.Success) {
-            QrCameraPreview(
-                lifecycleOwner = lifecycleOwner,
-                onQrScanned = viewModel::onQrScanned,
-            )
-        } else if (!hasCamera) {
-            Text(
-                text = stringResource(R.string.camera_permission_required),
-                modifier = Modifier.align(Alignment.Center).padding(24.dp),
-            )
+    VMessengerScaffold(
+        title = stringResource(R.string.scan_qr_title),
+        onNavigateBack = onNavigateBack,
+    ) { padding ->
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            if (hasCamera && uiState !is AddContactUiState.Success) {
+                QrCameraPreview(
+                    lifecycleOwner = lifecycleOwner,
+                    onQrScanned = viewModel::onQrScanned,
+                )
+                QrScanFrameOverlay()
+            } else if (!hasCamera) {
+                Text(
+                    text = stringResource(R.string.camera_permission_required),
+                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                )
+            }
+            QrScannerStatusOverlay(uiState = uiState, onDone = onDone)
         }
-        QrScannerStatusOverlay(uiState = uiState, onDone = onDone)
+    }
+}
+
+@Composable
+private fun QrScanFrameOverlay() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Surface(
+            modifier = Modifier.size(260.dp),
+            shape = RoundedCornerShape(24.dp),
+            color = Color.Transparent,
+            border = BorderStroke(2.dp, MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)),
+        ) {}
+        Text(
+            text = stringResource(R.string.scan_qr_hint),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 32.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
     }
 }
 
@@ -131,6 +165,7 @@ private fun QrScannerStatusOverlay(
                 Text(
                     text = uiState.message,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
             AddContactUiState.Success -> {

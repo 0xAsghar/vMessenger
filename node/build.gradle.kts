@@ -22,6 +22,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.lazysodium.java)
     implementation(libs.jna)
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.websockets)
 
     testImplementation(libs.junit)
 }
