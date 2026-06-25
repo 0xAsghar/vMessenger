@@ -4,6 +4,7 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.data.di.IoDispatcher
+import ir.vmessenger.domain.model.Identity
 import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.domain.usecase.discovery.JoinNetworkUseCase
 import ir.vmessenger.domain.usecase.discovery.PublishNetworkEndpointsUseCase
@@ -12,6 +13,8 @@ import ir.vmessenger.network.messaging.PeerIdentity
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,26 +39,56 @@ class NetworkCoordinator @Inject constructor(
     ) {
         scope.launch {
             AppLogger.info("Network", "coordinator start listenPort=$listenPort dev=${directHost != null}")
+            configureInbound()
+            incomingMessageCollector.start()
+            messagingService.startListening(listenPort)
+            AppLogger.info("Network", "TCP listener started on $listenPort")
             when (val join = joinNetworkUseCase()) {
                 is AppResult.Success ->
                     AppLogger.info("Network", "join network OK")
                 is AppResult.Error ->
                     AppLogger.error("Network", "join network failed: ${join.error.message}")
             }
-            when (val publish = publishNetworkEndpointsUseCase(directHost = directHost, directPort = directPort)) {
-                is AppResult.Success ->
-                    AppLogger.info("Network", "publish endpoints OK")
-                is AppResult.Error ->
-                    AppLogger.error("Network", "publish endpoints failed: ${publish.error.message}")
-            }
-            configureInbound()
-            incomingMessageCollector.start()
-            messagingService.startListening(listenPort)
-            AppLogger.info("Network", "TCP listener started on $listenPort")
-            startRelayListener()
-            AppLogger.info("Network", "relay listener started")
+            publishAndStartRelay(directHost = directHost, directPort = directPort)
         }
     }
+
+    private suspend fun publishAndStartRelay(
+        directHost: String?,
+        directPort: Int?,
+    ) {
+        val identityWithKey = awaitIdentityWithKey() ?: run {
+            AppLogger.warn("Network", "identity unavailable; skipping publish and relay listener")
+            return
+        }
+        val (identity, privateKey) = identityWithKey
+        when (
+            val publish = publishNetworkEndpointsUseCase(directHost = directHost, directPort = directPort)
+        ) {
+            is AppResult.Success ->
+                AppLogger.info("Network", "publish endpoints OK")
+            is AppResult.Error ->
+                AppLogger.error("Network", "publish endpoints failed: ${publish.error.message}")
+        }
+        messagingService.startRelayListener(
+            identityHash = identity.identityHash,
+            identityPub = identity.ed25519PublicKey,
+            ed25519PrivateKey = privateKey,
+        )
+        AppLogger.info("Network", "relay listener started")
+    }
+
+    private suspend fun awaitIdentityWithKey(): Pair<Identity, ByteArray>? {
+        resolveIdentityWithKey(identityRepository.getIdentity())?.let { return it }
+        AppLogger.info("Network", "waiting for identity before publish/relay")
+        val identity = identityRepository.observeIdentity().filterNotNull().first()
+        return resolveIdentityWithKey(identity)
+    }
+
+    private suspend fun resolveIdentityWithKey(identity: Identity?): Pair<Identity, ByteArray>? =
+        identity?.let { id ->
+            identityRepository.getEd25519PrivateKey()?.let { key -> id to key }
+        }
 
     private suspend fun configureInbound() {
         messagingService.configureInbound(
@@ -80,16 +113,6 @@ class NetworkCoordinator @Inject constructor(
             contactIdResolver = { identityHash ->
                 contactDao.getByIdentityHash(identityHash)?.id
             },
-        )
-    }
-
-    private suspend fun startRelayListener() {
-        val identity = identityRepository.getIdentity() ?: return
-        val privateKey = identityRepository.getEd25519PrivateKey() ?: return
-        messagingService.startRelayListener(
-            identityHash = identity.identityHash,
-            identityPub = identity.ed25519PublicKey,
-            ed25519PrivateKey = privateKey,
         )
     }
 }
