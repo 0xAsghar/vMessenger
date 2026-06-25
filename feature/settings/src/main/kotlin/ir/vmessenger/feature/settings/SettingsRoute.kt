@@ -99,47 +99,14 @@ private fun SettingsContent(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        SettingsSection(title = stringResource(R.string.settings_theme_section)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                ThemeMode.entries.forEach { mode ->
-                    FilterChip(
-                        selected = themeMode == mode,
-                        onClick = { viewModel.setThemeMode(mode) },
-                        label = { Text(text = mode.label()) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-
-        SettingsSection(title = stringResource(R.string.settings_privacy_section)) {
-            SettingsToggleRow(
-                label = stringResource(R.string.settings_screen_security),
-                icon = Icons.Outlined.Security,
-                checked = screenSecurity,
-                onCheckedChange = viewModel::setScreenSecurity,
-            )
-            SettingsDivider()
-            SettingsToggleRow(
-                label = stringResource(R.string.settings_hide_notifications),
-                icon = Icons.Outlined.NotificationsOff,
-                checked = hideNotifications,
-                onCheckedChange = viewModel::setHideNotificationContent,
-            )
-            SettingsDivider()
-            SettingsActionRow(
-                label = stringResource(R.string.settings_secure_wipe),
-                icon = Icons.Outlined.DeleteForever,
-                onClick = navigation.onSecureWipe,
-                destructive = true,
-            )
-        }
-
+        SettingsThemeSection(themeMode = themeMode, onThemeMode = viewModel::setThemeMode)
+        SettingsPrivacySection(
+            screenSecurity = screenSecurity,
+            hideNotifications = hideNotifications,
+            onScreenSecurity = viewModel::setScreenSecurity,
+            onHideNotifications = viewModel::setHideNotificationContent,
+            onSecureWipe = navigation.onSecureWipe,
+        )
         SettingsSection(title = stringResource(R.string.settings_network_section)) {
             SettingsActionRow(
                 label = stringResource(R.string.settings_debug),
@@ -147,20 +114,86 @@ private fun SettingsContent(
                 onClick = navigation.onDebug,
             )
         }
+        SettingsIdentitySection(
+            onIdentity = navigation.onIdentity,
+            onAbout = navigation.onAbout,
+        )
+    }
+}
 
-        SettingsSection(title = stringResource(R.string.settings_identity_section)) {
-            SettingsActionRow(
-                label = stringResource(R.string.settings_identity),
-                icon = Icons.Outlined.Fingerprint,
-                onClick = navigation.onIdentity,
-            )
-            SettingsDivider()
-            SettingsActionRow(
-                label = stringResource(R.string.settings_about),
-                icon = Icons.AutoMirrored.Outlined.HelpOutline,
-                onClick = navigation.onAbout,
-            )
+@Composable
+private fun SettingsThemeSection(
+    themeMode: ThemeMode,
+    onThemeMode: (ThemeMode) -> Unit,
+) {
+    SettingsSection(title = stringResource(R.string.settings_theme_section)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ThemeMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = themeMode == mode,
+                    onClick = { onThemeMode(mode) },
+                    label = { Text(text = mode.label()) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun SettingsPrivacySection(
+    screenSecurity: Boolean,
+    hideNotifications: Boolean,
+    onScreenSecurity: (Boolean) -> Unit,
+    onHideNotifications: (Boolean) -> Unit,
+    onSecureWipe: () -> Unit,
+) {
+    SettingsSection(title = stringResource(R.string.settings_privacy_section)) {
+        SettingsToggleRow(
+            label = stringResource(R.string.settings_screen_security),
+            icon = Icons.Outlined.Security,
+            checked = screenSecurity,
+            onCheckedChange = onScreenSecurity,
+        )
+        SettingsDivider()
+        SettingsToggleRow(
+            label = stringResource(R.string.settings_hide_notifications),
+            icon = Icons.Outlined.NotificationsOff,
+            checked = hideNotifications,
+            onCheckedChange = onHideNotifications,
+        )
+        SettingsDivider()
+        SettingsActionRow(
+            label = stringResource(R.string.settings_secure_wipe),
+            icon = Icons.Outlined.DeleteForever,
+            onClick = onSecureWipe,
+            destructive = true,
+        )
+    }
+}
+
+@Composable
+private fun SettingsIdentitySection(
+    onIdentity: () -> Unit,
+    onAbout: () -> Unit,
+) {
+    SettingsSection(title = stringResource(R.string.settings_identity_section)) {
+        SettingsActionRow(
+            label = stringResource(R.string.settings_identity),
+            icon = Icons.Outlined.Fingerprint,
+            onClick = onIdentity,
+        )
+        SettingsDivider()
+        SettingsActionRow(
+            label = stringResource(R.string.settings_about),
+            icon = Icons.AutoMirrored.Outlined.HelpOutline,
+            onClick = onAbout,
+        )
     }
 }
 

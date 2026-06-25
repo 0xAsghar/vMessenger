@@ -3,6 +3,7 @@ package ir.vmessenger.data.repository
 import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.network.Endpoint
+import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.database.dao.BootstrapNodeDao
 import ir.vmessenger.core.database.dao.EndpointCacheDao
 import ir.vmessenger.core.database.entity.BootstrapNodeEntity
@@ -11,7 +12,6 @@ import ir.vmessenger.domain.model.DiscoveryStatus
 import ir.vmessenger.domain.repository.DiscoveryRepository
 import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.network.bootstrap.BootstrapManager
-import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.network.dht.Dht
 import ir.vmessenger.network.dht.toEndpoints
 import ir.vmessenger.network.discovery.DhtDiscoveryProvider

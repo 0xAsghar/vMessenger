@@ -13,8 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import ir.vmessenger.core.designsystem.R as DesignR
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.R as DesignR
 
 @Composable
 fun AboutRoute(
@@ -39,7 +39,7 @@ fun AboutRoute(
             )
             Text(text = stringResource(R.string.feature_about_app_name), style = MaterialTheme.typography.headlineSmall)
             Text(
-                text = stringResource(R.string.feature_about_version, "0.1.0-rc1"),
+                text = stringResource(R.string.feature_about_version, "0.1.0-rc2"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(

@@ -1,6 +1,7 @@
 package ir.vmessenger.network.messaging
 
 import ir.vmessenger.core.common.network.NetworkConfig
+import ir.vmessenger.core.common.network.WebSocketFrameClient
 import ir.vmessenger.core.proto.relay.v1.RelayEvent
 import ir.vmessenger.core.proto.relay.v1.RelayEventType
 import ir.vmessenger.network.transport.Connection
@@ -17,7 +18,6 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
-import ir.vmessenger.core.common.network.WebSocketFrameClient
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,10 +32,18 @@ class RelayListener @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var handler: InboundConnectionHandler? = null
-  @Volatile private var identityHash: ByteArray? = null
-  @Volatile private var identityPub: ByteArray? = null
-  @Volatile private var ed25519PrivateKey: ByteArray? = null
-  @Volatile private var running = false
+
+    @Volatile
+    private var identityHash: ByteArray? = null
+
+    @Volatile
+    private var identityPub: ByteArray? = null
+
+    @Volatile
+    private var ed25519PrivateKey: ByteArray? = null
+
+    @Volatile
+    private var running = false
 
     fun configure(
         identityHash: ByteArray,
@@ -60,7 +68,7 @@ class RelayListener @Inject constructor(
         scope.cancel()
     }
 
-    @Suppress("TooGenericExceptionCaught")
+    @Suppress("SwallowedException", "TooGenericExceptionCaught")
     private suspend fun maintainControlChannel() {
         var backoffMs = 1_000L
         while (running && scope.isActive) {
@@ -74,7 +82,7 @@ class RelayListener @Inject constructor(
             try {
                 connectControlChannel(hash, pub, key)
                 backoffMs = 1_000L
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 delay(backoffMs)
                 backoffMs = (backoffMs * 2).coerceAtMost(60_000L)
             }
@@ -93,7 +101,7 @@ class RelayListener @Inject constructor(
         val socketHolder = arrayOfNulls<WebSocket>(1)
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send(ByteString.of(*hello.toByteArray()))
+                webSocket.send(ByteString.of(hello.toByteArray()))
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {

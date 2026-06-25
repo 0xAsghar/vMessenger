@@ -15,6 +15,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
+@Suppress("LongParameterList")
 class NetworkCoordinator @Inject constructor(
     private val joinNetworkUseCase: JoinNetworkUseCase,
     private val publishNetworkEndpointsUseCase: PublishNetworkEndpointsUseCase,

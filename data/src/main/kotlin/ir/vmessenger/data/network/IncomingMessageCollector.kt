@@ -34,7 +34,9 @@ class IncomingMessageCollector @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
-  @Volatile private var started = false
+
+    @Volatile
+    private var started = false
 
     fun start() {
         if (started) return
@@ -50,7 +52,7 @@ class IncomingMessageCollector @Inject constructor(
         val envelope = incoming.envelope
         when {
             envelope.hasChat() -> persistChatMessage(incoming.contactId, envelope)
-            envelope.hasReceipt() -> handleReceipt(incoming.contactId, envelope.receipt)
+            envelope.hasReceipt() -> handleReceipt(envelope.receipt)
             else -> Unit
         }
     }
@@ -93,7 +95,7 @@ class IncomingMessageCollector @Inject constructor(
         sendDeliveryReceipt(contactId, messageId, now)
     }
 
-    private suspend fun handleReceipt(contactId: String, receipt: Receipt) {
+    private suspend fun handleReceipt(receipt: Receipt) {
         val refId = receipt.refMessageId.toStringUtf8()
         val now = receipt.atUnixMs
         when (receipt.type) {

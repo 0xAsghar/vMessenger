@@ -41,59 +41,78 @@ fun AddByHashRoute(
         title = stringResource(R.string.add_by_hash_title),
         onNavigateBack = onNavigateBack,
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.Top,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = stringResource(R.string.add_by_hash_hint),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            OutlinedTextField(
-                value = userHash,
-                onValueChange = { userHash = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.add_by_hash_label)) },
-                textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-                singleLine = false,
-                minLines = 2,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            val addState = uiState
-            when (addState) {
-                AddContactUiState.Idle, AddContactUiState.Saving -> {
-                    Button(
-                        onClick = { viewModel.addContact(userHash) },
-                        enabled = addState != AddContactUiState.Saving && userHash.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        if (addState == AddContactUiState.Saving) {
-                            CircularProgressIndicator()
-                        } else {
-                            Text(stringResource(R.string.add_by_hash_action))
-                        }
+        AddByHashForm(
+            padding = padding,
+            userHash = userHash,
+            onUserHashChange = { userHash = it },
+            uiState = uiState,
+            onAdd = { viewModel.addContact(userHash) },
+            onDone = onDone,
+        )
+    }
+}
+
+@Composable
+@Suppress("LongParameterList")
+private fun AddByHashForm(
+    padding: androidx.compose.foundation.layout.PaddingValues,
+    userHash: String,
+    onUserHashChange: (String) -> Unit,
+    uiState: AddContactUiState,
+    onAdd: () -> Unit,
+    onDone: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(padding)
+            .padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.Top,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = stringResource(R.string.add_by_hash_hint),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(
+            value = userHash,
+            onValueChange = onUserHashChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(stringResource(R.string.add_by_hash_label)) },
+            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+            singleLine = false,
+            minLines = 2,
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        when (uiState) {
+            AddContactUiState.Idle, AddContactUiState.Saving -> {
+                Button(
+                    onClick = onAdd,
+                    enabled = uiState != AddContactUiState.Saving && userHash.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (uiState == AddContactUiState.Saving) {
+                        CircularProgressIndicator()
+                    } else {
+                        Text(stringResource(R.string.add_by_hash_action))
                     }
                 }
-                AddContactUiState.Success -> {
-                    Text(text = stringResource(R.string.add_contact_success))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.add_contact_done))
-                    }
+            }
+            AddContactUiState.Success -> {
+                Text(text = stringResource(R.string.add_contact_success))
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.add_contact_done))
                 }
-                is AddContactUiState.Error -> {
-                    Text(
-                        text = addState.message,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
+            }
+            is AddContactUiState.Error -> {
+                Text(
+                    text = uiState.message,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         }
     }

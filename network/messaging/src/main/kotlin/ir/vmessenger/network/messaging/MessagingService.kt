@@ -80,6 +80,7 @@ class MessagingService @Inject constructor(
         acceptInbound(connection)
     }
 
+    @Suppress("ReturnCount")
     private suspend fun acceptInbound(connection: Connection) {
         val self = selfProvider?.invoke() ?: return
         val resolvePeer = peerResolver ?: return

@@ -4,9 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.domain.repository.DiscoveryRepository
 import ir.vmessenger.domain.usecase.discovery.JoinNetworkUseCase
-import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.domain.usecase.discovery.PublishNetworkEndpointsUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

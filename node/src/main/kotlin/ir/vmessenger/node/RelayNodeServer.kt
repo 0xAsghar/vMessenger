@@ -14,6 +14,7 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readBytes
+import ir.vmessenger.core.common.network.RelayProof
 import ir.vmessenger.core.proto.dht.v1.DhtRpcRequest
 import ir.vmessenger.core.proto.relay.v1.RelayEvent
 import ir.vmessenger.core.proto.relay.v1.RelayEventType
@@ -26,7 +27,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import ir.vmessenger.core.common.network.RelayProof
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -85,11 +85,12 @@ class RelayNodeServer(
             }
         } catch (_: ClosedReceiveChannelException) {
             // client disconnected
-        } catch (e: Exception) {
+        } catch (e: IllegalStateException) {
             System.err.println("Relay ws error: ${e.message}")
         }
     }
 
+    @Suppress("ReturnCount")
     private suspend fun handleListener(hello: RelayHello, session: WsSession) {
         val listenerId = hello.listenerId.toByteArray()
         val identityPub = hello.identityPub.toByteArray()
@@ -189,7 +190,7 @@ class RelayNodeServer(
             }
         } catch (_: ClosedReceiveChannelException) {
             runCatching { to.close(CloseReason(CloseReason.Codes.NORMAL, "peer closed")) }
-        } catch (e: Exception) {
+        } catch (e: IllegalStateException) {
             runCatching { to.close(CloseReason(CloseReason.Codes.INTERNAL_ERROR, e.message ?: "error")) }
         }
     }

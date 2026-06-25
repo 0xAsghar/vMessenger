@@ -24,10 +24,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import ir.vmessenger.core.designsystem.R as DesignR
 import ir.vmessenger.core.designsystem.component.UserHashLabel
 import ir.vmessenger.core.designsystem.component.UserHashShareRow
 import ir.vmessenger.core.designsystem.component.UserHashText
+import ir.vmessenger.core.designsystem.R as DesignR
 
 @Composable
 fun CreateIdentityRoute(

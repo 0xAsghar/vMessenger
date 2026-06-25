@@ -65,7 +65,7 @@ class RelayTransport @Inject constructor() : Transport {
         val socketHolder = arrayOfNulls<WebSocket>(1)
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send(ByteString.of(*hello.toByteArray()))
+                webSocket.send(ByteString.of(hello.toByteArray()))
                 if (!awaitReady) {
                     val connection = RelayConnection(remote, webSocket, dataMode = true)
                     connectionRef[0] = connection
@@ -163,7 +163,7 @@ class RelayConnection(
     override suspend fun write(frame: ByteArray): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             check(_state.value == ConnectionState.OPEN) { "Connection closed" }
-            val sent = webSocket.send(ByteString.of(*frame))
+            val sent = webSocket.send(ByteString.of(frame))
             check(sent) { "WebSocket send failed" }
         }
     }

@@ -2,7 +2,6 @@ package ir.vmessenger.node
 
 import ir.vmessenger.core.common.network.LengthPrefixedFrames
 import ir.vmessenger.core.proto.dht.v1.DhtRpcRequest
-import ir.vmessenger.core.proto.dht.v1.DhtRpcResponse
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.IOException
