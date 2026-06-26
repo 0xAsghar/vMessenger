@@ -8,6 +8,16 @@ import org.junit.Test
 
 class UserHashEncoderTest {
     @Test
+    fun encodeDecodeRoundTripForFullIdentityHash() {
+        val hash = UserHashEncoder.identityHashFromPublicKey(ByteArray(32) { it.toByte() })
+        val encoded = UserHashEncoder.encode(hash)
+        val decoded = UserHashEncoder.decode(encoded)
+        assertNotNull(decoded)
+        assertTrue(hash.copyOf(16).contentEquals(decoded))
+        assertEquals("ok", UserHashEncoder.decodeFailureReason(encoded))
+    }
+
+    @Test
     fun encodeDecodeRoundTrip() {
         val hash = ByteArray(16) { it.toByte() }
         val encoded = UserHashEncoder.encode(hash)
@@ -16,6 +26,13 @@ class UserHashEncoderTest {
         assertNotNull(decoded)
         assertEquals(16, decoded!!.size)
         assertTrue(decoded.contentEquals(hash))
+    }
+
+    @Test
+    fun decodeAcceptsUppercasePrefix() {
+        val hash = ByteArray(16) { it.toByte() }
+        val encoded = UserHashEncoder.encode(hash).uppercase()
+        assertTrue(UserHashEncoder.isValid(encoded))
     }
 
     @Test

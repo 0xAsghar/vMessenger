@@ -3,6 +3,7 @@ package ir.vmessenger.data.repository
 import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.encoding.UserHashEncoder
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.crypto.CryptoEngine
 import ir.vmessenger.core.crypto.keystore.KeyStoreKeyManager
 import ir.vmessenger.core.database.dao.IdentityDao
@@ -12,7 +13,7 @@ import ir.vmessenger.core.database.entity.KeyMaterialEntity
 import ir.vmessenger.domain.model.Identity
 import ir.vmessenger.domain.repository.IdentityRepository
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,9 +26,12 @@ class IdentityRepositoryImpl @Inject constructor(
 ) : IdentityRepository {
 
     override fun observeIdentity(): Flow<Identity?> =
-        identityDao.observeIdentity().map { it?.toDomain() }
+        identityDao.observeIdentity().mapLatest { entity ->
+            entity?.let { migrateUserHashIfNeeded(it) }?.toDomain()
+        }
 
-    override suspend fun getIdentity(): Identity? = identityDao.getIdentity()?.toDomain()
+    override suspend fun getIdentity(): Identity? =
+        identityDao.getIdentity()?.let { migrateUserHashIfNeeded(it) }?.toDomain()
 
     override suspend fun hasIdentity(): Boolean = identityDao.getIdentity() != null
 
@@ -79,6 +83,15 @@ class IdentityRepositoryImpl @Inject constructor(
     override suspend fun wipeIdentity() {
         identityDao.deleteAll()
         keyMaterialDao.deleteAll()
+    }
+
+    private suspend fun migrateUserHashIfNeeded(entity: IdentityEntity): IdentityEntity {
+        val fixed = UserHashEncoder.encode(entity.identityHash)
+        if (fixed == entity.userHash) return entity
+        val updated = entity.copy(userHash = fixed)
+        identityDao.insertIdentity(updated)
+        AppLogger.info("Identity", "migrated userHash to decodable format")
+        return updated
     }
 
     private fun IdentityEntity.toDomain() = Identity(

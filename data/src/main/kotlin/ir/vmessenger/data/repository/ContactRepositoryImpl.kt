@@ -3,6 +3,7 @@ package ir.vmessenger.data.repository
 import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.encoding.UserHashEncoder
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.crypto.pairing.PairingDescriptorCodec
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.entity.ContactEntity
@@ -59,7 +60,11 @@ class ContactRepositoryImpl @Inject constructor(
     override suspend fun addContactByUserHash(userHash: String, alias: String?): AppResult<Contact> =
         runCatching {
             val partialHash = UserHashEncoder.decode(userHash)
-                ?: throw IllegalArgumentException("شناسه کاربری نامعتبر است")
+                ?: run {
+                    val reason = UserHashEncoder.decodeFailureReason(userHash)
+                    AppLogger.warn("Contact", "addByUserHash decode failed reason=$reason")
+                    throw IllegalArgumentException("شناسه کاربری نامعتبر است")
+                }
             val identityHash = ByteArray(32).also { partialHash.copyInto(it, 0, 0, partialHash.size) }
             contactDao.getByIdentityHash(identityHash)?.let { return@runCatching it.toDomain() }
             val entity = ContactEntity(

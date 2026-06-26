@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.encoding.UserHashEncoder
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.domain.repository.PairingRepository
 import ir.vmessenger.domain.usecase.contact.AddContactByHashUseCase
 import ir.vmessenger.domain.usecase.contact.AddContactByQrUseCase
@@ -59,13 +60,20 @@ class AddByHashViewModel @Inject constructor(
     val uiState: StateFlow<AddContactUiState> = _uiState.asStateFlow()
 
     fun addContact(userHash: String) {
-        if (!UserHashEncoder.isValid(userHash)) {
+        val trimmed = userHash.trim()
+        if (!UserHashEncoder.isValid(trimmed)) {
+            val reason = UserHashEncoder.decodeFailureReason(trimmed)
+            AppLogger.warn(
+                "Pairing",
+                "addByHash rejected reason=$reason len=${trimmed.length} " +
+                    "prefix=${trimmed.take(12)}",
+            )
             _uiState.value = AddContactUiState.Error("شناسه کاربری نامعتبر است")
             return
         }
         viewModelScope.launch {
             _uiState.value = AddContactUiState.Saving
-            when (val result = addByHash(userHash.trim())) {
+            when (val result = addByHash(trimmed)) {
                 is AppResult.Success -> _uiState.value = AddContactUiState.Success
                 is AppResult.Error -> _uiState.value = AddContactUiState.Error(result.error.message)
             }
