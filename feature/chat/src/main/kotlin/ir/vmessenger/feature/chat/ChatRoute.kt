@@ -15,6 +15,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,10 +32,19 @@ import ir.vmessenger.domain.model.MessageDirection
 
 @Composable
 fun ChatRoute(
+    initialConversationId: String? = null,
+    onInitialConversationConsumed: () -> Unit = {},
     viewModel: ChatListViewModel = hiltViewModel(),
 ) {
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
     var selectedConversationId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(initialConversationId) {
+        if (initialConversationId != null) {
+            selectedConversationId = initialConversationId
+            onInitialConversationConsumed()
+        }
+    }
 
     if (selectedConversationId != null) {
         ConversationRoute(

@@ -6,4 +6,5 @@
     <string name="contacts_add">افزودن مخاطب</string>
     <string name="contacts_my_qr">QR من</string>
     <string name="contacts_scan_qr">اسکن QR</string>
+    <string name="contacts_start_chat">شروع گفتگو</string>
 </resources>

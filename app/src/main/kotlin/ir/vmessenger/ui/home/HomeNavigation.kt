@@ -8,3 +8,9 @@ data class HomeNavigation(
     val onNavigateToAbout: () -> Unit = {},
     val onNavigateToIdentity: () -> Unit = {},
 )
+
+data class HomeChatNavigation(
+    val openConversationId: String?,
+    val onOpenConversationConsumed: () -> Unit,
+    val onStartChat: (String) -> Unit,
+)

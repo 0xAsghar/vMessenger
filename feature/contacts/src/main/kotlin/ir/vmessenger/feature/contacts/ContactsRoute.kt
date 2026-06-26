@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -20,6 +21,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -37,10 +41,27 @@ fun ContactsRoute(
     onMyQr: () -> Unit,
     onScanQr: () -> Unit,
     onAddByHash: () -> Unit,
-    onContactSelected: (String) -> Unit = {},
+    onStartChat: (String) -> Unit,
     viewModel: ContactsViewModel = hiltViewModel(),
 ) {
     val contacts by viewModel.contacts.collectAsStateWithLifecycle()
+    val localPublicKey by viewModel.localPublicKey.collectAsStateWithLifecycle()
+    var selectedContactId by remember { mutableStateOf<String?>(null) }
+    val selectedContact = selectedContactId?.let { id -> contacts.find { it.id == id } }
+
+    if (selectedContact != null) {
+        ContactDetailRoute(
+            contact = selectedContact,
+            localPublicKey = localPublicKey,
+            onBack = { selectedContactId = null },
+            onStartChat = {
+                onStartChat(selectedContact.id)
+                selectedContactId = null
+            },
+        )
+        return
+    }
+
     VMessengerScaffold(
         title = stringResource(R.string.contacts_title),
         actions = {
@@ -67,25 +88,38 @@ fun ContactsRoute(
             )
         },
     ) { padding ->
-        if (contacts.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(text = stringResource(R.string.contacts_empty))
-                Text(
-                    text = stringResource(R.string.contacts_empty_hint),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-        } else {
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
-                items(contacts, key = { it.id }) { contact ->
-                    ContactRow(contact = contact, onClick = { onContactSelected(contact.id) })
-                }
+        ContactsListContent(
+            contacts = contacts,
+            padding = padding,
+            onContactClick = { selectedContactId = it },
+        )
+    }
+}
+
+@Composable
+private fun ContactsListContent(
+    contacts: List<Contact>,
+    padding: androidx.compose.foundation.layout.PaddingValues,
+    onContactClick: (String) -> Unit,
+) {
+    if (contacts.isEmpty()) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(text = stringResource(R.string.contacts_empty))
+            Text(
+                text = stringResource(R.string.contacts_empty_hint),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    } else {
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
+            items(contacts, key = { it.id }) { contact ->
+                ContactRow(contact = contact, onClick = { onContactClick(contact.id) })
             }
         }
     }
@@ -95,25 +129,41 @@ fun ContactsRoute(
 fun ContactDetailRoute(
     contact: Contact,
     localPublicKey: ByteArray?,
+    onBack: () -> Unit,
+    onStartChat: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxSize().padding(24.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Identicon(seed = contact.identityHash, size = 56.dp)
-            Column(modifier = Modifier.padding(start = 16.dp)) {
-                Text(text = contact.displayName, style = MaterialTheme.typography.titleLarge)
-                UserHashText(
-                    text = contact.userHash,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+    VMessengerScaffold(
+        title = contact.displayName,
+        onNavigateBack = onBack,
+    ) { padding ->
+        Column(modifier = modifier.fillMaxSize().padding(padding).padding(24.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Identicon(seed = contact.identityHash, size = 56.dp)
+                Column(modifier = Modifier.padding(start = 16.dp)) {
+                    Text(text = contact.displayName, style = MaterialTheme.typography.titleLarge)
+                    UserHashText(
+                        text = contact.userHash,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                    )
+                }
+            }
+            if (localPublicKey != null && contact.ed25519PublicKey.any { it != 0.toByte() }) {
+                SafetyNumberDisplay(
+                    localPublicKey = localPublicKey,
+                    remotePublicKey = contact.ed25519PublicKey,
+                    modifier = Modifier.padding(top = 24.dp),
                 )
             }
-        }
-        if (localPublicKey != null && contact.ed25519PublicKey.any { it != 0.toByte() }) {
-            SafetyNumberDisplay(
-                localPublicKey = localPublicKey,
-                remotePublicKey = contact.ed25519PublicKey,
-                modifier = Modifier.padding(top = 24.dp),
-            )
+            Button(
+                onClick = onStartChat,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 24.dp),
+                enabled = !contact.blocked,
+            ) {
+                Text(text = stringResource(R.string.contacts_start_chat))
+            }
         }
     }
 }

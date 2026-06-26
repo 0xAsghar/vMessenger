@@ -14,10 +14,13 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -37,7 +40,10 @@ private data class HomeTab(
 )
 
 @Composable
-fun HomeRoute(navigation: HomeNavigation = HomeNavigation()) {
+fun HomeRoute(
+    navigation: HomeNavigation = HomeNavigation(),
+    viewModel: HomeViewModel = hiltViewModel(),
+) {
     val tabs = listOf(
         HomeTab(Routes.CHATS, R.string.tab_chats) {
             Icon(Icons.AutoMirrored.Outlined.Chat, contentDescription = null)
@@ -56,6 +62,19 @@ fun HomeRoute(navigation: HomeNavigation = HomeNavigation()) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: Routes.CHATS
+    val openConversationId by viewModel.openConversationId.collectAsStateWithLifecycle()
+
+    LaunchedEffect(openConversationId) {
+        if (openConversationId != null) {
+            navController.navigate(Routes.CHATS) {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -64,6 +83,11 @@ fun HomeRoute(navigation: HomeNavigation = HomeNavigation()) {
         HomeTabNavHost(
             navController = navController,
             navigation = navigation,
+            chatNavigation = HomeChatNavigation(
+                openConversationId = openConversationId,
+                onOpenConversationConsumed = viewModel::consumeOpenConversation,
+                onStartChat = viewModel::startChat,
+            ),
             modifier = Modifier.padding(padding),
         )
     }
@@ -109,6 +133,7 @@ private fun HomeBottomBar(
 private fun HomeTabNavHost(
     navController: androidx.navigation.NavHostController,
     navigation: HomeNavigation,
+    chatNavigation: HomeChatNavigation,
     modifier: Modifier = Modifier,
 ) {
     NavHost(
@@ -116,12 +141,18 @@ private fun HomeTabNavHost(
         startDestination = Routes.CHATS,
         modifier = modifier,
     ) {
-        composable(Routes.CHATS) { ChatRoute() }
+        composable(Routes.CHATS) {
+            ChatRoute(
+                initialConversationId = chatNavigation.openConversationId,
+                onInitialConversationConsumed = chatNavigation.onOpenConversationConsumed,
+            )
+        }
         composable(Routes.CONTACTS) {
             ContactsRoute(
                 onMyQr = navigation.onMyQr,
                 onScanQr = navigation.onScanQr,
                 onAddByHash = navigation.onAddByHash,
+                onStartChat = chatNavigation.onStartChat,
             )
         }
         composable(Routes.LOCATION) { LocationRoute() }
