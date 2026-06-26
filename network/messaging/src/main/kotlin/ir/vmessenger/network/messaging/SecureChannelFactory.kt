@@ -1,6 +1,7 @@
 package ir.vmessenger.network.messaging
 
 import com.google.protobuf.ByteString
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.crypto.CryptoEngine
 import ir.vmessenger.core.proto.wire.v1.Capabilities
 import ir.vmessenger.core.proto.wire.v1.Frame
@@ -81,7 +82,8 @@ class SecureChannelFactory @Inject constructor(
             sendHandshake(connection, step1)
             val step2 = readHandshake(connection)
             require(step2.step == 2) { "Expected handshake step 2" }
-            verifyPeer(step2, peer)
+            val resolvedPeer = resolvePeerFromStep2(step2, peer)
+            verifyStepSignature(step2, buildTranscript(step1, null), resolvedPeer.ed25519PublicKey)
             val dh1 = cryptoEngine.x25519SharedSecret(eph.privateKey, step2.ephemeralPub.toByteArray())
             val dh2 = cryptoEngine.x25519SharedSecret(
                 self.x25519StaticPrivateKey!!,
@@ -107,7 +109,7 @@ class SecureChannelFactory @Inject constructor(
                 .build()
             sendHandshake(connection, step3)
             val state = ratchet.initFromRoot(root, isInitiator = true)
-            ActiveSecureSession(peer, state, ratchet, connection)
+            ActiveSecureSession(resolvedPeer, state, ratchet, connection)
         }
 
     suspend fun accept(connection: Connection, self: PeerIdentity, expectedPeer: PeerIdentity): Result<SecureSession> =
@@ -134,7 +136,8 @@ class SecureChannelFactory @Inject constructor(
             sendHandshake(connection, step2)
             val step3 = readHandshake(connection)
             require(step3.step == 3) { "Expected handshake step 3" }
-            verifyPeer(step3, expectedPeer)
+            val resolvedPeer = resolvePeerFromStep3(step3, expectedPeer)
+            verifyStepSignature(step3, buildTranscript(step1, step2), resolvedPeer.ed25519PublicKey)
             val dh2 = cryptoEngine.x25519SharedSecret(
                 self.x25519StaticPrivateKey!!,
                 step1.ephemeralPub.toByteArray(),
@@ -146,7 +149,7 @@ class SecureChannelFactory @Inject constructor(
                 32,
             )
             val state = ratchet.initFromRoot(root, isInitiator = false)
-            ActiveSecureSession(expectedPeer, state, ratchet, connection)
+            ActiveSecureSession(resolvedPeer, state, ratchet, connection)
         }
 
     suspend fun acceptResolving(
@@ -178,9 +181,13 @@ class SecureChannelFactory @Inject constructor(
         require(step3.step == 3) { "Expected handshake step 3" }
         val identityPub = step3.identityPub.toByteArray()
         val staticPub = step3.staticPub.toByteArray()
-        val peer = resolvePeer(identityPub, staticPub)
-            ?: error("Unknown peer identity")
-        verifyPeer(step3, peer.copy(x25519StaticPublicKey = staticPub))
+        val peer = resolvePeer(identityPub, staticPub) ?: error("Unknown peer identity")
+        val resolvedPeer = peer.copy(
+            identityHash = cryptoEngine.sha256(identityPub),
+            ed25519PublicKey = identityPub,
+            x25519StaticPublicKey = staticPub,
+        )
+        verifyStepSignature(step3, buildTranscript(step1, step2), resolvedPeer.ed25519PublicKey)
         val dh2 = cryptoEngine.x25519SharedSecret(
             self.x25519StaticPrivateKey!!,
             step1.ephemeralPub.toByteArray(),
@@ -192,15 +199,59 @@ class SecureChannelFactory @Inject constructor(
             32,
         )
         val state = ratchet.initFromRoot(root, isInitiator = false)
-        ActiveSecureSession(peer.copy(x25519StaticPublicKey = staticPub), state, ratchet, connection)
+        ActiveSecureSession(resolvedPeer, state, ratchet, connection)
     }
 
-    private fun verifyPeer(message: HandshakeMessage, expected: PeerIdentity) {
+    private fun resolvePeerFromStep2(step2: HandshakeMessage, expected: PeerIdentity): PeerIdentity {
+        val identityPub = step2.identityPub.toByteArray()
+        val staticPub = step2.staticPub.toByteArray()
+        val fullHash = cryptoEngine.sha256(identityPub)
+        return if (IdentityHashMatcher.isPlaceholderPublicKey(expected.ed25519PublicKey)) {
+            require(IdentityHashMatcher.matches(expected.identityHash, fullHash)) {
+                "Identity hash mismatch"
+            }
+            PeerIdentity(
+                identityHash = fullHash,
+                ed25519PublicKey = identityPub,
+                x25519StaticPublicKey = staticPub,
+            )
+        } else {
+            require(identityPub.contentEquals(expected.ed25519PublicKey)) { "Identity key mismatch" }
+            expected.copy(x25519StaticPublicKey = staticPub)
+        }
+    }
+
+    private fun resolvePeerFromStep3(step3: HandshakeMessage, expected: PeerIdentity): PeerIdentity {
+        val identityPub = step3.identityPub.toByteArray()
+        val staticPub = step3.staticPub.toByteArray()
+        val fullHash = cryptoEngine.sha256(identityPub)
+        return if (IdentityHashMatcher.isPlaceholderPublicKey(expected.ed25519PublicKey)) {
+            require(IdentityHashMatcher.matches(expected.identityHash, fullHash)) {
+                "Identity hash mismatch"
+            }
+            PeerIdentity(
+                identityHash = fullHash,
+                ed25519PublicKey = identityPub,
+                x25519StaticPublicKey = staticPub,
+            )
+        } else {
+            require(identityPub.contentEquals(expected.ed25519PublicKey)) { "Identity key mismatch" }
+            expected.copy(
+                identityHash = fullHash,
+                x25519StaticPublicKey = staticPub,
+            )
+        }
+    }
+
+    private fun verifyStepSignature(
+        message: HandshakeMessage,
+        transcript: ByteArray,
+        expectedEd25519PublicKey: ByteArray,
+    ) {
         val identityPub = message.identityPub.toByteArray()
-        require(identityPub.contentEquals(expected.ed25519PublicKey)) {
+        require(identityPub.contentEquals(expectedEd25519PublicKey)) {
             "Identity key mismatch"
         }
-        val transcript = message.toByteArray()
         require(
             cryptoEngine.verifyEd25519(
                 transcript,

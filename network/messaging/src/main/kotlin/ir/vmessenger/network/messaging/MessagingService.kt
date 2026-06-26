@@ -49,15 +49,18 @@ class MessagingService @Inject constructor(
     private var selfProvider: (suspend () -> PeerIdentity?)? = null
     private var peerResolver: (suspend (ByteArray) -> PeerIdentity?)? = null
     private var contactIdResolver: (suspend (ByteArray) -> String?)? = null
+    private var peerKeyUpdater: (suspend (String, PeerIdentity) -> Unit)? = null
 
     fun configureInbound(
         selfProvider: suspend () -> PeerIdentity?,
         peerResolver: suspend (ByteArray) -> PeerIdentity?,
         contactIdResolver: suspend (ByteArray) -> String?,
+        peerKeyUpdater: (suspend (String, PeerIdentity) -> Unit)? = null,
     ) {
         this.selfProvider = selfProvider
         this.peerResolver = peerResolver
         this.contactIdResolver = contactIdResolver
+        this.peerKeyUpdater = peerKeyUpdater
     }
 
     fun startListening(listenPort: Int) {
@@ -91,14 +94,18 @@ class MessagingService @Inject constructor(
             resolvePeer(hash)?.copy(x25519StaticPublicKey = staticPub)
         }
         val session = sessionResult.getOrElse {
+            AppLogger.warn("Messaging", "inbound handshake failed: ${it.message}")
             connection.close()
             return
         }
         val peerHash = session.peer.identityHash
         val contactId = resolveContactId(peerHash) ?: run {
+            val prefix = peerHash.take(4).joinToString("") { "%02x".format(it) }
+            AppLogger.warn("Messaging", "inbound peer unknown hash=$prefix")
             connection.close()
             return
         }
+        peerKeyUpdater?.invoke(contactId, session.peer)
         sessionMutex.withLock {
             sessions[contactId] = session
         }
@@ -179,8 +186,9 @@ class MessagingService @Inject constructor(
         envelope: MessageEnvelope,
     ): AppResult<Unit> = runCatching {
         val session = sessionMutex.withLock {
-            sessions[contactId] ?: establishSession(self, peer, endpoint).also {
-                sessions[contactId] = it
+            sessions[contactId] ?: establishSession(self, peer, endpoint).also { established ->
+                sessions[contactId] = established
+                scope.launch { peerKeyUpdater?.invoke(contactId, established.peer) }
             }
         }
         val sealed = session.seal(envelope.toByteArray())

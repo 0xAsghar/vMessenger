@@ -19,6 +19,9 @@ interface ContactDao {
     @Query("SELECT * FROM contact WHERE identityHash = :identityHash LIMIT 1")
     suspend fun getByIdentityHash(identityHash: ByteArray): ContactEntity?
 
+    @Query("SELECT * FROM contact")
+    suspend fun getAll(): List<ContactEntity>
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: ContactEntity)
 

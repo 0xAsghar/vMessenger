@@ -1,6 +1,7 @@
 package ir.vmessenger.data.network
 
 import com.google.protobuf.ByteString
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.MessageDao
@@ -92,6 +93,7 @@ class IncomingMessageCollector @Inject constructor(
                 readAtUnixMs = null,
             ),
         )
+        AppLogger.info("Messaging", "incoming chat messageId=$messageId contact=$contactId")
         sendDeliveryReceipt(contactId, messageId, now)
     }
 
@@ -120,7 +122,7 @@ class IncomingMessageCollector @Inject constructor(
         val peer = PeerIdentity(
             identityHash = contact.identityHash,
             ed25519PublicKey = contact.ed25519Public,
-            x25519StaticPublicKey = contact.ed25519Public,
+            x25519StaticPublicKey = contact.x25519StaticPublic ?: ByteArray(32),
         )
         val receiptEnvelope = MessageEnvelope.newBuilder()
             .setMessageId(ByteString.copyFromUtf8("receipt-$messageId"))

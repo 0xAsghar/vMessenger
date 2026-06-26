@@ -4,6 +4,8 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.data.di.IoDispatcher
+import ir.vmessenger.data.repository.findByIdentityHash
+import ir.vmessenger.data.repository.updateLearnedKeys
 import ir.vmessenger.domain.model.Identity
 import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.domain.usecase.discovery.JoinNetworkUseCase
@@ -111,15 +113,24 @@ class NetworkCoordinator @Inject constructor(
                 )
             },
             peerResolver = peer@{ identityHash ->
-                val contact = contactDao.getByIdentityHash(identityHash) ?: return@peer null
+                val contact = contactDao.findByIdentityHash(identityHash) ?: return@peer null
                 PeerIdentity(
                     identityHash = contact.identityHash,
                     ed25519PublicKey = contact.ed25519Public,
-                    x25519StaticPublicKey = contact.ed25519Public,
+                    x25519StaticPublicKey = contact.x25519StaticPublic ?: ByteArray(32),
                 )
             },
             contactIdResolver = { identityHash ->
-                contactDao.getByIdentityHash(identityHash)?.id
+                contactDao.findByIdentityHash(identityHash)?.id
+            },
+            peerKeyUpdater = { contactId, peer ->
+                contactDao.updateLearnedKeys(
+                    contactId = contactId,
+                    identityHash = peer.identityHash,
+                    ed25519Public = peer.ed25519PublicKey,
+                    x25519StaticPublic = peer.x25519StaticPublicKey,
+                )
+                AppLogger.info("Contact", "learned peer keys for contact=$contactId")
             },
         )
     }

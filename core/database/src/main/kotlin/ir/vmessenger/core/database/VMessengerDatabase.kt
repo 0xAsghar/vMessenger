@@ -44,7 +44,7 @@ import ir.vmessenger.core.database.entity.SessionEntity
         LocationShareEntity::class,
         LocationSampleEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)

@@ -4,6 +4,7 @@ data class Contact(
     val id: String,
     val identityHash: ByteArray,
     val ed25519PublicKey: ByteArray,
+    val x25519StaticPublicKey: ByteArray?,
     val userHash: String,
     val displayName: String,
     val verified: Boolean,
@@ -18,6 +19,7 @@ data class Contact(
         return id == other.id &&
             identityHash.contentEquals(other.identityHash) &&
             ed25519PublicKey.contentEquals(other.ed25519PublicKey) &&
+            x25519StaticPublicKey.contentEqualsOrNull(other.x25519StaticPublicKey) &&
             userHash == other.userHash &&
             displayName == other.displayName &&
             verified == other.verified &&
@@ -30,6 +32,7 @@ data class Contact(
         var result = id.hashCode()
         result = 31 * result + identityHash.contentHashCode()
         result = 31 * result + ed25519PublicKey.contentHashCode()
+        result = 31 * result + (x25519StaticPublicKey?.contentHashCode() ?: 0)
         result = 31 * result + userHash.hashCode()
         result = 31 * result + displayName.hashCode()
         result = 31 * result + verified.hashCode()
@@ -38,4 +41,11 @@ data class Contact(
         result = 31 * result + (lastSeenUnixMs?.hashCode() ?: 0)
         return result
     }
+
+    private fun ByteArray?.contentEqualsOrNull(other: ByteArray?): Boolean =
+        when {
+            this == null && other == null -> true
+            this != null && other != null -> this.contentEquals(other)
+            else -> false
+        }
 }

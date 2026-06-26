@@ -26,6 +26,7 @@ import ir.vmessenger.core.database.migration.MIGRATION_2_3
 import ir.vmessenger.core.database.migration.MIGRATION_3_4
 import ir.vmessenger.core.database.migration.MIGRATION_4_5
 import ir.vmessenger.core.database.migration.MIGRATION_5_6
+import ir.vmessenger.core.database.migration.MIGRATION_6_7
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import javax.inject.Singleton
 
@@ -59,6 +60,7 @@ object DatabaseModule {
                 MIGRATION_3_4,
                 MIGRATION_4_5,
                 MIGRATION_5_6,
+                MIGRATION_6_7,
             )
             .build()
     }

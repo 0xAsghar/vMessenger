@@ -123,7 +123,7 @@ class ConversationRepositoryImpl @Inject constructor(
             val peer = PeerIdentity(
                 identityHash = contact.identityHash,
                 ed25519PublicKey = contact.ed25519Public,
-                x25519StaticPublicKey = contact.ed25519Public,
+                x25519StaticPublicKey = contact.x25519StaticPublic ?: ByteArray(32),
             )
             val envelope = MessageEnvelope.newBuilder()
                 .setMessageId(ByteString.copyFromUtf8(messageId))

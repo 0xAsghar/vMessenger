@@ -103,6 +103,7 @@ class ContactRepositoryImpl @Inject constructor(
         id = id,
         identityHash = identityHash,
         ed25519PublicKey = ed25519Public,
+        x25519StaticPublicKey = x25519StaticPublic,
         userHash = userHash,
         displayName = displayName,
         verified = verified,
