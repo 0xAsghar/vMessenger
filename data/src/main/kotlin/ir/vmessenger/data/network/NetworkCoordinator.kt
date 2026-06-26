@@ -1,10 +1,13 @@
 package ir.vmessenger.data.network
 
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
+import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.data.di.IoDispatcher
 import ir.vmessenger.data.repository.findByIdentityHash
+import ir.vmessenger.data.repository.findContactForInbound
 import ir.vmessenger.data.repository.updateLearnedKeys
 import ir.vmessenger.domain.model.Identity
 import ir.vmessenger.domain.repository.IdentityRepository
@@ -112,12 +115,21 @@ class NetworkCoordinator @Inject constructor(
                     x25519StaticPrivateKey = identityRepository.getX25519StaticPrivateKey(),
                 )
             },
-            peerResolver = peer@{ identityHash ->
-                val contact = contactDao.findByIdentityHash(identityHash) ?: return@peer null
+            resolveInboundPeer = resolveInboundPeer@{ identityPub, staticPub ->
+                val hash = UserHashEncoder.identityHashFromPublicKey(identityPub)
+                val contact = contactDao.findContactForInbound(identityPub, hash)
+                if (contact == null) {
+                    AppLogger.warn(
+                        "Contact",
+                        "inbound peer not in contacts hash=" +
+                            IdentityHashMatcher.hashPrefixHex(hash),
+                    )
+                    return@resolveInboundPeer null
+                }
                 PeerIdentity(
-                    identityHash = contact.identityHash,
-                    ed25519PublicKey = contact.ed25519Public,
-                    x25519StaticPublicKey = contact.x25519StaticPublic ?: ByteArray(32),
+                    identityHash = hash,
+                    ed25519PublicKey = identityPub,
+                    x25519StaticPublicKey = staticPub,
                 )
             },
             contactIdResolver = { identityHash ->

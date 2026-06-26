@@ -16,6 +16,7 @@ class IdentityHashMatcherTest {
         val full = ByteArray(32) { it.toByte() }
         val stored = ByteArray(32).also { full.copyInto(it, 0, 0, 16) }
         assertTrue(IdentityHashMatcher.matches(stored, full))
+        assertTrue(IdentityHashMatcher.matches(full, stored))
     }
 
     @Test

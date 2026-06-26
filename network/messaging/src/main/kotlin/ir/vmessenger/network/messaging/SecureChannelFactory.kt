@@ -181,13 +181,17 @@ class SecureChannelFactory @Inject constructor(
         require(step3.step == 3) { "Expected handshake step 3" }
         val identityPub = step3.identityPub.toByteArray()
         val staticPub = step3.staticPub.toByteArray()
-        val peer = resolvePeer(identityPub, staticPub) ?: error("Unknown peer identity")
+        verifyStepSignature(step3, buildTranscript(step1, step2), identityPub)
+        val fullHash = cryptoEngine.sha256(identityPub)
+        val peer = resolvePeer(identityPub, staticPub)
+            ?: error(
+                "Unknown peer identity (hash=${IdentityHashMatcher.hashPrefixHex(fullHash)})",
+            )
         val resolvedPeer = peer.copy(
-            identityHash = cryptoEngine.sha256(identityPub),
+            identityHash = fullHash,
             ed25519PublicKey = identityPub,
             x25519StaticPublicKey = staticPub,
         )
-        verifyStepSignature(step3, buildTranscript(step1, step2), resolvedPeer.ed25519PublicKey)
         val dh2 = cryptoEngine.x25519SharedSecret(
             self.x25519StaticPrivateKey!!,
             step1.ephemeralPub.toByteArray(),

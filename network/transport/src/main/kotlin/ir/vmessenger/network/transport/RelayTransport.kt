@@ -9,10 +9,11 @@ import ir.vmessenger.core.proto.relay.v1.RelayEventType
 import ir.vmessenger.core.proto.relay.v1.RelayHello
 import ir.vmessenger.core.proto.relay.v1.RelayRole
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import okhttp3.Request
@@ -136,7 +137,7 @@ class RelayConnection(
 ) : Connection {
     private val _state = MutableStateFlow(ConnectionState.OPEN)
     override val state: StateFlow<ConnectionState> = _state
-    private val _reads = MutableSharedFlow<ByteArray>(extraBufferCapacity = 64)
+    private val incoming = Channel<ByteArray>(Channel.BUFFERED)
     private var acceptsData = dataMode
 
     internal fun dispatchMessage(bytes: ByteString) {
@@ -146,11 +147,11 @@ class RelayConnection(
                 RelayEventType.RELAY_EVENT_TYPE_READY -> acceptsData = true
                 RelayEventType.RELAY_EVENT_TYPE_INCOMING -> Unit
                 RelayEventType.RELAY_EVENT_TYPE_ERROR -> _state.value = ConnectionState.FAILED
-                else -> if (acceptsData) _reads.tryEmit(bytes.toByteArray())
+                else -> if (acceptsData) incoming.trySend(bytes.toByteArray())
             }
             return
         }
-        _reads.tryEmit(bytes.toByteArray())
+        incoming.trySend(bytes.toByteArray())
     }
 
     internal fun markClosed() {
@@ -169,11 +170,12 @@ class RelayConnection(
         }
     }
 
-    override fun read(): Flow<ByteArray> = _reads
+    override fun read() = incoming.receiveAsFlow()
 
     override suspend fun close() {
         if (_state.value == ConnectionState.CLOSED) return
         _state.value = ConnectionState.CLOSED
+        incoming.close()
         webSocket.close(1000, "closed")
     }
 }

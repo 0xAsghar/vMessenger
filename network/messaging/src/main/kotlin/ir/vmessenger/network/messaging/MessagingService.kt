@@ -3,10 +3,10 @@ package ir.vmessenger.network.messaging
 import com.google.protobuf.ByteString
 import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
 import ir.vmessenger.core.common.network.TransportIds
-import ir.vmessenger.core.crypto.CryptoEngine
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import ir.vmessenger.core.proto.wire.v1.Frame
 import ir.vmessenger.core.proto.wire.v1.FrameType
@@ -38,7 +38,6 @@ class MessagingService @Inject constructor(
     private val secureChannelFactory: SecureChannelFactory,
     private val internetTransport: InternetTransport,
     private val relayListener: RelayListener,
-    private val cryptoEngine: CryptoEngine,
 ) : InboundConnectionHandler {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val sessions = mutableMapOf<String, SecureSession>()
@@ -47,18 +46,18 @@ class MessagingService @Inject constructor(
     val incoming: Flow<IncomingEnvelope> = _incoming.asSharedFlow()
 
     private var selfProvider: (suspend () -> PeerIdentity?)? = null
-    private var peerResolver: (suspend (ByteArray) -> PeerIdentity?)? = null
+    private var resolveInboundPeer: (suspend (ByteArray, ByteArray) -> PeerIdentity?)? = null
     private var contactIdResolver: (suspend (ByteArray) -> String?)? = null
     private var peerKeyUpdater: (suspend (String, PeerIdentity) -> Unit)? = null
 
     fun configureInbound(
         selfProvider: suspend () -> PeerIdentity?,
-        peerResolver: suspend (ByteArray) -> PeerIdentity?,
+        resolveInboundPeer: suspend (identityPub: ByteArray, staticPub: ByteArray) -> PeerIdentity?,
         contactIdResolver: suspend (ByteArray) -> String?,
         peerKeyUpdater: (suspend (String, PeerIdentity) -> Unit)? = null,
     ) {
         this.selfProvider = selfProvider
-        this.peerResolver = peerResolver
+        this.resolveInboundPeer = resolveInboundPeer
         this.contactIdResolver = contactIdResolver
         this.peerKeyUpdater = peerKeyUpdater
     }
@@ -87,12 +86,9 @@ class MessagingService @Inject constructor(
     @Suppress("ReturnCount")
     private suspend fun acceptInbound(connection: Connection) {
         val self = selfProvider?.invoke() ?: return
-        val resolvePeer = peerResolver ?: return
+        val resolvePeer = resolveInboundPeer ?: return
         val resolveContactId = contactIdResolver ?: return
-        val sessionResult = secureChannelFactory.acceptResolving(connection, self) { identityPub, staticPub ->
-            val hash = cryptoEngine.sha256(identityPub)
-            resolvePeer(hash)?.copy(x25519StaticPublicKey = staticPub)
-        }
+        val sessionResult = secureChannelFactory.acceptResolving(connection, self, resolvePeer)
         val session = sessionResult.getOrElse {
             AppLogger.warn("Messaging", "inbound handshake failed: ${it.message}")
             connection.close()
@@ -100,8 +96,10 @@ class MessagingService @Inject constructor(
         }
         val peerHash = session.peer.identityHash
         val contactId = resolveContactId(peerHash) ?: run {
-            val prefix = peerHash.take(4).joinToString("") { "%02x".format(it) }
-            AppLogger.warn("Messaging", "inbound peer unknown hash=$prefix")
+            AppLogger.warn(
+                "Messaging",
+                "inbound contact id missing hash=${IdentityHashMatcher.hashPrefixHex(peerHash)}",
+            )
             connection.close()
             return
         }

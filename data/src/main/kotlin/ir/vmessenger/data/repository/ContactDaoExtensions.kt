@@ -9,6 +9,20 @@ suspend fun ContactDao.findByIdentityHash(identityHash: ByteArray): ContactEntit
     return getAll().firstOrNull { IdentityHashMatcher.matches(it.identityHash, identityHash) }
 }
 
+suspend fun ContactDao.findContactForInbound(
+    identityPub: ByteArray,
+    identityHash: ByteArray,
+): ContactEntity? {
+    if (!IdentityHashMatcher.isPlaceholderPublicKey(identityPub)) {
+        getByEd25519Public(identityPub)?.let { return it }
+    }
+    return findByIdentityHash(identityHash)
+        ?: getAll().firstOrNull { contact ->
+            IdentityHashMatcher.isPlaceholderPublicKey(contact.ed25519Public) &&
+                IdentityHashMatcher.matches(contact.identityHash, identityHash)
+        }
+}
+
 suspend fun ContactDao.updateLearnedKeys(
     contactId: String,
     identityHash: ByteArray,
