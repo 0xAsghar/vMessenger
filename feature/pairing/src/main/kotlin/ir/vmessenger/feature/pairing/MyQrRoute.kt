@@ -37,6 +37,7 @@ fun MyQrRoute(
             when (val state = uiState) {
                 MyQrUiState.Loading -> CircularProgressIndicator()
                 MyQrUiState.NoIdentity -> Text(stringResource(R.string.pairing_no_identity))
+                MyQrUiState.Error -> Text(stringResource(R.string.my_qr_error))
                 is MyQrUiState.Ready -> QrCard(
                     payload = state.qrPayload,
                     userHash = state.userHash,

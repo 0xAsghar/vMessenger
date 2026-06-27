@@ -3,6 +3,7 @@
     <string name="feature_pairing_placeholder">جفت‌سازی — به‌زودی</string>
     <string name="pairing_no_identity">ابتدا هویت بسازید</string>
     <string name="my_qr_title">QR من</string>
+    <string name="my_qr_error">نمایش QR ممکن نشد. دوباره تلاش کنید.</string>
     <string name="scan_qr_title">اسکن QR</string>
     <string name="scan_qr_hint">QR مخاطب را داخل کادر قرار دهید</string>
     <string name="add_by_hash_title">افزودن با شناسه</string>

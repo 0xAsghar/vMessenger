@@ -11,16 +11,19 @@ import ir.vmessenger.domain.usecase.contact.AddContactByHashUseCase
 import ir.vmessenger.domain.usecase.contact.AddContactByQrUseCase
 import ir.vmessenger.domain.usecase.identity.GetIdentityUseCase
 import ir.vmessenger.domain.usecase.pairing.CreateMyPairingDescriptorUseCase
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 sealed class MyQrUiState {
     data object Loading : MyQrUiState()
     data class Ready(val userHash: String, val qrPayload: String) : MyQrUiState()
     data object NoIdentity : MyQrUiState()
+    data object Error : MyQrUiState()
 }
 
 @HiltViewModel
@@ -34,12 +37,19 @@ class MyQrViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val bytes = createDescriptor()
-            val identity = getIdentity()
-            _uiState.value = if (bytes != null && identity != null) {
-                MyQrUiState.Ready(identity.userHash, pairingRepository.encodeDescriptor(bytes))
-            } else {
-                MyQrUiState.NoIdentity
+            _uiState.value = withContext(Dispatchers.Default) {
+                runCatching {
+                    val bytes = createDescriptor()
+                    val identity = getIdentity()
+                    when {
+                        bytes != null && identity != null ->
+                            MyQrUiState.Ready(
+                                userHash = identity.userHash,
+                                qrPayload = pairingRepository.encodeDescriptor(bytes),
+                            )
+                        else -> MyQrUiState.NoIdentity
+                    }
+                }.getOrElse { MyQrUiState.Error }
             }
         }
     }
