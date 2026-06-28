@@ -21,6 +21,8 @@
     <string name="feature_debug_copy_adb">کپی دستورات</string>
     <string name="feature_logs_title">لاگ عملکرد</string>
     <string name="feature_logs_export_share">خروجی و اشتراک</string>
+    <string name="feature_logs_copy">کپی لاگ</string>
+    <string name="feature_logs_copied">لاگ در حافظه کپی شد</string>
     <string name="feature_logs_clear">پاک‌کردن لاگ</string>
     <string name="feature_logs_empty">هنوز لاگی ثبت نشده است</string>
     <string name="feature_logs_share_chooser">اشتراک‌گذاری لاگ</string>

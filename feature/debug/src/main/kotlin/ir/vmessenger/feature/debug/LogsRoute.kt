@@ -1,6 +1,7 @@
 package ir.vmessenger.feature.debug
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,8 +17,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -34,6 +37,8 @@ fun LogsRoute(
 ) {
     val entries by viewModel.entries.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val copiedMessage = stringResource(R.string.feature_logs_copied)
 
     VMessengerScaffold(
         title = stringResource(R.string.feature_logs_title),
@@ -57,6 +62,15 @@ fun LogsRoute(
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(text = stringResource(R.string.feature_logs_export_share))
+                }
+                OutlinedButton(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(viewModel.snapshotText()))
+                        Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(text = stringResource(R.string.feature_logs_copy))
                 }
                 OutlinedButton(
                     onClick = { viewModel.clear() },
