@@ -13,7 +13,6 @@ import ir.vmessenger.core.proto.wire.v1.Frame
 import ir.vmessenger.core.proto.wire.v1.FrameType
 import ir.vmessenger.network.discovery.DiscoveryManager
 import ir.vmessenger.network.transport.Connection
-import ir.vmessenger.network.transport.ConnectionState
 import ir.vmessenger.network.transport.InternetTransport
 import ir.vmessenger.network.transport.TransportSelector
 import kotlinx.coroutines.CoroutineScope
@@ -146,6 +145,7 @@ class MessagingService @Inject constructor(
         var lastError: AppError? = null
         for (endpoint in endpoints) {
             AppLogger.info("Messaging", "try ${endpoint.transport.value}:${endpoint.address}")
+            awaitCloseOutbound(contactId)
             when (val result = sendToEndpoint(contactId, self, peer, endpoint, envelope)) {
                 is AppResult.Success -> {
                     AppLogger.info("Messaging", "sent via ${endpoint.transport.value}")
@@ -177,7 +177,11 @@ class MessagingService @Inject constructor(
         endpoint: Endpoint,
         envelope: MessageEnvelope,
     ): AppResult<Unit> = runCatching {
-        val session = getOrCreateOutboundSession(contactId, self, peer, endpoint)
+        val session = sessionMutex.withLock {
+            outboundSessions[contactId] ?: establishSession(contactId, self, peer, endpoint).also { established ->
+                outboundSessions[contactId] = established
+            }
+        }
         val sealed = session.seal(envelope.toByteArray())
         val frame = Frame.newBuilder()
             .setVersion(1)
@@ -192,26 +196,6 @@ class MessagingService @Inject constructor(
             AppResult.Error(AppError.Network(it.message ?: "ارسال ناموفق"))
         },
     )
-
-    private suspend fun getOrCreateOutboundSession(
-        contactId: String,
-        self: PeerIdentity,
-        peer: PeerIdentity,
-        endpoint: Endpoint,
-    ): ActiveSecureSession {
-        sessionMutex.withLock {
-            outboundSessions[contactId]?.let { existing ->
-                if (existing.connection.state.value == ConnectionState.OPEN) {
-                    return existing
-                }
-                outboundSessions.remove(contactId)
-                existing.close()
-            }
-        }
-        val session = establishSession(contactId, self, peer, endpoint)
-        sessionMutex.withLock { outboundSessions[contactId] = session }
-        return session
-    }
 
     private suspend fun establishSession(
         contactId: String,

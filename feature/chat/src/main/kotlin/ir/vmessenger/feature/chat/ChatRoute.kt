@@ -1,28 +1,25 @@
 package ir.vmessenger.feature.chat
 
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -116,9 +113,9 @@ fun ConversationRoute(
         viewModel.load(conversationId)
     }
 
-    LaunchedEffect(messages.size) {
+    LaunchedEffect(messages.lastOrNull()?.messageId) {
         if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(0)
+            listState.scrollToItem(messages.lastIndex)
         }
     }
 
@@ -135,56 +132,42 @@ fun ConversationRoute(
                 state = listState,
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
-                reverseLayout = true,
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
             ) {
-                items(
-                    items = messages.asReversed(),
-                    key = { it.messageId },
-                ) { message ->
-                    MessageBubble(
-                        message = message,
-                        modifier = Modifier.animateItem(
-                            fadeInSpec = tween(180),
-                            fadeOutSpec = tween(120),
-                            placementSpec = tween(220),
-                        ),
-                    )
+                items(messages, key = { it.messageId }) { message ->
+                    MessageBubble(message = message)
                 }
             }
-            Surface(
-                tonalElevation = 2.dp,
-                shadowElevation = 4.dp,
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.Bottom,
+                TextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text(text = stringResource(R.string.feature_chat_hint)) },
+                    shape = RoundedCornerShape(24.dp),
+                    maxLines = 4,
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedIndicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                )
+                TextButton(
+                    onClick = {
+                        viewModel.send(draft)
+                        draft = ""
+                    },
+                    enabled = draft.isNotBlank(),
                 ) {
-                    OutlinedTextField(
-                        value = draft,
-                        onValueChange = { draft = it },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text(text = stringResource(R.string.feature_chat_hint)) },
-                        shape = RoundedCornerShape(24.dp),
-                        maxLines = 4,
-                    )
-                    FilledIconButton(
-                        onClick = {
-                            viewModel.send(draft)
-                            draft = ""
-                        },
-                        enabled = draft.isNotBlank(),
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Send,
-                            contentDescription = stringResource(R.string.feature_chat_send),
-                        )
-                    }
+                    Text(text = stringResource(R.string.feature_chat_send))
                 }
             }
         }
@@ -192,10 +175,7 @@ fun ConversationRoute(
 }
 
 @Composable
-private fun MessageBubble(
-    message: ChatMessage,
-    modifier: Modifier = Modifier,
-) {
+private fun MessageBubble(message: ChatMessage) {
     val isOutgoing = message.direction == MessageDirection.OUTGOING
     val alignment = if (isOutgoing) {
         Alignment.CenterStart
@@ -213,7 +193,7 @@ private fun MessageBubble(
         MaterialTheme.colorScheme.onSurface
     }
     val statusColor = if (isOutgoing) {
-        MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.75f)
+        MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.7f)
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
@@ -224,13 +204,13 @@ private fun MessageBubble(
     }
 
     Box(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         contentAlignment = alignment,
     ) {
         Surface(
             modifier = Modifier
                 .widthIn(max = 280.dp)
-                .padding(horizontal = 4.dp),
+                .padding(vertical = 2.dp),
             shape = shape,
             color = bubbleColor,
         ) {
