@@ -1,5 +1,6 @@
 package ir.vmessenger.network.transport
 
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
 import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.TransportIds
@@ -137,7 +138,7 @@ class RelayConnection(
 ) : Connection {
     private val _state = MutableStateFlow(ConnectionState.OPEN)
     override val state: StateFlow<ConnectionState> = _state
-    private val incoming = Channel<ByteArray>(Channel.BUFFERED)
+    private val incoming = Channel<ByteArray>(Channel.UNLIMITED)
     private var acceptsData = dataMode
 
     internal fun dispatchMessage(bytes: ByteString) {
@@ -147,11 +148,19 @@ class RelayConnection(
                 RelayEventType.RELAY_EVENT_TYPE_READY -> acceptsData = true
                 RelayEventType.RELAY_EVENT_TYPE_INCOMING -> Unit
                 RelayEventType.RELAY_EVENT_TYPE_ERROR -> _state.value = ConnectionState.FAILED
-                else -> if (acceptsData) incoming.trySend(bytes.toByteArray())
+                else -> enqueueFrame(bytes)
             }
             return
         }
-        incoming.trySend(bytes.toByteArray())
+        enqueueFrame(bytes)
+    }
+
+    private fun enqueueFrame(bytes: ByteString) {
+        incoming.trySend(bytes.toByteArray()).let { result ->
+            if (!result.isSuccess) {
+                AppLogger.warn("Relay", "dropped inbound frame (${bytes.size} bytes)")
+            }
+        }
     }
 
     internal fun markClosed() {

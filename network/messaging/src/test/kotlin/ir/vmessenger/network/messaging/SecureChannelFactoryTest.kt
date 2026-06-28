@@ -84,6 +84,34 @@ class SecureChannelFactoryTest {
     }
 
     @Test
+    fun bobInitiatesAliceAcceptsEncryptsAndDecrypts() = runBlocking {
+        val aliceEd = crypto.generateEd25519KeyPair()
+        val aliceX = crypto.generateX25519KeyPair()
+        val bobEd = crypto.generateEd25519KeyPair()
+        val bobX = crypto.generateX25519KeyPair()
+        val aliceHash = crypto.sha256(aliceEd.publicKey)
+        val bobHash = crypto.sha256(bobEd.publicKey)
+        val alice = peer(aliceHash, aliceEd, aliceX)
+        val bob = peer(bobHash, bobEd, bobX)
+        val (client, server) = pairedConnections()
+
+        val serverDeferred = async(Dispatchers.Default) {
+            factory.accept(server, alice, bob).getOrThrow()
+        }
+        val clientSession = factory.initiate(client, bob, alice).getOrThrow()
+        val serverSession = serverDeferred.await()
+
+        val payload = "reply".toByteArray()
+        val sealed = clientSession.seal(payload)
+        val counter = serverSession.ratchetState.recvCounter + 1
+        val opened = serverSession.open(sealed, counter)
+        assertTrue(opened?.contentEquals(payload) == true)
+
+        clientSession.close()
+        serverSession.close()
+    }
+
+    @Test
     fun handshakeEncryptsAndDecrypts() = runBlocking {
         val aliceEd = crypto.generateEd25519KeyPair()
         val aliceX = crypto.generateX25519KeyPair()

@@ -1,6 +1,7 @@
 package ir.vmessenger.network.messaging
 
 import com.google.protobuf.ByteString
+import com.google.protobuf.InvalidProtocolBufferException
 import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
@@ -40,7 +41,7 @@ class MessagingService @Inject constructor(
     private val relayListener: RelayListener,
 ) : InboundConnectionHandler {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val sessions = mutableMapOf<String, SecureSession>()
+    private val outboundSessions = mutableMapOf<String, ActiveSecureSession>()
     private val sessionMutex = Mutex()
     private val _incoming = MutableSharedFlow<IncomingEnvelope>(extraBufferCapacity = 64)
     val incoming: Flow<IncomingEnvelope> = _incoming.asSharedFlow()
@@ -94,6 +95,7 @@ class MessagingService @Inject constructor(
             connection.close()
             return
         }
+        val activeSession = session as ActiveSecureSession
         val peerHash = session.peer.identityHash
         val contactId = resolveContactId(peerHash) ?: run {
             AppLogger.warn(
@@ -103,29 +105,14 @@ class MessagingService @Inject constructor(
             connection.close()
             return
         }
-        peerKeyUpdater?.invoke(contactId, session.peer)
-        sessionMutex.withLock {
-            sessions[contactId] = session
+        scope.launch {
+            runCatching { peerKeyUpdater?.invoke(contactId, session.peer) }
+                .onFailure { AppLogger.warn("Messaging", "peer key update failed: ${it.message}") }
         }
         try {
-            connection.read().collect { frameBytes ->
-                val frame = Frame.parseFrom(frameBytes)
-                if (frame.type != FrameType.FRAME_TYPE_SECURE) return@collect
-                val counter = (session as ActiveSecureSession).ratchetState.recvCounter + 1
-                val plaintext = session.open(frame.body.toByteArray(), counter)
-                if (plaintext == null) {
-                    AppLogger.warn(
-                        "Messaging",
-                        "inbound decrypt failed contact=$contactId counter=$counter",
-                    )
-                    return@collect
-                }
-                val envelope = MessageEnvelope.parseFrom(plaintext)
-                _incoming.emit(IncomingEnvelope(envelope, contactId))
-            }
+            readSecureFrames(activeSession, contactId, connection)
         } finally {
-            session.close()
-            sessionMutex.withLock { sessions.remove(contactId) }
+            activeSession.close()
         }
     }
 
@@ -158,7 +145,7 @@ class MessagingService @Inject constructor(
         var lastError: AppError? = null
         for (endpoint in endpoints) {
             AppLogger.info("Messaging", "try ${endpoint.transport.value}:${endpoint.address}")
-            sessionMutex.withLock { sessions.remove(contactId) }
+            awaitCloseOutbound(contactId)
             when (val result = sendToEndpoint(contactId, self, peer, endpoint, envelope)) {
                 is AppResult.Success -> {
                     AppLogger.info("Messaging", "sent via ${endpoint.transport.value}")
@@ -191,9 +178,8 @@ class MessagingService @Inject constructor(
         envelope: MessageEnvelope,
     ): AppResult<Unit> = runCatching {
         val session = sessionMutex.withLock {
-            sessions[contactId] ?: establishSession(self, peer, endpoint).also { established ->
-                sessions[contactId] = established
-                scope.launch { peerKeyUpdater?.invoke(contactId, established.peer) }
+            outboundSessions[contactId] ?: establishSession(contactId, self, peer, endpoint).also { established ->
+                outboundSessions[contactId] = established
             }
         }
         val sealed = session.seal(envelope.toByteArray())
@@ -202,24 +188,91 @@ class MessagingService @Inject constructor(
             .setType(FrameType.FRAME_TYPE_SECURE)
             .setBody(ByteString.copyFrom(sealed))
             .build()
-        (session as ActiveSecureSession).writeFrame(frame.toByteArray())
+        session.writeFrame(frame.toByteArray())
     }.fold(
         onSuccess = { AppResult.Success(Unit) },
         onFailure = {
+            awaitCloseOutbound(contactId)
             AppResult.Error(AppError.Network(it.message ?: "ارسال ناموفق"))
         },
     )
 
     private suspend fun establishSession(
+        contactId: String,
         self: PeerIdentity,
         peer: PeerIdentity,
         endpoint: Endpoint,
-    ): SecureSession {
+    ): ActiveSecureSession {
         val connection = transportSelector.connect(
             endpoint,
             relayTargetId = if (endpoint.transport == TransportIds.RELAY) peer.identityHash else null,
         ).getOrThrow()
-        return secureChannelFactory.initiate(connection, self, peer).getOrThrow()
+        val session = secureChannelFactory.initiate(connection, self, peer).getOrThrow() as ActiveSecureSession
+        scope.launch {
+            runCatching { peerKeyUpdater?.invoke(contactId, session.peer) }
+                .onFailure { AppLogger.warn("Messaging", "peer key update failed: ${it.message}") }
+        }
+        scope.launch {
+            try {
+                readSecureFrames(session, contactId, connection)
+            } finally {
+                sessionMutex.withLock {
+                    if (outboundSessions[contactId] === session) {
+                        outboundSessions.remove(contactId)
+                    }
+                }
+                session.close()
+            }
+        }
+        return session
+    }
+
+    private suspend fun readSecureFrames(
+        session: ActiveSecureSession,
+        contactId: String,
+        connection: Connection,
+    ) {
+        connection.read().collect { frameBytes ->
+            processSecureFrame(session, contactId, frameBytes)
+        }
+    }
+
+    private suspend fun processSecureFrame(
+        session: ActiveSecureSession,
+        contactId: String,
+        frameBytes: ByteArray,
+    ) {
+        val frame = try {
+            Frame.parseFrom(frameBytes)
+        } catch (e: InvalidProtocolBufferException) {
+            AppLogger.warn("Messaging", "inbound frame parse failed contact=$contactId: ${e.message}")
+            return
+        }
+        if (frame.type != FrameType.FRAME_TYPE_SECURE) {
+            AppLogger.debug("Messaging", "inbound skip frame type=${frame.type} contact=$contactId")
+            return
+        }
+        val counter = session.ratchetState.recvCounter + 1
+        val plaintext = session.open(frame.body.toByteArray(), counter)
+        if (plaintext == null) {
+            AppLogger.warn(
+                "Messaging",
+                "inbound decrypt failed contact=$contactId counter=$counter",
+            )
+            return
+        }
+        val envelope = try {
+            MessageEnvelope.parseFrom(plaintext)
+        } catch (e: InvalidProtocolBufferException) {
+            AppLogger.warn("Messaging", "inbound envelope parse failed contact=$contactId: ${e.message}")
+            return
+        }
+        _incoming.emit(IncomingEnvelope(envelope, contactId))
+    }
+
+    private suspend fun awaitCloseOutbound(contactId: String) {
+        val previous = sessionMutex.withLock { outboundSessions.remove(contactId) }
+        previous?.close()
     }
 }
 
