@@ -1,5 +1,6 @@
 package ir.vmessenger.ui.home
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
@@ -88,7 +89,9 @@ fun HomeRoute(
                 onOpenConversationConsumed = viewModel::consumeOpenConversation,
                 onStartChat = viewModel::startChat,
             ),
-            modifier = Modifier.padding(padding),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
         )
     }
 }

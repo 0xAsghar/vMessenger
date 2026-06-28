@@ -43,6 +43,7 @@ class MessagingService @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val outboundSessions = mutableMapOf<String, ActiveSecureSession>()
     private val sessionMutex = Mutex()
+    private val sendMutexes = mutableMapOf<String, Mutex>()
     private val _incoming = MutableSharedFlow<IncomingEnvelope>(extraBufferCapacity = 64)
     val incoming: Flow<IncomingEnvelope> = _incoming.asSharedFlow()
 
@@ -122,16 +123,19 @@ class MessagingService @Inject constructor(
         peer: PeerIdentity,
         envelope: MessageEnvelope,
     ): AppResult<Unit> {
-        return when (val endpoints = discoveryManager.resolve(peer.identityHash)) {
-            is AppResult.Success -> {
-                val ordered = orderEndpoints(endpoints.data)
-                if (ordered.isEmpty()) {
-                    AppResult.Error(AppError.Network("endpoint یافت نشد"))
-                } else {
-                    sendWithFallback(contactId, self, peer, ordered, envelope)
+        val mutex = sendMutexes.getOrPut(contactId) { Mutex() }
+        return mutex.withLock {
+            when (val endpoints = discoveryManager.resolve(peer.identityHash)) {
+                is AppResult.Success -> {
+                    val ordered = orderEndpoints(endpoints.data)
+                    if (ordered.isEmpty()) {
+                        AppResult.Error(AppError.Network("endpoint یافت نشد"))
+                    } else {
+                        sendWithFallback(contactId, self, peer, ordered, envelope)
+                    }
                 }
+                is AppResult.Error -> endpoints
             }
-            is AppResult.Error -> endpoints
         }
     }
 

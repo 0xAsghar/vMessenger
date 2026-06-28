@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -73,7 +72,7 @@ fun ChatRoute(
                     )
                 }
             } else {
-                LazyColumn(modifier = Modifier.padding(padding)) {
+                LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
                     items(conversations, key = { it.id }) { conversation ->
                         Card(
                             modifier = Modifier
@@ -113,7 +112,7 @@ fun ConversationRoute(
         viewModel.load(conversationId)
     }
 
-    LaunchedEffect(messages.lastOrNull()?.messageId) {
+    LaunchedEffect(messages.size, messages.lastOrNull()?.messageId) {
         if (messages.isNotEmpty()) {
             listState.scrollToItem(messages.lastIndex)
         }
@@ -122,53 +121,71 @@ fun ConversationRoute(
     VMessengerScaffold(
         title = stringResource(R.string.feature_chat_conversation),
         onNavigateBack = onBack,
+        bottomBar = {
+            MessageComposer(
+                draft = draft,
+                onDraftChange = { draft = it },
+                onSend = {
+                    viewModel.send(draft)
+                    draft = ""
+                },
+            )
+        },
     ) { padding ->
-        Column(
+        LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            reverseLayout = true,
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(messages, key = { it.messageId }) { message ->
-                    MessageBubble(message = message)
-                }
+            items(
+                items = messages.asReversed(),
+                key = { it.messageId },
+            ) { message ->
+                MessageBubble(message = message)
             }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .imePadding()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+        }
+    }
+}
+
+@Composable
+private fun MessageComposer(
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    onSend: () -> Unit,
+) {
+    Surface(
+        tonalElevation = 1.dp,
+        shadowElevation = 2.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextField(
+                value = draft,
+                onValueChange = onDraftChange,
+                modifier = Modifier.weight(1f),
+                placeholder = { Text(text = stringResource(R.string.feature_chat_hint)) },
+                shape = RoundedCornerShape(24.dp),
+                maxLines = 4,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    focusedIndicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedIndicatorColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            )
+            TextButton(
+                onClick = onSend,
+                enabled = draft.isNotBlank(),
             ) {
-                TextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text(text = stringResource(R.string.feature_chat_hint)) },
-                    shape = RoundedCornerShape(24.dp),
-                    maxLines = 4,
-                    colors = TextFieldDefaults.colors(
-                        focusedIndicatorColor = MaterialTheme.colorScheme.surfaceVariant,
-                        unfocusedIndicatorColor = MaterialTheme.colorScheme.surfaceVariant,
-                    ),
-                )
-                TextButton(
-                    onClick = {
-                        viewModel.send(draft)
-                        draft = ""
-                    },
-                    enabled = draft.isNotBlank(),
-                ) {
-                    Text(text = stringResource(R.string.feature_chat_send))
-                }
+                Text(text = stringResource(R.string.feature_chat_send))
             }
         }
     }
@@ -204,13 +221,13 @@ private fun MessageBubble(message: ChatMessage) {
     }
 
     Box(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 2.dp),
         contentAlignment = alignment,
     ) {
         Surface(
-            modifier = Modifier
-                .widthIn(max = 280.dp)
-                .padding(vertical = 2.dp),
+            modifier = Modifier.widthIn(max = 280.dp),
             shape = shape,
             color = bubbleColor,
         ) {
