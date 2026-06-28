@@ -2,9 +2,12 @@ package ir.vmessenger.app.network
 
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import dagger.hilt.android.AndroidEntryPoint
 import ir.vmessenger.core.common.network.NetworkConfig
+import ir.vmessenger.core.notifications.NetworkNotificationManager
 import ir.vmessenger.data.network.NetworkCoordinator
 import javax.inject.Inject
 
@@ -13,7 +16,20 @@ class NetworkLifecycleService : Service() {
     @Inject
     lateinit var networkCoordinator: NetworkCoordinator
 
+    @Inject
+    lateinit var networkNotificationManager: NetworkNotificationManager
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val notification = networkNotificationManager.buildForegroundNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NetworkNotificationManager.NOTIFICATION_ID_NETWORK,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            )
+        } else {
+            startForeground(NetworkNotificationManager.NOTIFICATION_ID_NETWORK, notification)
+        }
         val listenPort = intent?.getIntExtra(EXTRA_LISTEN_PORT, DEFAULT_LISTEN_PORT) ?: DEFAULT_LISTEN_PORT
         val forwardPort = intent?.getIntExtra(EXTRA_FORWARD_PORT, listenPort) ?: listenPort
         val useDevBootstrap = intent?.getBooleanExtra(EXTRA_USE_DEV_BOOTSTRAP, false) ?: false

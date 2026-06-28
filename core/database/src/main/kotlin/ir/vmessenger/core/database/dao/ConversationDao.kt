@@ -3,6 +3,7 @@ package ir.vmessenger.core.database.dao
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
+import androidx.room.Embedded
 import androidx.room.Query
 import androidx.room.Update
 import ir.vmessenger.core.database.entity.ConversationEntity
@@ -12,6 +13,11 @@ import ir.vmessenger.core.database.entity.OutboxEntity
 import ir.vmessenger.core.database.entity.SessionEntity
 import kotlinx.coroutines.flow.Flow
 
+data class ConversationWithPreview(
+    @Embedded val conversation: ConversationEntity,
+    val lastMessagePreview: String?,
+)
+
 @Dao
 interface ConversationDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -19,6 +25,16 @@ interface ConversationDao {
 
     @Query("SELECT * FROM conversation ORDER BY lastActivityUnixMs DESC")
     fun observeAll(): Flow<List<ConversationEntity>>
+
+    @Query(
+        """
+        SELECT c.*, m.body AS lastMessagePreview
+        FROM conversation c
+        LEFT JOIN message m ON m.messageId = c.lastMessageId
+        ORDER BY c.lastActivityUnixMs DESC
+        """,
+    )
+    fun observeAllWithPreview(): Flow<List<ConversationWithPreview>>
 
     @Query("SELECT * FROM conversation WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): ConversationEntity?

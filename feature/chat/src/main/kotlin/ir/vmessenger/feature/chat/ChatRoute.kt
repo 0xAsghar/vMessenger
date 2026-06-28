@@ -1,19 +1,28 @@
 package ir.vmessenger.feature.chat
 
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -27,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.model.DeliveryStatus
 import ir.vmessenger.domain.model.MessageDirection
 
@@ -100,9 +110,16 @@ fun ConversationRoute(
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     var draft by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
 
-    androidx.compose.runtime.LaunchedEffect(conversationId) {
+    LaunchedEffect(conversationId) {
         viewModel.load(conversationId)
+    }
+
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(0)
+        }
     }
 
     VMessengerScaffold(
@@ -115,32 +132,59 @@ fun ConversationRoute(
                 .padding(padding),
         ) {
             LazyColumn(
-                modifier = Modifier.weight(1f).padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                reverseLayout = true,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
             ) {
-                items(messages, key = { it.messageId }) { message ->
-                    MessageBubble(message = message)
+                items(
+                    items = messages.asReversed(),
+                    key = { it.messageId },
+                ) { message ->
+                    MessageBubble(
+                        message = message,
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = tween(180),
+                            fadeOutSpec = tween(120),
+                            placementSpec = tween(220),
+                        ),
+                    )
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            Surface(
+                tonalElevation = 2.dp,
+                shadowElevation = 4.dp,
             ) {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text(text = stringResource(R.string.feature_chat_hint)) },
-                )
-                TextButton(
-                    onClick = {
-                        viewModel.send(draft)
-                        draft = ""
-                    },
-                    enabled = draft.isNotBlank(),
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Bottom,
                 ) {
-                    Text(text = stringResource(R.string.feature_chat_send))
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text(text = stringResource(R.string.feature_chat_hint)) },
+                        shape = RoundedCornerShape(24.dp),
+                        maxLines = 4,
+                    )
+                    FilledIconButton(
+                        onClick = {
+                            viewModel.send(draft)
+                            draft = ""
+                        },
+                        enabled = draft.isNotBlank(),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Send,
+                            contentDescription = stringResource(R.string.feature_chat_send),
+                        )
+                    }
                 }
             }
         }
@@ -148,20 +192,61 @@ fun ConversationRoute(
 }
 
 @Composable
-private fun MessageBubble(message: ir.vmessenger.domain.model.ChatMessage) {
-    val alignment = if (message.direction == MessageDirection.OUTGOING) {
-        Alignment.CenterEnd
-    } else {
+private fun MessageBubble(
+    message: ChatMessage,
+    modifier: Modifier = Modifier,
+) {
+    val isOutgoing = message.direction == MessageDirection.OUTGOING
+    val alignment = if (isOutgoing) {
         Alignment.CenterStart
+    } else {
+        Alignment.CenterEnd
     }
-    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
-        Card(modifier = Modifier.padding(4.dp)) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(text = message.text)
+    val bubbleColor = if (isOutgoing) {
+        MaterialTheme.colorScheme.secondary
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val contentColor = if (isOutgoing) {
+        MaterialTheme.colorScheme.onSecondary
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val statusColor = if (isOutgoing) {
+        MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.75f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val shape = if (isOutgoing) {
+        RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 4.dp)
+    } else {
+        RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 4.dp, bottomStart = 16.dp)
+    }
+
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = alignment,
+    ) {
+        Surface(
+            modifier = Modifier
+                .widthIn(max = 280.dp)
+                .padding(horizontal = 4.dp),
+            shape = shape,
+            color = bubbleColor,
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Text(
+                    text = message.text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = contentColor,
+                )
                 Text(
                     text = statusLabel(message.status),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = statusColor,
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(top = 2.dp),
                 )
             }
         }

@@ -61,23 +61,24 @@ class IncomingMessageCollector @Inject constructor(
     private suspend fun persistChatMessage(contactId: String, envelope: MessageEnvelope) {
         val messageId = envelope.messageId.toStringUtf8()
         if (messageDao.getById(messageId) != null) return
-        val conversationId = conversationDao.getByContactId(contactId)?.id
+        val now = System.currentTimeMillis()
+        val activityMs = envelope.sentAtUnixMs
+        val existingConversation = conversationDao.getByContactId(contactId)
+        val conversationId = existingConversation?.id
             ?: run {
-                val now = System.currentTimeMillis()
                 val id = java.util.UUID.randomUUID().toString()
                 conversationDao.upsert(
                     ir.vmessenger.core.database.entity.ConversationEntity(
                         id = id,
                         contactId = contactId,
-                        lastMessageId = null,
-                        lastActivityUnixMs = now,
+                        lastMessageId = messageId,
+                        lastActivityUnixMs = activityMs,
                         unreadCount = 1,
                         muted = false,
                     ),
                 )
                 id
             }
-        val now = System.currentTimeMillis()
         messageDao.insert(
             MessageEntity(
                 messageId = messageId,
@@ -87,12 +88,21 @@ class IncomingMessageCollector @Inject constructor(
                 body = envelope.chat.text,
                 replyToMessageId = null,
                 status = DeliveryStatus.DELIVERED,
-                createdAtUnixMs = envelope.sentAtUnixMs,
+                createdAtUnixMs = activityMs,
                 sentAtUnixMs = envelope.sentAtUnixMs,
                 deliveredAtUnixMs = now,
                 readAtUnixMs = null,
             ),
         )
+        if (existingConversation != null) {
+            conversationDao.upsert(
+                existingConversation.copy(
+                    lastMessageId = messageId,
+                    lastActivityUnixMs = activityMs,
+                    unreadCount = existingConversation.unreadCount + 1,
+                ),
+            )
+        }
         AppLogger.info("Messaging", "incoming chat messageId=$messageId contact=$contactId")
         sendDeliveryReceipt(contactId, messageId, now)
     }

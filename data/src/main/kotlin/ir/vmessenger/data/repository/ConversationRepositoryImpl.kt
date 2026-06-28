@@ -41,17 +41,18 @@ class ConversationRepositoryImpl @Inject constructor(
 
     override fun observeConversations(): Flow<List<Conversation>> =
         combine(
-            conversationDao.observeAll(),
+            conversationDao.observeAllWithPreview(),
             contactDao.observeContacts(),
         ) { conversations, contacts ->
             val contactMap = contacts.associateBy { it.id }
-            conversations.map { conv ->
+            conversations.map { row ->
+                val conv = row.conversation
                 val contact = contactMap[conv.contactId]
                 Conversation(
                     id = conv.id,
                     contactId = conv.contactId,
                     contactName = contact?.displayName ?: conv.contactId,
-                    lastMessagePreview = null,
+                    lastMessagePreview = row.lastMessagePreview,
                     lastActivityUnixMs = conv.lastActivityUnixMs,
                     unreadCount = conv.unreadCount,
                 )
@@ -109,6 +110,14 @@ class ConversationRepositoryImpl @Inject constructor(
                 lastError = null,
             ),
         )
+        conversationDao.getById(conversationId)?.let { conv ->
+            conversationDao.upsert(
+                conv.copy(
+                    lastMessageId = messageId,
+                    lastActivityUnixMs = now,
+                ),
+            )
+        }
         val conv = conversationDao.getById(conversationId) ?: return AppResult.Success(messageId)
         val contact = contactDao.getById(conv.contactId)
         val identity = identityRepository.getIdentity()

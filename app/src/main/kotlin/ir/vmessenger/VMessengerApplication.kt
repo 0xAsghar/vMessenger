@@ -2,6 +2,7 @@ package ir.vmessenger
 
 import android.app.Application
 import android.content.Intent
+import android.os.Build
 import dagger.hilt.android.HiltAndroidApp
 import ir.vmessenger.app.network.NetworkLifecycleService
 import ir.vmessenger.core.common.logging.AppLogger
@@ -22,11 +23,14 @@ class VMessengerApplication : Application() {
         AppLogger.addSink(fileLogSink)
         AppLogger.info("App", "vMessenger started")
         runBlocking { databaseKeyProvider.initialize() }
-        startService(
-            Intent(this, NetworkLifecycleService::class.java).apply {
-                putExtra(NetworkLifecycleService.EXTRA_LISTEN_PORT, NetworkLifecycleService.DEFAULT_LISTEN_PORT)
-                putExtra(NetworkLifecycleService.EXTRA_FORWARD_PORT, NetworkLifecycleService.DEFAULT_LISTEN_PORT)
-            },
-        )
+        val networkIntent = Intent(this, NetworkLifecycleService::class.java).apply {
+            putExtra(NetworkLifecycleService.EXTRA_LISTEN_PORT, NetworkLifecycleService.DEFAULT_LISTEN_PORT)
+            putExtra(NetworkLifecycleService.EXTRA_FORWARD_PORT, NetworkLifecycleService.DEFAULT_LISTEN_PORT)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(networkIntent)
+        } else {
+            startService(networkIntent)
+        }
     }
 }
