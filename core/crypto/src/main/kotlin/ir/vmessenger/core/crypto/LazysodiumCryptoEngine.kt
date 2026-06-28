@@ -38,7 +38,7 @@ class LazysodiumCryptoEngine(
     }
 
     override fun x25519SharedSecret(privateKey: ByteArray, publicKey: ByteArray): ByteArray {
-        val sharedHex = lazySodium.cryptoBoxBeforeNm(privateKey, publicKey)
+        val sharedHex = lazySodium.cryptoBoxBeforeNm(publicKey, privateKey)
         return LazySodium.toBin(sharedHex)
     }
 

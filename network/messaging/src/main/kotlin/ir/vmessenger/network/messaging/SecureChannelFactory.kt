@@ -47,12 +47,13 @@ interface SecureSession {
 
 class ActiveSecureSession(
     override val peer: PeerIdentity,
+    val selfIdentityHash: ByteArray,
     override val ratchetState: RatchetState,
     private val ratchet: SymmetricRatchet,
     private val connection: Connection,
 ) : SecureSession {
     override suspend fun seal(plaintext: ByteArray): ByteArray =
-        ratchet.seal(ratchetState, plaintext, peer.identityHash)
+        ratchet.seal(ratchetState, plaintext, selfIdentityHash)
 
     override suspend fun open(frame: ByteArray, counter: Long): ByteArray? =
         ratchet.open(ratchetState, frame, counter, peer.identityHash)
@@ -86,8 +87,8 @@ class SecureChannelFactory @Inject constructor(
             verifyStepSignature(step2, buildTranscript(step1, null), resolvedPeer.ed25519PublicKey)
             val dh1 = cryptoEngine.x25519SharedSecret(eph.privateKey, step2.ephemeralPub.toByteArray())
             val dh2 = cryptoEngine.x25519SharedSecret(
-                self.x25519StaticPrivateKey!!,
-                step2.ephemeralPub.toByteArray(),
+                eph.privateKey,
+                step2.staticPub.toByteArray(),
             )
             val root = cryptoEngine.hkdfSha256(
                 dh1 + dh2,
@@ -109,7 +110,7 @@ class SecureChannelFactory @Inject constructor(
                 .build()
             sendHandshake(connection, step3)
             val state = ratchet.initFromRoot(root, isInitiator = true)
-            ActiveSecureSession(resolvedPeer, state, ratchet, connection)
+            ActiveSecureSession(resolvedPeer, self.identityHash, state, ratchet, connection)
         }
 
     suspend fun accept(connection: Connection, self: PeerIdentity, expectedPeer: PeerIdentity): Result<SecureSession> =
@@ -149,7 +150,7 @@ class SecureChannelFactory @Inject constructor(
                 32,
             )
             val state = ratchet.initFromRoot(root, isInitiator = false)
-            ActiveSecureSession(resolvedPeer, state, ratchet, connection)
+            ActiveSecureSession(resolvedPeer, self.identityHash, state, ratchet, connection)
         }
 
     suspend fun acceptResolving(
@@ -203,7 +204,7 @@ class SecureChannelFactory @Inject constructor(
             32,
         )
         val state = ratchet.initFromRoot(root, isInitiator = false)
-        ActiveSecureSession(resolvedPeer, state, ratchet, connection)
+        ActiveSecureSession(resolvedPeer, self.identityHash, state, ratchet, connection)
     }
 
     private fun resolvePeerFromStep2(step2: HandshakeMessage, expected: PeerIdentity): PeerIdentity {

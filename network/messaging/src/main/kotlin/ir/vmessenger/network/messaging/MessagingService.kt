@@ -112,7 +112,14 @@ class MessagingService @Inject constructor(
                 val frame = Frame.parseFrom(frameBytes)
                 if (frame.type != FrameType.FRAME_TYPE_SECURE) return@collect
                 val counter = (session as ActiveSecureSession).ratchetState.recvCounter + 1
-                val plaintext = session.open(frame.body.toByteArray(), counter) ?: return@collect
+                val plaintext = session.open(frame.body.toByteArray(), counter)
+                if (plaintext == null) {
+                    AppLogger.warn(
+                        "Messaging",
+                        "inbound decrypt failed contact=$contactId counter=$counter",
+                    )
+                    return@collect
+                }
                 val envelope = MessageEnvelope.parseFrom(plaintext)
                 _incoming.emit(IncomingEnvelope(envelope, contactId))
             }

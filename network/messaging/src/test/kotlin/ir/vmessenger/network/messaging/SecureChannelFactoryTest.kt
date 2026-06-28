@@ -46,6 +46,113 @@ class SecureChannelFactoryTest {
     }
 
     @Test
+    fun x25519SharedSecretIsSymmetric() {
+        val eph = crypto.generateX25519KeyPair()
+        val staticKey = crypto.generateX25519KeyPair()
+        val ab = crypto.x25519SharedSecret(eph.privateKey, staticKey.publicKey)
+        val ba = crypto.x25519SharedSecret(staticKey.privateKey, eph.publicKey)
+        assertTrue(ab.contentEquals(ba))
+    }
+
+    @Test
+    fun handshakeRootKeysMatch() = runBlocking {
+        val aliceEd = crypto.generateEd25519KeyPair()
+        val aliceX = crypto.generateX25519KeyPair()
+        val bobEd = crypto.generateEd25519KeyPair()
+        val bobX = crypto.generateX25519KeyPair()
+        val aliceHash = crypto.sha256(aliceEd.publicKey)
+        val bobHash = crypto.sha256(bobEd.publicKey)
+        val alice = peer(aliceHash, aliceEd, aliceX)
+        val bob = peer(bobHash, bobEd, bobX)
+        val (client, server) = pairedConnections()
+
+        val serverDeferred = async(Dispatchers.Default) {
+            factory.accept(server, bob, alice).getOrThrow()
+        }
+        val clientSession = factory.initiate(client, alice, bob).getOrThrow()
+        val serverSession = serverDeferred.await()
+
+        assertTrue(
+            clientSession.ratchetState.sendChainKey.contentEquals(serverSession.ratchetState.recvChainKey),
+        )
+        assertTrue(
+            clientSession.ratchetState.recvChainKey.contentEquals(serverSession.ratchetState.sendChainKey),
+        )
+
+        clientSession.close()
+        serverSession.close()
+    }
+
+    @Test
+    fun handshakeEncryptsAndDecrypts() = runBlocking {
+        val aliceEd = crypto.generateEd25519KeyPair()
+        val aliceX = crypto.generateX25519KeyPair()
+        val bobEd = crypto.generateEd25519KeyPair()
+        val bobX = crypto.generateX25519KeyPair()
+        val aliceHash = crypto.sha256(aliceEd.publicKey)
+        val bobHash = crypto.sha256(bobEd.publicKey)
+        val alice = peer(aliceHash, aliceEd, aliceX)
+        val bob = peer(bobHash, bobEd, bobX)
+        val (client, server) = pairedConnections()
+
+        val serverDeferred = async(Dispatchers.Default) {
+            factory.accept(server, bob, alice).getOrThrow()
+        }
+        val clientSession = factory.initiate(client, alice, bob).getOrThrow()
+        val serverSession = serverDeferred.await()
+
+        val payload = "سلام".toByteArray(Charsets.UTF_8)
+        val sealed = clientSession.seal(payload)
+        val counter = serverSession.ratchetState.recvCounter + 1
+        val opened = serverSession.open(sealed, counter)
+        assertTrue(opened?.contentEquals(payload) == true)
+
+        clientSession.close()
+        serverSession.close()
+    }
+
+    @Test
+    fun acceptResolvingEncryptsAndDecrypts() = runBlocking {
+        val aliceEd = crypto.generateEd25519KeyPair()
+        val aliceX = crypto.generateX25519KeyPair()
+        val bobEd = crypto.generateEd25519KeyPair()
+        val bobX = crypto.generateX25519KeyPair()
+        val bobHash = crypto.sha256(bobEd.publicKey)
+        val aliceHash = crypto.sha256(aliceEd.publicKey)
+        val alice = peer(aliceHash, aliceEd, aliceX)
+        val placeholderBob = PeerIdentity(
+            identityHash = bobHash.copyOf(32).also { bobHash.copyInto(it, 0, 0, 16) },
+            ed25519PublicKey = ByteArray(32),
+            x25519StaticPublicKey = ByteArray(32),
+            ed25519PrivateKey = null,
+            x25519StaticPrivateKey = null,
+        )
+        val bob = peer(bobHash, bobEd, bobX)
+        val (client, server) = pairedConnections()
+
+        val serverDeferred = async(Dispatchers.Default) {
+            factory.acceptResolving(server, bob) { identityPub, staticPub ->
+                require(identityPub.contentEquals(aliceEd.publicKey))
+                alice.copy(x25519StaticPublicKey = staticPub)
+            }.getOrThrow()
+        }
+        val clientSession = factory.initiate(client, alice, placeholderBob).getOrThrow()
+        val serverSession = serverDeferred.await()
+
+        assertTrue(clientSession.peer.ed25519PublicKey.contentEquals(bobEd.publicKey))
+        assertTrue(clientSession.peer.x25519StaticPublicKey.contentEquals(bobX.publicKey))
+
+        val payload = "test message".toByteArray()
+        val sealed = clientSession.seal(payload)
+        val counter = serverSession.ratchetState.recvCounter + 1
+        val opened = serverSession.open(sealed, counter)
+        assertTrue(opened?.contentEquals(payload) == true)
+
+        clientSession.close()
+        serverSession.close()
+    }
+
+    @Test
     fun initiateLearnsPeerKeysFromHandshake() = runBlocking {
         val aliceEd = crypto.generateEd25519KeyPair()
         val aliceX = crypto.generateX25519KeyPair()
