@@ -10,6 +10,7 @@ android {
 
 dependencies {
     implementation(project(":domain"))
+    implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:datastore"))
     implementation(libs.compose.material.icons.extended)

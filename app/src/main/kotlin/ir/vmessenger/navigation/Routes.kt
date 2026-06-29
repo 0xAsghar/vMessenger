@@ -15,6 +15,7 @@ object Routes {
     const val PAIRING_HASH = "pairing_hash"
     const val DEBUG = "debug"
     const val LOGS = "logs"
+    const val NODES = "nodes"
     const val ABOUT = "about"
 
     fun conversation(conversationId: String): String = "conversation/$conversationId"

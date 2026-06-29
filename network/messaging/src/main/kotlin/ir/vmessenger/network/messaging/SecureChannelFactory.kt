@@ -315,5 +315,10 @@ class SecureChannelFactory @Inject constructor(
         .setProtocolMinor(0)
         .addFeatures("receipts")
         .addFeatures("live-location")
+        .apply {
+            if (ir.vmessenger.core.common.network.P2PConfig.relayPeerModeEnabled) {
+                addFeatures("relay-peer")
+            }
+        }
         .build()
 }

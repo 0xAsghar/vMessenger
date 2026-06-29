@@ -13,8 +13,10 @@ import ir.vmessenger.core.database.dao.IdentityDao
 import ir.vmessenger.core.database.dao.KeyMaterialDao
 import ir.vmessenger.core.database.dao.LocationSampleDao
 import ir.vmessenger.core.database.dao.LocationShareDao
+import ir.vmessenger.core.database.dao.MailboxDao
 import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.dao.OutboxDao
+import ir.vmessenger.core.database.dao.RelayNodeDao
 import ir.vmessenger.core.database.dao.SessionDao
 import ir.vmessenger.core.database.entity.AppMetadataEntity
 import ir.vmessenger.core.database.entity.BootstrapNodeEntity
@@ -25,8 +27,10 @@ import ir.vmessenger.core.database.entity.IdentityEntity
 import ir.vmessenger.core.database.entity.KeyMaterialEntity
 import ir.vmessenger.core.database.entity.LocationSampleEntity
 import ir.vmessenger.core.database.entity.LocationShareEntity
+import ir.vmessenger.core.database.entity.MailboxBlobEntity
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
+import ir.vmessenger.core.database.entity.RelayNodeEntity
 import ir.vmessenger.core.database.entity.SessionEntity
 
 @Database(
@@ -37,14 +41,16 @@ import ir.vmessenger.core.database.entity.SessionEntity
         ContactEntity::class,
         EndpointCacheEntity::class,
         BootstrapNodeEntity::class,
+        RelayNodeEntity::class,
         ConversationEntity::class,
         MessageEntity::class,
         OutboxEntity::class,
         SessionEntity::class,
         LocationShareEntity::class,
         LocationSampleEntity::class,
+        MailboxBlobEntity::class,
     ],
-    version = 7,
+    version = 9,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -56,10 +62,12 @@ abstract class VMessengerDatabase : RoomDatabase() {
     abstract fun contactDao(): ContactDao
     abstract fun endpointCacheDao(): EndpointCacheDao
     abstract fun bootstrapNodeDao(): BootstrapNodeDao
+    abstract fun relayNodeDao(): RelayNodeDao
     abstract fun conversationDao(): ConversationDao
     abstract fun messageDao(): MessageDao
     abstract fun outboxDao(): OutboxDao
     abstract fun sessionDao(): SessionDao
     abstract fun locationShareDao(): LocationShareDao
     abstract fun locationSampleDao(): LocationSampleDao
+    abstract fun mailboxDao(): MailboxDao
 }

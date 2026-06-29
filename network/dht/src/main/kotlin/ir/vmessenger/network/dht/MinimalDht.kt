@@ -61,9 +61,18 @@ private fun String.splitHostPort(): Pair<String, Int> {
 }
 
 interface Dht {
-    suspend fun bootstrap(nodes: List<ir.vmessenger.network.bootstrap.BootstrapNode>): AppResult<Unit>
+    /**
+     * Pings each candidate node and returns the subset that responded, so callers
+     * can record per-node health and rotate away from unreachable nodes.
+     */
+    suspend fun bootstrap(
+        nodes: List<ir.vmessenger.network.bootstrap.BootstrapNode>,
+    ): AppResult<List<ir.vmessenger.network.bootstrap.BootstrapNode>>
     suspend fun publish(record: ir.vmessenger.core.proto.dht.v1.EndpointRecord): AppResult<Unit>
     suspend fun lookup(identityHash: ByteArray): AppResult<ir.vmessenger.core.proto.dht.v1.EndpointRecord?>
+
+    /** Addresses of DHT nodes currently known to this client (for caching/persistence). */
+    fun knownNodeAddresses(): Set<String>
 }
 
 @Singleton
@@ -73,32 +82,46 @@ class MinimalDht @Inject constructor(
 ) : Dht {
     private val knownNodes = mutableSetOf<String>()
 
-    override suspend fun bootstrap(nodes: List<ir.vmessenger.network.bootstrap.BootstrapNode>): AppResult<Unit> =
+    override suspend fun bootstrap(
+        nodes: List<ir.vmessenger.network.bootstrap.BootstrapNode>,
+    ): AppResult<List<ir.vmessenger.network.bootstrap.BootstrapNode>> =
         runCatching {
             AppLogger.info("Dht", "bootstrap ${nodes.size} node(s): ${nodes.joinToString { it.address }}")
+            val responders = mutableListOf<ir.vmessenger.network.bootstrap.BootstrapNode>()
             for (node in nodes) {
-                val response = rpcClient.send(
-                    node.address,
-                    DhtRpcRequest.newBuilder()
-                        .setPing(
-                            ir.vmessenger.core.proto.dht.v1.PingRequest.newBuilder()
-                                .setNodeId(com.google.protobuf.ByteString.EMPTY),
-                        )
-                        .build(),
-                )
-                if (response.hasPing()) {
+                val reachable = pingNode(node.address)
+                if (reachable) {
                     knownNodes.add(node.address)
+                    responders.add(node)
                 }
             }
             check(knownNodes.isNotEmpty()) { "Bootstrap failed" }
             AppLogger.info("Dht", "bootstrap OK, knownNodes=${knownNodes.size}")
+            responders.toList()
         }.fold(
-            onSuccess = { AppResult.Success(Unit) },
+            onSuccess = { AppResult.Success(it) },
             onFailure = {
                 AppLogger.error("Dht", "bootstrap failed: ${it.message}")
                 AppResult.Error(ir.vmessenger.core.common.AppError.Network(it.message ?: "Bootstrap failed"))
             },
         )
+
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun pingNode(address: String): Boolean = try {
+        val response = rpcClient.send(
+            address,
+            DhtRpcRequest.newBuilder()
+                .setPing(
+                    ir.vmessenger.core.proto.dht.v1.PingRequest.newBuilder()
+                        .setNodeId(com.google.protobuf.ByteString.EMPTY),
+                )
+                .build(),
+        )
+        response.hasPing()
+    } catch (e: Exception) {
+        AppLogger.warn("Dht", "ping failed $address: ${e.message}")
+        false
+    }
 
     override suspend fun publish(record: ir.vmessenger.core.proto.dht.v1.EndpointRecord): AppResult<Unit> =
         runCatching {
@@ -165,6 +188,8 @@ class MinimalDht @Inject constructor(
         )
 
     fun knownNodeCount(): Int = knownNodes.size
+
+    override fun knownNodeAddresses(): Set<String> = knownNodes.toSet()
 
     private fun rpcTargets(): Set<String> = knownNodes.mapNotNull(::normalizeDhtRpcAddress).toSet()
 }

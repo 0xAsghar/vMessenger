@@ -3,6 +3,7 @@ package ir.vmessenger.network.discovery
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
+import ir.vmessenger.core.common.network.P2PConfig
 import ir.vmessenger.network.dht.Dht
 import ir.vmessenger.network.dht.EndpointRecordSigner
 import ir.vmessenger.network.dht.toEndpoints
@@ -14,6 +15,7 @@ class DhtDiscoveryProvider @Inject constructor(
     private val dht: Dht,
     private val signer: EndpointRecordSigner,
     private val sequenceStore: PublishSequenceStore,
+    private val peerEndpointCache: PeerEndpointCache,
 ) : DiscoveryProvider {
     override val id = DiscoveryProviderId("dht")
 
@@ -63,11 +65,28 @@ class DhtDiscoveryProvider @Inject constructor(
     override suspend fun resolve(identityHash: ByteArray): AppResult<List<Endpoint>> =
         when (val result = dht.lookup(identityHash)) {
             is AppResult.Success -> {
-                val endpoints = result.data?.toEndpoints() ?: emptyList()
-                AppResult.Success(endpoints)
+                val record = result.data
+                if (record != null) {
+                    if (P2PConfig.peerCacheEnabled) peerEndpointCache.store(record)
+                    AppResult.Success(record.toEndpoints())
+                } else {
+                    // Not found via the network: fall back to a cached peer if we have one.
+                    cachedFallback(identityHash) ?: AppResult.Success(emptyList())
+                }
             }
-            is AppResult.Error -> result
+            is AppResult.Error -> {
+                // Network/bootstrap unreachable: try to rejoin via a previously known peer.
+                cachedFallback(identityHash) ?: result
+            }
         }
+
+    private suspend fun cachedFallback(identityHash: ByteArray): AppResult<List<Endpoint>>? {
+        if (!P2PConfig.peerCacheEnabled) return null
+        val cached = peerEndpointCache.lookup(identityHash) ?: return null
+        if (cached.isEmpty()) return null
+        AppLogger.info("Discovery", "resolved from cached peer (${cached.size} endpoint(s))")
+        return AppResult.Success(cached)
+    }
 
     companion object {
         const val DEFAULT_TTL_MS = 20 * 60 * 1000L

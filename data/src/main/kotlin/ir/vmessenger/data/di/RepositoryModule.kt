@@ -8,6 +8,8 @@ import dagger.hilt.components.SingletonComponent
 import ir.vmessenger.data.repository.ContactRepositoryImpl
 import ir.vmessenger.data.repository.ConversationRepositoryImpl
 import ir.vmessenger.data.repository.DiscoveryRepositoryImpl
+import ir.vmessenger.data.network.NetworkNodeRepository
+import ir.vmessenger.data.network.P2PSessionHooks
 import ir.vmessenger.data.repository.IdentityRepositoryImpl
 import ir.vmessenger.data.repository.LocationRepositoryImpl
 import ir.vmessenger.data.repository.PairingRepositoryImpl
@@ -16,7 +18,9 @@ import ir.vmessenger.domain.repository.ConversationRepository
 import ir.vmessenger.domain.repository.DiscoveryRepository
 import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.domain.repository.LocationRepository
+import ir.vmessenger.domain.repository.NodeManagementRepository
 import ir.vmessenger.domain.repository.PairingRepository
+import ir.vmessenger.network.messaging.SessionPostHandshakeHandler
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import javax.inject.Qualifier
@@ -56,6 +60,14 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindLocationRepository(impl: LocationRepositoryImpl): LocationRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindNodeManagementRepository(impl: NetworkNodeRepository): NodeManagementRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSessionPostHandshakeHandler(impl: P2PSessionHooks): SessionPostHandshakeHandler
 }
 
 @Module

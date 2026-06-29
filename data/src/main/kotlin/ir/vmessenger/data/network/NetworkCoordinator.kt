@@ -15,6 +15,7 @@ import ir.vmessenger.domain.usecase.discovery.JoinNetworkUseCase
 import ir.vmessenger.domain.usecase.discovery.PublishNetworkEndpointsUseCase
 import ir.vmessenger.network.messaging.MessagingService
 import ir.vmessenger.network.messaging.PeerIdentity
+import ir.vmessenger.network.messaging.RelayDirectory
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -35,6 +36,9 @@ class NetworkCoordinator @Inject constructor(
     private val outboxDispatcher: OutboxDispatcher,
     private val identityRepository: IdentityRepository,
     private val contactDao: ContactDao,
+    private val relayDirectory: RelayDirectory,
+    private val embeddedDhtService: ir.vmessenger.network.dht.EmbeddedDhtService,
+    private val peerRelayCoordinator: PeerRelayCoordinator,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -51,6 +55,11 @@ class NetworkCoordinator @Inject constructor(
             outboxDispatcher.start()
             messagingService.startListening(listenPort)
             AppLogger.info("Network", "TCP listener started on $listenPort")
+            if (ir.vmessenger.core.common.network.P2PConfig.dhtParticipationEnabled) {
+                val dhtPort = listenPort + ir.vmessenger.network.dht.EmbeddedDhtService.PORT_OFFSET
+                val host = directHost ?: "0.0.0.0"
+                embeddedDhtService.start(dhtPort, host)
+            }
             when (val join = joinNetworkUseCase()) {
                 is AppResult.Success ->
                     AppLogger.info("Network", "join network OK")
@@ -66,6 +75,10 @@ class NetworkCoordinator @Inject constructor(
         directPort: Int?,
     ) {
         val (identity, privateKey) = awaitIdentityWithKey()
+        // Resolve the active relay first so the endpoint we publish matches the
+        // relay our listener will actually connect through (multi-relay support).
+        val activeRelay = relayDirectory.activeRelayUrl()
+        AppLogger.info("Network", "active relay=$activeRelay")
         when (
             val publish = publishNetworkEndpointsUseCase(directHost = directHost, directPort = directPort)
         ) {
@@ -80,6 +93,9 @@ class NetworkCoordinator @Inject constructor(
             ed25519PrivateKey = privateKey,
         )
         AppLogger.info("Network", "relay listener starting")
+        if (ir.vmessenger.core.common.network.P2PConfig.relayPeerModeEnabled) {
+            peerRelayCoordinator.logStatus()
+        }
         outboxDispatcher.wake()
     }
 

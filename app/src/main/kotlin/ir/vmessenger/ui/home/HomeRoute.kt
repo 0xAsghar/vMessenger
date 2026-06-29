@@ -171,6 +171,7 @@ private fun HomeTabNavHost(
         composable(Routes.SETTINGS) {
             SettingsRoute(
                 onNavigateToDebug = navigation.onNavigateToDebug,
+                onNavigateToNodes = navigation.onNavigateToNodes,
                 onNavigateToAbout = navigation.onNavigateToAbout,
                 onNavigateToIdentity = navigation.onNavigateToIdentity,
             )

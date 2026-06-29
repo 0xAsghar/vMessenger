@@ -16,7 +16,23 @@ message MessageEnvelope {
     Receipt receipt = 11;
     LocationPacket location = 12;
     Control control = 13;
+    NetworkNodeList network_nodes = 14;
+    MailboxBlob mailbox_blob = 15;
   }
+}
+
+/** Phase 4: signed network infrastructure hints exchanged after a secure handshake. */
+message NetworkNodeList {
+  repeated string bootstrap_addresses = 1;
+  repeated string relay_addresses = 2;
+}
+
+/** Phase 8: encrypted offline delivery blob (plaintext never stored on mailbox peers). */
+message MailboxBlob {
+  bytes blob_id = 1;
+  bytes recipient_identity_hash = 2;
+  bytes sealed_payload = 3;
+  int64 expires_at_unix_ms = 4;
 }
 
 message ChatMessage {

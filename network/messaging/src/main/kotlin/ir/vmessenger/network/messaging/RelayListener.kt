@@ -1,7 +1,6 @@
 package ir.vmessenger.network.messaging
 
 import ir.vmessenger.core.common.logging.AppLogger
-import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.WebSocketFrameClient
 import ir.vmessenger.core.proto.relay.v1.RelayEvent
 import ir.vmessenger.core.proto.relay.v1.RelayEventType
@@ -32,6 +31,7 @@ fun interface InboundConnectionHandler {
 class RelayListener @Inject constructor(
     private val relayTransport: RelayTransport,
     private val relayHelloFactory: RelayHelloFactory,
+    private val relayDirectory: RelayDirectory,
 ) {
     private var scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var handler: InboundConnectionHandler? = null
@@ -66,7 +66,7 @@ class RelayListener @Inject constructor(
         if (!scope.isActive) {
             scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         }
-        AppLogger.info("Relay", "listener starting on ${NetworkConfig.relayAddress}")
+        AppLogger.info("Relay", "listener starting")
         scope.launch { maintainControlChannel() }
     }
 
@@ -86,13 +86,17 @@ class RelayListener @Inject constructor(
                 delay(1_000)
                 continue
             }
+            val url = relayDirectory.activeRelayUrl()
             try {
-                connectControlChannel(hash, pub, key)
+                AppLogger.info("Relay", "control channel connecting via $url")
+                connectControlChannel(url, hash, pub, key)
+                relayDirectory.reportResult(url, ok = true)
                 backoffMs = 1_000L
                 AppLogger.info("Relay", "control channel ended, reconnecting in ${backoffMs}ms")
                 delay(backoffMs)
             } catch (e: Exception) {
-                AppLogger.warn("Relay", "control channel lost: ${e.message}, retry in ${backoffMs}ms")
+                relayDirectory.reportResult(url, ok = false)
+                AppLogger.warn("Relay", "control channel lost ($url): ${e.message}, retry in ${backoffMs}ms")
                 delay(backoffMs)
                 backoffMs = (backoffMs * 2).coerceAtMost(60_000L)
             }
@@ -100,11 +104,11 @@ class RelayListener @Inject constructor(
     }
 
     private suspend fun connectControlChannel(
+        url: String,
         identityHash: ByteArray,
         identityPub: ByteArray,
         ed25519PrivateKey: ByteArray,
     ) {
-        val url = NetworkConfig.relayAddress
         val hello = relayHelloFactory.buildListenerHello(identityHash, identityPub, ed25519PrivateKey)
         val request = Request.Builder().url(url).build()
         val openLatch = CompletableDeferred<Unit>()
@@ -121,7 +125,7 @@ class RelayListener @Inject constructor(
                 when (event.type) {
                     RelayEventType.RELAY_EVENT_TYPE_INCOMING -> {
                         AppLogger.info("Relay", "incoming circuit ${event.circuitId}")
-                        scope.launch { acceptCircuit(event.circuitId) }
+                        scope.launch { acceptCircuit(url, event.circuitId) }
                     }
                     RelayEventType.RELAY_EVENT_TYPE_ERROR -> {
                         AppLogger.warn("Relay", "relay error: ${event.message}")
@@ -156,9 +160,8 @@ class RelayListener @Inject constructor(
         }
     }
 
-    private suspend fun acceptCircuit(circuitId: String) {
+    private suspend fun acceptCircuit(url: String, circuitId: String) {
         val inbound = handler ?: return
-        val url = NetworkConfig.relayAddress
         val hello = relayHelloFactory.buildAcceptHello(circuitId)
         val connection = relayTransport.openRelayCircuit(url, hello, awaitReady = true)
         inbound.onInboundConnection(connection)

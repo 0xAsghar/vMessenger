@@ -5,6 +5,7 @@ data class HomeNavigation(
     val onScanQr: () -> Unit = {},
     val onAddByHash: () -> Unit = {},
     val onNavigateToDebug: () -> Unit = {},
+    val onNavigateToNodes: () -> Unit = {},
     val onNavigateToAbout: () -> Unit = {},
     val onNavigateToIdentity: () -> Unit = {},
 )

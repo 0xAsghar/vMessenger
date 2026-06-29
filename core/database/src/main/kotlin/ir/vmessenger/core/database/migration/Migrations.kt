@@ -196,3 +196,44 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         db.execSQL("ALTER TABLE contact ADD COLUMN x25519StaticPublic BLOB")
     }
 }
+
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE bootstrap_node ADD COLUMN priority INTEGER NOT NULL DEFAULT 100")
+        db.execSQL("ALTER TABLE bootstrap_node ADD COLUMN lastFailUnixMs INTEGER")
+        db.execSQL("ALTER TABLE bootstrap_node ADD COLUMN failCount INTEGER NOT NULL DEFAULT 0")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS relay_node (
+                address TEXT NOT NULL PRIMARY KEY,
+                publicKey BLOB,
+                source TEXT NOT NULL,
+                enabled INTEGER NOT NULL,
+                lastOkUnixMs INTEGER,
+                priority INTEGER NOT NULL DEFAULT 100,
+                lastFailUnixMs INTEGER,
+                failCount INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_relay_node_address ON relay_node(address)")
+    }
+}
+
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS mailbox_blob (
+                blobId TEXT NOT NULL PRIMARY KEY,
+                recipientIdentityHash BLOB NOT NULL,
+                sealedPayload BLOB NOT NULL,
+                expiresAtUnixMs INTEGER NOT NULL,
+                createdAtUnixMs INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_mailbox_blob_recipient ON mailbox_blob(recipientIdentityHash)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_mailbox_blob_expires ON mailbox_blob(expiresAtUnixMs)")
+    }
+}

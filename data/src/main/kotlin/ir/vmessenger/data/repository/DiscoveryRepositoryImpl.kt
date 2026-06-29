@@ -5,14 +5,14 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
 import ir.vmessenger.core.common.network.NetworkConfig
-import ir.vmessenger.core.database.dao.BootstrapNodeDao
 import ir.vmessenger.core.database.dao.EndpointCacheDao
-import ir.vmessenger.core.database.entity.BootstrapNodeEntity
 import ir.vmessenger.core.proto.dht.v1.EndpointRecord
+import ir.vmessenger.data.network.NetworkNodeRepository
 import ir.vmessenger.domain.model.DiscoveryStatus
 import ir.vmessenger.domain.repository.DiscoveryRepository
 import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.network.bootstrap.BootstrapManager
+import ir.vmessenger.network.bootstrap.BootstrapNode
 import ir.vmessenger.network.dht.Dht
 import ir.vmessenger.network.dht.toEndpoints
 import ir.vmessenger.network.discovery.DhtDiscoveryProvider
@@ -33,7 +33,7 @@ class DiscoveryRepositoryImpl @Inject constructor(
     private val dhtDiscoveryProvider: DhtDiscoveryProvider,
     private val identityRepository: IdentityRepository,
     private val endpointCacheDao: EndpointCacheDao,
-    private val bootstrapNodeDao: BootstrapNodeDao,
+    private val networkNodeRepository: NetworkNodeRepository,
 ) : DiscoveryRepository {
     private val _status = MutableStateFlow(
         DiscoveryStatus(bootstrapped = false, knownNodes = 0, publishedEndpoint = null, lastError = null),
@@ -42,22 +42,31 @@ class DiscoveryRepositoryImpl @Inject constructor(
     override fun observeStatus(): Flow<DiscoveryStatus> = _status.asStateFlow()
 
     override suspend fun joinNetwork(): AppResult<Unit> {
-        seedBootstrapNodes()
+        networkNodeRepository.seedDefaults()
         val bootstrapAddress = NetworkConfig.effectiveBootstrapAddress()
         AppLogger.info("Discovery", "joinNetwork bootstrap=$bootstrapAddress")
         return when (val nodes = bootstrapManager.collectNodes()) {
             is AppResult.Success -> {
                 when (val boot = dht.bootstrap(nodes.data)) {
                     is AppResult.Success -> {
+                        recordBootstrapHealth(candidates = nodes.data, responders = boot.data)
+                        networkNodeRepository.importLearnedBootstrapAddresses(
+                            dht.knownNodeAddresses(),
+                            NetworkNodeRepository.SOURCE_CACHED_DHT,
+                        )
                         _status.value = _status.value.copy(
                             bootstrapped = true,
-                            knownNodes = nodes.data.size,
+                            knownNodes = boot.data.size,
                             lastError = null,
                         )
-                        AppLogger.info("Discovery", "joinNetwork OK nodes=${nodes.data.size}")
+                        AppLogger.info(
+                            "Discovery",
+                            "joinNetwork OK reachable=${boot.data.size}/${nodes.data.size}",
+                        )
                         AppResult.Success(Unit)
                     }
                     is AppResult.Error -> {
+                        recordBootstrapHealth(candidates = nodes.data, responders = emptyList())
                         AppLogger.error("Discovery", "joinNetwork bootstrap failed: ${boot.error.message}")
                         _status.value = _status.value.copy(lastError = boot.error.message)
                         boot
@@ -68,6 +77,16 @@ class DiscoveryRepositoryImpl @Inject constructor(
                 _status.value = _status.value.copy(lastError = nodes.error.message)
                 nodes
             }
+        }
+    }
+
+    private suspend fun recordBootstrapHealth(
+        candidates: List<BootstrapNode>,
+        responders: List<BootstrapNode>,
+    ) {
+        val reachable = responders.map { it.address }.toSet()
+        candidates.forEach { node ->
+            networkNodeRepository.recordBootstrapResult(node.address, ok = node.address in reachable)
         }
     }
 
@@ -117,16 +136,4 @@ class DiscoveryRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getPublishedEndpoint(): String? = _status.value.publishedEndpoint
-
-    private suspend fun seedBootstrapNodes() {
-        bootstrapNodeDao.upsert(
-            BootstrapNodeEntity(
-                address = NetworkConfig.effectiveBootstrapAddress(),
-                publicKey = null,
-                source = "BUILT_IN",
-                enabled = true,
-                lastOkUnixMs = null,
-            ),
-        )
-    }
 }

@@ -32,6 +32,8 @@ class IncomingMessageCollector @Inject constructor(
     private val contactDao: ContactDao,
     private val conversationDao: ConversationDao,
     private val messageDao: MessageDao,
+    private val peerExchangeService: PeerExchangeService,
+    private val mailboxService: MailboxService,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -54,6 +56,8 @@ class IncomingMessageCollector @Inject constructor(
         when {
             envelope.hasChat() -> persistChatMessage(incoming.contactId, envelope)
             envelope.hasReceipt() -> handleReceipt(envelope.receipt)
+            envelope.hasNetworkNodes() -> peerExchangeService.ingestFromEnvelope(envelope)
+            envelope.hasMailboxBlob() -> mailboxService.storeIncoming(envelope.mailboxBlob)
             else -> Unit
         }
     }

@@ -7,11 +7,15 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
+import ir.vmessenger.core.common.network.NetworkConfig
+import ir.vmessenger.core.common.network.NetworkPath
+import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.common.network.TransportIds
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import ir.vmessenger.core.proto.wire.v1.Frame
 import ir.vmessenger.core.proto.wire.v1.FrameType
-import ir.vmessenger.network.discovery.DiscoveryManager
+import ir.vmessenger.network.discovery.EndpointResolveService
+import ir.vmessenger.network.messaging.EndpointOrder
 import ir.vmessenger.network.transport.Connection
 import ir.vmessenger.network.transport.InternetTransport
 import ir.vmessenger.network.transport.TransportSelector
@@ -34,7 +38,8 @@ data class IncomingEnvelope(
 
 @Singleton
 class MessagingService @Inject constructor(
-    private val discoveryManager: DiscoveryManager,
+    private val endpointResolveService: ir.vmessenger.network.discovery.EndpointResolveService,
+    private val sessionPostHandshakeHandler: SessionPostHandshakeHandler,
     private val transportSelector: TransportSelector,
     private val secureChannelFactory: SecureChannelFactory,
     private val internetTransport: InternetTransport,
@@ -110,6 +115,10 @@ class MessagingService @Inject constructor(
             runCatching { peerKeyUpdater?.invoke(contactId, session.peer) }
                 .onFailure { AppLogger.warn("Messaging", "peer key update failed: ${it.message}") }
         }
+        scope.launch {
+            runCatching { sessionPostHandshakeHandler.onEstablished(activeSession, self, activeSession.peer) }
+                .onFailure { AppLogger.warn("Messaging", "post-handshake hook failed: ${it.message}") }
+        }
         try {
             readSecureFrames(activeSession, contactId, connection)
         } finally {
@@ -125,16 +134,23 @@ class MessagingService @Inject constructor(
     ): AppResult<Unit> {
         val mutex = sendMutexes.getOrPut(contactId) { Mutex() }
         return mutex.withLock {
-            when (val endpoints = discoveryManager.resolve(peer.identityHash)) {
+            when (val resolved = endpointResolveService.resolve(peer.identityHash)) {
                 is AppResult.Success -> {
-                    val ordered = orderEndpoints(endpoints.data)
+                    val ordered = EndpointOrder.order(resolved.data.endpoints)
                     if (ordered.isEmpty()) {
                         AppResult.Error(AppError.Network("endpoint یافت نشد"))
                     } else {
-                        sendWithFallback(contactId, self, peer, ordered, envelope)
+                        sendWithFallback(
+                            contactId,
+                            self,
+                            peer,
+                            ordered,
+                            envelope,
+                            fromPeerCache = resolved.data.fromPeerCache,
+                        )
                     }
                 }
-                is AppResult.Error -> endpoints
+                is AppResult.Error -> resolved
             }
         }
     }
@@ -145,6 +161,7 @@ class MessagingService @Inject constructor(
         peer: PeerIdentity,
         endpoints: List<Endpoint>,
         envelope: MessageEnvelope,
+        fromPeerCache: Boolean = false,
     ): AppResult<Unit> {
         var lastError: AppError? = null
         for (endpoint in endpoints) {
@@ -153,6 +170,14 @@ class MessagingService @Inject constructor(
             when (val result = sendToEndpoint(contactId, self, peer, endpoint, envelope)) {
                 is AppResult.Success -> {
                     AppLogger.info("Messaging", "sent via ${endpoint.transport.value}")
+                    val path = when {
+                        fromPeerCache -> NetworkPath.CACHED_PEER
+                        else -> endpoint.toNetworkPath()
+                    }
+                    NetworkPathTracker.record(
+                        path = path,
+                        detail = "${endpoint.transport.value}:${endpoint.address}",
+                    )
                     return result
                 }
                 is AppResult.Error -> {
@@ -164,15 +189,6 @@ class MessagingService @Inject constructor(
         AppLogger.error("Messaging", "all transports failed for contact=$contactId")
         return AppResult.Error(lastError ?: AppError.Network("ارسال ناموفق"))
     }
-
-    private fun orderEndpoints(endpoints: List<Endpoint>): List<Endpoint> =
-        endpoints.sortedBy { endpoint ->
-            when (endpoint.transport) {
-                TransportIds.INTERNET -> 0
-                TransportIds.RELAY -> 1
-                else -> 2
-            }
-        }
 
     suspend fun sendToEndpoint(
         contactId: String,
@@ -212,6 +228,10 @@ class MessagingService @Inject constructor(
             relayTargetId = if (endpoint.transport == TransportIds.RELAY) peer.identityHash else null,
         ).getOrThrow()
         val session = secureChannelFactory.initiate(connection, self, peer).getOrThrow() as ActiveSecureSession
+        scope.launch {
+            runCatching { sessionPostHandshakeHandler.onEstablished(session, self, session.peer) }
+                .onFailure { AppLogger.warn("Messaging", "post-handshake hook failed: ${it.message}") }
+        }
         scope.launch {
             runCatching { peerKeyUpdater?.invoke(contactId, session.peer) }
                 .onFailure { AppLogger.warn("Messaging", "peer key update failed: ${it.message}") }
@@ -278,4 +298,18 @@ class MessagingService @Inject constructor(
         val previous = sessionMutex.withLock { outboundSessions.remove(contactId) }
         previous?.close()
     }
+}
+
+/**
+ * Classifies the transport path a successful send used so debug tooling can show
+ * whether traffic took a direct, relay, or user/community relay route. Direct
+ * INTERNET endpoints are reported as [NetworkPath.DIRECT]; relay endpoints are
+ * split into the central default relay versus a user/community relay.
+ */
+internal fun Endpoint.toNetworkPath(): NetworkPath = when (transport) {
+    TransportIds.INTERNET -> NetworkPath.DIRECT
+    TransportIds.UDP -> NetworkPath.NAT_TRAVERSAL
+    TransportIds.RELAY ->
+        if (address == NetworkConfig.DEFAULT_RELAY_URL) NetworkPath.DEFAULT_RELAY else NetworkPath.USER_RELAY
+    else -> NetworkPath.UNKNOWN
 }

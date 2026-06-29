@@ -8,6 +8,7 @@ import dagger.multibindings.IntoSet
 import ir.vmessenger.network.transport.InternetTransport
 import ir.vmessenger.network.transport.RelayTransport
 import ir.vmessenger.network.transport.Transport
+import ir.vmessenger.network.transport.UdpTransport
 import javax.inject.Singleton
 
 @Module
@@ -22,4 +23,9 @@ object TransportModule {
     @IntoSet
     @Singleton
     fun provideRelayTransport(transport: RelayTransport): Transport = transport
+
+    @Provides
+    @IntoSet
+    @Singleton
+    fun provideUdpTransport(transport: UdpTransport): Transport = transport
 }

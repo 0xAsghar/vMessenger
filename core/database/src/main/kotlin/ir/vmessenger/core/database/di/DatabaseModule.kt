@@ -18,8 +18,10 @@ import ir.vmessenger.core.database.dao.IdentityDao
 import ir.vmessenger.core.database.dao.KeyMaterialDao
 import ir.vmessenger.core.database.dao.LocationSampleDao
 import ir.vmessenger.core.database.dao.LocationShareDao
+import ir.vmessenger.core.database.dao.MailboxDao
 import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.dao.OutboxDao
+import ir.vmessenger.core.database.dao.RelayNodeDao
 import ir.vmessenger.core.database.dao.SessionDao
 import ir.vmessenger.core.database.migration.MIGRATION_1_2
 import ir.vmessenger.core.database.migration.MIGRATION_2_3
@@ -27,6 +29,8 @@ import ir.vmessenger.core.database.migration.MIGRATION_3_4
 import ir.vmessenger.core.database.migration.MIGRATION_4_5
 import ir.vmessenger.core.database.migration.MIGRATION_5_6
 import ir.vmessenger.core.database.migration.MIGRATION_6_7
+import ir.vmessenger.core.database.migration.MIGRATION_7_8
+import ir.vmessenger.core.database.migration.MIGRATION_8_9
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import javax.inject.Singleton
 
@@ -61,6 +65,8 @@ object DatabaseModule {
                 MIGRATION_4_5,
                 MIGRATION_5_6,
                 MIGRATION_6_7,
+                MIGRATION_7_8,
+                MIGRATION_8_9,
             )
             .build()
     }
@@ -84,6 +90,9 @@ object DatabaseModule {
     fun provideBootstrapNodeDao(database: VMessengerDatabase): BootstrapNodeDao = database.bootstrapNodeDao()
 
     @Provides
+    fun provideRelayNodeDao(database: VMessengerDatabase): RelayNodeDao = database.relayNodeDao()
+
+    @Provides
     fun provideConversationDao(database: VMessengerDatabase): ConversationDao = database.conversationDao()
 
     @Provides
@@ -100,4 +109,7 @@ object DatabaseModule {
 
     @Provides
     fun provideLocationSampleDao(database: VMessengerDatabase): LocationSampleDao = database.locationSampleDao()
+
+    @Provides
+    fun provideMailboxDao(database: VMessengerDatabase): MailboxDao = database.mailboxDao()
 }

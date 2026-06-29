@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.AlertDialog
@@ -45,6 +46,7 @@ import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 
 private data class SettingsNavigation(
     val onDebug: () -> Unit,
+    val onNodes: () -> Unit,
     val onAbout: () -> Unit,
     val onIdentity: () -> Unit,
     val onSecureWipe: () -> Unit,
@@ -53,6 +55,7 @@ private data class SettingsNavigation(
 @Composable
 fun SettingsRoute(
     onNavigateToDebug: () -> Unit = {},
+    onNavigateToNodes: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
     onNavigateToIdentity: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -66,6 +69,7 @@ fun SettingsRoute(
             viewModel = viewModel,
             navigation = SettingsNavigation(
                 onDebug = onNavigateToDebug,
+                onNodes = onNavigateToNodes,
                 onAbout = onNavigateToAbout,
                 onIdentity = onNavigateToIdentity,
                 onSecureWipe = { showWipeDialog = true },
@@ -111,6 +115,12 @@ private fun SettingsContent(
             onSecureWipe = navigation.onSecureWipe,
         )
         SettingsSection(title = stringResource(R.string.settings_network_section)) {
+            SettingsActionRow(
+                label = stringResource(R.string.settings_nodes),
+                icon = Icons.Outlined.Hub,
+                onClick = navigation.onNodes,
+            )
+            SettingsDivider()
             SettingsActionRow(
                 label = stringResource(R.string.settings_debug),
                 icon = Icons.Outlined.BugReport,

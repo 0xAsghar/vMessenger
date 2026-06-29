@@ -66,6 +66,8 @@ fun DebugRoute(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             DebugNetworkStatusSection(state = state)
+            DebugPathSection(state = state)
+            DebugP2PFlagsSection(flags = state.flags, onFlagChange = viewModel::setFlag)
             DebugActionsSection(
                 state = state,
                 onDevModeChange = viewModel::setDevMode,
@@ -119,6 +121,87 @@ private fun DebugNetworkStatusSection(state: DebugUiState) {
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun DebugPathSection(state: DebugUiState) {
+    SettingsSection(title = "Active network path") {
+        DebugStatusRow(
+            label = "Last delivery path",
+            value = state.lastPath ?: "—",
+            positive = state.lastPath != null,
+            monospaceValue = state.lastPath != null,
+        )
+        if (state.recentPaths.size > 1) {
+            SettingsDivider()
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                state.recentPaths.take(6).forEach { entry ->
+                    Text(
+                        text = entry,
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(vertical = 2.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DebugP2PFlagsSection(
+    flags: P2PFlagsUiState,
+    onFlagChange: (P2PFlag, Boolean) -> Unit,
+) {
+    SettingsSection(title = "P2P migration flags") {
+        DebugFlagRow("Multiple nodes (P1)", flags.multiNode) { onFlagChange(P2PFlag.MULTI_NODE, it) }
+        SettingsDivider()
+        DebugFlagRow("Peer cache (P3)", flags.peerCache) { onFlagChange(P2PFlag.PEER_CACHE, it) }
+        SettingsDivider()
+        DebugFlagRow("Peer exchange (P4)", flags.peerExchange) { onFlagChange(P2PFlag.PEER_EXCHANGE, it) }
+        SettingsDivider()
+        DebugFlagRow("DHT participation (P5)", flags.dhtParticipation) {
+            onFlagChange(P2PFlag.DHT_PARTICIPATION, it)
+        }
+        SettingsDivider()
+        DebugFlagRow("Relay-capable peer (P6)", flags.relayPeerMode) {
+            onFlagChange(P2PFlag.RELAY_PEER_MODE, it)
+        }
+        SettingsDivider()
+        DebugFlagRow("NAT traversal (P7)", flags.natTraversal) { onFlagChange(P2PFlag.NAT_TRAVERSAL, it) }
+        SettingsDivider()
+        DebugFlagRow("Store & forward (P8)", flags.storeAndForward) {
+            onFlagChange(P2PFlag.STORE_AND_FORWARD, it)
+        }
+        SettingsDivider()
+        DebugFlagRow("Demote default relay (P9)", flags.reduceDefaultRelay) {
+            onFlagChange(P2PFlag.REDUCE_DEFAULT_RELAY, it)
+        }
+    }
+}
+
+@Composable
+private fun DebugFlagRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
