@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -51,6 +52,8 @@ class MessagingService @Inject constructor(
     private val outboundSessions = mutableMapOf<String, ActiveSecureSession>()
     private val sessionMutex = Mutex()
     private val sendMutexes = mutableMapOf<String, Mutex>()
+    private val postHandshakeDone = ConcurrentHashMap.newKeySet<String>()
+    private val inboundReadContacts = ConcurrentHashMap.newKeySet<String>()
     private val _incoming = MutableSharedFlow<IncomingEnvelope>(extraBufferCapacity = 64)
     val incoming: Flow<IncomingEnvelope> = _incoming.asSharedFlow()
 
@@ -117,11 +120,12 @@ class MessagingService @Inject constructor(
             runCatching { peerKeyUpdater?.invoke(contactId, session.peer) }
                 .onFailure { AppLogger.warn("Messaging", "peer key update failed: ${it.message}") }
         }
-        runCatching { sessionPostHandshakeHandler.onEstablished(activeSession, self, activeSession.peer) }
-            .onFailure { AppLogger.warn("Messaging", "post-handshake hook failed: ${it.message}") }
+        inboundReadContacts.add(contactId)
         try {
             readSecureFrames(activeSession, contactId, connection)
         } finally {
+            inboundReadContacts.remove(contactId)
+            postHandshakeDone.remove(contactId)
             activeSession.close()
         }
     }
@@ -240,8 +244,8 @@ class MessagingService @Inject constructor(
             relayTargetId = if (endpoint.transport == TransportIds.RELAY) peer.identityHash else null,
         ).getOrThrow()
         val session = secureChannelFactory.initiate(connection, self, peer).getOrThrow() as ActiveSecureSession
-        runCatching { sessionPostHandshakeHandler.onEstablished(session, self, session.peer) }
-            .onFailure { AppLogger.warn("Messaging", "post-handshake hook failed: ${it.message}") }
+        // Post-handshake protocol (peer exchange, mailbox) runs only on the inbound
+        // accept path so ratchet counters stay aligned with the first chat frame.
         scope.launch {
             runCatching { peerKeyUpdater?.invoke(contactId, session.peer) }
                 .onFailure { AppLogger.warn("Messaging", "peer key update failed: ${it.message}") }
@@ -302,6 +306,17 @@ class MessagingService @Inject constructor(
             return
         }
         _incoming.emit(IncomingEnvelope(envelope = envelope, contactId = contactId, session = session))
+        schedulePostHandshakeIfNeeded(contactId, session)
+    }
+
+    private fun schedulePostHandshakeIfNeeded(contactId: String, session: ActiveSecureSession) {
+        if (!inboundReadContacts.contains(contactId)) return
+        if (!postHandshakeDone.add(contactId)) return
+        scope.launch {
+            val self = selfProvider?.invoke() ?: return@launch
+            runCatching { sessionPostHandshakeHandler.onEstablished(session, self, session.peer) }
+                .onFailure { AppLogger.warn("Messaging", "post-handshake hook failed: ${it.message}") }
+        }
     }
 
     /**

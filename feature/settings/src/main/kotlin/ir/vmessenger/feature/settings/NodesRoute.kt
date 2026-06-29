@@ -216,7 +216,6 @@ private fun CopyableCodeBlock(
             )
             IconButton(
                 onClick = { clipboard.setText(AnnotatedString(code)) },
-                modifier = Modifier.padding(top = (-8).dp),
             ) {
                 Icon(
                     Icons.Outlined.ContentCopy,
