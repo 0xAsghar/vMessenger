@@ -1,6 +1,5 @@
 package ir.vmessenger.data.repository
 
-import com.google.protobuf.ByteString
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.database.dao.ContactDao
@@ -11,15 +10,12 @@ import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
-import ir.vmessenger.core.proto.app.v1.MessageEnvelope
+import ir.vmessenger.data.network.OutboxDispatcher
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.model.Conversation
 import ir.vmessenger.domain.model.DeliveryStatus
 import ir.vmessenger.domain.model.MessageDirection
 import ir.vmessenger.domain.repository.ConversationRepository
-import ir.vmessenger.domain.repository.IdentityRepository
-import ir.vmessenger.network.messaging.MessagingService
-import ir.vmessenger.network.messaging.PeerIdentity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -28,7 +24,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import ir.vmessenger.core.database.entity.DeliveryStatus as DbDeliveryStatus
 import ir.vmessenger.core.database.entity.MessageDirection as DbMessageDirection
-import ir.vmessenger.core.proto.app.v1.ChatMessage as ProtoChatMessage
 
 @Singleton
 class ConversationRepositoryImpl @Inject constructor(
@@ -36,8 +31,7 @@ class ConversationRepositoryImpl @Inject constructor(
     private val messageDao: MessageDao,
     private val outboxDao: OutboxDao,
     private val contactDao: ContactDao,
-    private val identityRepository: IdentityRepository,
-    private val messagingService: MessagingService,
+    private val outboxDispatcher: OutboxDispatcher,
 ) : ConversationRepository {
 
     override fun observeConversations(): Flow<List<Conversation>> =
@@ -120,32 +114,9 @@ class ConversationRepositoryImpl @Inject constructor(
                 ),
             )
         }
-        val conv = conversationDao.getById(conversationId) ?: return AppResult.Success(messageId)
-        val contact = contactDao.getById(conv.contactId)
-        val identity = identityRepository.getIdentity()
-        if (contact != null && identity != null) {
-            val self = PeerIdentity(
-                identityHash = identity.identityHash,
-                ed25519PublicKey = identity.ed25519PublicKey,
-                x25519StaticPublicKey = identity.x25519StaticPublicKey,
-                ed25519PrivateKey = identityRepository.getEd25519PrivateKey(),
-                x25519StaticPrivateKey = identityRepository.getX25519StaticPrivateKey(),
-            )
-            val peer = PeerIdentity(
-                identityHash = contact.identityHash,
-                ed25519PublicKey = contact.ed25519Public,
-                x25519StaticPublicKey = contact.x25519StaticPublic ?: ByteArray(32),
-            )
-            val envelope = MessageEnvelope.newBuilder()
-                .setMessageId(ByteString.copyFromUtf8(messageId))
-                .setSenderIdentityHash(ByteString.copyFrom(identity.identityHash))
-                .setSentAtUnixMs(now)
-                .setCounter(1)
-                .setChat(ProtoChatMessage.newBuilder().setText(text))
-                .build()
-            messagingService.send(conv.contactId, self, peer, envelope)
-            messageDao.markSent(messageId, DbDeliveryStatus.SENT, now)
-        }
+        // Delivery (and the SENT/FAILED status) is owned by the outbox dispatcher,
+        // which retries until a transport send actually succeeds.
+        outboxDispatcher.wake()
         return AppResult.Success(messageId)
     }
 

@@ -279,23 +279,3 @@ class MessagingService @Inject constructor(
         previous?.close()
     }
 }
-
-@Singleton
-class OutboxWorker @Inject constructor(
-    private val messagingService: MessagingService,
-) {
-    suspend fun processDue(
-        items: List<ir.vmessenger.core.database.entity.OutboxEntity>,
-        self: PeerIdentity,
-        peerResolver: (String) -> PeerIdentity?,
-        envelopeBuilder: (ir.vmessenger.core.database.entity.OutboxEntity) -> MessageEnvelope?,
-    ) {
-        items.forEach { item ->
-            val peer = peerResolver(item.conversationId)
-            val envelope = peer?.let { envelopeBuilder(item) }
-            if (peer != null && envelope != null) {
-                messagingService.send(item.conversationId, self, peer, envelope)
-            }
-        }
-    }
-}

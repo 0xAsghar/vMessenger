@@ -32,6 +32,7 @@ class NetworkCoordinator @Inject constructor(
     private val publishNetworkEndpointsUseCase: PublishNetworkEndpointsUseCase,
     private val messagingService: MessagingService,
     private val incomingMessageCollector: IncomingMessageCollector,
+    private val outboxDispatcher: OutboxDispatcher,
     private val identityRepository: IdentityRepository,
     private val contactDao: ContactDao,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -47,6 +48,7 @@ class NetworkCoordinator @Inject constructor(
             AppLogger.info("Network", "coordinator start listenPort=$listenPort dev=${directHost != null}")
             configureInbound()
             incomingMessageCollector.start()
+            outboxDispatcher.start()
             messagingService.startListening(listenPort)
             AppLogger.info("Network", "TCP listener started on $listenPort")
             when (val join = joinNetworkUseCase()) {
@@ -78,6 +80,7 @@ class NetworkCoordinator @Inject constructor(
             ed25519PrivateKey = privateKey,
         )
         AppLogger.info("Network", "relay listener starting")
+        outboxDispatcher.wake()
     }
 
     private suspend fun awaitIdentityWithKey(): Pair<Identity, ByteArray> {
@@ -143,6 +146,7 @@ class NetworkCoordinator @Inject constructor(
                     x25519StaticPublic = peer.x25519StaticPublicKey,
                 )
                 AppLogger.info("Contact", "learned peer keys for contact=$contactId")
+                outboxDispatcher.wake()
             },
         )
     }
