@@ -25,4 +25,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.lazysodium.java)
+    testImplementation(project(":core:crypto"))
 }

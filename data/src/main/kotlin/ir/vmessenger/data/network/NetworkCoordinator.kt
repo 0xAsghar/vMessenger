@@ -4,6 +4,7 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.common.logging.AppLogger
+import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.data.di.IoDispatcher
 import ir.vmessenger.data.repository.findByIdentityHash
@@ -39,6 +40,7 @@ class NetworkCoordinator @Inject constructor(
     private val relayDirectory: RelayDirectory,
     private val embeddedDhtService: ir.vmessenger.network.dht.EmbeddedDhtService,
     private val peerRelayCoordinator: PeerRelayCoordinator,
+    private val p2pConfigLoader: P2PConfigLoader,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -49,6 +51,7 @@ class NetworkCoordinator @Inject constructor(
         directPort: Int? = null,
     ) {
         scope.launch {
+            p2pConfigLoader.loadIntoConfig()
             AppLogger.info("Network", "coordinator start listenPort=$listenPort dev=${directHost != null}")
             configureInbound()
             incomingMessageCollector.start()
@@ -77,10 +80,15 @@ class NetworkCoordinator @Inject constructor(
         val (identity, privateKey) = awaitIdentityWithKey()
         // Resolve the active relay first so the endpoint we publish matches the
         // relay our listener will actually connect through (multi-relay support).
-        val activeRelay = relayDirectory.activeRelayUrl()
-        AppLogger.info("Network", "active relay=$activeRelay")
+        val selectedRelay = relayDirectory.activeRelay()
+        NetworkPathTracker.setActiveRelay(selectedRelay.url)
+        AppLogger.info("Network", "active relay=${selectedRelay.url} source=${selectedRelay.source}")
         when (
-            val publish = publishNetworkEndpointsUseCase(directHost = directHost, directPort = directPort)
+            val publish = publishNetworkEndpointsUseCase(
+                directHost = directHost,
+                directPort = directPort,
+                relayUrl = selectedRelay.url,
+            )
         ) {
             is AppResult.Success ->
                 AppLogger.info("Network", "publish endpoints OK")

@@ -10,9 +10,11 @@ import javax.inject.Singleton
 class P2PSessionHooks @Inject constructor(
     private val peerExchangeService: PeerExchangeService,
     private val mailboxService: MailboxService,
+    private val mailboxSyncService: MailboxSyncService,
 ) : SessionPostHandshakeHandler {
     override suspend fun onEstablished(session: ActiveSecureSession, self: PeerIdentity, peer: PeerIdentity) {
         peerExchangeService.exchangeOnSession(session, self)
         mailboxService.offerPending(session, self, peer.identityHash)
+        mailboxSyncService.pullFromPeer(session, self)
     }
 }

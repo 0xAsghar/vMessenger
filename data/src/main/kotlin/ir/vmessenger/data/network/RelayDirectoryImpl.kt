@@ -2,31 +2,44 @@ package ir.vmessenger.data.network
 
 import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.P2PConfig
+import ir.vmessenger.core.common.network.RelaySource
+import ir.vmessenger.core.common.network.SelectedRelay
 import ir.vmessenger.network.messaging.RelayDirectory
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * DB-backed [RelayDirectory]. Picks the healthiest enabled relay and keeps
- * [NetworkConfig.relayAddress] in sync so the endpoint we publish matches the
- * relay we are actually listening on. Falls back to the built-in default relay
- * whenever the list is empty (docs/P2P-Phases.md Phase 1).
+ * DB-backed [RelayDirectory]. Picks the healthiest enabled relay and exposes the
+ * selection explicitly so publish and listener use the same endpoint.
  */
 @Singleton
 class RelayDirectoryImpl @Inject constructor(
     private val nodeRepository: NetworkNodeRepository,
 ) : RelayDirectory {
-    override suspend fun activeRelayUrl(): String {
+    @Volatile
+    private var lastSelected: SelectedRelay? = null
+
+    override suspend fun activeRelay(): SelectedRelay {
+        val default = NetworkConfig.DEFAULT_RELAY_URL
         val url = selectActiveRelay(
             rankedRelays = if (P2PConfig.multiNodeEnabled) nodeRepository.enabledRelayUrls() else emptyList(),
-            default = NetworkConfig.DEFAULT_RELAY_URL,
+            default = default,
         )
-        NetworkConfig.relayAddress = url
-        return url
+        val selected = SelectedRelay(
+            url = url,
+            source = if (url == default) RelaySource.DEFAULT else RelaySource.RANKED,
+        )
+        lastSelected = selected
+        return selected
     }
+
+    override fun lastSelectedRelay(): SelectedRelay? = lastSelected
 
     override suspend fun reportResult(url: String, ok: Boolean) {
         nodeRepository.recordRelayResult(url, ok)
+        if (ok) {
+            nodeRepository.promoteNodeOnSuccess(url)
+        }
     }
 }
 

@@ -237,3 +237,19 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
         db.execSQL("CREATE INDEX IF NOT EXISTS index_mailbox_blob_expires ON mailbox_blob(expiresAtUnixMs)")
     }
 }
+
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS dht_record (
+                recordKey TEXT NOT NULL PRIMARY KEY,
+                recordProto BLOB NOT NULL,
+                sequence INTEGER NOT NULL,
+                expiresAtUnixMs INTEGER NOT NULL,
+                storedAtUnixMs INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+    }
+}

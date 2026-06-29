@@ -7,7 +7,7 @@ vMessenger is a privacy-first communication platform where each Android device i
 - Bundle ID: `ir.vmessenger.android`
 - Platform: Android 8.0+ (API 26+)
 - UI language: Persian (RTL), Material 3, light/dark
-- Status: **v0.1.0-rc21** — identity, pairing, DHT discovery, E2EE messaging, live location, multi-node P2P migration (phases 0–9), and settings/debug ship in this repo.
+- Status: **v0.1.0-rc31** — identity, pairing, DHT discovery, E2EE messaging, live location, relay fallback, multi-node bootstrap/relay management, and P2P migration scaffolding (rc25–rc31 reliability hardening) ship in this repo.
 
 ---
 
@@ -47,7 +47,7 @@ The app is functional over the public Internet using a minimal Distributed Hash 
 
 The DHT stores only temporary routing metadata. It never stores messages, contacts, private keys, or profiles.
 
-**P2P migration (rc21):** The staged plan in [docs/P2P-Phases.md](docs/P2P-Phases.md) is implemented behind `P2PConfig` flags. All phases are **enabled by default** — multi-node lists, peer cache, peer exchange after handshake, embedded DHT participation, relay-capable peer mode, NAT/UDP attempts, mailbox store-and-forward, and demoting the default relay to last resort. Disable individual flags under **تنظیمات → اشکال‌زدایی** for conservative testing.
+**P2P migration (rc21+):** The staged plan in [docs/P2P-Phases.md](docs/P2P-Phases.md) is partially implemented behind `P2PConfig` flags (persisted in DataStore). Multi-node lists, peer cache, peer exchange, embedded DHT participation, UDP transport attempts, mailbox blobs, and relay demotion have code support, but user-operated relay bridging, full NAT traversal, full DHT routing/replication, and complete mailbox delivery remain incomplete. See [docs/P2P-Bugs-Improvement.md](docs/P2P-Bugs-Improvement.md) and [docs/P2P-Testing.md](docs/P2P-Testing.md). Disable individual flags under **تنظیمات → اشکال‌زدایی** for conservative testing.
 
 ```mermaid
 sequenceDiagram
@@ -76,7 +76,7 @@ sequenceDiagram
 - Live Location sharing with a foreground service and encrypted location packets.
 - Encrypted local storage (Room over SQLCipher) and contact management.
 - **Multi-node network:** Settings → **نودهای شبکه** — add bootstrap/relay nodes, health ranking, `vmnode:` link import/export.
-- **P2P migration phases 0–9** (see [docs/P2P-Phases.md](docs/P2P-Phases.md)).
+- **P2P migration scaffolding and partial phases 0–9** (see [docs/P2P-Phases.md](docs/P2P-Phases.md)).
 
 Designed for but intentionally deferred to later phases: groups, voice/video calls, file and image transfer, Bluetooth and Wi-Fi Direct transports, mesh networking, geofencing, location history analytics, SOS mode, team and family management, plugin system, and full Kademlia/ICE hole-punching. **Relay fallback** via `relay.vmessenger.ir` (DHT + circuit relay, E2E only) is implemented — see [deploy/README.md](deploy/README.md).
 
@@ -106,7 +106,7 @@ Read these in order for a top-down understanding of the system.
 - [docs/Discovery.md](docs/Discovery.md) - the modular Discovery layer, QR and User Hash pairing, DHT-based resolution.
 - [docs/DHT.md](docs/DHT.md) - the minimal DHT design, signed routing records, TTL and refresh, anti-centralization rules.
 - [docs/Bootstrap.md](docs/Bootstrap.md) - the BootstrapProvider interface and how to operate bootstrap nodes.
-- [docs/P2P-Phases.md](docs/P2P-Phases.md) - staged migration from relay-assisted to decentralized P2P (phases 0–9, implemented in rc21).
+- [docs/P2P-Phases.md](docs/P2P-Phases.md) - staged migration from relay-assisted to decentralized P2P, with current implementation status.
 - [docs/Database.md](docs/Database.md) - encrypted local schema, entities, DAOs, and migrations.
 - [docs/UI.md](docs/UI.md) - Persian RTL design system, theme, and screen-by-screen specifications.
 - [docs/FolderStructure.md](docs/FolderStructure.md) - the Gradle multi-module layout.
@@ -132,7 +132,7 @@ vMessenger/
   vMessenger-icon/     <- app launcher icons and brand logos
 ```
 
-MVP phases 1–7 and P2P migration phases 0–9 are implemented. See [docs/Roadmap.md](docs/Roadmap.md) for post-MVP work.
+MVP phases 1–7 are implemented. P2P migration phases 0–9 have scaffolding behind `P2PConfig` flags (see status matrix in [docs/P2P-Phases.md](docs/P2P-Phases.md)); several phases remain partial. Known gaps and the fix roadmap live in [docs/P2P-Bugs-Improvement.md](docs/P2P-Bugs-Improvement.md). See [docs/Roadmap.md](docs/Roadmap.md) for post-MVP work.
 
 ---
 

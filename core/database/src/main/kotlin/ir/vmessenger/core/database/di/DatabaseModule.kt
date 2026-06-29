@@ -13,6 +13,7 @@ import ir.vmessenger.core.database.dao.AppMetadataDao
 import ir.vmessenger.core.database.dao.BootstrapNodeDao
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
+import ir.vmessenger.core.database.dao.DhtRecordDao
 import ir.vmessenger.core.database.dao.EndpointCacheDao
 import ir.vmessenger.core.database.dao.IdentityDao
 import ir.vmessenger.core.database.dao.KeyMaterialDao
@@ -31,6 +32,7 @@ import ir.vmessenger.core.database.migration.MIGRATION_5_6
 import ir.vmessenger.core.database.migration.MIGRATION_6_7
 import ir.vmessenger.core.database.migration.MIGRATION_7_8
 import ir.vmessenger.core.database.migration.MIGRATION_8_9
+import ir.vmessenger.core.database.migration.MIGRATION_9_10
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import javax.inject.Singleton
 
@@ -67,6 +69,7 @@ object DatabaseModule {
                 MIGRATION_6_7,
                 MIGRATION_7_8,
                 MIGRATION_8_9,
+                MIGRATION_9_10,
             )
             .build()
     }
@@ -112,4 +115,7 @@ object DatabaseModule {
 
     @Provides
     fun provideMailboxDao(database: VMessengerDatabase): MailboxDao = database.mailboxDao()
+
+    @Provides
+    fun provideDhtRecordDao(database: VMessengerDatabase): DhtRecordDao = database.dhtRecordDao()
 }

@@ -18,13 +18,61 @@ message MessageEnvelope {
     Control control = 13;
     NetworkNodeList network_nodes = 14;
     MailboxBlob mailbox_blob = 15;
+    RelayOpen relay_open = 16;
+    RelayReady relay_ready = 17;
+    RelayData relay_data = 18;
+    RelayClose relay_close = 19;
+    MailboxPut mailbox_put = 20;
+    MailboxListRequest mailbox_list = 21;
+    MailboxListResponse mailbox_list_response = 22;
+    MailboxFetchRequest mailbox_fetch = 23;
+    MailboxFetchResponse mailbox_fetch_response = 24;
+    MailboxDelete mailbox_delete = 25;
+    MailboxDeleteAck mailbox_delete_ack = 26;
   }
 }
 
-/** Phase 4: signed network infrastructure hints exchanged after a secure handshake. */
+/** Phase 4: network infrastructure hints exchanged after a secure handshake. */
 message NetworkNodeList {
   repeated string bootstrap_addresses = 1;
   repeated string relay_addresses = 2;
+  repeated SignedNodeRecord signed_records = 3;
+}
+
+/** Signed node capability record (Phase 4 / rc28). */
+message SignedNodeRecord {
+  string address = 1;
+  NodeRole role = 2;
+  bytes public_key = 3;
+  repeated string capabilities = 4;
+  int64 expires_at_unix_ms = 5;
+  bytes signature = 6;
+}
+
+enum NodeRole {
+  NODE_ROLE_UNSPECIFIED = 0;
+  NODE_ROLE_BOOTSTRAP = 1;
+  NODE_ROLE_RELAY = 2;
+}
+
+/** Phase 6: open a relay circuit through a relay-capable peer. */
+message RelayOpen {
+  string circuit_id = 1;
+  bytes target_identity_hash = 2;
+}
+
+message RelayReady {
+  string circuit_id = 1;
+}
+
+message RelayData {
+  string circuit_id = 1;
+  bytes encrypted_frame = 2;
+}
+
+message RelayClose {
+  string circuit_id = 1;
+  string reason = 2;
 }
 
 /** Phase 8: encrypted offline delivery blob (plaintext never stored on mailbox peers). */
@@ -33,6 +81,35 @@ message MailboxBlob {
   bytes recipient_identity_hash = 2;
   bytes sealed_payload = 3;
   int64 expires_at_unix_ms = 4;
+}
+
+message MailboxPut {
+  MailboxBlob blob = 1;
+}
+
+message MailboxListRequest {
+  bytes recipient_identity_hash = 1;
+}
+
+message MailboxListResponse {
+  repeated bytes blob_ids = 1;
+}
+
+message MailboxFetchRequest {
+  bytes blob_id = 1;
+}
+
+message MailboxFetchResponse {
+  MailboxBlob blob = 1;
+}
+
+message MailboxDelete {
+  bytes blob_id = 1;
+}
+
+message MailboxDeleteAck {
+  bytes blob_id = 1;
+  bool accepted = 2;
 }
 
 message ChatMessage {

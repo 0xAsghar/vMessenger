@@ -95,7 +95,7 @@ These are designed-for in the current architecture and added without breaking ex
 
 ### Connectivity hardening
 - **Done (MVP):** WebSocket-secure DHT node + circuit relay at `relay.vmessenger.ir`; app prefers direct `INTERNET` then falls back to `RELAY`; listener registers on relay for inbound NAT'd peers.
-- **Done (P2P migration, rc21):** Multi-node bootstrap/relay lists, cache-first peer resolve, post-handshake peer exchange, optional embedded DHT participation, UDP/NAT attempts, mailbox store-and-forward, relay demotion — see [P2P-Phases.md](P2P-Phases.md). All `P2PConfig` flags are on by default.
+- **Scaffolding landed (P2P migration, rc21+):** Multi-node bootstrap/relay lists, cache-first peer resolve, post-handshake peer exchange, optional embedded DHT participation, UDP transport attempts, mailbox blob plumbing, and relay demotion have code behind `P2PConfig` flags — see the per-phase status matrix in [P2P-Phases.md](P2P-Phases.md). User-operated relay bridging, full NAT traversal, durable DHT routing, and complete mailbox delivery remain incomplete ([P2P-Bugs-Improvement.md](P2P-Bugs-Improvement.md)).
 - Remaining: full ICE/STUN hole punching for reliable direct mobile-to-mobile; phones as full DHT routing nodes with replication.
 - Full Kademlia routing table (k-buckets, replication across closest k, parallel lookups), addressing the MVP simplifications in [DHT.md](DHT.md) Section 8.
 

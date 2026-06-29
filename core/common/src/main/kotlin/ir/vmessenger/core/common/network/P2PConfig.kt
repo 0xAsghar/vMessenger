@@ -20,7 +20,7 @@ object P2PConfig {
     @Volatile
     var peerCacheEnabled: Boolean = true
 
-    /** Phase 4: exchange signed network-node records after a secure handshake. */
+    /** Phase 4: exchange bootstrap/relay address hints after a secure handshake (signed records: rc28). */
     @Volatile
     var peerExchangeEnabled: Boolean = true
 
@@ -28,11 +28,11 @@ object P2PConfig {
     @Volatile
     var dhtParticipationEnabled: Boolean = true
 
-    /** Phase 6: forward opaque encrypted frames for other peers (relay-capable peer). */
+    /** Phase 6: forward opaque encrypted frames for other peers (relay-capable peer). Default off until consent (rc26). */
     @Volatile
-    var relayPeerModeEnabled: Boolean = true
+    var relayPeerModeEnabled: Boolean = false
 
-    /** Phase 7: attempt NAT traversal / direct UDP before falling back to relay. */
+    /** Phase 7: UDP transport attempts (TCP→UDP mirroring; not full ICE/STUN NAT traversal). */
     @Volatile
     var natTraversalEnabled: Boolean = true
 
@@ -52,7 +52,7 @@ object P2PConfig {
         peerCacheEnabled = true
         peerExchangeEnabled = true
         dhtParticipationEnabled = true
-        relayPeerModeEnabled = true
+        relayPeerModeEnabled = false
         natTraversalEnabled = true
         storeAndForwardEnabled = true
         reduceDefaultRelayEnabled = true

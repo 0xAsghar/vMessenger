@@ -27,6 +27,12 @@ class MailboxService @Inject constructor(
         if (!P2PConfig.storeAndForwardEnabled) return
         val now = System.currentTimeMillis()
         if (blob.expiresAtUnixMs <= now) return
+        if (blob.sealedPayload.size() > MAX_BLOB_BYTES) return
+        mailboxDao.purgeExpired(now)
+        if (mailboxDao.countActive(now) >= MAX_TOTAL_BLOBS) {
+            AppLogger.warn("Mailbox", "quota full; rejecting blob")
+            return
+        }
         mailboxDao.upsert(
             MailboxBlobEntity(
                 blobId = blob.blobId.toStringUtf8(),
@@ -37,6 +43,7 @@ class MailboxService @Inject constructor(
             ),
         )
         AppLogger.info("Mailbox", "stored blob ${blob.blobId.toStringUtf8()}")
+        updatePendingCount()
     }
 
     suspend fun offerPending(session: ActiveSecureSession, self: PeerIdentity, recipientHash: ByteArray) {
@@ -95,9 +102,18 @@ class MailboxService @Inject constructor(
             ),
         )
         AppLogger.info("Mailbox", "queued local blob $blobId")
+        updatePendingCount()
+    }
+
+    private suspend fun updatePendingCount() {
+        val now = System.currentTimeMillis()
+        mailboxDao.purgeExpired(now)
+        NetworkPathTracker.setMailboxPendingCount(mailboxDao.countActive(now))
     }
 
     companion object {
         private const val DEFAULT_TTL_MS = 24 * 60 * 60 * 1000L
+        private const val MAX_BLOB_BYTES = 256 * 1024
+        private const val MAX_TOTAL_BLOBS = 200
     }
 }

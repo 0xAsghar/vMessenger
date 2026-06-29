@@ -67,7 +67,11 @@ fun DebugRoute(
         ) {
             DebugNetworkStatusSection(state = state)
             DebugPathSection(state = state)
-            DebugP2PFlagsSection(flags = state.flags, onFlagChange = viewModel::setFlag)
+            DebugP2PFlagsSection(
+                flags = state.flags,
+                onFlagChange = viewModel::setFlag,
+                onResetFlags = viewModel::resetFlagsToDefaults,
+            )
             DebugActionsSection(
                 state = state,
                 onDevModeChange = viewModel::setDevMode,
@@ -128,6 +132,13 @@ private fun DebugNetworkStatusSection(state: DebugUiState) {
 private fun DebugPathSection(state: DebugUiState) {
     SettingsSection(title = "Active network path") {
         DebugStatusRow(
+            label = "Diagnostics",
+            value = state.networkSnapshot ?: "—",
+            positive = state.networkSnapshot != null,
+            monospaceValue = state.networkSnapshot != null,
+        )
+        SettingsDivider()
+        DebugStatusRow(
             label = "Last delivery path",
             value = state.lastPath ?: "—",
             positive = state.lastPath != null,
@@ -155,6 +166,7 @@ private fun DebugPathSection(state: DebugUiState) {
 private fun DebugP2PFlagsSection(
     flags: P2PFlagsUiState,
     onFlagChange: (P2PFlag, Boolean) -> Unit,
+    onResetFlags: () -> Unit,
 ) {
     SettingsSection(title = "P2P migration flags") {
         DebugFlagRow("Multiple nodes (P1)", flags.multiNode) { onFlagChange(P2PFlag.MULTI_NODE, it) }
@@ -171,7 +183,7 @@ private fun DebugP2PFlagsSection(
             onFlagChange(P2PFlag.RELAY_PEER_MODE, it)
         }
         SettingsDivider()
-        DebugFlagRow("NAT traversal (P7)", flags.natTraversal) { onFlagChange(P2PFlag.NAT_TRAVERSAL, it) }
+        DebugFlagRow("UDP attempts (P7)", flags.natTraversal) { onFlagChange(P2PFlag.UDP_ATTEMPTS, it) }
         SettingsDivider()
         DebugFlagRow("Store & forward (P8)", flags.storeAndForward) {
             onFlagChange(P2PFlag.STORE_AND_FORWARD, it)
@@ -179,6 +191,13 @@ private fun DebugP2PFlagsSection(
         SettingsDivider()
         DebugFlagRow("Demote default relay (P9)", flags.reduceDefaultRelay) {
             onFlagChange(P2PFlag.REDUCE_DEFAULT_RELAY, it)
+        }
+        SettingsDivider()
+        TextButton(
+            onClick = onResetFlags,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Reset P2P flags to defaults")
         }
     }
 }

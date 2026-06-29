@@ -1,5 +1,8 @@
 package ir.vmessenger.network.messaging
 
+import ir.vmessenger.core.common.network.RelaySource
+import ir.vmessenger.core.common.network.SelectedRelay
+
 /**
  * Supplies the relay endpoint the listener should currently use and records the
  * outcome of relay connections. Backed by a health-ranked list of relay nodes so
@@ -11,7 +14,10 @@ package ir.vmessenger.network.messaging
  */
 interface RelayDirectory {
     /** The relay URL to connect through right now (healthiest enabled relay). */
-    suspend fun activeRelayUrl(): String
+    suspend fun activeRelay(): SelectedRelay
+
+    /** Last relay returned by [activeRelay]; useful for publish/listener alignment tests. */
+    fun lastSelectedRelay(): SelectedRelay?
 
     /** Records whether a connection to [url] succeeded, updating health ranking. */
     suspend fun reportResult(url: String, ok: Boolean)

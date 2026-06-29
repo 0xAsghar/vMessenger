@@ -17,15 +17,30 @@ Every phase below should be guarded by feature flags, measured in debug tooling,
 
 ## Implementation status (v0.1.0-rc21)
 
-Phases 0–9 are implemented in the Android app. Runtime flags live in `P2PConfig` (`core/common`). **All flags are enabled by default** as of rc21; turn individual phases off under **تنظیمات → اشکال‌زدایی → P2P migration flags** when testing.
+The Android app has started implementing this migration, but the phases are not all complete yet. Runtime flags live in `P2PConfig` (`core/common`). The current defaults enable the experimental paths, so use **تنظیمات → اشکال‌زدایی → P2P migration flags** to turn individual phases off during conservative testing.
 
-Recent reliability fixes (post-rc21, in progress):
+Current status from the codebase:
 
-- Relay fallback when DHT lookup returns no peer endpoints (cold start / new contacts).
-- Ratchet receive state no longer advances on failed decryption (peer exchange + chat on the same session).
-- Post-handshake peer exchange runs before the first encrypted send/read on a session.
+- Phase 0: implemented. The existing relay remains available as a fallback path.
+- Phase 1: implemented for database-backed bootstrap/relay node lists, health ordering, and relay rotation.
+- Phase 2: mostly implemented. Users can add, remove, enable/disable, import, export, and QR-share nodes.
+- Phase 3: partially implemented. Verified endpoint records can be cached and reused, and learned DHT node addresses are persisted.
+- Phase 4: partially implemented. Peers exchange bootstrap/relay node hints after handshake, but the exchanged records are simple address hints, not signed node capability records.
+- Phase 5: partially implemented. Android clients can run a minimal TCP DHT service, but it is in-memory, limited, and not a full replicated DHT routing node.
+- Phase 6: not fully implemented. The app advertises a `relay-peer` capability, but Android clients do not yet implement third-party relay circuit bridging with limits, consent policy, and abuse controls.
+- Phase 7: not fully implemented. A UDP transport exists and TCP endpoints can be mirrored as UDP candidates, but there is no full ICE/STUN/UDP hole-punching implementation yet.
+- Phase 8: partially implemented. Mailbox blob storage and offering pending blobs during sessions exist, but there is not yet a full trusted-peer mailbox discovery/pull protocol.
+- Phase 9: partially implemented. Endpoint ordering demotes the default relay behind direct/user relay paths, but this depends on the incomplete phases above.
+
+Recent reliability fixes in the current code:
+
+- Relay fallback when DHT lookup returns no peer endpoints, useful for cold start or new contacts.
+- Ratchet receive state does not advance on failed decryption.
+- Post-handshake hooks run before the first normal encrypted send/read on a session.
 
 See [README.md](../README.md#how-to-run-a-node) for operating bootstrap/relay nodes.
+
+For known gaps, risks, and the prioritized fix list see [P2P-Bugs-Improvement.md](P2P-Bugs-Improvement.md).
 
 ## Phase 0: Keep The Existing Relay As Fallback
 

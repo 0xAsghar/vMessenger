@@ -5,6 +5,7 @@ import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.MessageDao
+import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageDirection
@@ -17,6 +18,7 @@ import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.network.messaging.IncomingEnvelope
 import ir.vmessenger.network.messaging.MessagingService
 import ir.vmessenger.network.messaging.PeerIdentity
+import ir.vmessenger.network.messaging.PeerRelayService
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -34,6 +36,10 @@ class IncomingMessageCollector @Inject constructor(
     private val messageDao: MessageDao,
     private val peerExchangeService: PeerExchangeService,
     private val mailboxService: MailboxService,
+    private val mailboxProtocolService: MailboxProtocolService,
+    private val mailboxSyncService: MailboxSyncService,
+    private val peerRelayForwarder: PeerRelayForwarder,
+    private val peerRelayService: PeerRelayService,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -58,6 +64,17 @@ class IncomingMessageCollector @Inject constructor(
             envelope.hasReceipt() -> handleReceipt(envelope.receipt)
             envelope.hasNetworkNodes() -> peerExchangeService.ingestFromEnvelope(envelope)
             envelope.hasMailboxBlob() -> mailboxService.storeIncoming(envelope.mailboxBlob)
+            envelope.hasRelayOpen() -> peerRelayForwarder.handleOpen(incoming)
+            envelope.hasRelayData() -> peerRelayForwarder.handleData(incoming)
+            envelope.hasRelayClose() -> peerRelayService.handleRelayClose(envelope)
+            envelope.hasMailboxPut() ||
+                envelope.hasMailboxList() ||
+                envelope.hasMailboxFetch() ||
+                envelope.hasMailboxDelete() ->
+                mailboxProtocolService.handleIncoming(envelope, incoming.session)
+            envelope.hasMailboxListResponse() ||
+                envelope.hasMailboxFetchResponse() ->
+                mailboxSyncService.handleResponse(envelope, incoming.session)
             else -> Unit
         }
     }
@@ -72,7 +89,7 @@ class IncomingMessageCollector @Inject constructor(
             ?: run {
                 val id = java.util.UUID.randomUUID().toString()
                 conversationDao.upsert(
-                    ir.vmessenger.core.database.entity.ConversationEntity(
+                    ConversationEntity(
                         id = id,
                         contactId = contactId,
                         lastMessageId = messageId,

@@ -7,6 +7,7 @@ import ir.vmessenger.core.database.converter.EnumConverters
 import ir.vmessenger.core.database.dao.AppMetadataDao
 import ir.vmessenger.core.database.dao.BootstrapNodeDao
 import ir.vmessenger.core.database.dao.ContactDao
+import ir.vmessenger.core.database.dao.DhtRecordDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.EndpointCacheDao
 import ir.vmessenger.core.database.dao.IdentityDao
@@ -21,6 +22,7 @@ import ir.vmessenger.core.database.dao.SessionDao
 import ir.vmessenger.core.database.entity.AppMetadataEntity
 import ir.vmessenger.core.database.entity.BootstrapNodeEntity
 import ir.vmessenger.core.database.entity.ContactEntity
+import ir.vmessenger.core.database.entity.DhtRecordEntity
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.EndpointCacheEntity
 import ir.vmessenger.core.database.entity.IdentityEntity
@@ -49,8 +51,9 @@ import ir.vmessenger.core.database.entity.SessionEntity
         LocationShareEntity::class,
         LocationSampleEntity::class,
         MailboxBlobEntity::class,
+        DhtRecordEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -70,4 +73,5 @@ abstract class VMessengerDatabase : RoomDatabase() {
     abstract fun locationShareDao(): LocationShareDao
     abstract fun locationSampleDao(): LocationSampleDao
     abstract fun mailboxDao(): MailboxDao
+    abstract fun dhtRecordDao(): DhtRecordDao
 }

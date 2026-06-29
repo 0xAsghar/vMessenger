@@ -8,9 +8,12 @@ import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.common.network.P2PConfig
+import ir.vmessenger.core.datastore.P2PFlagSnapshot
+import ir.vmessenger.data.network.P2PConfigLoader
 import ir.vmessenger.domain.repository.DiscoveryRepository
 import ir.vmessenger.domain.usecase.discovery.JoinNetworkUseCase
 import ir.vmessenger.domain.usecase.discovery.PublishNetworkEndpointsUseCase
+import ir.vmessenger.network.messaging.RelayDirectory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +32,10 @@ data class DebugUiState(
     val lastPath: String? = null,
     val recentPaths: List<String> = emptyList(),
     val flags: P2PFlagsUiState = P2PFlagsUiState(),
+    val relayPeerPolicy: String? = null,
+    val activeRelayCircuits: Int = 0,
+    val relayBytesForwarded: Long = 0,
+    val networkSnapshot: String? = null,
 )
 
 data class P2PFlagsUiState(
@@ -47,11 +54,17 @@ class DebugViewModel @Inject constructor(
     private val discoveryRepository: DiscoveryRepository,
     private val joinNetworkUseCase: JoinNetworkUseCase,
     private val publishNetworkEndpointsUseCase: PublishNetworkEndpointsUseCase,
+    private val relayDirectory: RelayDirectory,
+    private val p2pConfigLoader: P2PConfigLoader,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(DebugUiState())
     val uiState: StateFlow<DebugUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            p2pConfigLoader.loadIntoConfig()
+            _uiState.update { it.copy(flags = currentFlags()) }
+        }
         viewModelScope.launch {
             discoveryRepository.observeStatus().collect { status ->
                 _uiState.update {
@@ -70,6 +83,19 @@ class DebugViewModel @Inject constructor(
                     state.copy(
                         lastPath = events.firstOrNull()?.let { "${it.path.name}  (${it.detail})" },
                         recentPaths = events.map { "${it.path.name} · ${it.detail}" },
+                        networkSnapshot = NetworkPathTracker.snapshotSummary(),
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            NetworkPathTracker.snapshot.collect { snap ->
+                _uiState.update {
+                    it.copy(
+                        relayPeerPolicy = snap.relayPeerPolicy.name,
+                        activeRelayCircuits = snap.activeRelayCircuits,
+                        relayBytesForwarded = snap.relayBytesForwarded,
+                        networkSnapshot = NetworkPathTracker.snapshotSummary(),
                     )
                 }
             }
@@ -88,12 +114,23 @@ class DebugViewModel @Inject constructor(
             P2PFlag.PEER_EXCHANGE -> P2PConfig.peerExchangeEnabled = enabled
             P2PFlag.DHT_PARTICIPATION -> P2PConfig.dhtParticipationEnabled = enabled
             P2PFlag.RELAY_PEER_MODE -> P2PConfig.relayPeerModeEnabled = enabled
-            P2PFlag.NAT_TRAVERSAL -> P2PConfig.natTraversalEnabled = enabled
+            P2PFlag.UDP_ATTEMPTS -> P2PConfig.natTraversalEnabled = enabled
             P2PFlag.STORE_AND_FORWARD -> P2PConfig.storeAndForwardEnabled = enabled
             P2PFlag.REDUCE_DEFAULT_RELAY -> P2PConfig.reduceDefaultRelayEnabled = enabled
         }
         AppLogger.info("Debug", "p2p flag ${flag.name}=$enabled")
-        _uiState.update { it.copy(flags = currentFlags()) }
+        viewModelScope.launch {
+            p2pConfigLoader.persistFromConfig()
+            _uiState.update { it.copy(flags = currentFlags()) }
+        }
+    }
+
+    fun resetFlagsToDefaults() {
+        viewModelScope.launch {
+            p2pConfigLoader.resetToDefaults()
+            _uiState.update { it.copy(flags = currentFlags()) }
+            AppLogger.info("Debug", "p2p flags reset to defaults")
+        }
     }
 
     private fun currentFlags() = P2PFlagsUiState(
@@ -118,15 +155,20 @@ class DebugViewModel @Inject constructor(
                     return@launch
                 }
             }
+            val selectedRelay = relayDirectory.activeRelay()
             val publish = if (devMode) {
                 NetworkConfig.useDevBootstrap = true
                 val port = _uiState.value.forwardPort
-                AppLogger.info("Debug", "publishing dev endpoints 10.0.2.2:$port")
-                publishNetworkEndpointsUseCase(directHost = "10.0.2.2", directPort = port)
+                AppLogger.info("Debug", "publishing dev endpoints 10.0.2.2:$port relay=${selectedRelay.url}")
+                publishNetworkEndpointsUseCase(
+                    directHost = "10.0.2.2",
+                    directPort = port,
+                    relayUrl = selectedRelay.url,
+                )
             } else {
                 NetworkConfig.useDevBootstrap = false
-                AppLogger.info("Debug", "publishing production relay endpoint")
-                publishNetworkEndpointsUseCase()
+                AppLogger.info("Debug", "publishing production relay endpoint ${selectedRelay.url}")
+                publishNetworkEndpointsUseCase(relayUrl = selectedRelay.url)
             }
             when (publish) {
                 is AppResult.Success -> AppLogger.info("Debug", "publish success")
@@ -142,7 +184,7 @@ enum class P2PFlag {
     PEER_EXCHANGE,
     DHT_PARTICIPATION,
     RELAY_PEER_MODE,
-    NAT_TRAVERSAL,
+    UDP_ATTEMPTS,
     STORE_AND_FORWARD,
     REDUCE_DEFAULT_RELAY,
 }

@@ -7,6 +7,9 @@ import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.dao.OutboxDao
+import ir.vmessenger.core.common.network.NetworkPath
+import ir.vmessenger.core.common.network.NetworkPathTracker
+import ir.vmessenger.core.common.network.P2PConfig
 import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
@@ -44,6 +47,7 @@ class OutboxDispatcher @Inject constructor(
     private val outboxDao: OutboxDao,
     private val identityRepository: IdentityRepository,
     private val messagingService: MessagingService,
+    private val mailboxService: MailboxService,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -102,19 +106,39 @@ class OutboxDispatcher @Inject constructor(
             ed25519PublicKey = contact.ed25519Public,
             x25519StaticPublicKey = contact.x25519StaticPublic ?: ByteArray(X25519_KEY_SIZE),
         )
-        when (val result = messagingService.send(conversation.contactId, self, peer, buildEnvelope(message, identity))) {
+        val envelope = buildEnvelope(message, identity)
+        when (val result = messagingService.send(conversation.contactId, self, peer, envelope)) {
             is AppResult.Success -> {
                 messageDao.markSent(message.messageId, DeliveryStatus.SENT, System.currentTimeMillis())
                 outboxDao.remove(item.messageId)
                 AppLogger.info("Outbox", "sent messageId=${message.messageId} attempt=${item.attemptCount + 1}")
             }
-            is AppResult.Error -> backoff(item, result.error.message)
+            is AppResult.Error -> backoff(item, result.error.message, peer, envelope)
         }
     }
 
-    private suspend fun backoff(item: OutboxEntity, error: String?) {
+    private suspend fun backoff(
+        item: OutboxEntity,
+        error: String?,
+        peer: PeerIdentity? = null,
+        envelope: MessageEnvelope? = null,
+    ) {
         val attempt = item.attemptCount + 1
         if (attempt >= MAX_ATTEMPTS) {
+            if (P2PConfig.storeAndForwardEnabled && peer != null && envelope != null) {
+                mailboxService.enqueueForRecipient(
+                    recipientHash = peer.identityHash,
+                    sealedPayload = envelope.toByteArray(),
+                )
+                NetworkPathTracker.record(
+                    path = NetworkPath.STORE_AND_FORWARD,
+                    detail = "outbox-${item.messageId}",
+                )
+                messageDao.markSent(item.messageId, DeliveryStatus.SENT, System.currentTimeMillis())
+                outboxDao.remove(item.messageId)
+                AppLogger.info("Outbox", "queued to mailbox messageId=${item.messageId}")
+                return
+            }
             messageDao.updateStatus(item.messageId, DeliveryStatus.FAILED)
             outboxDao.remove(item.messageId)
             AppLogger.warn("Outbox", "giving up messageId=${item.messageId} after $attempt attempts: $error")

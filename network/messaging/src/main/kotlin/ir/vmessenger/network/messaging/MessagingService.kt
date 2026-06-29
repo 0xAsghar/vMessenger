@@ -7,6 +7,7 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
+import ir.vmessenger.core.common.network.EndpointSource
 import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.NetworkPath
 import ir.vmessenger.core.common.network.NetworkPathTracker
@@ -34,6 +35,7 @@ import javax.inject.Singleton
 data class IncomingEnvelope(
     val envelope: MessageEnvelope,
     val contactId: String,
+    val session: ActiveSecureSession? = null,
 )
 
 @Singleton
@@ -162,12 +164,18 @@ class MessagingService @Inject constructor(
         fromPeerCache: Boolean = false,
     ): AppResult<Unit> {
         var lastError: AppError? = null
+        val attemptSource = if (fromPeerCache) EndpointSource.CACHE else EndpointSource.DHT
         for (endpoint in endpoints) {
             AppLogger.info("Messaging", "try ${endpoint.transport.value}:${endpoint.address}")
             awaitCloseOutbound(contactId)
             when (val result = sendToEndpoint(contactId, self, peer, endpoint, envelope)) {
                 is AppResult.Success -> {
                     AppLogger.info("Messaging", "sent via ${endpoint.transport.value}")
+                    NetworkPathTracker.recordAttempt(
+                        endpoint = "${endpoint.transport.value}:${endpoint.address}",
+                        source = attemptSource,
+                        success = true,
+                    )
                     val path = when {
                         fromPeerCache -> NetworkPath.CACHED_PEER
                         else -> endpoint.toNetworkPath()
@@ -180,6 +188,12 @@ class MessagingService @Inject constructor(
                 }
                 is AppResult.Error -> {
                     AppLogger.warn("Messaging", "failed ${endpoint.transport.value}: ${result.error.message}")
+                    NetworkPathTracker.recordAttempt(
+                        endpoint = "${endpoint.transport.value}:${endpoint.address}",
+                        source = attemptSource,
+                        success = false,
+                        failureReason = result.error.message,
+                    )
                     lastError = result.error
                 }
             }
@@ -287,7 +301,71 @@ class MessagingService @Inject constructor(
             AppLogger.warn("Messaging", "inbound envelope parse failed contact=$contactId: ${e.message}")
             return
         }
-        _incoming.emit(IncomingEnvelope(envelope, contactId))
+        _incoming.emit(IncomingEnvelope(envelope = envelope, contactId = contactId, session = session))
+    }
+
+    /**
+     * Forwards an already-sealed secure frame to a peer without re-encryption (user relay).
+     */
+    suspend fun forwardOpaqueFrame(
+        contactId: String,
+        self: PeerIdentity,
+        peer: PeerIdentity,
+        sealedSecureBody: ByteArray,
+    ): AppResult<Unit> = runCatching {
+        when (val resolved = endpointResolveService.resolve(peer.identityHash)) {
+            is AppResult.Success -> {
+                val ordered = EndpointOrder.order(resolved.data.endpoints)
+                var lastError: AppError? = null
+                for (endpoint in ordered) {
+                    awaitCloseOutbound(contactId)
+                    val result = forwardToEndpoint(contactId, self, peer, endpoint, sealedSecureBody)
+                    if (result is AppResult.Success) return@runCatching
+                    if (result is AppResult.Error) lastError = result.error
+                }
+                throw IllegalStateException(lastError?.message ?: "relay forward failed")
+            }
+            is AppResult.Error -> throw IllegalStateException(resolved.error.message)
+        }
+    }.fold(
+        onSuccess = { AppResult.Success(Unit) },
+        onFailure = { AppResult.Error(AppError.Network(it.message ?: "relay forward failed")) },
+    )
+
+    private suspend fun forwardToEndpoint(
+        contactId: String,
+        self: PeerIdentity,
+        peer: PeerIdentity,
+        endpoint: Endpoint,
+        sealedSecureBody: ByteArray,
+    ): AppResult<Unit> = runCatching {
+        val session = sessionMutex.withLock {
+            outboundSessions[contactId] ?: establishSession(contactId, self, peer, endpoint).also { established ->
+                outboundSessions[contactId] = established
+            }
+        }
+        val frame = Frame.newBuilder()
+            .setVersion(1)
+            .setType(FrameType.FRAME_TYPE_SECURE)
+            .setBody(ByteString.copyFrom(sealedSecureBody))
+            .build()
+        session.writeFrame(frame.toByteArray())
+    }.fold(
+        onSuccess = { AppResult.Success(Unit) },
+        onFailure = {
+            awaitCloseOutbound(contactId)
+            AppResult.Error(AppError.Network(it.message ?: "relay forward failed"))
+        },
+    )
+
+    suspend fun sendProtocolReply(session: ActiveSecureSession, reply: MessageEnvelope) {
+        val sealed = session.seal(reply.toByteArray())
+        val frame = Frame.newBuilder()
+            .setVersion(1)
+            .setType(FrameType.FRAME_TYPE_SECURE)
+            .setBody(ByteString.copyFrom(sealed))
+            .build()
+        session.writeFrame(frame.toByteArray())
     }
 
     private suspend fun awaitCloseOutbound(contactId: String) {
@@ -304,7 +382,7 @@ class MessagingService @Inject constructor(
  */
 internal fun Endpoint.toNetworkPath(): NetworkPath = when (transport) {
     TransportIds.INTERNET -> NetworkPath.DIRECT
-    TransportIds.UDP -> NetworkPath.NAT_TRAVERSAL
+    TransportIds.UDP -> NetworkPath.UDP_ATTEMPT
     TransportIds.RELAY ->
         if (address == NetworkConfig.DEFAULT_RELAY_URL) NetworkPath.DEFAULT_RELAY else NetworkPath.USER_RELAY
     else -> NetworkPath.UNKNOWN

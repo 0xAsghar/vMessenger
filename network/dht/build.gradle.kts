@@ -13,6 +13,7 @@ dependencies {
     implementation(project(":core:crypto"))
     implementation(project(":core:proto"))
     implementation(project(":core:common"))
+    implementation(project(":core:database"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
 

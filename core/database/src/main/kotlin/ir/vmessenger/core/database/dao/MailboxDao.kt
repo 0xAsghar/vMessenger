@@ -14,6 +14,12 @@ interface MailboxDao {
     @Query("SELECT * FROM mailbox_blob WHERE recipientIdentityHash = :hash AND expiresAtUnixMs > :now")
     suspend fun forRecipient(hash: ByteArray, now: Long): List<MailboxBlobEntity>
 
+    @Query("SELECT * FROM mailbox_blob WHERE blobId = :blobId LIMIT 1")
+    suspend fun getById(blobId: String): MailboxBlobEntity?
+
+    @Query("SELECT COUNT(*) FROM mailbox_blob WHERE expiresAtUnixMs > :now")
+    suspend fun countActive(now: Long): Int
+
     @Query("DELETE FROM mailbox_blob WHERE blobId = :blobId")
     suspend fun delete(blobId: String)
 

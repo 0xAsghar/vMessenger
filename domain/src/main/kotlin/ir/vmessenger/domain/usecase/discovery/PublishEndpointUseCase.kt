@@ -13,6 +13,7 @@ class PublishNetworkEndpointsUseCase @Inject constructor(
     suspend operator fun invoke(
         directHost: String? = null,
         directPort: Int? = null,
+        relayUrl: String? = null,
     ): AppResult<Unit> {
         val endpoints = buildList {
             if (!directHost.isNullOrBlank() && directPort != null) {
@@ -23,7 +24,13 @@ class PublishNetworkEndpointsUseCase @Inject constructor(
                     ),
                 )
             }
-            add(NetworkConfig.effectiveRelayEndpoint())
+            val relay = relayUrl ?: NetworkConfig.DEFAULT_RELAY_URL
+            add(
+                Endpoint(
+                    transport = TransportIds.RELAY,
+                    address = relay,
+                ),
+            )
         }
         return discoveryRepository.publishEndpoints(endpoints)
     }

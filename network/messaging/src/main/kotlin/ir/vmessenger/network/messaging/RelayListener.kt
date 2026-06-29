@@ -86,7 +86,8 @@ class RelayListener @Inject constructor(
                 delay(1_000)
                 continue
             }
-            val url = relayDirectory.activeRelayUrl()
+            val selected = relayDirectory.activeRelay()
+            val url = selected.url
             try {
                 AppLogger.info("Relay", "control channel connecting via $url")
                 connectControlChannel(url, hash, pub, key)

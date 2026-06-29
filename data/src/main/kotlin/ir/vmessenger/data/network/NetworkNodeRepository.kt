@@ -87,6 +87,29 @@ class NetworkNodeRepository @Inject constructor(
         }
     }
 
+    suspend fun importSignedNodeRecords(
+        records: List<ir.vmessenger.core.proto.app.v1.SignedNodeRecord>,
+        verifier: SignedNodeRecordVerifier,
+    ) {
+        val now = System.currentTimeMillis()
+        for (record in records.take(MAX_EXCHANGE)) {
+            if (!verifier.verify(record, now)) continue
+            when (record.role) {
+                ir.vmessenger.core.proto.app.v1.NodeRole.NODE_ROLE_BOOTSTRAP ->
+                    seedBootstrapNode(record.address, SOURCE_PEER_EXCHANGE, priority = CACHED_NODE_PRIORITY)
+                ir.vmessenger.core.proto.app.v1.NodeRole.NODE_ROLE_RELAY ->
+                    seedRelayNode(record.address, SOURCE_PEER_EXCHANGE, priority = CACHED_NODE_PRIORITY)
+                else -> Unit
+            }
+        }
+    }
+
+    suspend fun promoteNodeOnSuccess(address: String) {
+        val now = System.currentTimeMillis()
+        bootstrapNodeDao.markOk(address, now)
+        relayNodeDao.markOk(address, now)
+    }
+
     suspend fun healthyNodesForExchange(max: Int = MAX_EXCHANGE): Pair<List<String>, List<String>> {
         val bootstrap = bootstrapNodeDao.getEnabledOrdered()
             .filter { it.failCount < MAX_FAIL_FOR_EXCHANGE }
