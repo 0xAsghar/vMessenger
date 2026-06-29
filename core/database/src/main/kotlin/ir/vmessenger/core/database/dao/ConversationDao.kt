@@ -23,6 +23,17 @@ interface ConversationDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: ConversationEntity)
 
+    /**
+     * Updates an existing conversation row in place.
+     *
+     * Do NOT use [upsert] to modify an existing conversation: it runs
+     * INSERT OR REPLACE, which deletes the old row first and triggers the
+     * message table's ON DELETE CASCADE, wiping every message in the
+     * conversation. A real UPDATE keeps the children intact.
+     */
+    @Update
+    suspend fun update(entity: ConversationEntity)
+
     @Query("SELECT * FROM conversation ORDER BY lastActivityUnixMs DESC")
     fun observeAll(): Flow<List<ConversationEntity>>
 

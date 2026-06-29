@@ -107,7 +107,7 @@ class ConversationRepositoryImpl @Inject constructor(
             ),
         )
         conversationDao.getById(conversationId)?.let { conv ->
-            conversationDao.upsert(
+            conversationDao.update(
                 conv.copy(
                     lastMessageId = messageId,
                     lastActivityUnixMs = now,

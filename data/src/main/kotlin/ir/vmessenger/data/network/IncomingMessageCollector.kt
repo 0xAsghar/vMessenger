@@ -95,7 +95,7 @@ class IncomingMessageCollector @Inject constructor(
             ),
         )
         if (existingConversation != null) {
-            conversationDao.upsert(
+            conversationDao.update(
                 existingConversation.copy(
                     lastMessageId = messageId,
                     lastActivityUnixMs = activityMs,
