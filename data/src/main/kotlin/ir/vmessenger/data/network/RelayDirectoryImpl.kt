@@ -21,10 +21,13 @@ class RelayDirectoryImpl @Inject constructor(
 
     override suspend fun activeRelay(): SelectedRelay {
         val default = NetworkConfig.DEFAULT_RELAY_URL
+        val ranked = if (P2PConfig.multiNodeEnabled) nodeRepository.enabledRelayUrls() else emptyList()
+        NetworkConfig.rankedRelayUrls = ranked
         val url = selectActiveRelay(
-            rankedRelays = if (P2PConfig.multiNodeEnabled) nodeRepository.enabledRelayUrls() else emptyList(),
+            rankedRelays = ranked,
             default = default,
         )
+        NetworkConfig.relayAddress = url
         val selected = SelectedRelay(
             url = url,
             source = if (url == default) RelaySource.DEFAULT else RelaySource.RANKED,

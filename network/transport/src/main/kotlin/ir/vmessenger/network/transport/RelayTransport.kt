@@ -3,6 +3,7 @@ package ir.vmessenger.network.transport
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
 import ir.vmessenger.core.common.network.NetworkConfig
+import ir.vmessenger.core.common.network.RelayDns
 import ir.vmessenger.core.common.network.TransportIds
 import ir.vmessenger.core.common.network.WebSocketFrameClient
 import ir.vmessenger.core.proto.relay.v1.RelayEvent
@@ -61,6 +62,31 @@ class RelayTransport @Inject constructor() : Transport {
         url: String,
         hello: RelayHello,
         awaitReady: Boolean,
+    ): RelayConnection {
+        val host = RelayDns.hostFromUrl(url)
+        val ips = host?.let { RelayDns.candidateIps(it) }.orEmpty()
+        if (host == null || ips.isEmpty()) {
+            return openRelayCircuitOnce(url, hello, awaitReady, host, targetIp = null)
+        }
+        var lastError: Exception? = null
+        for (ip in ips) {
+            try {
+                return openRelayCircuitOnce(url, hello, awaitReady, host, ip)
+            } catch (e: Exception) {
+                lastError = e
+                if (!shouldRetryRelayDial(e)) throw e
+                AppLogger.info("Relay", "dial retry next backend ip for $host after: ${e.message}")
+            }
+        }
+        throw lastError ?: IllegalStateException("Relay connect failed")
+    }
+
+    private suspend fun openRelayCircuitOnce(
+        url: String,
+        hello: RelayHello,
+        awaitReady: Boolean,
+        host: String?,
+        targetIp: String?,
     ): RelayConnection = suspendCancellableCoroutine { cont ->
         val remote = Endpoint(TransportIds.RELAY, url)
         val connectionRef = arrayOf<RelayConnection?>(null)
@@ -121,10 +147,26 @@ class RelayTransport @Inject constructor() : Transport {
                 }
             }
         }
-        socketHolder[0] = WebSocketFrameClient.httpClient().newWebSocket(request, listener)
+        socketHolder[0] = when {
+            host != null && targetIp != null ->
+                WebSocketFrameClient.httpClientWithPinning(host, targetIp).newWebSocket(request, listener)
+            host != null ->
+                WebSocketFrameClient.httpClientWithPinning(host).newWebSocket(request, listener)
+            else ->
+                WebSocketFrameClient.httpClient().newWebSocket(request, listener)
+        }
         cont.invokeOnCancellation {
             socketHolder[0]?.close(1000, "cancelled")
         }
+    }
+
+    private fun shouldRetryRelayDial(error: Exception): Boolean {
+        if (RelayDns.isPeerNotListening(error.message)) return true
+        val message = error.message.orEmpty()
+        return message.contains("failed to connect", ignoreCase = true) ||
+            message.contains("timeout", ignoreCase = true) ||
+            error is java.net.ConnectException ||
+            error is java.net.SocketTimeoutException
     }
 
     override fun listen(port: Int): Flow<Connection> =

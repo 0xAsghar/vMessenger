@@ -52,6 +52,7 @@ class NetworkCoordinator @Inject constructor(
     ) {
         scope.launch {
             p2pConfigLoader.loadIntoConfig()
+            relayDirectory.activeRelay()
             AppLogger.info("Network", "coordinator start listenPort=$listenPort dev=${directHost != null}")
             configureInbound()
             incomingMessageCollector.start()
@@ -63,13 +64,53 @@ class NetworkCoordinator @Inject constructor(
                 val host = directHost ?: "0.0.0.0"
                 embeddedDhtService.start(dhtPort, host)
             }
+            var joinSucceeded = false
             when (val join = joinNetworkUseCase()) {
-                is AppResult.Success ->
+                is AppResult.Success -> {
+                    joinSucceeded = true
                     AppLogger.info("Network", "join network OK")
+                }
                 is AppResult.Error ->
                     AppLogger.error("Network", "join network failed: ${join.error.message}")
             }
             publishAndStartRelay(directHost = directHost, directPort = directPort)
+            if (!joinSucceeded) {
+                scope.launch { retryBootstrapAndPublish(directHost, directPort) }
+            }
+        }
+    }
+
+    private suspend fun retryBootstrapAndPublish(
+        directHost: String?,
+        directPort: Int?,
+    ) {
+        var backoffMs = 10_000L
+        while (true) {
+            delay(backoffMs)
+            when (joinNetworkUseCase()) {
+                is AppResult.Success -> {
+                    AppLogger.info("Network", "join network recovered after retry")
+                    val selectedRelay = relayDirectory.activeRelay()
+                    NetworkPathTracker.setActiveRelay(selectedRelay.url)
+                    when (
+                        val publish = publishNetworkEndpointsUseCase(
+                            directHost = directHost,
+                            directPort = directPort,
+                            relayUrl = selectedRelay.url,
+                        )
+                    ) {
+                        is AppResult.Success ->
+                            AppLogger.info("Network", "publish endpoints OK after retry")
+                        is AppResult.Error ->
+                            AppLogger.error("Network", "publish endpoints failed after retry: ${publish.error.message}")
+                    }
+                    outboxDispatcher.wake()
+                    return
+                }
+                is AppResult.Error -> {
+                    backoffMs = (backoffMs * 2).coerceAtMost(120_000L)
+                }
+            }
         }
     }
 

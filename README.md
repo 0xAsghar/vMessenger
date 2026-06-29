@@ -7,7 +7,7 @@ vMessenger is a privacy-first communication platform where each Android device i
 - Bundle ID: `ir.vmessenger.android`
 - Platform: Android 8.0+ (API 26+)
 - UI language: Persian (RTL), Material 3, light/dark
-- Status: **v0.1.0** (stable) — identity, pairing, DHT discovery, E2EE messaging, live location, relay fallback, multi-node bootstrap/relay management, and P2P migration scaffolding ship in this release (promoted from rc32).
+- Status: **v0.1.1** (stable) — identity, pairing, DHT discovery, E2EE messaging, live location, relay fallback, multi-node bootstrap/relay management, and P2P migration scaffolding ship in this release.
 
 ---
 

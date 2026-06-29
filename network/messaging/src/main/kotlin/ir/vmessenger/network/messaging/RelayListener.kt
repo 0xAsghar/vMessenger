@@ -1,6 +1,7 @@
 package ir.vmessenger.network.messaging
 
 import ir.vmessenger.core.common.logging.AppLogger
+import ir.vmessenger.core.common.network.RelayDns
 import ir.vmessenger.core.common.network.WebSocketFrameClient
 import ir.vmessenger.core.proto.relay.v1.RelayEvent
 import ir.vmessenger.core.proto.relay.v1.RelayEventType
@@ -110,6 +111,33 @@ class RelayListener @Inject constructor(
         identityPub: ByteArray,
         ed25519PrivateKey: ByteArray,
     ) {
+        val host = RelayDns.hostFromUrl(url)
+        val ips = host?.let { RelayDns.candidateIps(it) }.orEmpty()
+        if (host == null || ips.isEmpty()) {
+            connectControlChannelOnce(url, host, targetIp = null, identityHash, identityPub, ed25519PrivateKey)
+            return
+        }
+        var lastError: Exception? = null
+        for (ip in ips) {
+            try {
+                connectControlChannelOnce(url, host, ip, identityHash, identityPub, ed25519PrivateKey)
+                return
+            } catch (e: Exception) {
+                lastError = e
+                AppLogger.warn("Relay", "control channel failed via $ip: ${e.message}")
+            }
+        }
+        throw lastError ?: IllegalStateException("Relay control channel failed")
+    }
+
+    private suspend fun connectControlChannelOnce(
+        url: String,
+        host: String?,
+        targetIp: String?,
+        identityHash: ByteArray,
+        identityPub: ByteArray,
+        ed25519PrivateKey: ByteArray,
+    ) {
         val hello = relayHelloFactory.buildListenerHello(identityHash, identityPub, ed25519PrivateKey)
         val request = Request.Builder().url(url).build()
         val openLatch = CompletableDeferred<Unit>()
@@ -152,7 +180,14 @@ class RelayListener @Inject constructor(
                 closeLatch.complete(Unit)
             }
         }
-        val webSocket = WebSocketFrameClient.httpClient().newWebSocket(request, listener)
+        val webSocket = when {
+            host != null && targetIp != null ->
+                WebSocketFrameClient.httpClientWithPinning(host, targetIp).newWebSocket(request, listener)
+            host != null ->
+                WebSocketFrameClient.httpClientWithPinning(host).newWebSocket(request, listener)
+            else ->
+                WebSocketFrameClient.httpClient().newWebSocket(request, listener)
+        }
         try {
             openLatch.await()
             closeLatch.await()

@@ -18,6 +18,10 @@ object NetworkConfig {
     @Volatile
     var relayAddress: String = DEFAULT_RELAY_URL
 
+    /** Health-ranked relay URLs (updated by [RelayDirectory] at runtime). */
+    @Volatile
+    var rankedRelayUrls: List<String> = emptyList()
+
     @Volatile
     var useDevBootstrap: Boolean = false
 
@@ -26,4 +30,13 @@ object NetworkConfig {
 
     fun effectiveRelayEndpoint(): Endpoint =
         Endpoint(transport = TransportIds.RELAY, address = relayAddress)
+
+    fun relayFallbackEndpoints(): List<Endpoint> {
+        val urls = buildList {
+            add(relayAddress)
+            addAll(rankedRelayUrls)
+            if (isEmpty()) add(DEFAULT_RELAY_URL)
+        }.distinct()
+        return urls.map { Endpoint(transport = TransportIds.RELAY, address = it) }
+    }
 }

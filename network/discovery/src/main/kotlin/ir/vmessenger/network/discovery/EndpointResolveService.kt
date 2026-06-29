@@ -53,7 +53,7 @@ class EndpointResolveService @Inject constructor(
     private fun withRelayFallback(endpoints: List<Endpoint>): List<Endpoint> {
         if (endpoints.isNotEmpty()) return endpoints
         AppLogger.info("Discovery", "no peer endpoints; falling back to default relay")
-        return listOf(Endpoint(transport = TransportIds.RELAY, address = NetworkConfig.DEFAULT_RELAY_URL))
+        return NetworkConfig.relayFallbackEndpoints()
     }
 
     /** Phase 7: mirror direct TCP endpoints as UDP candidates when NAT traversal is enabled. */
