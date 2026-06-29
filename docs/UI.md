@@ -184,6 +184,7 @@ Home uses a bottom NavigationBar (NavigationRail on large screens) with primary 
   - Appearance: theme mode (Light/Dark/System), Persian/Latin numerals.
   - Privacy and security: require unlock for keys, screen security (FLAG_SECURE), location history on/off, safety-number verification entry.
   - Network: manage bootstrap providers and nodes (add/remove/prioritize, paste signed community list), view DHT/join status.
+  - **نودهای شبکه** (Network nodes): list bootstrap and relay nodes with health, add via `vmnode:` link or URL, share via QR, and an on-screen **راه‌اندازی نود** (How to run a node) guide for operators.
   - Identity: view My QR/User Hash, export/recovery (future), secure wipe (panic) with confirmation.
   - About and Debug entry points.
 

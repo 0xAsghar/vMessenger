@@ -73,11 +73,13 @@ class SymmetricRatchet @Inject constructor(
             counter.toString().toByteArray(),
             32,
         )
+        val plaintext = cryptoEngine.open(ciphertext, messageKey, associatedData)
+        if (plaintext == null) return null
         if (counter > state.recvCounter) {
             state.recvChainKey = cryptoEngine.hkdfSha256(chainKey, ByteArray(0), "chain".toByteArray(), 32)
             state.recvCounter = counter
         }
         state.seenCounters.add(counter)
-        return cryptoEngine.open(ciphertext, messageKey, associatedData)
+        return plaintext
     }
 }

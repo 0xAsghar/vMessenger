@@ -4,7 +4,9 @@ import com.goterl.lazysodium.LazySodiumJava
 import com.goterl.lazysodium.SodiumJava
 import ir.vmessenger.core.crypto.LazysodiumCryptoEngine
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 
@@ -29,5 +31,20 @@ class SymmetricRatchetTest {
         val opened = ratchet.open(bob, sealed, counter = 1, ad)
         assertNotNull(opened)
         assertArrayEquals(plaintext, opened)
+    }
+
+    @Test
+    fun failedOpenDoesNotAdvanceRecvCounter() {
+        val root = crypto.randomBytes(32)
+        val alice = ratchet.initFromRoot(root, isInitiator = true)
+        val bob = ratchet.initFromRoot(root, isInitiator = false)
+        val ad = ByteArray(0)
+        val sealed = ratchet.seal(alice, "real".toByteArray(), ad)
+        val garbage = ratchet.seal(alice, "noise".toByteArray(), ad)
+        assertNull(ratchet.open(bob, garbage, counter = 1, ad))
+        assertEquals(0L, bob.recvCounter)
+        val opened = ratchet.open(bob, sealed, counter = 1, ad)
+        assertNotNull(opened)
+        assertArrayEquals("real".toByteArray(), opened)
     }
 }

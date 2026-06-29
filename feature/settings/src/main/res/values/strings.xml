@@ -17,6 +17,13 @@
     <string name="settings_debug">اشکال‌زدایی</string>
     <string name="settings_nodes">نودهای شبکه</string>
     <string name="nodes_title">نودهای شبکه</string>
+    <string name="nodes_run_section">راه‌اندازی نود</string>
+    <string name="nodes_run_intro">هر کسی می‌تواند نود بوت‌استرپ (DHT) یا رله اجرا کند. نود پیام‌ها را نمی‌خواند؛ فقط متادیتای امضا‌شدهٔ موقت را relay می‌کند.</string>
+    <string name="nodes_run_build">ساخت:\n./gradlew :node:installDist</string>
+    <string name="nodes_run_production">نود عمومی (DHT + رله، پشت nginx):\nVMESSENGER_PUBLIC_HOST=your.domain ./gradlew :node:run\nخروجی: wss://your.domain/dht و wss://your.domain/relay</string>
+    <string name="nodes_run_dev">توسعه محلی (DHT TCP):\n./gradlew :node:run --args=\"--tcp\"\n./scripts/emulator-connect.sh</string>
+    <string name="nodes_run_add_hint">پس از راه‌اندازی، نود را با دکمه + یا لینک vmnode اضافه کنید:</string>
+    <string name="nodes_run_link_examples">vmnode:relay:wss://relay.example/relay\nvmnode:bootstrap:wss://relay.example/dht</string>
     <string name="nodes_bootstrap_section">نودهای بوت‌استرپ</string>
     <string name="nodes_relay_section">نودهای رله</string>
     <string name="nodes_empty">نودی موجود نیست</string>

@@ -1,5 +1,7 @@
 # Deploying relay.vmessenger.ir
 
+For general node operation (local dev, self-hosted domains, adding nodes in the app), see the main [README.md](../README.md#how-to-run-a-node).
+
 ## Build the node
 
 ```bash

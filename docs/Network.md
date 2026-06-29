@@ -169,7 +169,8 @@ For the MVP only the Internet transport is registered, so selection trivially re
 - Reliable, ordered byte stream over TCP, carrying length-delimited frames (see [Protocol.md](Protocol.md)). TLS-style transport encryption is unnecessary because every frame is already end-to-end encrypted; the Encryption layer authenticates the peer by identity key, which is stronger than CA-based TLS for this use case.
 - Listens on a local port and registers its address as an `Endpoint` published via the DHT discovery provider.
 - Connection reuse: an established connection is cached per peer and reused for subsequent messages and location packets.
-- **Direct-first, relay-fallback:** the app tries `INTERNET` endpoints before `RELAY`. The production relay at `wss://relay.vmessenger.ir/relay` bridges opaque E2E-encrypted frames when direct TCP fails (NAT/carrier-grade NAT). The relay never decrypts message content.
+- **Direct-first, relay-fallback:** the app tries direct `INTERNET` and UDP (NAT traversal) before `RELAY`. The production relay at `wss://relay.vmessenger.ir/relay` bridges opaque E2E-encrypted frames when direct connectivity fails. The relay never decrypts message content.
+- **P2P migration (rc21):** endpoint resolution is cache-first; multiple bootstrap/relay nodes are health-ranked; peers exchange node hints after handshake; default relay is demoted when `P2PConfig.reduceDefaultRelayEnabled` is true (default on). See [P2P-Phases.md](P2P-Phases.md).
 - DHT bootstrap and store/find use `wss://relay.vmessenger.ir/dht` through Arvan CDN + nginx TLS.
 - Local emulator dev can use raw TCP bootstrap (`10.0.2.2:46555`) via `NetworkConfig.useDevBootstrap`.
 - Full mobile-to-mobile hole punching (DCUtR/ICE) and full Kademlia remain future work (see [Roadmap.md](Roadmap.md)).

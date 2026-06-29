@@ -69,6 +69,7 @@ fun NodesRoute(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
+            RunNodeGuideSection()
             NodeSection(
                 title = stringResource(R.string.nodes_bootstrap_section),
                 nodes = state.bootstrapNodes,
@@ -102,6 +103,43 @@ fun NodesRoute(
             link = viewModel.exportLink(node),
             onDismiss = { shareNode = null },
         )
+    }
+}
+
+@Composable
+private fun RunNodeGuideSection() {
+    SettingsSection(title = stringResource(R.string.nodes_run_section)) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.nodes_run_intro),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(R.string.nodes_run_build),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            )
+            Text(
+                text = stringResource(R.string.nodes_run_production),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            )
+            Text(
+                text = stringResource(R.string.nodes_run_dev),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            )
+            Text(
+                text = stringResource(R.string.nodes_run_add_hint),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(R.string.nodes_run_link_examples),
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            )
+        }
     }
 }
 

@@ -115,10 +115,8 @@ class MessagingService @Inject constructor(
             runCatching { peerKeyUpdater?.invoke(contactId, session.peer) }
                 .onFailure { AppLogger.warn("Messaging", "peer key update failed: ${it.message}") }
         }
-        scope.launch {
-            runCatching { sessionPostHandshakeHandler.onEstablished(activeSession, self, activeSession.peer) }
-                .onFailure { AppLogger.warn("Messaging", "post-handshake hook failed: ${it.message}") }
-        }
+        runCatching { sessionPostHandshakeHandler.onEstablished(activeSession, self, activeSession.peer) }
+            .onFailure { AppLogger.warn("Messaging", "post-handshake hook failed: ${it.message}") }
         try {
             readSecureFrames(activeSession, contactId, connection)
         } finally {
@@ -228,10 +226,8 @@ class MessagingService @Inject constructor(
             relayTargetId = if (endpoint.transport == TransportIds.RELAY) peer.identityHash else null,
         ).getOrThrow()
         val session = secureChannelFactory.initiate(connection, self, peer).getOrThrow() as ActiveSecureSession
-        scope.launch {
-            runCatching { sessionPostHandshakeHandler.onEstablished(session, self, session.peer) }
-                .onFailure { AppLogger.warn("Messaging", "post-handshake hook failed: ${it.message}") }
-        }
+        runCatching { sessionPostHandshakeHandler.onEstablished(session, self, session.peer) }
+            .onFailure { AppLogger.warn("Messaging", "post-handshake hook failed: ${it.message}") }
         scope.launch {
             runCatching { peerKeyUpdater?.invoke(contactId, session.peer) }
                 .onFailure { AppLogger.warn("Messaging", "peer key update failed: ${it.message}") }

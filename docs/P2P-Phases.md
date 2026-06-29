@@ -15,6 +15,18 @@ Both jobs must be replaced gradually. Removing the relay before replacement mech
 
 Every phase below should be guarded by feature flags, measured in debug tooling, and tested on real devices before becoming the default.
 
+## Implementation status (v0.1.0-rc21)
+
+Phases 0–9 are implemented in the Android app. Runtime flags live in `P2PConfig` (`core/common`). **All flags are enabled by default** as of rc21; turn individual phases off under **تنظیمات → اشکال‌زدایی → P2P migration flags** when testing.
+
+Recent reliability fixes (post-rc21, in progress):
+
+- Relay fallback when DHT lookup returns no peer endpoints (cold start / new contacts).
+- Ratchet receive state no longer advances on failed decryption (peer exchange + chat on the same session).
+- Post-handshake peer exchange runs before the first encrypted send/read on a session.
+
+See [README.md](../README.md#how-to-run-a-node) for operating bootstrap/relay nodes.
+
 ## Phase 0: Keep The Existing Relay As Fallback
 
 Keep `relay.vmessenger.ir` working while the decentralized pieces are added.

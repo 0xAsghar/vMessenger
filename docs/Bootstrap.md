@@ -127,7 +127,7 @@ sequenceDiagram
 
 ## 8. Operating a bootstrap node
 
-Because anyone can run one, bootstrap operation is part of the product.
+Because anyone can run one, bootstrap operation is part of the product. **Step-by-step commands** for building and running the reference node (local dev, production behind nginx) are in [README.md](../README.md#how-to-run-a-node) and summarized in the app under **تنظیمات → نودهای شبکه → راه‌اندازی نود**.
 
 - Node software: a lightweight, standalone vMessenger DHT node (the same `DhtNode` RPC surface from [DHT.md](DHT.md) Section 4.6) with a stable public address. It stores only signed, expiring `EndpointRecord`s and serves Ping/FindNode/Store/FindValue.
 - Requirements: a reachable host (public IP or port forwarding), modest CPU/RAM, and a persistent listening port. No database of users, no message storage, no logs of content (operators are encouraged to minimize connection logging for privacy).

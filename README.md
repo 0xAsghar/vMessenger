@@ -7,7 +7,7 @@ vMessenger is a privacy-first communication platform where each Android device i
 - Bundle ID: `ir.vmessenger.android`
 - Platform: Android 8.0+ (API 26+)
 - UI language: Persian (RTL), Material 3, light/dark
-- Status: **MVP 0.1.0-rc1** — identity, pairing, DHT discovery, E2EE messaging, live location, and settings/debug ship in this repo.
+- Status: **v0.1.0-rc21** — identity, pairing, DHT discovery, E2EE messaging, live location, multi-node P2P migration (phases 0–9), and settings/debug ship in this repo.
 
 ---
 
@@ -35,29 +35,32 @@ Guiding values:
 
 ---
 
-## How it works (MVP)
+## How it works (MVP + P2P migration)
 
-The MVP is functional over the public Internet using a minimal Distributed Hash Table (DHT) for routing only.
+The app is functional over the public Internet using a minimal Distributed Hash Table (DHT) for routing and an optional circuit relay when direct connectivity fails.
 
 1. Each device generates an Ed25519 identity locally.
 2. Two users pair once by exchanging long-term public keys via QR or User Hash. No network needed for pairing.
 3. To become reachable, a device joins the DHT through bootstrap nodes and publishes a signed, timestamped, expiring endpoint record (its current reachable address).
-4. To start a conversation, a device looks up the contact's identity hash in the DHT, retrieves the signed endpoint record, and connects directly.
-5. The two peers run an X25519 handshake, derive session keys with HKDF, and exchange ChaCha20-Poly1305 encrypted messages with forward secrecy and replay protection.
+4. To message a contact, the app resolves endpoints (local peer cache first, then DHT), tries direct TCP/UDP when possible, and falls back to encrypted relay circuits.
+5. Peers run an X25519 handshake, derive session keys with HKDF, and exchange ChaCha20-Poly1305 encrypted messages with forward secrecy and replay protection.
 
 The DHT stores only temporary routing metadata. It never stores messages, contacts, private keys, or profiles.
+
+**P2P migration (rc21):** The staged plan in [docs/P2P-Phases.md](docs/P2P-Phases.md) is implemented behind `P2PConfig` flags. All phases are **enabled by default** — multi-node lists, peer cache, peer exchange after handshake, embedded DHT participation, relay-capable peer mode, NAT/UDP attempts, mailbox store-and-forward, and demoting the default relay to last resort. Disable individual flags under **تنظیمات → اشکال‌زدایی** for conservative testing.
 
 ```mermaid
 sequenceDiagram
   participant A as Device A
   participant DHT as DHT / Bootstrap
+  participant R as Relay (fallback)
   participant B as Device B
   Note over A,B: One-time pairing via QR or User Hash exchanges Ed25519 public keys
   B->>DHT: publish signed endpoint record, key = hash of B pubkey, with TTL
-  A->>DHT: lookup hash of B pubkey
+  A->>DHT: lookup hash of B pubkey (or peer cache)
   DHT-->>A: signed endpoint record for B
-  A->>B: direct connect, then X25519 handshake
-  A->>B: ChaCha20-Poly1305 encrypted message
+  A->>B: direct connect when possible, else relay circuit
+  A->>B: X25519 handshake, then ChaCha20-Poly1305 encrypted message
   B-->>A: delivery and read receipts
 ```
 
@@ -69,11 +72,13 @@ sequenceDiagram
 - QR code pairing and User Hash pairing.
 - Minimal DHT discovery: bootstrap, publish, lookup, TTL, refresh.
 - End-to-end encrypted 1:1 messaging with delivery and read status.
-- Retry queue and offline queue (store-and-forward on the sender side).
+- Retry queue and offline outbox (`OutboxDispatcher` with backoff).
 - Live Location sharing with a foreground service and encrypted location packets.
 - Encrypted local storage (Room over SQLCipher) and contact management.
+- **Multi-node network:** Settings → **نودهای شبکه** — add bootstrap/relay nodes, health ranking, `vmnode:` link import/export.
+- **P2P migration phases 0–9** (see [docs/P2P-Phases.md](docs/P2P-Phases.md)).
 
-Designed for but intentionally deferred to later phases: groups, voice/video calls, file and image transfer, Bluetooth and Wi-Fi Direct transports, mesh networking, geofencing, location history analytics, SOS mode, team and family management, plugin system, and full Kademlia/NAT hole-punching. **Relay fallback** via `relay.vmessenger.ir` (DHT + circuit relay, E2E only) is implemented — see [deploy/README.md](deploy/README.md).
+Designed for but intentionally deferred to later phases: groups, voice/video calls, file and image transfer, Bluetooth and Wi-Fi Direct transports, mesh networking, geofencing, location history analytics, SOS mode, team and family management, plugin system, and full Kademlia/ICE hole-punching. **Relay fallback** via `relay.vmessenger.ir` (DHT + circuit relay, E2E only) is implemented — see [deploy/README.md](deploy/README.md).
 
 ---
 
@@ -84,7 +89,7 @@ Designed for but intentionally deferred to later phases: groups, voice/video cal
 - UI: Jetpack Compose + Material 3 (Persian / RTL)
 - DI: Hilt
 - Async: Coroutines + Flow
-- Database: Room over SQLCipher
+- Database: Room over SQLCipher (schema v9 — mailbox blobs, network nodes)
 - Serialization: Protocol Buffers (proto3)
 - Crypto: Ed25519, X25519, ChaCha20-Poly1305, HKDF, SHA-256 (libsodium / BouncyCastle), Android Keystore for key wrapping
 
@@ -101,6 +106,7 @@ Read these in order for a top-down understanding of the system.
 - [docs/Discovery.md](docs/Discovery.md) - the modular Discovery layer, QR and User Hash pairing, DHT-based resolution.
 - [docs/DHT.md](docs/DHT.md) - the minimal DHT design, signed routing records, TTL and refresh, anti-centralization rules.
 - [docs/Bootstrap.md](docs/Bootstrap.md) - the BootstrapProvider interface and how to operate bootstrap nodes.
+- [docs/P2P-Phases.md](docs/P2P-Phases.md) - staged migration from relay-assisted to decentralized P2P (phases 0–9, implemented in rc21).
 - [docs/Database.md](docs/Database.md) - encrypted local schema, entities, DAOs, and migrations.
 - [docs/UI.md](docs/UI.md) - Persian RTL design system, theme, and screen-by-screen specifications.
 - [docs/FolderStructure.md](docs/FolderStructure.md) - the Gradle multi-module layout.
@@ -119,13 +125,67 @@ vMessenger/
   domain/              <- pure Kotlin domain layer
   feature/             <- feature UI modules (Compose)
   network/             <- networking stack modules
-  node/                <- host-run bootstrap/DHT reference node (dev)
+  node/                <- host-run bootstrap/DHT + relay reference node
+  deploy/              <- nginx + systemd for production relay host
   scripts/             <- emulator-connect.sh for two-emulator TCP
   docs/                <- architecture and protocol documentation
   vMessenger-icon/     <- app launcher icons and brand logos
 ```
 
-Phases 1–7 (MVP) are implemented. See [docs/Roadmap.md](docs/Roadmap.md) for post-MVP work.
+MVP phases 1–7 and P2P migration phases 0–9 are implemented. See [docs/Roadmap.md](docs/Roadmap.md) for post-MVP work.
+
+---
+
+## How to run a node
+
+Anyone can run a **bootstrap (DHT)** or **relay** node. Nodes never see message plaintext — they only help with signed, expiring endpoint records and opaque encrypted frame forwarding.
+
+### Build
+
+```bash
+./gradlew :node:installDist
+```
+
+Artifacts land in `node/build/install/node/`. For production VPS deployment (nginx, systemd, CDN), see [deploy/README.md](deploy/README.md).
+
+### Production node (DHT + relay over WebSocket)
+
+The default mode listens on `127.0.0.1:8443` for nginx to terminate TLS and expose:
+
+| Path | Purpose |
+|------|---------|
+| `wss://your.domain/dht` | DHT bootstrap, store, find |
+| `wss://your.domain/relay` | Circuit relay (listener + dial) |
+
+```bash
+VMESSENGER_PUBLIC_HOST=your.domain ./gradlew :node:run
+# or after installDist:
+VMESSENGER_PUBLIC_HOST=your.domain VMESSENGER_NODE_PORT=8443 node/build/install/node/bin/node
+```
+
+Health check (when nginx is configured): `curl https://your.domain/healthz` → `ok`
+
+### Local development (TCP DHT)
+
+For two Android emulators on one machine:
+
+```bash
+./gradlew :node:run --args="--tcp"   # TCP DHT on :46555
+./scripts/emulator-connect.sh        # adb port forwards
+```
+
+In the app **Debug** screen, use **Join & Publish** (or start with `use_dev_bootstrap` — see [deploy/README.md](deploy/README.md)).
+
+### Add your node in the app
+
+**تنظیمات → نودهای شبکه** — paste a link or tap **+**:
+
+```text
+vmnode:relay:wss://relay.example/relay
+vmnode:bootstrap:wss://relay.example/dht
+```
+
+Share your node via QR from the same screen. Built-in defaults include `relay.vmessenger.ir`.
 
 ---
 
@@ -135,7 +195,7 @@ Two emulators cannot reach each other directly. Use a host bootstrap node plus `
 
 1. **Terminal A** — start the reference DHT node:
    ```bash
-   ./gradlew :node:run
+   ./gradlew :node:run --args="--tcp"
    ```
 2. **Terminal B** — forward ports (run once per emulator session):
    ```bash
@@ -172,8 +232,8 @@ Install on a device or emulator:
 Updating [`gradle/version.properties`](gradle/version.properties) on `main` runs a **build-only** check. To **publish** APKs, push a matching version tag:
 
 ```bash
-git tag v0.1.0-rc1   # must match versionName in gradle/version.properties
-git push origin v0.1.0-rc1
+git tag v0.1.0-rc21   # must match versionName in gradle/version.properties
+git push origin v0.1.0-rc21
 ```
 
 The [Release APK](.github/workflows/release-apk.yml) workflow attaches per-architecture release APKs to the GitHub Release:
@@ -199,7 +259,7 @@ The app launches to a themed Splash screen, then Home with Persian RTL navigatio
 
 ## Contributing and bootstrap nodes
 
-vMessenger is designed to be community-operated. Anyone can run a bootstrap node or a DHT node; see [docs/Bootstrap.md](docs/Bootstrap.md). No bootstrap operator can read messages or identify users beyond ephemeral routing metadata, and the app never depends on a single bootstrap server.
+vMessenger is designed to be community-operated. Anyone can run a bootstrap node or a relay node — see [How to run a node](#how-to-run-a-node) and [docs/Bootstrap.md](docs/Bootstrap.md). No bootstrap operator can read messages or identify users beyond ephemeral routing metadata, and the app never depends on a single bootstrap server.
 
 ---
 
