@@ -10,7 +10,5 @@ data class HomeNavigation(
 )
 
 data class HomeChatNavigation(
-    val openConversationId: String?,
-    val onOpenConversationConsumed: () -> Unit,
     val onStartChat: (String) -> Unit,
 )

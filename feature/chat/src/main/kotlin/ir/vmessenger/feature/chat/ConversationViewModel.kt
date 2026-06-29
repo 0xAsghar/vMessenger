@@ -1,15 +1,13 @@
 package ir.vmessenger.feature.chat
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.repository.ConversationRepository
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -17,26 +15,21 @@ import javax.inject.Inject
 @HiltViewModel
 class ConversationViewModel @Inject constructor(
     private val conversationRepository: ConversationRepository,
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
-    private val activeConversationId = MutableStateFlow<String?>(null)
+    private val conversationId: String = checkNotNull(savedStateHandle["conversationId"])
 
-    val messages: StateFlow<List<ChatMessage>> = activeConversationId
-        .filterNotNull()
-        .flatMapLatest { conversationRepository.observeMessages(it) }
+    val messages: StateFlow<List<ChatMessage>> = conversationRepository
+        .observeMessages(conversationId)
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
+            started = SharingStarted.Eagerly,
             initialValue = emptyList(),
         )
-
-    fun load(conversationId: String) {
-        activeConversationId.value = conversationId
-    }
 
     fun send(text: String) {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
-        val conversationId = activeConversationId.value ?: return
         viewModelScope.launch {
             conversationRepository.sendMessage(conversationId, trimmed)
         }

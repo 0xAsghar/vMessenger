@@ -23,12 +23,15 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import ir.vmessenger.R
 import ir.vmessenger.feature.chat.ChatRoute
+import ir.vmessenger.feature.chat.ConversationRoute
 import ir.vmessenger.feature.contacts.ContactsRoute
 import ir.vmessenger.feature.location.LocationRoute
 import ir.vmessenger.feature.settings.SettingsRoute
@@ -66,14 +69,11 @@ fun HomeRoute(
     val openConversationId by viewModel.openConversationId.collectAsStateWithLifecycle()
 
     LaunchedEffect(openConversationId) {
-        if (openConversationId != null) {
-            navController.navigate(Routes.CHATS) {
-                popUpTo(navController.graph.findStartDestination().id) {
-                    saveState = true
-                }
+        openConversationId?.let { conversationId ->
+            navController.navigate(Routes.conversation(conversationId)) {
                 launchSingleTop = true
-                restoreState = true
             }
+            viewModel.consumeOpenConversation()
         }
     }
 
@@ -85,8 +85,6 @@ fun HomeRoute(
             navController = navController,
             navigation = navigation,
             chatNavigation = HomeChatNavigation(
-                openConversationId = openConversationId,
-                onOpenConversationConsumed = viewModel::consumeOpenConversation,
                 onStartChat = viewModel::startChat,
             ),
             modifier = Modifier
@@ -146,9 +144,20 @@ private fun HomeTabNavHost(
     ) {
         composable(Routes.CHATS) {
             ChatRoute(
-                initialConversationId = chatNavigation.openConversationId,
-                onInitialConversationConsumed = chatNavigation.onOpenConversationConsumed,
+                onOpenConversation = { conversationId ->
+                    navController.navigate(Routes.conversation(conversationId)) {
+                        launchSingleTop = true
+                    }
+                },
             )
+        }
+        composable(
+            route = Routes.CONVERSATION,
+            arguments = listOf(
+                navArgument("conversationId") { type = NavType.StringType },
+            ),
+        ) {
+            ConversationRoute(onBack = { navController.popBackStack() })
         }
         composable(Routes.CONTACTS) {
             ContactsRoute(

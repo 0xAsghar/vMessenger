@@ -15,5 +15,5 @@ class ChatListViewModel @Inject constructor(
     conversationRepository: ConversationRepository,
 ) : ViewModel() {
     val conversations: StateFlow<List<Conversation>> = conversationRepository.observeConversations()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 }

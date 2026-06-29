@@ -1,6 +1,7 @@
 package ir.vmessenger.data.repository
 
 import com.google.protobuf.ByteString
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
@@ -100,6 +101,7 @@ class ConversationRepositoryImpl @Inject constructor(
                 readAtUnixMs = null,
             ),
         )
+        AppLogger.info("Messaging", "outgoing chat queued messageId=$messageId conversation=$conversationId")
         outboxDao.enqueue(
             OutboxEntity(
                 messageId = messageId,

@@ -5,6 +5,7 @@ object Routes {
     const val CREATE_IDENTITY = "create_identity"
     const val HOME = "home"
     const val CHATS = "chats"
+    const val CONVERSATION = "conversation/{conversationId}"
     const val CONTACTS = "contacts"
     const val LOCATION = "location"
     const val SETTINGS = "settings"
@@ -15,4 +16,6 @@ object Routes {
     const val DEBUG = "debug"
     const val LOGS = "logs"
     const val ABOUT = "about"
+
+    fun conversation(conversationId: String): String = "conversation/$conversationId"
 }

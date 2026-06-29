@@ -3,6 +3,7 @@ package ir.vmessenger.feature.chat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,57 +39,41 @@ import ir.vmessenger.domain.model.MessageDirection
 
 @Composable
 fun ChatRoute(
-    initialConversationId: String? = null,
-    onInitialConversationConsumed: () -> Unit = {},
+    onOpenConversation: (String) -> Unit,
     viewModel: ChatListViewModel = hiltViewModel(),
 ) {
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
-    var selectedConversationId by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(initialConversationId) {
-        if (initialConversationId != null) {
-            selectedConversationId = initialConversationId
-            onInitialConversationConsumed()
-        }
-    }
-
-    if (selectedConversationId != null) {
-        ConversationRoute(
-            conversationId = selectedConversationId!!,
-            onBack = { selectedConversationId = null },
-        )
-    } else {
-        VMessengerScaffold(
-            title = stringResource(R.string.feature_chat_title),
-        ) { padding ->
-            if (conversations.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize().padding(padding),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = stringResource(R.string.feature_chat_empty),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
-                    items(conversations, key = { it.id }) { conversation ->
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 6.dp),
-                            onClick = { selectedConversationId = conversation.id },
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(text = conversation.contactName, style = MaterialTheme.typography.titleMedium)
-                                conversation.lastMessagePreview?.let {
-                                    Text(
-                                        text = it,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
+    VMessengerScaffold(
+        title = stringResource(R.string.feature_chat_title),
+    ) { padding ->
+        if (conversations.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.feature_chat_empty),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
+                items(conversations, key = { it.id }) { conversation ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        onClick = { onOpenConversation(conversation.id) },
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(text = conversation.contactName, style = MaterialTheme.typography.titleMedium)
+                            conversation.lastMessagePreview?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                     }
@@ -100,7 +85,6 @@ fun ChatRoute(
 
 @Composable
 fun ConversationRoute(
-    conversationId: String,
     onBack: () -> Unit,
     viewModel: ConversationViewModel = hiltViewModel(),
 ) {
@@ -108,13 +92,9 @@ fun ConversationRoute(
     var draft by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
-    LaunchedEffect(conversationId) {
-        viewModel.load(conversationId)
-    }
-
-    LaunchedEffect(messages.size, messages.lastOrNull()?.messageId) {
+    LaunchedEffect(messages.lastOrNull()?.messageId) {
         if (messages.isNotEmpty()) {
-            listState.scrollToItem(messages.lastIndex)
+            listState.animateScrollToItem(messages.lastIndex)
         }
     }
 
@@ -138,12 +118,9 @@ fun ConversationRoute(
                 .fillMaxSize()
                 .padding(padding),
             verticalArrangement = Arrangement.spacedBy(6.dp),
-            reverseLayout = true,
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
         ) {
-            items(
-                items = messages.asReversed(),
-                key = { it.messageId },
-            ) { message ->
+            items(messages, key = { it.messageId }) { message ->
                 MessageBubble(message = message)
             }
         }
@@ -223,7 +200,7 @@ private fun MessageBubble(message: ChatMessage) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 4.dp, vertical = 2.dp),
+            .padding(vertical = 2.dp),
         contentAlignment = alignment,
     ) {
         Surface(
