@@ -150,6 +150,28 @@ Artifacts land in `node/build/install/node/`. For production VPS deployment (ngi
 
 ### Production node (DHT + relay over WebSocket)
 
+**One-line setup** on Ubuntu/Debian (no domain required — auto-detects IP, openssl self-signed TLS):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/setup-node.sh | sudo bash -s --
+```
+
+With an optional hostname:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/setup-node.sh | sudo bash -s -- --domain relay.example.com
+```
+
+From a clone:
+
+```bash
+sudo ./scripts/setup-node.sh
+sudo ./scripts/setup-node.sh --ip 203.0.113.10
+sudo ./scripts/setup-node.sh --domain relay.example.com
+```
+
+TLS certificates are generated with **openssl** (self-signed, stored in `/etc/vmessenger/tls/`). No certbot or public DNS required.
+
 The default mode listens on `127.0.0.1:8443` for nginx to terminate TLS and expose:
 
 | Path | Purpose |

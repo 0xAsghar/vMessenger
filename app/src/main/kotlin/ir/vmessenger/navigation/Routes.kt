@@ -16,6 +16,7 @@ object Routes {
     const val DEBUG = "debug"
     const val LOGS = "logs"
     const val NODES = "nodes"
+    const val NODES_SCAN = "nodes_scan"
     const val ABOUT = "about"
 
     fun conversation(conversationId: String): String = "conversation/$conversationId"

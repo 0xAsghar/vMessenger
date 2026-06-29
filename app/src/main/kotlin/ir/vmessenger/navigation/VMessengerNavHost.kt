@@ -19,6 +19,7 @@ import ir.vmessenger.feature.identity.IdentityRoute
 import ir.vmessenger.feature.pairing.AddByHashRoute
 import ir.vmessenger.feature.pairing.MyQrRoute
 import ir.vmessenger.feature.pairing.QrScannerRoute
+import ir.vmessenger.feature.settings.NodeQrScannerRoute
 import ir.vmessenger.feature.settings.NodesRoute
 import ir.vmessenger.ui.home.HomeNavigation
 import ir.vmessenger.ui.home.HomeRoute
@@ -98,7 +99,16 @@ private fun NavGraphBuilder.debugRoutes(navController: NavHostController) {
         LogsRoute(onNavigateBack = { navController.popBackStack() })
     }
     composable(Routes.NODES) {
-        NodesRoute(onNavigateBack = { navController.popBackStack() })
+        NodesRoute(
+            onNavigateBack = { navController.popBackStack() },
+            onNavigateToScan = { navController.navigate(Routes.NODES_SCAN) },
+        )
+    }
+    composable(Routes.NODES_SCAN) {
+        NodeQrScannerRoute(
+            onDone = { navController.popBackStack() },
+            onNavigateBack = { navController.popBackStack() },
+        )
     }
 }
 

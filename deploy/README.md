@@ -2,6 +2,16 @@
 
 For general node operation (local dev, self-hosted domains, adding nodes in the app), see the main [README.md](../README.md#how-to-run-a-node).
 
+**Quick VPS install** (no domain required):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/setup-node.sh | sudo bash -s --
+```
+
+Optional hostname: `... | sudo bash -s -- --domain relay.example.com`
+
+TLS is a self-signed certificate from **openssl** (`/etc/vmessenger/tls/`), not Let's Encrypt.
+
 ## Build the node
 
 ```bash

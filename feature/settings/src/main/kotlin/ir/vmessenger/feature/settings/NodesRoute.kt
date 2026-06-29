@@ -10,6 +10,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -46,6 +47,7 @@ import ir.vmessenger.domain.model.NetworkNodeRole
 @Composable
 fun NodesRoute(
     onNavigateBack: () -> Unit = {},
+    onNavigateToScan: () -> Unit = {},
     viewModel: NodesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -56,6 +58,14 @@ fun NodesRoute(
     VMessengerScaffold(
         title = stringResource(R.string.nodes_title),
         onNavigateBack = onNavigateBack,
+        actions = {
+            IconButton(onClick = onNavigateToScan) {
+                Icon(
+                    Icons.Outlined.QrCodeScanner,
+                    contentDescription = stringResource(R.string.nodes_scan_action),
+                )
+            }
+        },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
                 Icon(Icons.Outlined.Add, contentDescription = stringResource(R.string.nodes_add_title))
@@ -91,6 +101,11 @@ fun NodesRoute(
         AddNodeDialog(
             error = addError,
             onAdd = { input, role -> viewModel.addNode(input, role) },
+            onScan = {
+                showAddDialog = false
+                viewModel.clearAddError()
+                onNavigateToScan()
+            },
             onDismiss = {
                 showAddDialog = false
                 viewModel.clearAddError()
@@ -233,6 +248,7 @@ private fun healthColor(node: NetworkNode) = when {
 private fun AddNodeDialog(
     error: String?,
     onAdd: (String, NetworkNodeRole) -> Unit,
+    onScan: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var input by remember { mutableStateOf("") }
@@ -268,6 +284,9 @@ private fun AddNodeDialog(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
+                }
+                TextButton(onClick = onScan) {
+                    Text(stringResource(R.string.nodes_scan_action))
                 }
             }
         },

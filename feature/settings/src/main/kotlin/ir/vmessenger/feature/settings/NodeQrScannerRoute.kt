@@ -1,4 +1,4 @@
-package ir.vmessenger.feature.pairing
+package ir.vmessenger.feature.settings
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,51 +14,52 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.feature.pairing.QrScannerScreen
 
 @Composable
-fun QrScannerRoute(
+fun NodeQrScannerRoute(
     onDone: () -> Unit,
     onNavigateBack: () -> Unit,
-    viewModel: QrScanViewModel = hiltViewModel(),
+    viewModel: NodeQrScanViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     QrScannerScreen(
-        title = stringResource(R.string.scan_qr_title),
-        hint = stringResource(R.string.scan_qr_hint),
+        title = stringResource(R.string.nodes_scan_title),
+        hint = stringResource(R.string.nodes_scan_hint),
         onNavigateBack = onNavigateBack,
-        scanPaused = uiState is AddContactUiState.Success,
+        scanPaused = uiState is NodeScanUiState.Success,
         onQrScanned = viewModel::onQrScanned,
         overlay = {
-            ContactQrScannerOverlay(uiState = uiState, onDone = onDone)
+            NodeQrScannerOverlay(uiState = uiState, onDone = onDone)
         },
     )
 }
 
 @Composable
-private fun ContactQrScannerOverlay(
-    uiState: AddContactUiState,
+private fun NodeQrScannerOverlay(
+    uiState: NodeScanUiState,
     onDone: () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         when (uiState) {
-            is AddContactUiState.Error -> {
+            is NodeScanUiState.Error -> {
                 Text(
                     text = uiState.message,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            AddContactUiState.Success -> {
+            NodeScanUiState.Success -> {
                 Text(
-                    text = stringResource(R.string.add_contact_success),
+                    text = stringResource(R.string.nodes_scan_success),
                     modifier = Modifier.align(Alignment.Center),
                 )
                 Button(
                     onClick = onDone,
                     modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
                 ) {
-                    Text(stringResource(R.string.add_contact_done))
+                    Text(stringResource(R.string.nodes_close))
                 }
             }
             else -> Unit
