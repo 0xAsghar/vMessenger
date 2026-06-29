@@ -4,12 +4,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.PriorityHigh
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
@@ -53,12 +56,19 @@ fun NodesRoute(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val addError by viewModel.addError.collectAsStateWithLifecycle()
     var showAddDialog by remember { mutableStateOf(false) }
+    var showRunGuide by remember { mutableStateOf(false) }
     var shareNode by remember { mutableStateOf<NetworkNode?>(null) }
 
     VMessengerScaffold(
         title = stringResource(R.string.nodes_title),
         onNavigateBack = onNavigateBack,
         actions = {
+            IconButton(onClick = { showRunGuide = true }) {
+                Icon(
+                    Icons.Outlined.PriorityHigh,
+                    contentDescription = stringResource(R.string.nodes_run_guide_action),
+                )
+            }
             IconButton(onClick = onNavigateToScan) {
                 Icon(
                     Icons.Outlined.QrCodeScanner,
@@ -79,7 +89,6 @@ fun NodesRoute(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            RunNodeGuideSection()
             NodeSection(
                 title = stringResource(R.string.nodes_bootstrap_section),
                 nodes = state.bootstrapNodes,
@@ -95,6 +104,10 @@ fun NodesRoute(
                 onShare = { shareNode = it },
             )
         }
+    }
+
+    if (showRunGuide) {
+        RunNodeGuideDialog(onDismiss = { showRunGuide = false })
     }
 
     if (showAddDialog) {
@@ -122,38 +135,94 @@ fun NodesRoute(
 }
 
 @Composable
-private fun RunNodeGuideSection() {
-    SettingsSection(title = stringResource(R.string.nodes_run_section)) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+private fun RunNodeGuideDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.nodes_run_section)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.nodes_run_intro),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                CopyableCodeBlock(
+                    label = stringResource(R.string.nodes_run_install_label),
+                    code = stringResource(R.string.nodes_run_install_one_liner),
+                )
+                CopyableCodeBlock(
+                    label = stringResource(R.string.nodes_run_build_label),
+                    code = stringResource(R.string.nodes_run_build_manual),
+                )
+                CopyableCodeBlock(
+                    label = stringResource(R.string.nodes_run_production_label),
+                    code = stringResource(R.string.nodes_run_production_cmd),
+                )
+                CopyableCodeBlock(
+                    label = stringResource(R.string.nodes_run_dev_label),
+                    code = stringResource(R.string.nodes_run_dev_cmd),
+                )
+                Text(
+                    text = stringResource(R.string.nodes_run_add_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                CopyableCodeBlock(
+                    label = stringResource(R.string.nodes_run_link_bootstrap_label),
+                    code = stringResource(R.string.nodes_run_link_bootstrap),
+                )
+                CopyableCodeBlock(
+                    label = stringResource(R.string.nodes_run_link_relay_label),
+                    code = stringResource(R.string.nodes_run_link_relay),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.nodes_close))
+            }
+        },
+    )
+}
+
+@Composable
+private fun CopyableCodeBlock(
+    label: String,
+    code: String,
+) {
+    val clipboard = LocalClipboardManager.current
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
         ) {
             Text(
-                text = stringResource(R.string.nodes_run_intro),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = stringResource(R.string.nodes_run_build),
+                text = code,
                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 4.dp),
             )
-            Text(
-                text = stringResource(R.string.nodes_run_production),
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-            )
-            Text(
-                text = stringResource(R.string.nodes_run_dev),
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-            )
-            Text(
-                text = stringResource(R.string.nodes_run_add_hint),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = stringResource(R.string.nodes_run_link_examples),
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-            )
+            IconButton(
+                onClick = { clipboard.setText(AnnotatedString(code)) },
+                modifier = Modifier.padding(top = (-8).dp),
+            ) {
+                Icon(
+                    Icons.Outlined.ContentCopy,
+                    contentDescription = stringResource(R.string.nodes_copy_code),
+                )
+            }
         }
     }
 }

@@ -18,12 +18,22 @@
     <string name="settings_nodes">نودهای شبکه</string>
     <string name="nodes_title">نودهای شبکه</string>
     <string name="nodes_run_section">راه‌اندازی نود</string>
+    <string name="nodes_run_guide_action">راهنمای راه‌اندازی نود</string>
     <string name="nodes_run_intro">هر کسی می‌تواند نود بوت‌استرپ (DHT) یا رله اجرا کند. نود پیام‌ها را نمی‌خواند؛ فقط متادیتای امضا‌شدهٔ موقت را relay می‌کند.</string>
-    <string name="nodes_run_build">نصب یک‌خطی (بدون دامنه، TLS با openssl):\ncurl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/setup-node.sh | sudo bash -s --\n\nساخت دستی:\n./gradlew :node:installDist</string>
-    <string name="nodes_run_production">نود عمومی (اختیاری --domain یا --ip):\nsudo ./scripts/setup-node.sh\nگواهی خودامضا: /etc/vmessenger/tls/</string>
-    <string name="nodes_run_dev">توسعه محلی (DHT TCP):\n./gradlew :node:run --args=\"--tcp\"\n./scripts/emulator-connect.sh</string>
-    <string name="nodes_run_add_hint">پس از راه‌اندازی، نود را با اسکن QR یا دکمه + اضافه کنید. QRها پس از نصب در ترمینال سرور هم نمایش داده می‌شوند.</string>
-    <string name="nodes_run_link_examples">vmnode:relay:wss://relay.example/relay\nvmnode:bootstrap:wss://relay.example/dht</string>
+    <string name="nodes_run_install_label">نصب یک‌خطی (VPS، بدون دامنه)</string>
+    <string name="nodes_run_install_one_liner">curl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/setup-node.sh | sudo bash -s --</string>
+    <string name="nodes_run_build_label">ساخت دستی</string>
+    <string name="nodes_run_build_manual">./gradlew :node:installDist</string>
+    <string name="nodes_run_production_label">نصب از مخزن (گواهی openssl در /etc/vmessenger/tls/)</string>
+    <string name="nodes_run_production_cmd">sudo ./scripts/setup-node.sh</string>
+    <string name="nodes_run_dev_label">توسعه محلی (DHT TCP)</string>
+    <string name="nodes_run_dev_cmd">./gradlew :node:run --args=\"--tcp\"\n./scripts/emulator-connect.sh</string>
+    <string name="nodes_run_add_hint">پس از راه‌اندازی، نود را با اسکن QR (کنار این راهنما) یا دکمه + اضافه کنید. QRها پس از نصب در ترمینال سرور هم نمایش داده می‌شوند.</string>
+    <string name="nodes_run_link_bootstrap_label">نمونه لینک بوت‌استرپ</string>
+    <string name="nodes_run_link_bootstrap">vmnode:bootstrap:wss://relay.example/dht</string>
+    <string name="nodes_run_link_relay_label">نمونه لینک رله</string>
+    <string name="nodes_run_link_relay">vmnode:relay:wss://relay.example/relay</string>
+    <string name="nodes_copy_code">کپی</string>
     <string name="nodes_bootstrap_section">نودهای بوت‌استرپ</string>
     <string name="nodes_relay_section">نودهای رله</string>
     <string name="nodes_empty">نودی موجود نیست</string>

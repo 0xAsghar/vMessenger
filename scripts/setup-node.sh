@@ -235,9 +235,10 @@ write_nginx_config() {
     local out="/etc/nginx/sites-available/vmessenger-node.conf"
     [[ -f "$template" ]] || die "nginx template not found at $template"
     log "writing nginx site $out"
-    sed -e "s/__SERVER_NAME__/$SERVER_NAME/g" \
-        -e "s/__NODE_PORT__/$NODE_PORT/g" \
-        -e "s/__CERT_DIR__/$CERT_DIR/g" \
+    # Use | delimiter — CERT_DIR contains slashes (/etc/vmessenger/tls).
+    sed -e "s|__SERVER_NAME__|$SERVER_NAME|g" \
+        -e "s|__NODE_PORT__|$NODE_PORT|g" \
+        -e "s|__CERT_DIR__|$CERT_DIR|g" \
         "$template" > "$out"
     ln -sf "$out" /etc/nginx/sites-enabled/vmessenger-node.conf
     rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
