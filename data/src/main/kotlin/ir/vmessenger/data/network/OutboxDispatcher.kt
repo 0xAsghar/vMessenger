@@ -101,6 +101,10 @@ class OutboxDispatcher @Inject constructor(
             backoff(item, "contact missing")
             return
         }
+        if (contact.relationshipStatus != ir.vmessenger.core.database.entity.ContactRelationshipStatus.APPROVED) {
+            backoff(item, "contact not approved")
+            return
+        }
         val peer = PeerIdentity(
             identityHash = contact.identityHash,
             ed25519PublicKey = contact.ed25519Public,

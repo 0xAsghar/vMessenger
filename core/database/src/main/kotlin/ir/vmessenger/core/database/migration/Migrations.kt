@@ -253,3 +253,45 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
         )
     }
 }
+
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE identity ADD COLUMN displayName TEXT NOT NULL DEFAULT ''")
+    }
+}
+
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE contact ADD COLUMN relationshipStatus TEXT NOT NULL DEFAULT 'APPROVED'",
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS contact_request (
+                requestId TEXT NOT NULL PRIMARY KEY,
+                requesterIdentityHash BLOB NOT NULL,
+                requesterUserHash TEXT NOT NULL,
+                requesterDisplayName TEXT NOT NULL,
+                requesterEd25519Public BLOB NOT NULL,
+                requesterX25519StaticPublic BLOB,
+                receivedAtUnixMs INTEGER NOT NULL,
+                status TEXT NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_contact_request_requesterIdentityHash " +
+                "ON contact_request(requesterIdentityHash)",
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS location_access (
+                contactId TEXT NOT NULL PRIMARY KEY,
+                canSeeMyLocation INTEGER NOT NULL,
+                updatedAtUnixMs INTEGER NOT NULL,
+                FOREIGN KEY(contactId) REFERENCES contact(id) ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+    }
+}

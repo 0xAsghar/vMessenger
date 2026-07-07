@@ -29,6 +29,8 @@ message MessageEnvelope {
     MailboxFetchResponse mailbox_fetch_response = 24;
     MailboxDelete mailbox_delete = 25;
     MailboxDeleteAck mailbox_delete_ack = 26;
+    ContactRequest contact_request = 27;
+    ContactResponse contact_response = 28;
   }
 }
 
@@ -162,4 +164,22 @@ message LocationPacket {
   int32 battery_pct = 7;
   int64 sampled_at_unix_ms = 8;
   bool is_final = 9;
+}
+
+message ContactRequest {
+  bytes requester_identity_pub = 1;
+  string requester_user_hash = 2;
+  string requester_display_name = 3;
+  bytes request_id = 4;
+}
+
+message ContactResponse {
+  bytes request_id = 1;
+  ContactResponseType type = 2;
+}
+
+enum ContactResponseType {
+  CONTACT_RESPONSE_UNSPECIFIED = 0;
+  CONTACT_RESPONSE_ACCEPT = 1;
+  CONTACT_RESPONSE_REJECT = 2;
 }

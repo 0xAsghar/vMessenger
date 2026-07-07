@@ -13,6 +13,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,22 +44,29 @@ fun CreateIdentityRoute(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         when (val state = uiState) {
-            CreateIdentityUiState.Intro -> CreateIdentityIntro(onCreate = viewModel::createIdentity)
+            CreateIdentityUiState.Intro -> CreateIdentityIntro(onContinue = viewModel::onIntroContinue)
+            is CreateIdentityUiState.NameEntry -> CreateIdentityNameEntry(
+                displayName = state.displayName,
+                error = state.error,
+                onDisplayNameChange = viewModel::onDisplayNameChange,
+                onCreate = viewModel::createIdentity,
+            )
             CreateIdentityUiState.Creating -> CreateIdentityLoading()
             is CreateIdentityUiState.Success -> CreateIdentitySuccess(
                 userHash = state.identity.userHash,
+                displayName = state.identity.displayName,
                 onContinue = onIdentityCreated,
             )
             is CreateIdentityUiState.Error -> CreateIdentityError(
                 message = state.message,
-                onRetry = viewModel::createIdentity,
+                onRetry = viewModel::retryFromError,
             )
         }
     }
 }
 
 @Composable
-private fun CreateIdentityIntro(onCreate: () -> Unit) {
+private fun CreateIdentityIntro(onContinue: () -> Unit) {
     Icon(
         painter = painterResource(DesignR.drawable.ic_vmessenger_logo),
         contentDescription = stringResource(DesignR.string.vmessenger_logo),
@@ -79,8 +87,43 @@ private fun CreateIdentityIntro(onCreate: () -> Unit) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Spacer(modifier = Modifier.height(32.dp))
-    Button(onClick = onCreate, modifier = Modifier.fillMaxWidth()) {
+    Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {
         Text(text = stringResource(R.string.create_identity_action))
+    }
+}
+
+@Composable
+private fun CreateIdentityNameEntry(
+    displayName: String,
+    error: String?,
+    onDisplayNameChange: (String) -> Unit,
+    onCreate: () -> Unit,
+) {
+    Text(
+        text = stringResource(R.string.create_identity_name_title),
+        style = MaterialTheme.typography.headlineSmall,
+        textAlign = TextAlign.Center,
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    Text(
+        text = stringResource(R.string.create_identity_name_body),
+        style = MaterialTheme.typography.bodyMedium,
+        textAlign = TextAlign.Center,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(modifier = Modifier.height(24.dp))
+    OutlinedTextField(
+        value = displayName,
+        onValueChange = onDisplayNameChange,
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text(stringResource(R.string.create_identity_name_label)) },
+        isError = error != null,
+        supportingText = error?.let { { Text(it) } },
+        singleLine = true,
+    )
+    Spacer(modifier = Modifier.height(24.dp))
+    Button(onClick = onCreate, modifier = Modifier.fillMaxWidth(), enabled = displayName.isNotBlank()) {
+        Text(text = stringResource(R.string.create_identity_name_action))
     }
 }
 
@@ -92,12 +135,20 @@ private fun CreateIdentityLoading() {
 }
 
 @Composable
-private fun CreateIdentitySuccess(userHash: String, onContinue: () -> Unit) {
+private fun CreateIdentitySuccess(userHash: String, displayName: String, onContinue: () -> Unit) {
     Text(
         text = stringResource(R.string.create_identity_success_title),
         style = MaterialTheme.typography.headlineSmall,
         textAlign = TextAlign.Center,
     )
+    if (displayName.isNotBlank()) {
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = displayName,
+            style = MaterialTheme.typography.titleLarge,
+            textAlign = TextAlign.Center,
+        )
+    }
     Spacer(modifier = Modifier.height(16.dp))
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(

@@ -74,6 +74,7 @@ dependencies {
     implementation(project(":feature:debug"))
     implementation(project(":feature:about"))
 
+    implementation(libs.maplibre.android)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

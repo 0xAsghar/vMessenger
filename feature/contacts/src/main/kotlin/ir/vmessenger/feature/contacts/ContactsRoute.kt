@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -35,6 +36,7 @@ import ir.vmessenger.core.designsystem.component.SafetyNumberDisplay
 import ir.vmessenger.core.designsystem.component.UserHashText
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.domain.model.Contact
+import ir.vmessenger.domain.model.ContactRelationshipStatus
 
 @Composable
 fun ContactsRoute(
@@ -160,9 +162,17 @@ fun ContactDetailRoute(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 24.dp),
-                enabled = !contact.blocked,
+                enabled = !contact.blocked && contact.isApproved,
             ) {
                 Text(text = stringResource(R.string.contacts_start_chat))
+            }
+            if (!contact.isApproved) {
+                Text(
+                    text = relationshipStatusLabel(contact.relationshipStatus),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
         }
     }
@@ -178,12 +188,26 @@ private fun ContactRow(contact: Contact, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Identicon(seed = contact.identityHash)
-        Column(modifier = Modifier.padding(start = 16.dp)) {
+        Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
             Text(text = contact.displayName, style = MaterialTheme.typography.titleMedium)
             UserHashText(
                 text = contact.userHash,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Start,
             )
         }
+        if (contact.relationshipStatus != ContactRelationshipStatus.APPROVED) {
+            AssistChip(
+                onClick = onClick,
+                label = { Text(text = relationshipStatusLabel(contact.relationshipStatus)) },
+            )
+        }
     }
+}
+
+@Composable
+private fun relationshipStatusLabel(status: ContactRelationshipStatus): String = when (status) {
+    ContactRelationshipStatus.PENDING_OUT -> stringResource(R.string.contacts_status_pending_out)
+    ContactRelationshipStatus.PENDING_IN -> stringResource(R.string.contacts_status_pending_in)
+    ContactRelationshipStatus.REJECTED -> stringResource(R.string.contacts_status_rejected)
+    ContactRelationshipStatus.APPROVED -> ""
 }

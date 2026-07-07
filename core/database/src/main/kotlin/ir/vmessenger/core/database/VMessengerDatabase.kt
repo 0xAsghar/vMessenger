@@ -7,6 +7,8 @@ import ir.vmessenger.core.database.converter.EnumConverters
 import ir.vmessenger.core.database.dao.AppMetadataDao
 import ir.vmessenger.core.database.dao.BootstrapNodeDao
 import ir.vmessenger.core.database.dao.ContactDao
+import ir.vmessenger.core.database.dao.ContactRequestDao
+import ir.vmessenger.core.database.dao.LocationAccessDao
 import ir.vmessenger.core.database.dao.DhtRecordDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.EndpointCacheDao
@@ -22,6 +24,8 @@ import ir.vmessenger.core.database.dao.SessionDao
 import ir.vmessenger.core.database.entity.AppMetadataEntity
 import ir.vmessenger.core.database.entity.BootstrapNodeEntity
 import ir.vmessenger.core.database.entity.ContactEntity
+import ir.vmessenger.core.database.entity.ContactRequestEntity
+import ir.vmessenger.core.database.entity.LocationAccessEntity
 import ir.vmessenger.core.database.entity.DhtRecordEntity
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.EndpointCacheEntity
@@ -41,6 +45,8 @@ import ir.vmessenger.core.database.entity.SessionEntity
         IdentityEntity::class,
         KeyMaterialEntity::class,
         ContactEntity::class,
+        ContactRequestEntity::class,
+        LocationAccessEntity::class,
         EndpointCacheEntity::class,
         BootstrapNodeEntity::class,
         RelayNodeEntity::class,
@@ -53,7 +59,7 @@ import ir.vmessenger.core.database.entity.SessionEntity
         MailboxBlobEntity::class,
         DhtRecordEntity::class,
     ],
-    version = 10,
+    version = 12,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)
@@ -63,6 +69,8 @@ abstract class VMessengerDatabase : RoomDatabase() {
     abstract fun identityDao(): IdentityDao
     abstract fun keyMaterialDao(): KeyMaterialDao
     abstract fun contactDao(): ContactDao
+    abstract fun contactRequestDao(): ContactRequestDao
+    abstract fun locationAccessDao(): LocationAccessDao
     abstract fun endpointCacheDao(): EndpointCacheDao
     abstract fun bootstrapNodeDao(): BootstrapNodeDao
     abstract fun relayNodeDao(): RelayNodeDao

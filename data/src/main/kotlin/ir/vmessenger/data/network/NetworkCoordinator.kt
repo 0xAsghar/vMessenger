@@ -186,22 +186,27 @@ class NetworkCoordinator @Inject constructor(
             resolveInboundPeer = resolveInboundPeer@{ identityPub, staticPub ->
                 val hash = UserHashEncoder.identityHashFromPublicKey(identityPub)
                 val contact = contactDao.findContactForInbound(identityPub, hash)
-                if (contact == null) {
-                    AppLogger.warn(
-                        "Contact",
-                        "inbound peer not in contacts hash=" +
-                            IdentityHashMatcher.hashPrefixHex(hash),
+                if (contact != null) {
+                    PeerIdentity(
+                        identityHash = hash,
+                        ed25519PublicKey = identityPub,
+                        x25519StaticPublicKey = staticPub,
                     )
-                    return@resolveInboundPeer null
+                } else {
+                    AppLogger.info(
+                        "Contact",
+                        "inbound stranger hash=${IdentityHashMatcher.hashPrefixHex(hash)}",
+                    )
+                    PeerIdentity(
+                        identityHash = hash,
+                        ed25519PublicKey = identityPub,
+                        x25519StaticPublicKey = staticPub,
+                    )
                 }
-                PeerIdentity(
-                    identityHash = hash,
-                    ed25519PublicKey = identityPub,
-                    x25519StaticPublicKey = staticPub,
-                )
             },
             contactIdResolver = { identityHash ->
                 contactDao.findByIdentityHash(identityHash)?.id
+                    ?: ContactRequestHandler.strangerContactId(identityHash)
             },
             peerKeyUpdater = { contactId, peer ->
                 contactDao.updateLearnedKeys(

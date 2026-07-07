@@ -103,6 +103,12 @@ private fun AddByHashForm(
             }
             AddContactUiState.Success -> {
                 Text(text = stringResource(R.string.add_contact_success))
+                Text(
+                    text = stringResource(R.string.add_contact_pending_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.add_contact_done))

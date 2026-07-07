@@ -5,6 +5,7 @@ import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.MessageDao
+import ir.vmessenger.core.database.entity.ContactRelationshipStatus
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.MessageContentType
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
+import ir.vmessenger.core.proto.app.v1.ChatMessage as ProtoChatMessage
 
 @Singleton
 class IncomingMessageCollector @Inject constructor(
@@ -40,6 +42,8 @@ class IncomingMessageCollector @Inject constructor(
     private val mailboxSyncService: MailboxSyncService,
     private val peerRelayForwarder: PeerRelayForwarder,
     private val peerRelayService: PeerRelayService,
+    private val contactRequestHandler: ContactRequestHandler,
+    private val locationSharingCoordinator: LocationSharingCoordinator,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -50,6 +54,7 @@ class IncomingMessageCollector @Inject constructor(
     fun start() {
         if (started) return
         started = true
+        locationSharingCoordinator.start()
         scope.launch {
             messagingService.incoming.collect { incoming ->
                 handleIncoming(incoming)
@@ -60,7 +65,31 @@ class IncomingMessageCollector @Inject constructor(
     private suspend fun handleIncoming(incoming: IncomingEnvelope) {
         val envelope = incoming.envelope
         when {
-            envelope.hasChat() -> persistChatMessage(incoming.contactId, envelope)
+            envelope.hasContactRequest() ->
+                contactRequestHandler.handleRequest(
+                    incoming.contactId,
+                    envelope,
+                    incoming.session?.peer,
+                )
+            envelope.hasContactResponse() ->
+                contactRequestHandler.handleResponse(incoming.contactId, envelope)
+            envelope.hasChat() -> {
+                if (isApprovedContact(incoming.contactId)) {
+                    persistChatMessage(incoming.contactId, envelope)
+                } else {
+                    AppLogger.warn("Messaging", "rejected chat from non-approved contact=${incoming.contactId}")
+                }
+            }
+            envelope.hasLocation() -> {
+                if (isApprovedContact(incoming.contactId)) {
+                    locationSharingCoordinator.handleIncomingLocation(incoming.contactId, envelope)
+                }
+            }
+            envelope.hasControl() -> {
+                if (isApprovedContact(incoming.contactId)) {
+                    locationSharingCoordinator.handleIncomingControl(incoming.contactId, envelope)
+                }
+            }
             envelope.hasReceipt() -> handleReceipt(envelope.receipt)
             envelope.hasNetworkNodes() -> peerExchangeService.ingestFromEnvelope(envelope)
             envelope.hasMailboxBlob() -> mailboxService.storeIncoming(envelope.mailboxBlob)
@@ -77,6 +106,12 @@ class IncomingMessageCollector @Inject constructor(
                 mailboxSyncService.handleResponse(envelope, incoming.session)
             else -> Unit
         }
+    }
+
+    private suspend fun isApprovedContact(contactId: String): Boolean {
+        if (contactId.startsWith("stranger:")) return false
+        val contact = contactDao.getById(contactId) ?: return false
+        return contact.relationshipStatus == ContactRelationshipStatus.APPROVED
     }
 
     private suspend fun persistChatMessage(contactId: String, envelope: MessageEnvelope) {

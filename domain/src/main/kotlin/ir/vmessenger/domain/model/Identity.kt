@@ -4,6 +4,7 @@ data class Identity(
     val ed25519PublicKey: ByteArray,
     val identityHash: ByteArray,
     val userHash: String,
+    val displayName: String,
     val x25519StaticPublicKey: ByteArray,
     val createdAtUnixMs: Long,
 ) {
@@ -14,6 +15,7 @@ data class Identity(
         return ed25519PublicKey.contentEquals(other.ed25519PublicKey) &&
             identityHash.contentEquals(other.identityHash) &&
             userHash == other.userHash &&
+            displayName == other.displayName &&
             x25519StaticPublicKey.contentEquals(other.x25519StaticPublicKey) &&
             createdAtUnixMs == other.createdAtUnixMs
     }
@@ -22,6 +24,7 @@ data class Identity(
         var result = ed25519PublicKey.contentHashCode()
         result = 31 * result + identityHash.contentHashCode()
         result = 31 * result + userHash.hashCode()
+        result = 31 * result + displayName.hashCode()
         result = 31 * result + x25519StaticPublicKey.contentHashCode()
         result = 31 * result + createdAtUnixMs.hashCode()
         return result

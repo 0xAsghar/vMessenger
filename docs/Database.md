@@ -54,6 +54,7 @@ data class IdentityEntity(
     val ed25519Public: ByteArray,
     val identityHash: ByteArray,            // SHA-256(ed25519Public)
     val userHash: String,                   // human-readable encoding
+    val displayName: String,                // self display name (v0.2.0); editable in settings
     val x25519StaticPublic: ByteArray,
     val createdAtUnixMs: Long
     // Private keys are NOT stored here in plaintext; they are Keystore-wrapped (see Security.md)
@@ -79,9 +80,10 @@ data class ContactEntity(
     val identityHash: ByteArray,
     val ed25519Public: ByteArray,
     val userHash: String,
-    val displayName: String,                // local alias only; never from the network authoritatively
+    val displayName: String,                // local alias; may be seeded from pairing label or contact request
     val verified: Boolean,                  // safety-number verified
     val blocked: Boolean,
+    val relationshipStatus: String,         // APPROVED | PENDING_OUT | PENDING_IN | REJECTED (v0.2.0)
     val createdAtUnixMs: Long,
     val lastSeenUnixMs: Long?
 )
@@ -299,7 +301,14 @@ interface LocationDao {
 }
 ```
 
-The full set also includes `IdentityDao`, `KeyMaterialDao`, `SessionDao`, `EndpointCacheDao`, `SettingsDao`, and `BootstrapNodeDao`.
+The full set also includes `IdentityDao`, `KeyMaterialDao`, `SessionDao`, `EndpointCacheDao`, `SettingsDao`, `BootstrapNodeDao`, `ContactRequestDao`, and `LocationAccessDao`.
+
+### 5.1 v0.2.0 tables
+
+- `contact_request`: inbox for inbound hash-add requests (`requestId`, requester identity keys, display name, status).
+- `location_access`: per-contact grant list (`contactId`, `canSeeMyLocation`, `updatedAtUnixMs`).
+
+Current schema version: **12** (`MIGRATION_10_11` adds `identity.displayName`; `MIGRATION_11_12` adds contact status + new tables).
 
 ---
 

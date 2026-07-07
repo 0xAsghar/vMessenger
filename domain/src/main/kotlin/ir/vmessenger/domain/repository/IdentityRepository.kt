@@ -8,7 +8,8 @@ interface IdentityRepository {
     fun observeIdentity(): Flow<Identity?>
     suspend fun getIdentity(): Identity?
     suspend fun hasIdentity(): Boolean
-    suspend fun generateIdentity(): AppResult<Identity>
+    suspend fun generateIdentity(displayName: String): AppResult<Identity>
+    suspend fun updateDisplayName(displayName: String): AppResult<Unit>
     suspend fun getEd25519PrivateKey(): ByteArray?
     suspend fun getX25519StaticPrivateKey(): ByteArray?
     suspend fun wipeIdentity()

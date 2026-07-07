@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="location_notification_channel">اشتراک موقعیت</string>
+    <string name="location_notification_title">اشتراک موقعیت فعال است</string>
+    <string name="location_notification_body">موقعیت زنده شما با مخاطبان انتخاب‌شده به اشتراک گذاشته می‌شود.</string>
+    <string name="location_notification_stop">توقف</string>
+</resources>

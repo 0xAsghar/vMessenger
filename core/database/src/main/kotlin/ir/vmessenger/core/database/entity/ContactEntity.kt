@@ -17,6 +17,7 @@ data class ContactEntity(
     val displayName: String,
     val verified: Boolean,
     val blocked: Boolean,
+    val relationshipStatus: ContactRelationshipStatus = ContactRelationshipStatus.APPROVED,
     val createdAtUnixMs: Long,
     val lastSeenUnixMs: Long?,
 ) {
@@ -32,6 +33,7 @@ data class ContactEntity(
             displayName == other.displayName &&
             verified == other.verified &&
             blocked == other.blocked &&
+            relationshipStatus == other.relationshipStatus &&
             createdAtUnixMs == other.createdAtUnixMs &&
             lastSeenUnixMs == other.lastSeenUnixMs
     }
@@ -45,6 +47,7 @@ data class ContactEntity(
         result = 31 * result + displayName.hashCode()
         result = 31 * result + verified.hashCode()
         result = 31 * result + blocked.hashCode()
+        result = 31 * result + relationshipStatus.hashCode()
         result = 31 * result + createdAtUnixMs.hashCode()
         result = 31 * result + (lastSeenUnixMs?.hashCode() ?: 0)
         return result

@@ -10,7 +10,8 @@
     <string name="add_by_hash_hint">شناسه کاربری مخاطب را وارد کنید.</string>
     <string name="add_by_hash_label">شناسه کاربری</string>
     <string name="add_by_hash_action">افزودن</string>
-    <string name="add_contact_success">مخاطب اضافه شد</string>
+    <string name="add_contact_success">درخواست ارسال شد</string>
+    <string name="add_contact_pending_hint">پس از تأیید مخاطب، گفتگو فعال می‌شود.</string>
     <string name="add_contact_done">بازگشت</string>
     <string name="camera_permission_required">برای اسکن QR به دوربین نیاز است</string>
     <string name="camera_permission_grant">اجازه دسترسی به دوربین</string>

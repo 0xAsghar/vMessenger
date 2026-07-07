@@ -20,6 +20,7 @@ dependencies {
     implementation(project(":core:datastore"))
     implementation(project(":core:proto"))
     implementation(project(":core:common"))
+    implementation(project(":core:location"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
     testImplementation(libs.junit)

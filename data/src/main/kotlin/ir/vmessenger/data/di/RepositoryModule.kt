@@ -5,7 +5,10 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import ir.vmessenger.data.network.ContactRequestService
 import ir.vmessenger.data.repository.ContactRepositoryImpl
+import ir.vmessenger.data.repository.ContactRequestRepositoryImpl
+import ir.vmessenger.data.repository.LocationAccessRepositoryImpl
 import ir.vmessenger.data.repository.ConversationRepositoryImpl
 import ir.vmessenger.data.repository.DiscoveryRepositoryImpl
 import ir.vmessenger.data.network.NetworkNodeRepository
@@ -14,6 +17,9 @@ import ir.vmessenger.data.repository.IdentityRepositoryImpl
 import ir.vmessenger.data.repository.LocationRepositoryImpl
 import ir.vmessenger.data.repository.PairingRepositoryImpl
 import ir.vmessenger.domain.repository.ContactRepository
+import ir.vmessenger.domain.repository.ContactRequestSender
+import ir.vmessenger.domain.repository.ContactRequestRepository
+import ir.vmessenger.domain.repository.LocationAccessRepository
 import ir.vmessenger.domain.repository.ConversationRepository
 import ir.vmessenger.domain.repository.DiscoveryRepository
 import ir.vmessenger.domain.repository.IdentityRepository
@@ -44,6 +50,18 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindContactRepository(impl: ContactRepositoryImpl): ContactRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindContactRequestSender(impl: ContactRequestService): ContactRequestSender
+
+    @Binds
+    @Singleton
+    abstract fun bindContactRequestRepository(impl: ContactRequestRepositoryImpl): ContactRequestRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindLocationAccessRepository(impl: LocationAccessRepositoryImpl): LocationAccessRepository
 
     @Binds
     @Singleton

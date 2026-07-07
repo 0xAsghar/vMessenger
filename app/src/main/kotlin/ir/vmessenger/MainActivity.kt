@@ -19,6 +19,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import ir.vmessenger.core.designsystem.theme.RtlLayout
 import ir.vmessenger.core.designsystem.theme.VMessengerTheme
 import ir.vmessenger.navigation.VMessengerNavHost
+import ir.vmessenger.ui.contact.ContactRequestOverlay
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -53,6 +54,7 @@ class MainActivity : ComponentActivity() {
 
             RtlLayout {
                 VMessengerTheme(darkTheme = darkTheme) {
+                    ContactRequestOverlay()
                     VMessengerNavHost()
                 }
             }

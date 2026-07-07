@@ -35,8 +35,12 @@ class IdentityRepositoryImpl @Inject constructor(
 
     override suspend fun hasIdentity(): Boolean = identityDao.getIdentity() != null
 
-    override suspend fun generateIdentity(): AppResult<Identity> = runCatching {
+    override suspend fun generateIdentity(displayName: String): AppResult<Identity> = runCatching {
         check(!hasIdentity()) { "هویت از قبل وجود دارد" }
+        val trimmed = displayName.trim()
+        check(trimmed.length in DISPLAY_NAME_MIN..DISPLAY_NAME_MAX) {
+            "نام باید بین $DISPLAY_NAME_MIN تا $DISPLAY_NAME_MAX کاراکتر باشد"
+        }
         val ed25519 = cryptoEngine.generateEd25519KeyPair()
         val x25519 = cryptoEngine.generateX25519KeyPair()
         val identityHash = UserHashEncoder.identityHashFromPublicKey(ed25519.publicKey)
@@ -46,6 +50,7 @@ class IdentityRepositoryImpl @Inject constructor(
             ed25519Public = ed25519.publicKey,
             identityHash = identityHash,
             userHash = userHash,
+            displayName = trimmed,
             x25519StaticPublic = x25519.publicKey,
             createdAtUnixMs = now,
         )
@@ -68,6 +73,18 @@ class IdentityRepositoryImpl @Inject constructor(
     }.fold(
         onSuccess = { AppResult.Success(it) },
         onFailure = { AppResult.Error(AppError.Crypto(it.message ?: "خطا در ایجاد هویت")) },
+    )
+
+    override suspend fun updateDisplayName(displayName: String): AppResult<Unit> = runCatching {
+        val trimmed = displayName.trim()
+        check(trimmed.length in DISPLAY_NAME_MIN..DISPLAY_NAME_MAX) {
+            "نام باید بین $DISPLAY_NAME_MIN تا $DISPLAY_NAME_MAX کاراکتر باشد"
+        }
+        val entity = identityDao.getIdentity() ?: error("هویت یافت نشد")
+        identityDao.insertIdentity(entity.copy(displayName = trimmed))
+    }.fold(
+        onSuccess = { AppResult.Success(Unit) },
+        onFailure = { AppResult.Error(AppError.Validation(it.message ?: "به‌روزرسانی نام ناموفق بود")) },
     )
 
     override suspend fun getEd25519PrivateKey(): ByteArray? =
@@ -98,6 +115,7 @@ class IdentityRepositoryImpl @Inject constructor(
         ed25519PublicKey = ed25519Public,
         identityHash = identityHash,
         userHash = userHash,
+        displayName = displayName,
         x25519StaticPublicKey = x25519StaticPublic,
         createdAtUnixMs = createdAtUnixMs,
     )
@@ -105,5 +123,7 @@ class IdentityRepositoryImpl @Inject constructor(
     companion object {
         private const val ALIAS_ED25519 = "identity-ed25519"
         private const val ALIAS_X25519 = "identity-x25519-static"
+        const val DISPLAY_NAME_MIN = 2
+        const val DISPLAY_NAME_MAX = 32
     }
 }

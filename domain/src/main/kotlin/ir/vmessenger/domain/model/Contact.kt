@@ -1,5 +1,12 @@
 package ir.vmessenger.domain.model
 
+enum class ContactRelationshipStatus {
+    APPROVED,
+    PENDING_OUT,
+    PENDING_IN,
+    REJECTED,
+}
+
 data class Contact(
     val id: String,
     val identityHash: ByteArray,
@@ -9,9 +16,12 @@ data class Contact(
     val displayName: String,
     val verified: Boolean,
     val blocked: Boolean,
+    val relationshipStatus: ContactRelationshipStatus,
     val createdAtUnixMs: Long,
     val lastSeenUnixMs: Long?,
 ) {
+    val isApproved: Boolean get() = relationshipStatus == ContactRelationshipStatus.APPROVED
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
@@ -24,6 +34,7 @@ data class Contact(
             displayName == other.displayName &&
             verified == other.verified &&
             blocked == other.blocked &&
+            relationshipStatus == other.relationshipStatus &&
             createdAtUnixMs == other.createdAtUnixMs &&
             lastSeenUnixMs == other.lastSeenUnixMs
     }
@@ -37,8 +48,50 @@ data class Contact(
         result = 31 * result + displayName.hashCode()
         result = 31 * result + verified.hashCode()
         result = 31 * result + blocked.hashCode()
+        result = 31 * result + relationshipStatus.hashCode()
         result = 31 * result + createdAtUnixMs.hashCode()
         result = 31 * result + (lastSeenUnixMs?.hashCode() ?: 0)
+        return result
+    }
+
+    private fun ByteArray?.contentEqualsOrNull(other: ByteArray?): Boolean =
+        when {
+            this == null && other == null -> true
+            this != null && other != null -> this.contentEquals(other)
+            else -> false
+        }
+}
+
+data class ContactRequest(
+    val requestId: String,
+    val requesterIdentityHash: ByteArray,
+    val requesterUserHash: String,
+    val requesterDisplayName: String,
+    val requesterEd25519PublicKey: ByteArray,
+    val requesterX25519StaticPublicKey: ByteArray?,
+    val receivedAtUnixMs: Long,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as ContactRequest
+        return requestId == other.requestId &&
+            requesterIdentityHash.contentEquals(other.requesterIdentityHash) &&
+            requesterUserHash == other.requesterUserHash &&
+            requesterDisplayName == other.requesterDisplayName &&
+            requesterEd25519PublicKey.contentEquals(other.requesterEd25519PublicKey) &&
+            requesterX25519StaticPublicKey.contentEqualsOrNull(other.requesterX25519StaticPublicKey) &&
+            receivedAtUnixMs == other.receivedAtUnixMs
+    }
+
+    override fun hashCode(): Int {
+        var result = requestId.hashCode()
+        result = 31 * result + requesterIdentityHash.contentHashCode()
+        result = 31 * result + requesterUserHash.hashCode()
+        result = 31 * result + requesterDisplayName.hashCode()
+        result = 31 * result + requesterEd25519PublicKey.contentHashCode()
+        result = 31 * result + (requesterX25519StaticPublicKey?.contentHashCode() ?: 0)
+        result = 31 * result + receivedAtUnixMs.hashCode()
         return result
     }
 

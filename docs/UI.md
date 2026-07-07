@@ -131,8 +131,11 @@ Home uses a bottom NavigationBar (NavigationRail on large screens) with primary 
 
 ### 9.2 Create Identity
 - Purpose: generate the device's Ed25519 identity on first launch.
-- Content: short, reassuring explanation (no accounts, no phone number, keys stay on device); a primary "Create my identity" action; optional advanced note about key security.
-- Behavior: generates keys on-device, shows the new User Hash and a success state, then proceeds to Home. Emphasizes that this is the user's sovereign identity.
+- Content: short explanation, then a **display name** step (2–32 characters, Persian OK), then key generation; success shows the User Hash.
+- Behavior: generates keys on-device, persists `displayName`, shows the new User Hash and a success state, then proceeds to Home.
+
+### 9.2.1 Identity settings (v0.2.0)
+- Settings → Identity: edit display name; view/share User Hash.
 
 ### 9.3 Home
 - Purpose: top-level container hosting the primary destinations via tabs.
@@ -166,12 +169,19 @@ Home uses a bottom NavigationBar (NavigationRail on large screens) with primary 
 
 ### 9.9 Add by User Hash
 - Purpose: pair without a camera by entering a User Hash.
-- Content: grouped input with live checksum validation and clear error messaging; on success, creates the contact and prompts to verify the safety number after first connection.
+- Content: grouped input with live checksum validation; on submit, sends a **contact request** (not an instant add).
+- Success: «درخواست ارسال شد»; chat unlocks after the recipient approves. QR add remains instant.
+
+### 9.9.1 Contact request dialog (v0.2.0)
+- Triggered when an inbound `ContactRequest` arrives (foreground dialog; notification when backgrounded).
+- Copy: «{name} با شناسه {hash} شما را به مخاطبین اضافه کرده است…» with Approve / Reject.
+- Contacts list shows badges for `PENDING_OUT`, `PENDING_IN`, and `REJECTED`.
 
 ### 9.10 Live Location
 - Purpose: manage active location shares (outgoing and incoming).
-- Content: list of active shares with contact, direction, start time, and a prominent stop control for outgoing shares; entry to view any share on the Map.
-- Status: shows that a foreground service is running while sharing, with battery-aware messaging.
+- Content: MapLibre map, per-contact **allow list** (who may see my location), Start/Stop sharing FAB, and active-share status.
+- Mutual visibility: markers appear only when **both** sides have an active outgoing share toward each other.
+- Status: foreground service notification while sharing (15s GPS interval in MVP).
 
 ### 9.11 Map
 - Purpose: visualize a contact's live (or historical) location.

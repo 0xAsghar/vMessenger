@@ -293,6 +293,33 @@ message PairingDescriptor {
 }
 ```
 
+### 12.1 Contact requests (v0.2.0)
+
+Hash-only adds require mutual approval. QR pairing remains instant (in-person trust).
+
+```proto
+message ContactRequest {
+  bytes requester_identity_pub = 1;
+  string requester_user_hash = 2;
+  string requester_display_name = 3;
+  bytes request_id = 4;
+}
+
+message ContactResponse {
+  bytes request_id = 1;
+  ContactResponseType type = 2;
+}
+
+enum ContactResponseType {
+  CONTACT_RESPONSE_UNSPECIFIED = 0;
+  CONTACT_RESPONSE_ACCEPT = 1;
+  CONTACT_RESPONSE_REJECT = 2;
+}
+```
+
+- `ContactRequest` / `ContactResponse` are carried in `MessageEnvelope` (fields 27–28).
+- Before approval, only contact-request frames are accepted from strangers; chat and location are rejected.
+
 ---
 
 ## 13. Error handling on the wire

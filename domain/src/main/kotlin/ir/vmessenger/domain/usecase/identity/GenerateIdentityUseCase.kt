@@ -8,5 +8,6 @@ import javax.inject.Inject
 class GenerateIdentityUseCase @Inject constructor(
     private val identityRepository: IdentityRepository,
 ) {
-    suspend operator fun invoke(): AppResult<Identity> = identityRepository.generateIdentity()
+    suspend operator fun invoke(displayName: String): AppResult<Identity> =
+        identityRepository.generateIdentity(displayName)
 }

@@ -5,15 +5,17 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -59,6 +61,7 @@ fun LocationRoute(
             state = state,
             hasLocationPermission = hasLocationPermission,
             padding = padding,
+            onToggleAccess = viewModel::toggleAccess,
             onToggleSharing = {
                 if (hasLocationPermission) {
                     viewModel.toggleSharing()
@@ -80,6 +83,7 @@ private fun LocationSharingContent(
     state: LocationUiState,
     hasLocationPermission: Boolean,
     padding: PaddingValues,
+    onToggleAccess: (String, Boolean) -> Unit,
     onToggleSharing: () -> Unit,
 ) {
     Column(
@@ -89,35 +93,28 @@ private fun LocationSharingContent(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (state.latestSample != null) {
-                    Text(
-                        text = stringResource(
-                            R.string.feature_location_coords,
-                            state.latestSample!!.latitude,
-                            state.latestSample!!.longitude,
-                        ),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.feature_location_map_placeholder),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+        LocationMapView(
+            samples = state.samples,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(240.dp),
+        )
+        Text(
+            text = stringResource(R.string.feature_location_access_title),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        LazyColumn(
+            modifier = Modifier.weight(1f, fill = false),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items(state.contacts, key = { it.contactId }) { item ->
+                RowWithCheckbox(
+                    label = item.displayName,
+                    checked = item.granted,
+                    onCheckedChange = { onToggleAccess(item.contactId, it) },
+                )
             }
         }
-        Text(
-            text = stringResource(R.string.feature_location_sharing_hint),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         if (!hasLocationPermission) {
             Text(
                 text = stringResource(R.string.feature_location_permission_required),
@@ -137,5 +134,20 @@ private fun LocationSharingContent(
                 },
             )
         }
+    }
+}
+
+@Composable
+private fun RowWithCheckbox(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    androidx.compose.foundation.layout.Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Text(text = label, modifier = Modifier.padding(start = 8.dp))
     }
 }

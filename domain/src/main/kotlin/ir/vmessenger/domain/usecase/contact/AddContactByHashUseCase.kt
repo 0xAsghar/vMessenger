@@ -7,7 +7,14 @@ import javax.inject.Inject
 
 class AddContactByHashUseCase @Inject constructor(
     private val contactRepository: ContactRepository,
+    private val sendContactRequestUseCase: SendContactRequestUseCase,
 ) {
     suspend operator fun invoke(userHash: String, alias: String? = null): AppResult<Contact> =
-        contactRepository.addContactByUserHash(userHash, alias)
+        when (val result = contactRepository.addContactByUserHash(userHash, alias)) {
+            is AppResult.Success -> {
+                sendContactRequestUseCase(result.data)
+                result
+            }
+            is AppResult.Error -> result
+        }
 }
