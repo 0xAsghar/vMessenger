@@ -66,6 +66,8 @@ flowchart TD
   data --> cDb
   data --> cStore
   data --> cData2
+  data --> cLoc
+  fLocation --> data
   fLocation --> cLoc
   networkLayer --> cCrypto
   networkLayer --> cProto
@@ -106,27 +108,29 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 ## 4. Module responsibilities and dependencies
 
 ### app
-- Application class, Hilt setup, root navigation host, theme application, dependency wiring of implementations.
-- Depends on: all `feature:*`, `data`, `network:*`, `core:designsystem`, `core:notifications`.
+- Application class, Hilt setup, root navigation host, theme application, global overlays (`ContactRequestOverlay` for inbound hash-add requests).
+- Depends on: all `feature:*`, `data`, `network:*`, `core:designsystem`, `core:notifications`, MapLibre (initialized in `VMessengerApplication`).
 
 ### domain
 - Pure Kotlin. Entities, value objects, repository interfaces, use cases. No Android, no framework.
+- Key v0.2.0 additions: `ContactRelationshipStatus`, `ContactRequest`, `LocationAccessRepository`, `ContactRequestSender`, `UpdateDisplayNameUseCase`, `SendContactRequestUseCase`.
 - Depends on: `core:common` only.
 
 ### data
 - Repository implementations; coordinates local stores and the networking facade; mappers between Protobuf, Room, and domain models.
-- Depends on: `domain`, `network:*`, `core:database`, `core:storage`, `core:datastore`, `core:proto`, `core:common`.
+- Network coordinators: `NetworkCoordinator`, `IncomingMessageCollector`, `OutboxDispatcher`, `LocationSharingCoordinator`, `ContactRequestHandler`/`Service`/`Notifier`.
+- Depends on: `domain`, `network:*`, `core:database`, `core:storage`, `core:datastore`, `core:location`, `core:proto`, `core:common`.
 
 ### feature:identity
-- Create Identity and identity display flows (My QR/User Hash surfaces shared with pairing).
-- Depends on: `domain`, `core:designsystem`.
+- Create Identity (intro → display name → keygen → success) and identity settings (edit display name, share User Hash).
+- Depends on: `domain`, `core:designsystem`, `core:common`.
 
 ### feature:pairing
-- My QR Code, QR Scanner, Add by User Hash screens and their ViewModels.
-- Depends on: `domain`, `core:designsystem` (QR encode/decode utility may live in `core:common` or a small `core:qr`).
+- My QR Code, QR Scanner, Add by User Hash screens and their ViewModels. Hash add creates `PENDING_OUT` contact and sends `ContactRequest`.
+- Depends on: `domain`, `core:designsystem`.
 
 ### feature:contacts
-- Contact list, contact detail, verification (safety number), block/delete/rename.
+- Contact list with relationship-status chips, contact detail, verification (safety number), block/delete/rename. Chat disabled until `APPROVED`.
 - Depends on: `domain`, `core:designsystem`.
 
 ### feature:chat
@@ -134,8 +138,8 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 - Depends on: `domain`, `core:designsystem`.
 
 ### feature:location
-- Live Location management and Map screens and ViewModels.
-- Depends on: `domain`, `core:designsystem`, `core:location`.
+- Live Location management (`LocationRoute`, `LocationViewModel`), MapLibre map (`LocationMapView`), per-contact allow list, start/stop sharing.
+- Depends on: `domain`, `data` (for `LocationSharingCoordinator`), `core:designsystem`, `core:location`, MapLibre Android SDK.
 
 ### feature:settings
 - Settings UI (appearance, privacy, network/bootstrap, identity), entry to Debug/About.
@@ -194,7 +198,7 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 - Depends on: `core:common`.
 
 ### core:location
-- Foreground `LocationService`, adaptive sampling, motion detection, battery-aware scheduling; emits `LocationSample`.
+- Foreground `LocationService` (15s GPS/network interval, persistent notification), `LocationUpdateBus`, `LocationUpdate` model.
 - Depends on: `core:common`.
 
 ### core:notifications
@@ -258,7 +262,7 @@ Base package namespace: `ir.vmessenger.*`, consistent with bundle ID `ir.vmessen
 
 ---
 
-## 7. Repository directory tree (target)
+## 7. Repository directory tree
 
 ```
 vMessenger/
@@ -266,22 +270,34 @@ vMessenger/
   build.gradle.kts
   gradle/
     libs.versions.toml
+    version.properties          <- versionName / versionCode (currently 0.2.0 / 35)
   build-logic/                 <- convention plugins
   app/
+    src/main/kotlin/ir/vmessenger/
+      navigation/                <- VMessengerNavHost, Routes
+      ui/                        <- splash, home, contact (ContactRequestOverlay)
+      app/network/               <- NetworkLifecycleService
   domain/
   data/
+    src/main/kotlin/ir/vmessenger/data/
+      repository/                <- *RepositoryImpl
+      network/                   <- coordinators, ContactRequest*, LocationSharingCoordinator
+      di/
   feature/
     identity/  pairing/  contacts/  chat/  location/  settings/  debug/  about/
   network/
     discovery/  dht/  bootstrap/  transport/  messaging/
   core/
     common/  crypto/  proto/  database/  storage/  datastore/  location/  notifications/  designsystem/  testing/
+  node/                        <- standalone JVM bootstrap/DHT + relay node (`:node` Gradle module)
+  deploy/                      <- production relay host (nginx, systemd)
+  scripts/                     <- setup-node.sh, emulator-connect.sh
   docs/                        <- this documentation set
   vMessenger-icon/             <- launcher icons and brand logos
   README.md
 ```
 
-Only `docs/`, `vMessenger-icon/`, and `README.md` exist today; the source modules are introduced during the scaffolding cycle described in [Roadmap.md](Roadmap.md).
+The full multi-module tree above is implemented. New capabilities are added as vertical slices behind existing interfaces (see [Architecture.md](Architecture.md) and [Roadmap.md](Roadmap.md)).
 
 ---
 

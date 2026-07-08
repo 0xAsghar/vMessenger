@@ -1,6 +1,6 @@
 # vMessenger - Roadmap
 
-This roadmap sequences vMessenger from its current documentation phase to the internet-functional MVP and then through the full feature set. Work is incremental: each phase produces a production-ready, reviewable increment, never a half-built whole. Every phase keeps the invariants from [Security.md](Security.md) and the layering from [Architecture.md](Architecture.md) and [Network.md](Network.md) intact.
+This roadmap sequences vMessenger from MVP delivery through post-MVP features. **MVP phases 1–7 and v0.2.0 are shipped** (see [README.md](../README.md)). Work remains incremental: each phase produces a production-ready, reviewable increment. Every phase keeps the invariants from [Security.md](Security.md) and the layering from [Architecture.md](Architecture.md) and [Network.md](Network.md) intact.
 
 ---
 
@@ -24,7 +24,8 @@ flowchart TD
   P4 --> P5["Phase 5: Secure Messaging MVP"]
   P5 --> P6["Phase 6: Live Location MVP"]
   P6 --> P7["Phase 7: MVP Hardening + Release"]
-  P7 --> F1["Connectivity Hardening (NAT, Relay, Full Kademlia)"]
+  P7 --> V02["v0.2.0: Display names, mutual contacts, MapLibre location"]
+  V02 --> F1["Connectivity Hardening (NAT, Relay, Full Kademlia)"]
   P7 --> F2["Crypto Upgrade (X3DH + Double Ratchet)"]
   F2 --> F3["Groups"]
   F1 --> F4["Additional Transports (BLE, Wi-Fi Direct, Mesh)"]
@@ -40,10 +41,10 @@ flowchart TD
 
 ## 3. MVP phases (detailed)
 
-### Phase 0 - Documentation (current)
+### Phase 0 - Documentation
 - Goal: complete, reviewed design for the whole system.
 - Deliverables: this `docs/` set and `README.md`.
-- Definition of done: documents reviewed and approved; decisions recorded.
+- Status: **done**; kept current with each release.
 
 ### Phase 1 - Scaffolding and design system
 - Goal: a buildable, empty multi-module project with conventions in place.
@@ -77,15 +78,21 @@ flowchart TD
 
 ### Phase 6 - Live Location MVP
 - Goal: secure, battery-aware live location sharing.
-- Scope: `core:location` foreground `LocationService`, adaptive interval, motion detection, battery awareness; encrypted `LocationPacket`s over the messaging session; Live Location management and Map screens; share start/stop control messages; optional encrypted location history (off by default).
+- Scope: `core:location` foreground `LocationService` (15s interval in MVP); encrypted `LocationPacket`s over the messaging session; MapLibre map, per-contact allow list, mutual visibility; share start/stop control messages; optional encrypted location history (off by default).
 - Definition of done: a device shares live location to a contact who sees it update on a map; sharing is clearly indicated, revocable, and encrypted; battery impact is reasonable.
-- Implements: [Protocol.md](Protocol.md) (location packets), [UI.md](UI.md) (Live Location/Map), [Database.md](Database.md) (location tables).
+- Status: **done** (v0.2.0 — adaptive/motion-aware sampling deferred).
 
 ### Phase 7 - MVP hardening and release
 - Goal: a trustworthy, polished MVP.
 - Scope: Settings (appearance, privacy, network/bootstrap, identity, secure wipe), Debug diagnostics, About; notifications and channels; accessibility and RTL polish; full test pass (unit, integration, instrumented, fuzz on the frame parser); performance and battery tuning; security self-review; build/release pipeline and documentation of build/run in `README.md`.
 - Definition of done: the MVP feature set in `README.md` works reliably between two devices; tests and CI green; security review complete; first release candidate.
-- Implements: all MVP docs.
+- Status: **done** (v0.1.0).
+
+### v0.2.0 - Names, mutual contacts, live location map
+- Goal: human-friendly identity, safer hash-based adds, and usable live location sharing.
+- Scope: `identity.displayName` + onboarding name step; `ContactRequest`/`ContactResponse` protocol; `relationshipStatus` + approval UI; `location_access` grants; `LocationSharingCoordinator` + MapLibre map; DB migrations 10→12.
+- Definition of done: hash add requires approval; QR add remains instant; mutual location markers; schema v12 upgrade from v0.1.x preserves contacts as `APPROVED`.
+- Status: **done** (v0.2.0).
 
 ---
 
@@ -95,7 +102,7 @@ These are designed-for in the current architecture and added without breaking ex
 
 ### Connectivity hardening
 - **Done (MVP):** WebSocket-secure DHT node + circuit relay at `relay.vmessenger.ir`; app prefers direct `INTERNET` then falls back to `RELAY`; listener registers on relay for inbound NAT'd peers.
-- **Scaffolding landed (P2P migration, rc21+):** Multi-node bootstrap/relay lists, cache-first peer resolve, post-handshake peer exchange, optional embedded DHT participation, UDP transport attempts, mailbox blob plumbing, and relay demotion have code behind `P2PConfig` flags — see the per-phase status matrix in [P2P-Phases.md](P2P-Phases.md). User-operated relay bridging, full NAT traversal, durable DHT routing, and complete mailbox delivery remain incomplete ([P2P-Bugs-Improvement.md](P2P-Bugs-Improvement.md)).
+- **Scaffolding landed (P2P migration, v0.2.0):** Multi-node bootstrap/relay lists, cache-first peer resolve, post-handshake peer exchange, optional embedded DHT participation, UDP transport attempts, mailbox blob plumbing, and relay demotion have code behind `P2PConfig` flags — see the per-phase status matrix in [P2P-Phases.md](P2P-Phases.md). User-operated relay bridging, full NAT traversal, durable DHT routing, and complete mailbox delivery remain incomplete ([P2P-Bugs-Improvement.md](P2P-Bugs-Improvement.md)).
 - Remaining: full ICE/STUN hole punching for reliable direct mobile-to-mobile; phones as full DHT routing nodes with replication.
 - Full Kademlia routing table (k-buckets, replication across closest k, parallel lookups), addressing the MVP simplifications in [DHT.md](DHT.md) Section 8.
 
@@ -140,6 +147,6 @@ These are designed-for in the current architecture and added without breaking ex
 
 ## 6. Feature coverage checklist
 
-MVP: identity, QR pairing, User Hash pairing, minimal DHT discovery, E2EE messaging, delivery/read status, retry queue, offline queue, live location, encrypted storage, contact management.
+MVP + v0.2.0: identity with display name, QR pairing (instant), User Hash pairing (contact request), minimal DHT discovery, E2EE messaging, delivery/read status, retry queue, offline queue, MapLibre live location with access control, encrypted storage (schema v12), contact management with relationship status.
 
 Future (all designed-for): groups, voice calls, video calls, file transfer, image sharing, Bluetooth transport, Wi-Fi Direct transport, mesh networking, geofencing, location history, SOS mode, team management, family tracking, plugin system, NAT traversal/relay, full Kademlia, X3DH + Double Ratchet, privacy hardening.

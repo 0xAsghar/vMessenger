@@ -305,8 +305,32 @@ The full set also includes `IdentityDao`, `KeyMaterialDao`, `SessionDao`, `Endpo
 
 ### 5.1 v0.2.0 tables
 
-- `contact_request`: inbox for inbound hash-add requests (`requestId`, requester identity keys, display name, status).
-- `location_access`: per-contact grant list (`contactId`, `canSeeMyLocation`, `updatedAtUnixMs`).
+**`contact_request`** — inbound hash-add inbox (strangers not yet in `contact`):
+
+```kotlin
+@Entity(tableName = "contact_request")
+data class ContactRequestEntity(
+    @PrimaryKey val requestId: String,
+    val requesterIdentityHash: ByteArray,
+    val requesterUserHash: String,
+    val requesterDisplayName: String,
+    val requesterEd25519Public: ByteArray,
+    val requesterX25519StaticPublic: ByteArray?,
+    val receivedAtUnixMs: Long,
+    val status: ContactRequestStatus,  // PENDING | ACCEPTED | REJECTED
+)
+```
+
+**`location_access`** — per-contact outbound grant (who may see my location when sharing):
+
+```kotlin
+@Entity(tableName = "location_access")
+data class LocationAccessEntity(
+    @PrimaryKey val contactId: String,
+    val canSeeMyLocation: Boolean,
+    val updatedAtUnixMs: Long,
+)
+```
 
 Current schema version: **12** (`MIGRATION_10_11` adds `identity.displayName`; `MIGRATION_11_12` adds contact status + new tables).
 
@@ -314,7 +338,7 @@ Current schema version: **12** (`MIGRATION_10_11` adds `identity.displayName`; `
 
 ## 6. Type converters
 
-- Enums (`Direction`, `ContentType`, `DeliveryStatus`, `ThemeMode`) are stored as their stable string names.
+- Enums (`Direction`, `ContentType`, `DeliveryStatus`, `ContactRelationshipStatus`, `ContactRequestStatus`, `ThemeMode`) are stored as their stable string names.
 - Timestamps are stored as `Long` epoch milliseconds; domain models convert to `Instant`.
 - Byte arrays (keys, hashes, signatures, serialized Protobuf) are stored as `BLOB` directly.
 - Larger structured payloads are stored as serialized Protobuf bytes and parsed in the data layer with mappers (see [Architecture.md](Architecture.md) Section 4.2).

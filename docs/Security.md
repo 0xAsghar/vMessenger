@@ -219,6 +219,18 @@ These are scheduled in [Roadmap.md](Roadmap.md). The `Encryption` interface and 
 - A Safety Number / fingerprint screen lets two contacts verify they share the same keys (comparable digits or a scannable code). Verified contacts are marked as such.
 - Key change handling: if a contact later presents a different identity key, vMessenger blocks the session by default and warns the user, requiring explicit re-verification. This converts silent MITM into a visible, user-acknowledged event.
 
+### 11.1 Stranger inbound policy (v0.2.0)
+
+v0.2.0 allows inbound handshakes from unknown identity hashes so hash-based contact requests can arrive. This opens a controlled spam surface mitigated as follows:
+
+- **Allowed from strangers:** `ContactRequest` and `ContactResponse` only.
+- **Rejected from non-`APPROVED` contacts:** `ChatMessage`, `LocationPacket`, and location share control frames.
+- **Outbound queue:** `OutboxDispatcher` skips delivery to contacts that are not `APPROVED`.
+- **Synthetic contact ID:** strangers use `stranger:<identityHashHex>` until approved; approved contacts use a stable UUID.
+- **User consent:** hash adds require explicit recipient approval via `ContactRequestOverlay`; QR adds remain instant in-person trust.
+
+Future mitigations: rate limits, block list, and signed request quotas (see [Roadmap.md](Roadmap.md)).
+
 ---
 
 ## 12. Encrypted local storage
@@ -272,7 +284,7 @@ The DHT stores only ephemeral routing metadata, and every record is signed and e
 - No post-compromise security yet (symmetric ratchet only) - upgrade to Double Ratchet planned.
 - No traffic-analysis resistance - endpoints, sizes, and timing are observable on the network.
 - DHT lookups leak interest in an identity hash to storing nodes.
-- Direct connectivity assumes a reachable endpoint; until NAT traversal/relay land, some peers cannot connect over the public Internet.
+- Direct connectivity may still fail on restrictive NAT; encrypted circuit relay is available as fallback. Full ICE/STUN hole punching remains planned.
 - A compromised or rooted device with an active attacker is outside the protected envelope.
 
 Each limitation has a scheduled mitigation in [Roadmap.md](Roadmap.md). None of them weaken the core guarantee: messages are end-to-end encrypted and authenticated to a verified identity, and private keys never leave the device.

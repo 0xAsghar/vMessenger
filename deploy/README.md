@@ -2,6 +2,8 @@
 
 For general node operation (local dev, self-hosted domains, adding nodes in the app), see the main [README.md](../README.md#how-to-run-a-node).
 
+Compatible with **vMessenger v0.2.0** app clients (protocol unchanged for node operators; contact-request and location features are app-layer only).
+
 **Quick VPS install** (no domain required):
 
 ```bash

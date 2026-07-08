@@ -2,6 +2,8 @@
 
 This document tracks correctness gaps, implementation risks, and next improvements for the P2P migration described in [P2P-Phases.md](P2P-Phases.md).
 
+**v0.2.0 shipped separately:** display names, mutual contact approval (`ContactRequest` protocol), MapLibre live location, and DB schema v12. Those features are documented in [Architecture.md](Architecture.md), [Protocol.md](Protocol.md) §12.1, [Database.md](Database.md), and [UI.md](UI.md). This file remains focused on P2P migration gaps.
+
 The goal is to keep the roadmap honest: some P2P pieces already have code support, but several are still partial and should not be treated as production-complete.
 
 ## 1. Documentation Overclaims

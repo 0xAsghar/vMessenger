@@ -10,15 +10,15 @@ Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Securi
 
 ### 1.1 Functional requirements (MVP)
 
-- FR-1 Identity: generate an Ed25519 keypair on-device; derive a permanent identity hash and a human-readable User Hash.
-- FR-2 Pairing: add a contact by scanning a QR code or by entering a User Hash. No pairing depends on a server.
+- FR-1 Identity: generate an Ed25519 keypair on-device; choose a display name (2–32 characters); derive a permanent identity hash and a human-readable User Hash.
+- FR-2 Pairing: add a contact by scanning a QR code (instant, in-person trust) or by entering a User Hash (sends a `ContactRequest`; requires mutual approval). No pairing depends on a server.
 - FR-3 Discovery: become reachable by publishing a signed endpoint record into a minimal DHT; resolve a contact's current endpoint by DHT lookup.
 - FR-4 Messaging: send and receive end-to-end encrypted 1:1 text messages.
 - FR-5 Delivery semantics: track per-message status (queued, sent, delivered, read, failed).
 - FR-6 Queues: retry transient failures; hold messages in an offline queue until the peer is reachable.
-- FR-7 Live Location: share live location through a foreground service; render it on a map; stop/revoke at any time.
-- FR-8 Storage: persist contacts, conversations, messages, keys, sessions, settings, and location history, encrypted at rest.
-- FR-9 Contact management: list, rename (local alias), verify, block, and delete contacts.
+- FR-7 Live Location: share live location through a foreground service with a per-contact allow list; render mutual shares on a MapLibre map; stop/revoke at any time.
+- FR-8 Storage: persist contacts, conversations, messages, keys, sessions, settings, contact requests, location access grants, and location history, encrypted at rest.
+- FR-9 Contact management: list, rename (local alias), verify, block, and delete contacts; show pending/rejected relationship status; gate chat and location to `APPROVED` contacts only.
 
 ### 1.2 Non-functional requirements
 
@@ -26,7 +26,7 @@ Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Securi
 - NFR-2 Decentralization: no central authentication, database, or message server; no single point of failure or control.
 - NFR-3 Modularity: each layer (Identity, Discovery, Transport, Encryption, Messaging) is replaceable behind an interface without changing the others.
 - NFR-4 Extensibility: future features (groups, calls, file transfer, additional transports, mesh, plugins) can be added without breaking existing code.
-- NFR-5 Performance and battery: adaptive location intervals, motion detection, efficient connection reuse; responsive UI on Android 8+ devices.
+- NFR-5 Performance and battery: fixed 15s location interval during active sharing (MVP); efficient connection reuse; responsive UI on Android 8+ devices.
 - NFR-6 Reliability: graceful degradation when the network, DHT, or a peer is unavailable; durable local queues.
 - NFR-7 Privacy: minimize metadata; routing records are ephemeral and signed; no analytics or tracking.
 - NFR-8 Testability: domain logic is pure and unit-testable; network and crypto layers are interface-driven and fakeable.
@@ -35,7 +35,7 @@ Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Securi
 ### 1.3 Constraints and assumptions
 
 - Minimum SDK 26 (Android 8.0); target the latest stable SDK.
-- The MVP assumes at least one peer is directly reachable at its published endpoint (public IP, IPv6, port-forwarded, or same network). Carrier-grade NAT traversal and relay fallback are deferred (see [Roadmap.md](Roadmap.md)).
+- The MVP uses direct TCP when possible and falls back to an encrypted circuit relay (`relay.vmessenger.ir` or user-configured nodes). Full ICE/STUN hole punching remains post-MVP (see [Roadmap.md](Roadmap.md)).
 - Bootstrap nodes are used only to join the DHT; the app becomes bootstrap-independent after joining (see [Bootstrap.md](Bootstrap.md)).
 
 ---
@@ -113,9 +113,9 @@ Each layer depends only on the interface of the layer beneath it, so any layer c
 
 Pure Kotlin, no Android or framework dependencies. Contains:
 
-- Entities and value objects: `Identity`, `Contact`, `Conversation`, `Message`, `DeliveryStatus`, `EndpointRecord`, `LocationSample`, `SessionState`.
-- Repository interfaces: `ContactRepository`, `MessageRepository`, `IdentityRepository`, `DiscoveryRepository`, `LocationRepository`, `SettingsRepository`.
-- Use cases: small, single-responsibility classes that orchestrate repositories, for example `GenerateIdentityUseCase`, `AddContactByQrUseCase`, `AddContactByHashUseCase`, `SendMessageUseCase`, `ObserveConversationUseCase`, `StartLiveLocationUseCase`, `ResolveEndpointUseCase`.
+- Entities and value objects: `Identity`, `Contact`, `ContactRequest`, `ContactRelationshipStatus`, `Conversation`, `Message`, `DeliveryStatus`, `EndpointRecord`, `LocationSample`, `SessionState`.
+- Repository interfaces: `ContactRepository`, `ContactRequestRepository`, `MessageRepository`, `IdentityRepository`, `DiscoveryRepository`, `LocationRepository`, `LocationAccessRepository`, `SettingsRepository`.
+- Use cases: small, single-responsibility classes that orchestrate repositories, for example `GenerateIdentityUseCase`, `UpdateDisplayNameUseCase`, `AddContactByQrUseCase`, `AddContactByHashUseCase`, `SendContactRequestUseCase`, `SendMessageUseCase`, `ObserveConversationUseCase`, `ResolveEndpointUseCase`.
 
 Use cases express application business rules and are independently unit-testable with fake repositories.
 
@@ -223,7 +223,7 @@ vMessenger is built on Kotlin Coroutines and Flow with structured concurrency.
 
 ## 9. Background execution
 
-- Live Location runs in a foreground service (`LocationService`) with a persistent notification, adaptive update interval, and motion detection. See [UI.md](UI.md) and [Roadmap.md](Roadmap.md).
+- Live Location runs in a foreground service (`LocationService`) with a persistent notification and a 15s GPS/network sampling interval. `LocationSharingCoordinator` encrypts samples and sends `LocationPacket`s to granted approved contacts. See [UI.md](UI.md) and [Roadmap.md](Roadmap.md).
 - Outbox delivery and DHT endpoint refresh run in the application scope while the app is alive, and are additionally scheduled with WorkManager for periodic refresh and retry when the app is backgrounded, subject to OS constraints.
 - The networking stack favors short-lived direct connections in the MVP; persistent presence and push-style wake-ups are a later-phase concern documented in [Roadmap.md](Roadmap.md).
 
@@ -233,15 +233,28 @@ vMessenger is built on Kotlin Coroutines and Flow with structured concurrency.
 
 ### 10.1 Create identity (first launch)
 
-1. `GenerateIdentityUseCase` asks the Identity service to create an Ed25519 keypair.
-2. The private key is stored wrapped by the Android Keystore; the public key, identity hash, and User Hash are persisted. See [Security.md](Security.md).
-3. The UI transitions from the Create Identity screen to Home.
+1. The user enters a display name (2–32 characters, Persian OK).
+2. `GenerateIdentityUseCase` asks the Identity service to create an Ed25519 keypair.
+3. The private key is stored wrapped by the Android Keystore; the public key, identity hash, display name, and User Hash are persisted. See [Security.md](Security.md).
+4. The UI transitions from the Create Identity screen to Home.
 
 ### 10.2 Add a contact (QR or User Hash)
 
-1. The user scans a QR (or enters a User Hash). The payload carries the contact's Ed25519 public key plus metadata; see [Discovery.md](Discovery.md) and [Protocol.md](Protocol.md).
-2. `AddContactByQrUseCase` / `AddContactByHashUseCase` validates the key, derives the identity hash, and stores a `Contact`.
+**QR (instant):**
+
+1. The user scans a QR. The payload carries the contact's Ed25519 public key plus metadata; see [Discovery.md](Discovery.md) and [Protocol.md](Protocol.md).
+2. `AddContactByQrUseCase` validates the descriptor signature, derives the identity hash, and stores a `Contact` with `relationshipStatus = APPROVED`.
 3. No network call is required; pairing is purely a local identity exchange.
+
+**User Hash (mutual approval, v0.2.0):**
+
+1. The user enters a User Hash. `AddContactByHashUseCase` inserts a local `Contact` with `relationshipStatus = PENDING_OUT` and placeholder keys.
+2. `SendContactRequestUseCase` sends a signed `ContactRequest` envelope (display name + user hash + request ID) over the messaging stack.
+3. The recipient's `IncomingMessageCollector` accepts the request from a stranger peer, persists it to `contact_request`, and shows `ContactRequestOverlay`.
+4. On approve: recipient inserts/updates an `APPROVED` contact and sends `ContactResponse ACCEPT`; sender upgrades `PENDING_OUT` → `APPROVED`. Chat and location are gated until both sides are `APPROVED`.
+5. On reject: recipient sends `ContactResponse REJECT`; sender may mark `REJECTED`.
+
+Strangers may complete a handshake for contact-request frames only; `chat` and `location` envelopes from non-approved contacts are dropped. See [Security.md](Security.md) Section 11.1.
 
 ### 10.3 Send a message
 
@@ -286,9 +299,12 @@ If endpoint resolution or connection fails, the message remains in the offline/r
 
 ### 10.5 Share live location
 
-1. `StartLiveLocationUseCase` starts `LocationService` and records an active sharing session for a contact.
-2. The service samples location with an adaptive interval and motion detection, encrypts each `LocationSample` as a location packet, and sends it over the messaging session.
-3. The recipient renders samples on the Map screen; sharing can be revoked, which ends the session and notifies the peer.
+1. The user grants location access per approved contact in `location_access` (`LocationAccessRepository`).
+2. Starting share calls `LocationSharingCoordinator.startSharingToGrantedContacts()`, which starts `LocationService` (FGS) and creates outgoing `location_share` rows per granted contact.
+3. The coordinator sends `CONTROL_TYPE_LOCATION_SHARE_START`, then encrypts each GPS sample (15s interval via `LocationUpdateBus`) as a `LocationPacket`.
+4. Inbound location/control frames update `location_share` and `location_sample` via `IncomingMessageCollector` → `LocationSharingCoordinator`.
+5. The Map UI (`LocationMapView`, MapLibre) shows markers only for **mutual** active shares (both sides have an outgoing share toward each other).
+6. Stopping share sends `CONTROL_TYPE_LOCATION_SHARE_STOP` plus a final `LocationPacket` with `is_final = true`, stops the FGS, and clears active shares.
 
 ---
 

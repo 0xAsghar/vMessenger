@@ -15,7 +15,9 @@ Both jobs must be replaced gradually. Removing the relay before replacement mech
 
 Every phase below should be guarded by feature flags, measured in debug tooling, and tested on real devices before becoming the default.
 
-## Implementation status (v0.1.0-rc21)
+> **Note:** v0.2.0 shipped app-layer features (display names, `ContactRequest` mutual approval, MapLibre location) independently of P2P phases below. See [Architecture.md](Architecture.md) and [Roadmap.md](Roadmap.md).
+
+## Implementation status (v0.2.0)
 
 The Android app has started implementing this migration, but the phases are not all complete yet. Runtime flags live in `P2PConfig` (`core/common`). The current defaults enable the experimental paths, so use **تنظیمات → اشکال‌زدایی → P2P migration flags** to turn individual phases off during conservative testing.
 

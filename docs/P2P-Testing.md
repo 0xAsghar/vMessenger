@@ -1,16 +1,28 @@
 # vMessenger P2P Real-Device Test Matrix
 
-Use this checklist when validating P2P migration phases on real hardware. Record results from **both devices** under **تنظیمات → اشکال‌زدایی** (network path, diagnostics snapshot, P2P flags).
+Use this checklist when validating P2P migration phases and **v0.2.0 features** on real hardware. Record results from **both devices** under **تنظیمات → اشکال‌زدایی** (network path, diagnostics snapshot, P2P flags).
 
 See also [P2P-Bugs-Improvement.md](P2P-Bugs-Improvement.md) and [P2P-Phases.md](P2P-Phases.md).
 
-## Prerequisites
+## v0.2.0 feature scenarios
+
+| # | Scenario | Pass criteria |
+|---|----------|---------------|
+| V1 | Fresh install: name → hash → QR shows display name | Identity stores `displayName`; pairing descriptor `display_label` matches |
+| V2 | A adds B by hash → B approves | B sees `ContactRequestOverlay`; both contacts `APPROVED`; chat works both ways |
+| V3 | B rejects hash add from A | A sees `REJECTED` or pending state; no chat |
+| V4 | Location: both grant + share | Mutual markers on MapLibre map; stop removes markers |
+| V5 | Upgrade from v0.1.x | Contacts stay `APPROVED`; empty `displayName` editable in settings |
+
+## P2P migration scenarios
+
+### Prerequisites
 
 - Two Android devices (or one device + one emulator for limited scenarios)
 - Optional: user-run bootstrap/relay node (`scripts/setup-node.sh`)
 - Debug logging enabled on both devices
 
-## Scenarios
+### Scenarios
 
 | # | Scenario | Discovery path | Transport path | Handshake | Delivery | Battery notes |
 |---|----------|----------------|----------------|-----------|----------|---------------|
@@ -46,7 +58,7 @@ For each run record:
 
 Runs focused unit tests and prints current `P2PConfig` defaults.
 
-## Pass criteria (rc25–rc30)
+## Pass criteria (v0.2.0+)
 
 - Published relay URL matches listener relay (multi-node list)
 - P2P flags persist across app restart

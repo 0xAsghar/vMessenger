@@ -148,6 +148,8 @@ message MessageEnvelope {
     Receipt receipt = 11;
     LocationPacket location = 12;
     Control control = 13;
+    ContactRequest contact_request = 27;   // v0.2.0: hash-add mutual approval
+    ContactResponse contact_response = 28; // v0.2.0
     // Reserved for future: GroupMessage, CallSignal, FileChunk, ImageMessage, Plugin payloads
   }
 }
@@ -275,6 +277,8 @@ message LocationPacket {
 ```
 
 - A sharing session begins with `CONTROL_TYPE_LOCATION_SHARE_START` and ends with `CONTROL_TYPE_LOCATION_SHARE_STOP` or a packet with `is_final = true`.
+- v0.2.0: the sender maintains a per-contact allow list (`location_access`); only granted approved contacts receive outgoing shares. Map markers use **mutual visibility** — both peers must have an active outgoing share toward each other.
+- GPS sampling uses a fixed 15s interval during foreground sharing (MVP); adaptive/motion-aware intervals are deferred (see [Roadmap.md](Roadmap.md)).
 - Packets are persisted to the encrypted location history table only if the user enabled history (future analytics build on this; see [Roadmap.md](Roadmap.md)).
 
 ---

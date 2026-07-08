@@ -95,7 +95,6 @@ When scanning is impractical, users exchange a User Hash out-of-band (spoken, me
 - Derivation: `identity hash = SHA-256(Ed25519 public key)`. The User Hash is a human-readable, checksummed encoding of that identity hash.
 - Encoding goals: typable, unambiguous (avoid easily confused characters), checksummed to catch typos, and chunked for readability.
 - Proposed format: a Base32 (Crockford) encoding of a truncated-with-checksum identity hash, grouped into blocks, with a short human-readable prefix, for example `vm1-XXXXX-XXXXX-XXXXX-XXXX`. The version prefix (`vm1`) allows the format to evolve; the trailing block carries a checksum.
-- Security note: the User Hash binds to the full public key via SHA-256. Because it may be truncated for usability, vMessenger treats hash-only pairing as needing confirmation: after resolving and connecting, the full key is verified during the handshake, and a Safety Number screen lets users confirm in-band (see [Security.md](Security.md) Section 11).
 
 ```mermaid
 flowchart LR
@@ -103,6 +102,40 @@ flowchart LR
   Sha --> Idh["identity hash (32 bytes)"]
   Idh --> Enc["Crockford Base32 + checksum + grouping"]
   Enc --> UH["User Hash: vm1-XXXXX-XXXXX-..."]
+```
+
+- Security note: the User Hash binds to the full public key via SHA-256. Because it may be truncated for usability, vMessenger treats hash-only pairing as needing confirmation: after resolving and connecting, the full key is verified during the handshake, and a Safety Number screen lets users confirm in-band (see [Security.md](Security.md) Section 11).
+
+### 5.1 User Hash add flow (v0.2.0 — mutual approval)
+
+Hash-only adds are **not** instant contacts. They initiate a contact-request protocol:
+
+| Step | Initiator (A) | Recipient (B) |
+|------|---------------|---------------|
+| 1 | Enters B's User Hash | — |
+| 2 | Local `Contact` inserted as `PENDING_OUT` | — |
+| 3 | Sends `ContactRequest` (display name, user hash, pubkey, request ID) | Receives request from stranger peer |
+| 4 | Waits for response | `ContactRequestOverlay` dialog: approve or reject |
+| 5 | On `ACCEPT`: status → `APPROVED`, keys learned | On approve: `Contact` inserted as `APPROVED` |
+| 6 | Chat and location enabled | Chat and location enabled |
+
+QR pairing (Section 4) remains **instant** (`APPROVED` immediately) because it is an in-person, signed descriptor exchange.
+
+Until approval, only `contact_request` / `contact_response` frames are accepted from the stranger; chat and location are rejected. See [Protocol.md](Protocol.md) §12.1 and [Security.md](Security.md) §11.1.
+
+```mermaid
+sequenceDiagram
+  participant A as Device A
+  participant Net as Relay/DHT
+  participant B as Device B
+  A->>A: insert Contact PENDING_OUT
+  A->>Net: ContactRequest
+  Net->>B: inbound from stranger
+  B->>B: show approval dialog
+  B->>Net: ContactResponse ACCEPT
+  Net->>A: ContactResponse ACCEPT
+  A->>A: upgrade to APPROVED
+  B->>B: insert Contact APPROVED
 ```
 
 ---

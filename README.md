@@ -7,7 +7,7 @@ vMessenger is a privacy-first communication platform where each Android device i
 - Bundle ID: `ir.vmessenger.android`
 - Platform: Android 8.0+ (API 26+)
 - UI language: Persian (RTL), Material 3, light/dark
-- Status: **v0.1.1** (stable) — identity, pairing, DHT discovery, E2EE messaging, live location, relay fallback, multi-node bootstrap/relay management, and P2P migration scaffolding ship in this release.
+- Status: **v0.2.0** (stable) — identity with display names, QR and hash-based pairing (mutual approval for hash adds), DHT discovery, E2EE messaging, MapLibre live location with per-contact access control, relay fallback, multi-node bootstrap/relay management, and P2P migration scaffolding.
 
 ---
 
@@ -29,7 +29,7 @@ Guiding values:
 - No user accounts, email, phone numbers, or usernames.
 - No centralized authentication, database, or message relay.
 - Identity is an on-device Ed25519 keypair. The public key derives a permanent identity hash and a human-readable User Hash.
-- Contacts are added only via QR code or User Hash.
+- Contacts are added via QR code (instant, in-person trust) or User Hash (sends a contact request; requires mutual approval).
 - The architecture is layered so each concern can be replaced independently: `Identity -> Discovery -> Transport -> Encryption -> Messaging`.
 - The Discovery layer is fully independent from the Messaging layer.
 
@@ -39,15 +39,15 @@ Guiding values:
 
 The app is functional over the public Internet using a minimal Distributed Hash Table (DHT) for routing and an optional circuit relay when direct connectivity fails.
 
-1. Each device generates an Ed25519 identity locally.
-2. Two users pair once by exchanging long-term public keys via QR or User Hash. No network needed for pairing.
+1. Each device generates an Ed25519 identity locally and chooses a display name shown to contacts.
+2. Two users pair by exchanging long-term public keys via QR (instant) or User Hash (request/approve flow). No network needed for QR pairing.
 3. To become reachable, a device joins the DHT through bootstrap nodes and publishes a signed, timestamped, expiring endpoint record (its current reachable address).
 4. To message a contact, the app resolves endpoints (local peer cache first, then DHT), tries direct TCP/UDP when possible, and falls back to encrypted relay circuits.
 5. Peers run an X25519 handshake, derive session keys with HKDF, and exchange ChaCha20-Poly1305 encrypted messages with forward secrecy and replay protection.
 
 The DHT stores only temporary routing metadata. It never stores messages, contacts, private keys, or profiles.
 
-**P2P migration (rc21+):** The staged plan in [docs/P2P-Phases.md](docs/P2P-Phases.md) is partially implemented behind `P2PConfig` flags (persisted in DataStore). Multi-node lists, peer cache, peer exchange, embedded DHT participation, UDP transport attempts, mailbox blobs, and relay demotion have code support, but user-operated relay bridging, full NAT traversal, full DHT routing/replication, and complete mailbox delivery remain incomplete. See [docs/P2P-Bugs-Improvement.md](docs/P2P-Bugs-Improvement.md) and [docs/P2P-Testing.md](docs/P2P-Testing.md). Disable individual flags under **تنظیمات → اشکال‌زدایی** for conservative testing.
+**P2P migration (v0.2.0):** The staged plan in [docs/P2P-Phases.md](docs/P2P-Phases.md) is partially implemented behind `P2PConfig` flags (persisted in DataStore). Multi-node lists, peer cache, peer exchange, embedded DHT participation, UDP transport attempts, mailbox blobs, and relay demotion have code support, but user-operated relay bridging, full NAT traversal, full DHT routing/replication, and complete mailbox delivery remain incomplete. See [docs/P2P-Bugs-Improvement.md](docs/P2P-Bugs-Improvement.md) and [docs/P2P-Testing.md](docs/P2P-Testing.md). Disable individual flags under **تنظیمات → اشکال‌زدایی** for conservative testing.
 
 ```mermaid
 sequenceDiagram
@@ -68,13 +68,14 @@ sequenceDiagram
 
 ## MVP feature scope
 
-- Identity generation (Ed25519) and human-readable User Hash.
-- QR code pairing and User Hash pairing.
+- Identity generation (Ed25519), display name, and human-readable User Hash.
+- QR code pairing (instant add) and User Hash pairing (contact request + mutual approval).
+- Contact relationship states: approved, pending outbound/inbound, rejected.
 - Minimal DHT discovery: bootstrap, publish, lookup, TTL, refresh.
 - End-to-end encrypted 1:1 messaging with delivery and read status.
 - Retry queue and offline outbox (`OutboxDispatcher` with backoff).
-- Live Location sharing with a foreground service and encrypted location packets.
-- Encrypted local storage (Room over SQLCipher) and contact management.
+- Live Location: MapLibre map, per-contact allow list, mutual visibility, foreground `LocationService`, encrypted location packets.
+- Encrypted local storage (Room over SQLCipher, schema v12) and contact management.
 - **Multi-node network:** Settings → **نودهای شبکه** — add bootstrap/relay nodes, health ranking, `vmnode:` link import/export.
 - **P2P migration scaffolding and partial phases 0–9** (see [docs/P2P-Phases.md](docs/P2P-Phases.md)).
 
@@ -89,7 +90,7 @@ Designed for but intentionally deferred to later phases: groups, voice/video cal
 - UI: Jetpack Compose + Material 3 (Persian / RTL)
 - DI: Hilt
 - Async: Coroutines + Flow
-- Database: Room over SQLCipher (schema v9 — mailbox blobs, network nodes)
+- Database: Room over SQLCipher (schema **v12** — identity display name, contact relationship status, contact requests, location access grants)
 - Serialization: Protocol Buffers (proto3)
 - Crypto: Ed25519, X25519, ChaCha20-Poly1305, HKDF, SHA-256 (libsodium / BouncyCastle), Android Keystore for key wrapping
 
@@ -106,8 +107,10 @@ Read these in order for a top-down understanding of the system.
 - [docs/Discovery.md](docs/Discovery.md) - the modular Discovery layer, QR and User Hash pairing, DHT-based resolution.
 - [docs/DHT.md](docs/DHT.md) - the minimal DHT design, signed routing records, TTL and refresh, anti-centralization rules.
 - [docs/Bootstrap.md](docs/Bootstrap.md) - the BootstrapProvider interface and how to operate bootstrap nodes.
+- [docs/P2P-Bugs-Improvement.md](docs/P2P-Bugs-Improvement.md) - P2P correctness gaps, risks, and prioritized fix list.
+- [docs/P2P-Testing.md](docs/P2P-Testing.md) - real-device test matrix for P2P and v0.2.0 feature validation.
 - [docs/P2P-Phases.md](docs/P2P-Phases.md) - staged migration from relay-assisted to decentralized P2P, with current implementation status.
-- [docs/Database.md](docs/Database.md) - encrypted local schema, entities, DAOs, and migrations.
+- [docs/Database.md](docs/Database.md) - encrypted local schema (v12), entities, DAOs, and migrations.
 - [docs/UI.md](docs/UI.md) - Persian RTL design system, theme, and screen-by-screen specifications.
 - [docs/FolderStructure.md](docs/FolderStructure.md) - the Gradle multi-module layout.
 - [docs/Roadmap.md](docs/Roadmap.md) - the phased delivery plan from MVP to full feature set.
@@ -118,21 +121,21 @@ Read these in order for a top-down understanding of the system.
 
 ```
 vMessenger/
-  app/                 <- Android application (Hilt, navigation, Splash)
+  app/                 <- Android application (Hilt, navigation, Splash, ContactRequestOverlay)
   build-logic/         <- Gradle convention plugins
-  core/                <- shared libraries (design system, database, proto, …)
-  data/                <- repository implementations
+  core/                <- shared libraries (design system, database, proto, location, …)
+  data/                <- repository implementations, network coordinators
   domain/              <- pure Kotlin domain layer
   feature/             <- feature UI modules (Compose)
   network/             <- networking stack modules
   node/                <- host-run bootstrap/DHT + relay reference node
   deploy/              <- nginx + systemd for production relay host
-  scripts/             <- emulator-connect.sh for two-emulator TCP
+  scripts/             <- setup-node.sh, emulator-connect.sh, p2p-terminal-check.sh
   docs/                <- architecture and protocol documentation
   vMessenger-icon/     <- app launcher icons and brand logos
 ```
 
-MVP phases 1–7 are implemented. P2P migration phases 0–9 have scaffolding behind `P2PConfig` flags (see status matrix in [docs/P2P-Phases.md](docs/P2P-Phases.md)); several phases remain partial. Known gaps and the fix roadmap live in [docs/P2P-Bugs-Improvement.md](docs/P2P-Bugs-Improvement.md). See [docs/Roadmap.md](docs/Roadmap.md) for post-MVP work.
+MVP phases 1–7 and **v0.2.0** (display names, mutual contacts, live location map) are implemented. P2P migration phases 0–9 have scaffolding behind `P2PConfig` flags (see status matrix in [docs/P2P-Phases.md](docs/P2P-Phases.md)); several phases remain partial. Known gaps and the fix roadmap live in [docs/P2P-Bugs-Improvement.md](docs/P2P-Bugs-Improvement.md). See [docs/Roadmap.md](docs/Roadmap.md) for post-MVP work.
 
 ---
 
@@ -223,7 +226,7 @@ Two emulators cannot reach each other directly. Use a host bootstrap node plus `
    ```bash
    ./scripts/emulator-connect.sh
    ```
-3. **Both emulators** — uninstall/reinstall the app, create identity, pair via **User Hash** (Contacts → add by hash).
+3. **Both emulators** — uninstall/reinstall the app, create identity (with display name), pair via **User Hash** (Contacts → add by hash; recipient approves the contact request).
 4. Open **Debug** (Settings) on each device — confirm DHT joined and endpoint published (`10.0.2.2:<port>`).
 5. Send an encrypted message; share live location from a conversation.
 
@@ -254,8 +257,8 @@ Install on a device or emulator:
 Updating [`gradle/version.properties`](gradle/version.properties) on `main` runs a **build-only** check. To **publish** APKs, push a matching version tag:
 
 ```bash
-git tag v0.1.0-rc21   # must match versionName in gradle/version.properties
-git push origin v0.1.0-rc21
+git tag v0.2.0   # must match versionName in gradle/version.properties
+git push origin v0.2.0
 ```
 
 The [Release APK](.github/workflows/release-apk.yml) workflow attaches per-architecture release APKs to the GitHub Release:
@@ -276,6 +279,18 @@ Run static analysis and unit tests:
 ```
 
 The app launches to a themed Splash screen, then Home with Persian RTL navigation. Theme mode (Light / Dark / System) can be changed under **تنظیمات** (Settings).
+
+---
+
+## Release history
+
+| Version | Highlights |
+|---------|------------|
+| **v0.2.0** | Display names; hash-add mutual contact approval (`ContactRequest`); MapLibre live location with per-contact access list and mutual visibility; DB schema v12 |
+| **v0.1.1** | Multi-IP relay dial retry; bootstrap recovery |
+| **v0.1.0** | Stable MVP: identity, pairing, DHT, E2EE messaging, relay fallback, multi-node management |
+
+APKs: [GitHub Releases](https://github.com/0xAsghar/vMessenger/releases).
 
 ---
 

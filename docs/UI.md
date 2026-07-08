@@ -154,12 +154,12 @@ Home uses a bottom NavigationBar (NavigationRail on large screens) with primary 
 
 ### 9.6 Contacts
 - Purpose: manage and add contacts.
-- Content: searchable contact list; entries show name, identicon, verified state; actions to add via QR scan, show My QR, or add by User Hash.
-- Actions: tap a contact for detail (verify safety number, start chat, block, delete, rename local alias).
+- Content: searchable contact list; entries show name, identicon, verified state, and relationship-status chips (`در انتظار تأیید`, `درخواست دریافتی`, `رد شده`) for non-approved contacts.
+- Actions: tap a contact for detail (verify safety number, start chat when `APPROVED`, block, delete, rename local alias); add via QR scan, show My QR, or add by User Hash.
 
 ### 9.7 My QR Code
 - Purpose: present this device's pairing descriptor for in-person pairing.
-- Content: large QR card rendering the signed `PairingDescriptor` (see [Protocol.md](Protocol.md)); the User Hash shown below in readable, grouped form with a copy/share action.
+- Content: large QR card rendering the signed `PairingDescriptor` including your **display name** as `display_label` (see [Protocol.md](Protocol.md)); the User Hash shown below in readable, grouped form with a copy/share action.
 - Privacy note: explains that sharing this lets someone add you and contains only your public identity, never private keys.
 
 ### 9.8 QR Scanner
@@ -195,7 +195,7 @@ Home uses a bottom NavigationBar (NavigationRail on large screens) with primary 
   - Privacy and security: require unlock for keys, screen security (FLAG_SECURE), location history on/off, safety-number verification entry.
   - Network: manage bootstrap providers and nodes (add/remove/prioritize, paste signed community list), view DHT/join status.
   - **نودهای شبکه** (Network nodes): list bootstrap and relay nodes with health, add via `vmnode:` link or URL, share via QR, scan QR to import; **!** icon next to scan opens a copyable node-setup guide dialog.
-  - Identity: view My QR/User Hash, export/recovery (future), secure wipe (panic) with confirmation.
+  - Identity: view/edit display name, view My QR/User Hash, export/recovery (future), secure wipe (panic) with confirmation.
   - About and Debug entry points.
 
 ### 9.13 Debug
