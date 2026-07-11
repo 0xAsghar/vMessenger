@@ -1,6 +1,7 @@
 package ir.vmessenger.network.dht
 
 import com.google.protobuf.ByteString
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.LengthPrefixedFrames
 import ir.vmessenger.core.common.network.NetworkPathTracker
@@ -132,14 +133,15 @@ class EmbeddedDhtRecordStore @Inject constructor(
     }
 
     private fun findRecord(keyBytes: ByteArray): EndpointRecord? {
-        val key = keyBytes.contentHashCode().toString()
+        // Routing-prefix key so partial (User Hash derived) lookups match too.
+        val key = IdentityHashMatcher.routingKeyHex(keyBytes)
         val entity = runBlocking { dhtRecordDao.active(System.currentTimeMillis()) }
             .firstOrNull { it.recordKey == key }
         return entity?.let { EndpointRecord.parseFrom(it.recordProto) }
     }
 
     private fun recordKey(record: EndpointRecord): String =
-        record.identityHash.toByteArray().contentHashCode().toString()
+        IdentityHashMatcher.routingKeyHex(record.identityHash.toByteArray())
 
     private fun isExpired(record: EndpointRecord): Boolean {
         val now = System.currentTimeMillis()

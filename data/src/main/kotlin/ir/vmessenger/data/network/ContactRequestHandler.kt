@@ -1,5 +1,6 @@
 package ir.vmessenger.data.network
 
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
@@ -8,6 +9,7 @@ import ir.vmessenger.core.proto.app.v1.ContactResponseType
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import ir.vmessenger.domain.model.ContactRelationshipStatus as DomainRelationshipStatus
 import ir.vmessenger.domain.model.ContactRequest
+import ir.vmessenger.data.repository.findByIdentityHash
 import ir.vmessenger.domain.repository.ContactRepository
 import ir.vmessenger.domain.repository.ContactRequestRepository
 import ir.vmessenger.network.messaging.PeerIdentity
@@ -37,9 +39,27 @@ class ContactRequestHandler @Inject constructor(
             requesterX25519StaticPublicKey = peer?.x25519StaticPublicKey,
             receivedAtUnixMs = envelope.sentAtUnixMs,
         )
+        // Requesters retry until they hear back. If we already approved this peer
+        // (their side missed the accept), or we added them ourselves and are
+        // waiting on them (mutual add), answer immediately instead of prompting.
+        val existing = contactDao.findByIdentityHash(identityHash)
+        val autoAcceptable = existing != null && (
+            existing.relationshipStatus == ContactRelationshipStatus.APPROVED ||
+                existing.relationshipStatus == ContactRelationshipStatus.PENDING_OUT
+            )
+        if (autoAcceptable) {
+            approveRequestSilently(domainRequest)
+            return
+        }
         contactRequestRepository.saveRequest(domainRequest)
         contactRequestNotifier.notify(domainRequest)
         AppLogger.info("Contact", "incoming contact request from ${request.requesterUserHash}")
+    }
+
+    private suspend fun approveRequestSilently(request: ContactRequest) {
+        contactRequestRepository.saveRequest(request)
+        approveRequest(request)
+        AppLogger.info("Contact", "auto-accepted request from already-approved ${request.requesterUserHash}")
     }
 
     suspend fun handleResponse(contactId: String, envelope: MessageEnvelope) {
@@ -52,11 +72,7 @@ class ContactRequestHandler @Inject constructor(
                         contact.id,
                         DomainRelationshipStatus.APPROVED,
                     )
-                    contactDao.update(
-                        contactDao.getById(contact.id)!!.copy(
-                            relationshipStatus = ContactRelationshipStatus.APPROVED,
-                        ),
-                    )
+                    applyResponderProfile(contact.id, response)
                 }
                 AppLogger.info("Contact", "contact request accepted requestId=$requestId")
             }
@@ -88,6 +104,40 @@ class ContactRequestHandler @Inject constructor(
                 accepted = true,
             )
         }
+    }
+
+    private suspend fun applyResponderProfile(
+        contactId: String,
+        response: ir.vmessenger.core.proto.app.v1.ContactResponse,
+    ) {
+        val entity = contactDao.getById(contactId) ?: return
+        val responderPub = response.responderIdentityPub.toByteArray()
+        val hasResponderIdentity = responderPub.size == 32 &&
+            !IdentityHashMatcher.isPlaceholderPublicKey(responderPub)
+        val fullHash = if (hasResponderIdentity) {
+            UserHashEncoder.identityHashFromPublicKey(responderPub)
+        } else {
+            null
+        }
+        val newUserHash = response.responderUserHash.ifBlank { entity.userHash }
+        // Only replace default names (the raw hash used at add time); never a user alias.
+        val hasCustomAlias = entity.displayName.isNotBlank() &&
+            entity.displayName != entity.userHash &&
+            entity.displayName != newUserHash
+        val newDisplayName = when {
+            hasCustomAlias -> entity.displayName
+            response.responderDisplayName.isNotBlank() -> response.responderDisplayName
+            else -> entity.displayName
+        }
+        contactDao.update(
+            entity.copy(
+                relationshipStatus = ContactRelationshipStatus.APPROVED,
+                identityHash = fullHash ?: entity.identityHash,
+                ed25519Public = if (hasResponderIdentity) responderPub else entity.ed25519Public,
+                userHash = newUserHash,
+                displayName = newDisplayName,
+            ),
+        )
     }
 
     suspend fun rejectRequest(request: ContactRequest) {

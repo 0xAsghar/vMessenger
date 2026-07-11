@@ -1,6 +1,7 @@
 package ir.vmessenger.node
 
 import com.google.protobuf.ByteString
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.proto.dht.v1.DhtNodeInfo
 import ir.vmessenger.core.proto.dht.v1.DhtRpcRequest
 import ir.vmessenger.core.proto.dht.v1.DhtRpcResponse
@@ -40,10 +41,10 @@ class DhtRequestHandler(
                 builder.setStore(StoreResponse.newBuilder().setAccepted(accepted))
             }
             request.hasFindValue() -> {
+                // Key on the routing prefix so lookups with a partial (User Hash
+                // derived, zero-padded) identity hash still find the record.
                 val keyBytes = request.findValue.key.toByteArray()
-                val record = records.values.find { entry ->
-                    entry.identityHash.toByteArray().contentEquals(keyBytes)
-                }
+                val record = records[IdentityHashMatcher.routingKeyHex(keyBytes)]
                 if (record != null && !isExpired(record)) {
                     builder.setFindValue(
                         FindValueResponse.newBuilder()
@@ -70,7 +71,7 @@ class DhtRequestHandler(
 
     private fun acceptStore(record: EndpointRecord): Boolean {
         if (!verifier.verify(record)) return false
-        val key = record.identityHash.toByteArray().contentHashCode().toString()
+        val key = IdentityHashMatcher.routingKeyHex(record.identityHash.toByteArray())
         val existing = records[key]
         val accepted = existing == null || record.sequence > existing.sequence
         if (accepted) {

@@ -1,5 +1,6 @@
 package ir.vmessenger.data.network
 
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
 import ir.vmessenger.core.database.dao.EndpointCacheDao
@@ -31,7 +32,9 @@ class PeerEndpointCacheImpl @Inject constructor(
             AppLogger.warn("PeerCache", "refused to cache unverifiable record")
             return
         }
-        val hash = record.identityHash.toByteArray()
+        // Cache rows are keyed by the identity-hash routing prefix so lookups with
+        // a partial (User Hash derived) hash hit entries stored under the full hash.
+        val hash = IdentityHashMatcher.routingHash(record.identityHash.toByteArray())
         val existing = endpointCacheDao.get(hash)
         if (existing != null && existing.expiresAtUnixMs > now && existing.sequence >= record.sequence) {
             // Do not let a cached entry override a newer or equal signed record.
@@ -51,7 +54,7 @@ class PeerEndpointCacheImpl @Inject constructor(
     override suspend fun lookup(identityHash: ByteArray): List<Endpoint>? {
         val now = System.currentTimeMillis()
         endpointCacheDao.purgeExpired(now)
-        val cached = endpointCacheDao.get(identityHash) ?: return null
+        val cached = endpointCacheDao.get(IdentityHashMatcher.routingHash(identityHash)) ?: return null
         if (cached.expiresAtUnixMs <= now) return null
         val record = runCatching { EndpointRecord.parseFrom(cached.endpointsProto) }.getOrNull() ?: return null
         if (!verifier.verify(record, now)) return null

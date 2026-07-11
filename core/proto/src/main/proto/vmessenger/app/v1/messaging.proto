@@ -176,6 +176,11 @@ message ContactRequest {
 message ContactResponse {
   bytes request_id = 1;
   ContactResponseType type = 2;
+  // Responder identity so the requester can learn the accepter's profile
+  // (hash-based pairing only carries a partial hash and no display name).
+  bytes responder_identity_pub = 3;
+  string responder_user_hash = 4;
+  string responder_display_name = 5;
 }
 
 enum ContactResponseType {

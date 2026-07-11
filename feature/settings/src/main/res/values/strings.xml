@@ -16,6 +16,8 @@
     <string name="settings_network_section">شبکه</string>
     <string name="settings_debug">اشکال‌زدایی</string>
     <string name="settings_nodes">نودهای شبکه</string>
+    <string name="settings_battery_optimization">دریافت پیام در پس‌زمینه</string>
+    <string name="settings_battery_optimization_done">دریافت پیام در پس‌زمینه فعال است</string>
     <string name="nodes_title">نودهای شبکه</string>
     <string name="nodes_run_section">راه‌اندازی نود</string>
     <string name="nodes_run_guide_action">راهنمای راه‌اندازی نود</string>

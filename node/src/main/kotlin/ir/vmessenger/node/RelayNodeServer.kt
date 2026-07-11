@@ -14,6 +14,7 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readBytes
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.network.RelayProof
 import ir.vmessenger.core.proto.dht.v1.DhtRpcRequest
 import ir.vmessenger.core.proto.relay.v1.RelayEvent
@@ -107,7 +108,9 @@ class RelayNodeServer(
             sendRelayError(session, hello.circuitId, "Invalid listener proof")
             return
         }
-        val key = listenerId.contentHashCode().toString()
+        // Listeners are keyed by the identity-hash routing prefix so dialers that
+        // only know a partial (User Hash derived) target hash still reach them.
+        val key = IdentityHashMatcher.routingKeyHex(listenerId)
         listeners[key]?.let { old ->
             runCatching { old.close(CloseReason(CloseReason.Codes.NORMAL, "replaced")) }
         }
@@ -127,7 +130,7 @@ class RelayNodeServer(
             sendRelayError(session, hello.circuitId, "Invalid target_id")
             return
         }
-        val listenerKey = targetId.contentHashCode().toString()
+        val listenerKey = IdentityHashMatcher.routingKeyHex(targetId)
         val listener = listeners[listenerKey]
         if (listener == null) {
             sendRelayError(session, hello.circuitId, "Peer not listening on relay")

@@ -35,6 +35,7 @@ class NetworkCoordinator @Inject constructor(
     private val messagingService: MessagingService,
     private val incomingMessageCollector: IncomingMessageCollector,
     private val outboxDispatcher: OutboxDispatcher,
+    private val contactRequestRetryWorker: ContactRequestRetryWorker,
     private val identityRepository: IdentityRepository,
     private val contactDao: ContactDao,
     private val relayDirectory: RelayDirectory,
@@ -45,11 +46,28 @@ class NetworkCoordinator @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
+    @Volatile
+    private var started = false
+
     fun start(
         listenPort: Int,
         directHost: String? = null,
         directPort: Int? = null,
     ) {
+        // onStartCommand re-fires on every app launch and START_STICKY restart;
+        // a second full start would double TCP listeners and retry loops. A dev
+        // restart (directHost set) still re-runs join/publish with the new config.
+        if (started) {
+            if (directHost != null) {
+                AppLogger.info("Network", "coordinator already started; re-joining with dev config")
+                rejoin(directHost, directPort)
+            } else {
+                AppLogger.info("Network", "coordinator already started; waking outbox")
+                outboxDispatcher.wake()
+            }
+            return
+        }
+        started = true
         scope.launch {
             p2pConfigLoader.loadIntoConfig()
             relayDirectory.activeRelay()
@@ -57,6 +75,7 @@ class NetworkCoordinator @Inject constructor(
             configureInbound()
             incomingMessageCollector.start()
             outboxDispatcher.start()
+            contactRequestRetryWorker.start()
             messagingService.startListening(listenPort)
             AppLogger.info("Network", "TCP listener started on $listenPort")
             if (ir.vmessenger.core.common.network.P2PConfig.dhtParticipationEnabled) {
@@ -77,6 +96,16 @@ class NetworkCoordinator @Inject constructor(
             if (!joinSucceeded) {
                 scope.launch { retryBootstrapAndPublish(directHost, directPort) }
             }
+        }
+    }
+
+    private fun rejoin(directHost: String?, directPort: Int?) {
+        scope.launch {
+            when (val join = joinNetworkUseCase()) {
+                is AppResult.Success -> AppLogger.info("Network", "re-join network OK")
+                is AppResult.Error -> AppLogger.error("Network", "re-join failed: ${join.error.message}")
+            }
+            publishAndStartRelay(directHost = directHost, directPort = directPort)
         }
     }
 

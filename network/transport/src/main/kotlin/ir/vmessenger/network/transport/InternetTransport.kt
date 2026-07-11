@@ -8,11 +8,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
@@ -74,18 +76,26 @@ private class InternetConnection(
     private val output = BufferedOutputStream(socket.getOutputStream())
     private val _state = MutableStateFlow(ConnectionState.OPEN)
     override val state: StateFlow<ConnectionState> = _state
-    private val _reads = MutableSharedFlow<ByteArray>(extraBufferCapacity = 32)
+
+    // An unbounded channel (not a replay=0 SharedFlow) buffers frames the socket
+    // reader produces before any consumer subscribes. With a SharedFlow, the
+    // first handshake frame could be read off the socket and emitted before the
+    // handshake's read().first() collector attached, silently dropping it and
+    // stalling the handshake until timeout — a timing-dependent failure that
+    // only reproduced on some devices/paths.
+    private val reads = Channel<ByteArray>(Channel.UNLIMITED)
 
     init {
         scope.launch {
             try {
                 while (_state.value == ConnectionState.OPEN) {
                     val frame = LengthPrefixedFrames.readFrame(input) ?: break
-                    _reads.emit(frame)
+                    reads.send(frame)
                 }
             } catch (_: Exception) {
                 _state.value = ConnectionState.FAILED
             } finally {
+                reads.close()
                 closeInternal()
             }
         }
@@ -98,7 +108,7 @@ private class InternetConnection(
         }
     }
 
-    override fun read(): Flow<ByteArray> = _reads
+    override fun read(): Flow<ByteArray> = reads.receiveAsFlow()
 
     override suspend fun close() {
         closeInternal()

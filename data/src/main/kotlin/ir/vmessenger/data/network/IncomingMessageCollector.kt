@@ -11,6 +11,8 @@ import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageDirection
 import ir.vmessenger.core.database.entity.MessageEntity
+import ir.vmessenger.core.datastore.PrivacyPreferences
+import ir.vmessenger.core.notifications.MessageNotificationManager
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import ir.vmessenger.core.proto.app.v1.Receipt
 import ir.vmessenger.core.proto.app.v1.ReceiptType
@@ -24,6 +26,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,6 +47,8 @@ class IncomingMessageCollector @Inject constructor(
     private val peerRelayService: PeerRelayService,
     private val contactRequestHandler: ContactRequestHandler,
     private val locationSharingCoordinator: LocationSharingCoordinator,
+    private val messageNotificationManager: MessageNotificationManager,
+    private val privacyPreferences: PrivacyPreferences,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -160,7 +165,21 @@ class IncomingMessageCollector @Inject constructor(
             )
         }
         AppLogger.info("Messaging", "incoming chat messageId=$messageId contact=$contactId")
+        notifyIncomingChat(contactId, conversationId, envelope.chat.text)
         sendDeliveryReceipt(contactId, messageId, now)
+    }
+
+    private suspend fun notifyIncomingChat(contactId: String, conversationId: String, text: String) {
+        runCatching {
+            val contact = contactDao.getById(contactId)
+            val hideContent = privacyPreferences.hideNotificationContent.first()
+            messageNotificationManager.showMessageNotification(
+                senderName = contact?.let { c -> c.displayName.ifBlank { c.userHash } } ?: "مخاطب",
+                preview = text,
+                conversationId = conversationId,
+                hideContent = hideContent,
+            )
+        }.onFailure { AppLogger.warn("Messaging", "notification failed: ${it.message}") }
     }
 
     private suspend fun handleReceipt(receipt: Receipt) {

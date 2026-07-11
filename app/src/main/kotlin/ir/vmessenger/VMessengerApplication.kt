@@ -29,10 +29,18 @@ class VMessengerApplication : Application() {
             putExtra(NetworkLifecycleService.EXTRA_LISTEN_PORT, NetworkLifecycleService.DEFAULT_LISTEN_PORT)
             putExtra(NetworkLifecycleService.EXTRA_FORWARD_PORT, NetworkLifecycleService.DEFAULT_LISTEN_PORT)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(networkIntent)
-        } else {
-            startService(networkIntent)
+        // On Android 12+ a background process restart (e.g. START_STICKY) reaches
+        // here with no foreground activity, and startForegroundService throws
+        // ForegroundServiceStartNotAllowedException — which would crash-loop the
+        // app. The system restarts the sticky service itself in that case.
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(networkIntent)
+            } else {
+                startService(networkIntent)
+            }
+        }.onFailure {
+            AppLogger.warn("App", "network service start deferred: ${it.message}")
         }
     }
 }

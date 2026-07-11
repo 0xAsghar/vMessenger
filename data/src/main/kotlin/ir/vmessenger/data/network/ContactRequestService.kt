@@ -11,7 +11,7 @@ import ir.vmessenger.domain.model.Contact
 import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.network.messaging.MessagingService
 import ir.vmessenger.network.messaging.PeerIdentity
-import java.util.UUID
+import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
 import ir.vmessenger.domain.model.Identity
@@ -31,7 +31,9 @@ class ContactRequestService @Inject constructor(
             ed25519PublicKey = contact.ed25519PublicKey,
             x25519StaticPublicKey = contact.x25519StaticPublicKey ?: ByteArray(X25519_KEY_SIZE),
         )
-        val requestId = UUID.randomUUID().toString()
+        // Deterministic per (requester, target) so retries upsert the same row on
+        // the receiver instead of piling up duplicate pending requests.
+        val requestId = deterministicRequestId(identity.identityHash, contact.identityHash)
         val envelope = MessageEnvelope.newBuilder()
             .setMessageId(ByteString.copyFromUtf8("contact-req-$requestId"))
             .setSenderIdentityHash(ByteString.copyFrom(identity.identityHash))
@@ -78,7 +80,10 @@ class ContactRequestService @Inject constructor(
             .setContactResponse(
                 ContactResponse.newBuilder()
                     .setRequestId(ByteString.copyFromUtf8(requestId))
-                    .setType(type),
+                    .setType(type)
+                    .setResponderIdentityPub(ByteString.copyFrom(identity.ed25519PublicKey))
+                    .setResponderUserHash(identity.userHash)
+                    .setResponderDisplayName(identity.displayName.ifBlank { identity.userHash }),
             )
             .build()
         return messagingService.send(contactId, self, peer, envelope)
@@ -94,5 +99,12 @@ class ContactRequestService @Inject constructor(
 
     companion object {
         private const val X25519_KEY_SIZE = 32
+        private const val REQUEST_ID_HEX_CHARS = 32
+
+        fun deterministicRequestId(requesterHash: ByteArray, targetHash: ByteArray): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+                .digest(requesterHash + targetHash)
+            return "cr-" + digest.joinToString("") { "%02x".format(it) }.take(REQUEST_ID_HEX_CHARS)
+        }
     }
 }

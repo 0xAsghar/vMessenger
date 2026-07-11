@@ -63,6 +63,12 @@ class SymmetricRatchet @Inject constructor(
 
     fun open(state: RatchetState, ciphertext: ByteArray, counter: Long, associatedData: ByteArray): ByteArray? {
         if (counter <= 0 || counter in state.seenCounters) return null
+        // recvChainKey is the immutable base chain key (position 0). The key for
+        // message N is KDF(chainKey_{N-1}, N), where chainKey_{N-1} is N-1 chain
+        // advances from the base — so we always derive from the base and never
+        // mutate it. (The previous code advanced recvChainKey *and* re-iterated
+        // from it, double-counting so every message after the first on a session
+        // failed to decrypt.)
         var chainKey = state.recvChainKey
         repeat((counter - 1).toInt()) {
             chainKey = cryptoEngine.hkdfSha256(chainKey, ByteArray(0), "chain".toByteArray(), 32)
@@ -76,7 +82,6 @@ class SymmetricRatchet @Inject constructor(
         val plaintext = cryptoEngine.open(ciphertext, messageKey, associatedData)
         if (plaintext == null) return null
         if (counter > state.recvCounter) {
-            state.recvChainKey = cryptoEngine.hkdfSha256(chainKey, ByteArray(0), "chain".toByteArray(), 32)
             state.recvCounter = counter
         }
         state.seenCounters.add(counter)

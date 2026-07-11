@@ -51,7 +51,7 @@ class MessagingService @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val outboundSessions = mutableMapOf<String, ActiveSecureSession>()
     private val sessionMutex = Mutex()
-    private val sendMutexes = mutableMapOf<String, Mutex>()
+    private val sendMutexes = ConcurrentHashMap<String, Mutex>()
     private val postHandshakeDone = ConcurrentHashMap.newKeySet<String>()
     private val inboundReadContacts = ConcurrentHashMap.newKeySet<String>()
     private val _incoming = MutableSharedFlow<IncomingEnvelope>(extraBufferCapacity = 64)

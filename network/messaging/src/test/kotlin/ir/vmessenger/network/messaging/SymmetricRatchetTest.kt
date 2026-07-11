@@ -34,6 +34,49 @@ class SymmetricRatchetTest {
     }
 
     @Test
+    fun sequentialMessagesOnSameSessionDecrypt() {
+        val root = crypto.randomBytes(32)
+        val alice = ratchet.initFromRoot(root, isInitiator = true)
+        val bob = ratchet.initFromRoot(root, isInitiator = false)
+        val ad = ByteArray(0)
+        // Multiple frames on one session (e.g. post-handshake peer exchange) must
+        // each decrypt at their incrementing counter, not just the first one.
+        for (n in 1..5) {
+            val body = "msg-$n".toByteArray()
+            val sealed = ratchet.seal(alice, body, ad)
+            val opened = ratchet.open(bob, sealed, counter = n.toLong(), ad)
+            assertNotNull("message $n should decrypt", opened)
+            assertArrayEquals(body, opened)
+        }
+        assertEquals(5L, bob.recvCounter)
+    }
+
+    @Test
+    fun outOfOrderMessagesDecrypt() {
+        val root = crypto.randomBytes(32)
+        val alice = ratchet.initFromRoot(root, isInitiator = true)
+        val bob = ratchet.initFromRoot(root, isInitiator = false)
+        val ad = ByteArray(0)
+        val sealed = (1..3).map { ratchet.seal(alice, "m$it".toByteArray(), ad) }
+        // Deliver 3, then 1, then 2 — all must decrypt (reliable transports can
+        // still interleave post-handshake and chat frames).
+        assertArrayEquals("m3".toByteArray(), ratchet.open(bob, sealed[2], 3, ad))
+        assertArrayEquals("m1".toByteArray(), ratchet.open(bob, sealed[0], 1, ad))
+        assertArrayEquals("m2".toByteArray(), ratchet.open(bob, sealed[1], 2, ad))
+    }
+
+    @Test
+    fun replayedCounterRejected() {
+        val root = crypto.randomBytes(32)
+        val alice = ratchet.initFromRoot(root, isInitiator = true)
+        val bob = ratchet.initFromRoot(root, isInitiator = false)
+        val ad = ByteArray(0)
+        val sealed = ratchet.seal(alice, "once".toByteArray(), ad)
+        assertNotNull(ratchet.open(bob, sealed, counter = 1, ad))
+        assertNull("replay of counter 1 must be rejected", ratchet.open(bob, sealed, counter = 1, ad))
+    }
+
+    @Test
     fun failedOpenDoesNotAdvanceRecvCounter() {
         val root = crypto.randomBytes(32)
         val alice = ratchet.initFromRoot(root, isInitiator = true)

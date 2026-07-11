@@ -6,6 +6,18 @@ This document tracks correctness gaps, implementation risks, and next improvemen
 
 The goal is to keep the roadmap honest: some P2P pieces already have code support, but several are still partial and should not be treated as production-complete.
 
+## 0. Fixed correctness bugs (post-v0.2.0)
+
+These were found and fixed during a full review pass and verified on two emulators:
+
+- **Handshake frame race (device-specific delivery failures).** `InternetConnection` read incoming frames into a `replay=0` `MutableSharedFlow` from a background coroutine started in `init{}`. If the reader consumed the first handshake frame before the handshake's `read().first()` subscribed, that frame was dropped and the handshake timed out — a timing race that only reproduced on some devices/paths. Fixed by buffering frames in an unbounded `Channel` (`InternetTransport.kt`).
+- **Symmetric ratchet double-advance.** `SymmetricRatchet.open()` advanced `recvChainKey` *and* re-iterated `counter-1` times from it, so every message after the first on a single session failed to decrypt. Single chat messages worked only because each `send()` opens a fresh session (counter resets to 1); multi-frame post-handshake traffic (peer exchange, mailbox) always failed at counter 2. This meant **peer exchange never actually worked**, blocking relay-less P2P. Fixed to derive purely from the immutable base chain key.
+- **Partial-hash routing.** User Hash pairing carries only the first 16 bytes of the identity hash, but DHT store/lookup, the relay listener map, the embedded DHT, and the peer cache keyed on the full 32-byte hash — so a hash-added peer could never be resolved. All routing tables now key on the 16-byte prefix via `IdentityHashMatcher.routingKeyHex()`/`routingHash()`.
+- **Contact request delivery + display names.** Hash-add contact requests are now retried (`ContactRequestRetryWorker`) until delivered; the accept response carries the responder's identity/display name so both sides learn each other's profile; the approval dialog is DB-backed so it survives app restarts.
+- **Map never opened.** `LocationMapView` lacked `MapView.onCreate` and lifecycle wiring and reset style/camera every recomposition; the style URL was a low-detail demo. Fixed lifecycle, moved to OpenFreeMap Liberty with a demotiles fallback.
+- **Message notifications.** Incoming chats now post a per-conversation notification (respecting the hide-content privacy setting) with a launch intent.
+- **Service restart safety.** `NetworkCoordinator.start()` is now idempotent (guards double listeners/loops) with a dev re-join path; the app no longer crashes if `startForegroundService` is disallowed from the background.
+
 ## 1. Documentation Overclaims
 
 ### Issue

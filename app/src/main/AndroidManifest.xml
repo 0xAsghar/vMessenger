@@ -10,17 +10,21 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <uses-feature
         android:name="android.hardware.camera.any"
         android:required="false" />
 
+    <!-- Cleartext is required for LAN/dev nodes (ws:// and raw TCP DHT); message
+         content is always end-to-end encrypted at the application layer. -->
     <application
         android:name=".VMessengerApplication"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.VMessenger">
         <activity
             android:name=".MainActivity"

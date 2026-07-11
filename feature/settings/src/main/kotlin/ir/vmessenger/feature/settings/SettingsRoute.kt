@@ -10,8 +10,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.BatteryAlert
+import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Fingerprint
@@ -121,6 +125,8 @@ private fun SettingsContent(
                 onClick = navigation.onNodes,
             )
             SettingsDivider()
+            BatteryOptimizationRow()
+            SettingsDivider()
             SettingsActionRow(
                 label = stringResource(R.string.settings_debug),
                 icon = Icons.Outlined.BugReport,
@@ -203,6 +209,48 @@ private fun SettingsPrivacySection(
             destructive = true,
         )
     }
+}
+
+/**
+ * Aggressive OEM battery managers kill the network foreground service, which
+ * silently stops message delivery and notifications. This row deep-links to the
+ * system exemption dialog; once granted it shows a passive confirmation.
+ */
+@Composable
+private fun BatteryOptimizationRow() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var exempt by remember {
+        mutableStateOf(isIgnoringBatteryOptimizations(context))
+    }
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        exempt = isIgnoringBatteryOptimizations(context)
+    }
+    if (exempt) {
+        SettingsActionRow(
+            label = stringResource(R.string.settings_battery_optimization_done),
+            icon = Icons.Outlined.BatteryFull,
+            onClick = {},
+        )
+    } else {
+        SettingsActionRow(
+            label = stringResource(R.string.settings_battery_optimization),
+            icon = Icons.Outlined.BatteryAlert,
+            onClick = {
+                val intent = android.content.Intent(
+                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    android.net.Uri.parse("package:${context.packageName}"),
+                )
+                runCatching { launcher.launch(intent) }
+            },
+        )
+    }
+}
+
+private fun isIgnoringBatteryOptimizations(context: android.content.Context): Boolean {
+    val powerManager = context.getSystemService(android.os.PowerManager::class.java)
+    return powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
 }
 
 @Composable
