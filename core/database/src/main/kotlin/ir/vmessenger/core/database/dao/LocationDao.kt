@@ -41,4 +41,11 @@ interface LocationSampleDao {
 
     @Query("SELECT * FROM location_sample WHERE shareId = :shareId ORDER BY sampledAtUnixMs DESC LIMIT 1")
     suspend fun getLatest(shareId: String): LocationSampleEntity?
+
+    /**
+     * Latest sample per share, reactive on the sample table so the map refreshes
+     * whenever a new position is recorded (not only when shares start/stop).
+     */
+    @Query("SELECT * FROM location_sample WHERE id IN (SELECT MAX(id) FROM location_sample GROUP BY shareId)")
+    fun observeLatestPerShare(): Flow<List<LocationSampleEntity>>
 }

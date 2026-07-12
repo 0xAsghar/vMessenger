@@ -11,9 +11,9 @@ import ir.vmessenger.domain.model.LocationSample
 import ir.vmessenger.domain.repository.ActiveLocationShare
 import ir.vmessenger.domain.repository.LocationRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapLatest
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -42,16 +42,32 @@ class LocationRepositoryImpl @Inject constructor(
     override fun observeLatestSample(shareId: String): Flow<LocationSample?> =
         locationSampleDao.observeLatest(shareId).map { entity -> entity?.toDomain() }
 
+    /**
+     * Latest position per visible share. Combines the share table with a
+     * sample-table-reactive query so the map refreshes on every new sample —
+     * previously this only re-emitted when shares started/stopped, so the map
+     * stayed empty even while positions were being recorded.
+     *
+     * Visibility: own outgoing position is always shown; a contact's incoming
+     * position is shown only while we also share to them (mutual visibility).
+     */
     override fun observeLatestSamples(): Flow<Map<String, LocationSample>> =
-        locationShareDao.observeActive().mapLatest { shares ->
+        combine(
+            locationShareDao.observeActive(),
+            locationSampleDao.observeLatestPerShare(),
+        ) { shares, latestSamples ->
+            val samplesByShare = latestSamples.associateBy { it.shareId }
             val outgoingContacts = shares
                 .filter { it.direction == MessageDirection.OUTGOING }
                 .map { it.contactId }
                 .toSet()
             shares
-                .filter { it.direction == MessageDirection.INCOMING && it.contactId in outgoingContacts }
+                .filter { share ->
+                    share.direction == MessageDirection.OUTGOING ||
+                        share.contactId in outgoingContacts
+                }
                 .mapNotNull { share ->
-                    val sample = locationSampleDao.getLatest(share.shareId) ?: return@mapNotNull null
+                    val sample = samplesByShare[share.shareId] ?: return@mapNotNull null
                     if (sample.sampledAtUnixMs <= 0L) return@mapNotNull null
                     share.shareId to sample.toDomain()
                 }

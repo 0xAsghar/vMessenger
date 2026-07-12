@@ -28,6 +28,12 @@ class LocationService : Service(), LocationListener {
         startForeground(NOTIFICATION_ID, buildNotification())
         val manager = getSystemService(LOCATION_SERVICE) as LocationManager
         try {
+            // Emit the last known fix right away so sharing starts with a position
+            // instead of waiting for the first provider callback (a cold GPS can
+            // take minutes; a stationary device may never trigger one).
+            val lastKnown = manager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                ?: manager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            lastKnown?.let { onLocationChanged(it) }
             if (manager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 manager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
@@ -111,7 +117,10 @@ class LocationService : Service(), LocationListener {
         private const val CHANNEL_ID = "location_sharing"
         private const val NOTIFICATION_ID = 2001
         private const val INTERVAL_MS = 15_000L
-        private const val MIN_DISTANCE_M = 10f
+
+        // 0 so a stationary device still receives periodic updates; with a
+        // distance filter some devices never deliver the first callback at all.
+        private const val MIN_DISTANCE_M = 0f
 
         fun start(context: Context) {
             val intent = Intent(context, LocationService::class.java)

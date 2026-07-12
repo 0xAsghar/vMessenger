@@ -98,6 +98,7 @@ private fun LocationSharingContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(240.dp),
+            showMyLocation = hasLocationPermission,
         )
         Text(
             text = stringResource(R.string.feature_location_access_title),

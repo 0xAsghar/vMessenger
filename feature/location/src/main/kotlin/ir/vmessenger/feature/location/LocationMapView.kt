@@ -1,5 +1,7 @@
 package ir.vmessenger.feature.location
 
+import android.annotation.SuppressLint
+import android.content.Context
 import android.graphics.Color
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -15,6 +17,8 @@ import ir.vmessenger.domain.model.LocationSample
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngBounds
+import org.maplibre.android.location.LocationComponentActivationOptions
+import org.maplibre.android.location.modes.CameraMode
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
@@ -35,20 +39,25 @@ private const val SOURCE_ID = "location-samples"
 private const val LAYER_ID = "location-samples-layer"
 private const val DEFAULT_ZOOM = 14.0
 private const val MULTI_POINT_PADDING_PX = 96
+private const val TRACKING_ZOOM_ATTEMPTS = 5
+private const val TRACKING_ZOOM_DELAY_MS = 1_500L
 
 /** Keeps map/style references and the latest samples across recompositions. */
 private class MapStateHolder {
     var map: MapLibreMap? = null
+    var view: MapView? = null
     var style: Style? = null
     var pendingSamples: List<LocationSample> = emptyList()
     var cameraInitialized = false
     var fallbackApplied = false
+    var myLocationRequested = false
 }
 
 @Composable
 fun LocationMapView(
     samples: Map<String, LocationSample>,
     modifier: Modifier = Modifier,
+    showMyLocation: Boolean = false,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -76,20 +85,22 @@ fun LocationMapView(
                 holder.fallbackApplied = true
                 map.setStyle(Style.Builder().fromUri(FALLBACK_STYLE)) { style ->
                     holder.style = style
-                    renderSamples(holder)
+                    renderSamples(holder, context)
                 }
             }
         }
+        holder.view = mapView
         mapView.getMapAsync { map ->
             holder.map = map
             map.setStyle(Style.Builder().fromUri(PRIMARY_STYLE)) { style ->
                 holder.style = style
-                renderSamples(holder)
+                renderSamples(holder, context)
             }
         }
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             holder.map = null
+            holder.view = null
             holder.style = null
             mapView.onDestroy()
         }
@@ -100,14 +111,18 @@ fun LocationMapView(
         modifier = modifier.fillMaxSize(),
         update = {
             holder.pendingSamples = samples.values.filter { it.sampledAtUnixMs > 0 }
-            renderSamples(holder)
+            holder.myLocationRequested = showMyLocation
+            renderSamples(holder, context)
         },
     )
 }
 
-private fun renderSamples(holder: MapStateHolder) {
+private fun renderSamples(holder: MapStateHolder, context: Context) {
     val style = holder.style ?: return
     if (!style.isFullyLoaded) return
+    if (holder.myLocationRequested) {
+        holder.map?.let { enableOwnLocationDot(it, style, context, holder) }
+    }
     val points = holder.pendingSamples
     updateMarkers(style, points)
     if (points.isNotEmpty() && !holder.cameraInitialized) {
@@ -116,7 +131,66 @@ private fun renderSamples(holder: MapStateHolder) {
     }
 }
 
+/**
+ * Shows the device's own position as the standard blue location puck so the map
+ * is immediately alive after the location permission is granted, even before
+ * any share has produced samples. Caller must hold the location permission.
+ */
+@SuppressLint("MissingPermission")
+private fun enableOwnLocationDot(
+    map: MapLibreMap,
+    style: Style,
+    context: Context,
+    holder: MapStateHolder,
+) {
+    runCatching {
+        val component = map.locationComponent
+        if (!component.isLocationComponentActivated) {
+            component.activateLocationComponent(
+                LocationComponentActivationOptions.builder(context, style)
+                    .useDefaultLocationEngine(true)
+                    .build(),
+            )
+            component.isLocationComponentEnabled = true
+            // Follow own position while nothing is shared; once shared samples
+            // exist the camera is fitted to them instead.
+            if (holder.pendingSamples.isEmpty()) {
+                component.cameraMode = CameraMode.TRACKING
+                scheduleTrackingZoom(holder, attempt = 0)
+            } else {
+                component.cameraMode = CameraMode.NONE
+            }
+        }
+    }
+}
+
+/**
+ * zoomWhileTracking is a no-op until the location engine delivers its first fix,
+ * so retry a few times after activation instead of staying at world zoom.
+ */
+private fun scheduleTrackingZoom(holder: MapStateHolder, attempt: Int) {
+    if (attempt >= TRACKING_ZOOM_ATTEMPTS) return
+    holder.view?.postDelayed({
+        runCatching {
+            val map = holder.map ?: return@postDelayed
+            val component = map.locationComponent
+            if (!component.isLocationComponentActivated) return@postDelayed
+            if (component.cameraMode != CameraMode.TRACKING) return@postDelayed
+            if (component.lastKnownLocation != null && map.cameraPosition.zoom < DEFAULT_ZOOM - 1) {
+                component.zoomWhileTracking(DEFAULT_ZOOM)
+            } else if (component.lastKnownLocation == null) {
+                scheduleTrackingZoom(holder, attempt + 1)
+            }
+        }
+    }, TRACKING_ZOOM_DELAY_MS)
+}
+
 private fun moveCameraTo(map: MapLibreMap, points: List<LocationSample>) {
+    runCatching {
+        if (map.locationComponent.isLocationComponentActivated) {
+            map.locationComponent.cameraMode = CameraMode.NONE
+        }
+    }
     if (points.size == 1) {
         val single = points.first()
         map.animateCamera(

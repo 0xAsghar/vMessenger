@@ -28,7 +28,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import ir.vmessenger.domain.model.Identity
@@ -54,10 +53,28 @@ class LocationSharingCoordinator @Inject constructor(
         if (started) return
         started = true
         scope.launch {
+            restoreActiveOutgoingShares()
             LocationUpdateBus.updates.collect { update ->
                 onLocationUpdate(update)
             }
         }
+    }
+
+    /**
+     * Rebuild in-memory outgoing share state after a process restart. Shares stay
+     * active in the DB, but without this the coordinator forgot them and location
+     * updates were silently no longer recorded or sent.
+     */
+    private suspend fun restoreActiveOutgoingShares() {
+        val active = locationShareDao.observeActive().first()
+            .filter { it.direction == MessageDirection.OUTGOING }
+        if (active.isEmpty()) return
+        for (share in active) {
+            outgoingShareIds[share.contactId] = share.shareId
+        }
+        AppLogger.info("Location", "restored ${active.size} active outgoing share(s)")
+        runCatching { LocationService.start(context) }
+            .onFailure { AppLogger.warn("Location", "service restart failed: ${it.message}") }
     }
 
     suspend fun startSharingToGrantedContacts(): AppResult<Unit> {
@@ -117,12 +134,18 @@ class LocationSharingCoordinator @Inject constructor(
         val control = envelope.control
         when (control.type) {
             ControlType.CONTROL_TYPE_LOCATION_SHARE_START -> {
-                val shareId = UUID.randomUUID().toString()
-                locationRepository.startIncomingShare(contactId, shareId)
+                // The share row is created by the first LocationPacket, which
+                // carries the sender's real shareId. Creating one here with a
+                // random id left a phantom share that never received samples
+                // and could never be matched to the sender's stop.
+                Unit
             }
             ControlType.CONTROL_TYPE_LOCATION_SHARE_STOP -> {
-                val shares = locationShareDao.getActiveByContact(contactId)
-                shares?.let { locationRepository.stopIncomingShare(it.shareId) }
+                // Only stop the INCOMING share for this contact; the unfiltered
+                // lookup could return (and kill) our own outgoing share instead.
+                locationShareDao
+                    .getActiveByContactAndDirection(contactId, MessageDirection.INCOMING)
+                    ?.let { locationRepository.stopIncomingShare(it.shareId) }
             }
             else -> Unit
         }
