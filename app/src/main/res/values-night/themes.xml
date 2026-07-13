@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Dark window theme so the pre-Compose window background matches the dark
+         color scheme; without it screens without their own background rendered
+         near-white text on the light window background (unreadable). -->
+    <style name="Theme.VMessenger" parent="android:Theme.Material.NoActionBar" />
     <style name="Theme.VMessenger.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@android:color/black</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_vmessenger_logo</item>

@@ -1,0 +1,23 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>LongParameterList:MessagingService.kt$MessagingService$( contactId: String, self: PeerIdentity, peer: PeerIdentity, endpoints: List&lt;Endpoint&gt;, envelope: MessageEnvelope, fromPeerCache: Boolean = false, )</ID>
+    <ID>LongParameterList:RelayListener.kt$RelayListener$( url: String, host: String?, targetIp: String?, identityHash: ByteArray, identityPub: ByteArray, ed25519PrivateKey: ByteArray, )</ID>
+    <ID>NoUnusedImports:EndpointOrderingTest.kt$ir.vmessenger.network.messaging.EndpointOrderingTest.kt</ID>
+    <ID>NoUnusedImports:MessagingService.kt$ir.vmessenger.network.messaging.MessagingService.kt</ID>
+    <ID>NoUnusedImports:PeerRelayService.kt$ir.vmessenger.network.messaging.PeerRelayService.kt</ID>
+    <ID>NoUnusedImports:RelayDirectory.kt$ir.vmessenger.network.messaging.RelayDirectory.kt</ID>
+    <ID>ReturnCount:EndpointOrder.kt$EndpointOrder$private fun relayDemotionRank(endpoint: Endpoint): Int</ID>
+    <ID>ReturnCount:MessagingService.kt$MessagingService$private suspend fun processSecureFrame( session: ActiveSecureSession, contactId: String, frameBytes: ByteArray, )</ID>
+    <ID>ReturnCount:PeerRelayService.kt$PeerRelayService$fun handleRelayData(envelope: MessageEnvelope): Boolean</ID>
+    <ID>ReturnCount:PeerRelayService.kt$PeerRelayService$fun handleRelayOpen( envelope: MessageEnvelope, peerHash: ByteArray, policyAllowed: Boolean = true, ): MessageEnvelope?</ID>
+    <ID>ReturnCount:SymmetricRatchet.kt$SymmetricRatchet$fun open(state: RatchetState, ciphertext: ByteArray, counter: Long, associatedData: ByteArray): ByteArray?</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:PeerRelayService.kt$PeerRelayService$@Volatile var policy: RelayPeerPolicy = RelayPeerPolicy.OFF</ID>
+    <ID>TooGenericExceptionCaught:RelayListener.kt$RelayListener$e: Exception</ID>
+    <ID>TooManyFunctions:MessagingService.kt$MessagingService : InboundConnectionHandler</ID>
+    <ID>TooManyFunctions:PeerRelayService.kt$PeerRelayService</ID>
+    <ID>TooManyFunctions:SecureChannelFactory.kt$SecureChannelFactory</ID>
+    <ID>UseCheckOrError:RelayListener.kt$RelayListener$throw lastError ?: IllegalStateException("Relay control channel failed")</ID>
+  </CurrentIssues>
+</SmellBaseline>

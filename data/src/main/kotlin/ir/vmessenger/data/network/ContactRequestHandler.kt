@@ -7,14 +7,14 @@ import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.entity.ContactRelationshipStatus
 import ir.vmessenger.core.proto.app.v1.ContactResponseType
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
-import ir.vmessenger.domain.model.ContactRelationshipStatus as DomainRelationshipStatus
-import ir.vmessenger.domain.model.ContactRequest
 import ir.vmessenger.data.repository.findByIdentityHash
+import ir.vmessenger.domain.model.ContactRequest
 import ir.vmessenger.domain.repository.ContactRepository
 import ir.vmessenger.domain.repository.ContactRequestRepository
 import ir.vmessenger.network.messaging.PeerIdentity
 import javax.inject.Inject
 import javax.inject.Singleton
+import ir.vmessenger.domain.model.ContactRelationshipStatus as DomainRelationshipStatus
 
 @Singleton
 class ContactRequestHandler @Inject constructor(
@@ -24,7 +24,7 @@ class ContactRequestHandler @Inject constructor(
     private val contactRequestService: ContactRequestService,
     private val contactDao: ContactDao,
 ) {
-    suspend fun handleRequest(contactId: String, envelope: MessageEnvelope, peer: PeerIdentity?) {
+    suspend fun handleRequest(envelope: MessageEnvelope, peer: PeerIdentity?) {
         val request = envelope.contactRequest
         val requestId = request.requestId.toStringUtf8()
         if (requestId.isBlank()) return

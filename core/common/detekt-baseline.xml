@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>MaxLineLength:P2PConfig.kt$P2PConfig$/** Phase 6: forward opaque encrypted frames for other peers (relay-capable peer). Default off until consent (rc26). */</ID>
+    <ID>SpacingBetweenDeclarationsWithComments:SelectedRelay.kt$RelaySource.DEFAULT$/** Built-in default relay fallback. */</ID>
+    <ID>TooManyFunctions:NetworkPath.kt$NetworkPathTracker</ID>
+  </CurrentIssues>
+</SmellBaseline>

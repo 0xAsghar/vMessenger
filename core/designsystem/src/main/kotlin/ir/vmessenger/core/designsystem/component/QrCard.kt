@@ -1,15 +1,15 @@
 package ir.vmessenger.core.designsystem.component
 
 import android.graphics.Bitmap
-import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Paint
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -26,6 +26,7 @@ import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import android.graphics.Canvas as AndroidCanvas
 
 @Composable
 fun QrCard(
@@ -60,8 +61,10 @@ fun StyledQrCode(
     payload: String,
     modifier: Modifier = Modifier,
     size: Dp = 220.dp,
-    moduleColor: Color = MaterialTheme.colorScheme.onBackground,
-    backgroundColor: Color = Color.Transparent,
+    // Always dark-on-light regardless of app theme: inverted (light-on-dark)
+    // QR codes fail on many scanners, and a white quiet zone is required.
+    moduleColor: Color = Color.Black,
+    backgroundColor: Color = Color.White,
 ) {
     val density = LocalDensity.current
     val pixelSize = with(density) { size.roundToPx().coerceAtLeast(1) }
@@ -73,18 +76,26 @@ fun StyledQrCode(
         }
     }.value
 
-    Box(
-        modifier = modifier.size(size),
-        contentAlignment = Alignment.Center,
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        color = backgroundColor,
     ) {
-        if (bitmap != null) {
-            Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = null,
-                modifier = Modifier.size(size),
-            )
-        } else {
-            CircularProgressIndicator()
+        Box(
+            modifier = Modifier
+                .padding(12.dp)
+                .size(size),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.size(size),
+                )
+            } else {
+                CircularProgressIndicator()
+            }
         }
     }
 }

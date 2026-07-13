@@ -97,7 +97,11 @@ class LocationService : Service(), LocationListener {
             .setContentText(getString(R.string.location_notification_body))
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setOngoing(true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, getString(R.string.location_notification_stop), stopPending)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                getString(R.string.location_notification_stop),
+                stopPending,
+            )
             .build()
     }
 

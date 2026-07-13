@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>ReturnCount:DhtDiscoveryProvider.kt$DhtDiscoveryProvider$private suspend fun cachedFallback(identityHash: ByteArray): AppResult&lt;List&lt;Endpoint&gt;&gt;?</ID>
+  </CurrentIssues>
+</SmellBaseline>

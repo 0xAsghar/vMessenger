@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>MaxLineLength:IdentityRoute.kt$enabled = name.trim().length in CreateIdentityViewModel.DISPLAY_NAME_MIN..CreateIdentityViewModel.DISPLAY_NAME_MAX</ID>
+    <ID>MaximumLineLength:IdentityRoute.kt$ </ID>
+    <ID>ReturnCount:IdentityViewModel.kt$CreateIdentityViewModel$fun createIdentity()</ID>
+  </CurrentIssues>
+</SmellBaseline>

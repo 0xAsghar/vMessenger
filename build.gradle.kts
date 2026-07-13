@@ -20,6 +20,8 @@ subprojects {
         buildUponDefaultConfig = true
         allRules = false
         config.from(files("${rootProject.projectDir}/config/detekt/detekt.yml"))
+        // Pre-existing structural findings live in the baseline; new code must stay clean.
+        baseline = file("$projectDir/detekt-baseline.xml")
     }
 
     dependencies {

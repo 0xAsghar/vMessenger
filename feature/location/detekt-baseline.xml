@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>NoUnusedImports:LocationViewModel.kt$ir.vmessenger.feature.location.LocationViewModel.kt</ID>
+  </CurrentIssues>
+</SmellBaseline>

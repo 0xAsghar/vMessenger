@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>ReturnCount:EmbeddedDhtPolicy.kt$EmbeddedDhtPolicy$fun shouldParticipate(): Boolean</ID>
+    <ID>ReturnCount:EmbeddedDhtPolicy.kt$EmbeddedDhtPolicy$private fun isOnWifi(): Boolean</ID>
+    <ID>ReturnCount:EmbeddedDhtService.kt$EmbeddedDhtService$fun start(dhtPort: Int, advertisedHost: String)</ID>
+    <ID>SpacingBetweenDeclarationsWithAnnotations:EmbeddedDhtService.kt$EmbeddedDhtService$@Volatile private var running = false</ID>
+    <ID>TooManyFunctions:EmbeddedDhtService.kt$EmbeddedDhtRecordStore</ID>
+  </CurrentIssues>
+</SmellBaseline>

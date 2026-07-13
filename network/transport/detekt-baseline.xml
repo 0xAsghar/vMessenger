@@ -1,0 +1,9 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>NoUnusedImports:UdpTransport.kt$ir.vmessenger.network.transport.UdpTransport.kt</ID>
+    <ID>TooGenericExceptionCaught:RelayTransport.kt$RelayTransport$e: Exception</ID>
+    <ID>UseCheckOrError:RelayTransport.kt$RelayTransport$throw lastError ?: IllegalStateException("Relay connect failed")</ID>
+  </CurrentIssues>
+</SmellBaseline>

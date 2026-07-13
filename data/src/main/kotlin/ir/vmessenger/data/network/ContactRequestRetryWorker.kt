@@ -59,30 +59,41 @@ class ContactRequestRetryWorker @Inject constructor(
         val now = System.currentTimeMillis()
         val pendingOut = contactDao.getAll()
             .filter { it.relationshipStatus == ContactRelationshipStatus.PENDING_OUT }
-        for (entity in pendingOut) {
+        val due = pendingOut.filter { entity ->
             val state = attempts[entity.id]
-            if (state != null && now < state.nextAttemptUnixMs) continue
-            val contact = contactRepository.getContact(entity.id) ?: continue
-            when (val result = contactRequestService.sendRequest(contact)) {
-                is AppResult.Success -> {
-                    // Delivered; keep a slow heartbeat until the peer answers so a
-                    // lost response still heals (receiver auto-accepts duplicates).
-                    attempts[entity.id] = RetryState(0, now + DELIVERED_REPEAT_MS)
-                    AppLogger.info("Contact", "re-sent contact request to ${contact.userHash}")
-                }
-                is AppResult.Error -> {
-                    val count = (state?.count ?: 0) + 1
-                    val backoff = (BASE_BACKOFF_MS shl minOf(count, MAX_SHIFT))
-                        .coerceAtMost(MAX_BACKOFF_MS)
-                    attempts[entity.id] = RetryState(count, now + backoff)
-                    AppLogger.info(
-                        "Contact",
-                        "contact request retry ${entity.id} failed (${result.error.message}), next in ${backoff}ms",
-                    )
-                }
+            state == null || now >= state.nextAttemptUnixMs
+        }
+        for (entity in due) {
+            contactRepository.getContact(entity.id)?.let { contact ->
+                sendWithBackoff(entity.id, contact, now)
             }
         }
         attempts.keys.retainAll(pendingOut.map { it.id }.toSet())
+    }
+
+    private suspend fun sendWithBackoff(
+        contactId: String,
+        contact: ir.vmessenger.domain.model.Contact,
+        now: Long,
+    ) {
+        when (val result = contactRequestService.sendRequest(contact)) {
+            is AppResult.Success -> {
+                // Delivered; keep a slow heartbeat until the peer answers so a
+                // lost response still heals (receiver auto-accepts duplicates).
+                attempts[contactId] = RetryState(0, now + DELIVERED_REPEAT_MS)
+                AppLogger.info("Contact", "re-sent contact request to ${contact.userHash}")
+            }
+            is AppResult.Error -> {
+                val count = (attempts[contactId]?.count ?: 0) + 1
+                val backoff = (BASE_BACKOFF_MS shl minOf(count, MAX_SHIFT))
+                    .coerceAtMost(MAX_BACKOFF_MS)
+                attempts[contactId] = RetryState(count, now + backoff)
+                AppLogger.info(
+                    "Contact",
+                    "contact request retry $contactId failed (${result.error.message}), next in ${backoff}ms",
+                )
+            }
+        }
     }
 
     companion object {

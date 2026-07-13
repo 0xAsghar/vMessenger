@@ -89,17 +89,22 @@ fun ConversationRoute(
     viewModel: ConversationViewModel = hiltViewModel(),
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
+    val contactName by viewModel.contactName.collectAsStateWithLifecycle()
     var draft by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
+    // reverseLayout anchors content to the bottom (messenger convention): with
+    // the list reversed, index 0 is the newest message at the very bottom.
+    val reversedMessages = remember(messages) { messages.asReversed() }
+
     LaunchedEffect(messages.lastOrNull()?.messageId) {
         if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.lastIndex)
+            listState.animateScrollToItem(0)
         }
     }
 
     VMessengerScaffold(
-        title = stringResource(R.string.feature_chat_conversation),
+        title = contactName ?: stringResource(R.string.feature_chat_conversation),
         onNavigateBack = onBack,
         bottomBar = {
             MessageComposer(
@@ -114,13 +119,14 @@ fun ConversationRoute(
     ) { padding ->
         LazyColumn(
             state = listState,
+            reverseLayout = true,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Bottom),
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
         ) {
-            items(messages, key = { it.messageId }) { message ->
+            items(reversedMessages, key = { it.messageId }) { message ->
                 MessageBubble(message = message)
             }
         }
@@ -214,14 +220,17 @@ private fun MessageBubble(message: ChatMessage) {
                     style = MaterialTheme.typography.bodyLarge,
                     color = contentColor,
                 )
-                Text(
-                    text = statusLabel(message.status),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = statusColor,
-                    modifier = Modifier
-                        .align(Alignment.End)
-                        .padding(top = 2.dp),
-                )
+                // Delivery status is only meaningful for the sender's own messages.
+                if (isOutgoing) {
+                    Text(
+                        text = statusLabel(message.status),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = statusColor,
+                        modifier = Modifier
+                            .align(Alignment.End)
+                            .padding(top = 2.dp),
+                    )
+                }
             }
         }
     }

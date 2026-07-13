@@ -1,0 +1,8 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>LongMethod:AddByHashRoute.kt$@Composable @Suppress("LongParameterList") private fun AddByHashForm( padding: androidx.compose.foundation.layout.PaddingValues, userHash: String, onUserHashChange: (String) -&gt; Unit, uiState: AddContactUiState, onAdd: () -&gt; Unit, onDone: () -&gt; Unit, )</ID>
+    <ID>LongParameterList:QrScannerScreen.kt$( title: String, hint: String, onNavigateBack: () -&gt; Unit, scanPaused: Boolean = false, onQrScanned: (String) -&gt; Unit, overlay: @Composable () -&gt; Unit = {}, )</ID>
+  </CurrentIssues>
+</SmellBaseline>

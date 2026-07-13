@@ -30,7 +30,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
-import ir.vmessenger.core.proto.app.v1.ChatMessage as ProtoChatMessage
 
 @Singleton
 class IncomingMessageCollector @Inject constructor(
@@ -71,11 +70,7 @@ class IncomingMessageCollector @Inject constructor(
         val envelope = incoming.envelope
         when {
             envelope.hasContactRequest() ->
-                contactRequestHandler.handleRequest(
-                    incoming.contactId,
-                    envelope,
-                    incoming.session?.peer,
-                )
+                contactRequestHandler.handleRequest(envelope, incoming.session?.peer)
             envelope.hasContactResponse() ->
                 contactRequestHandler.handleResponse(incoming.contactId, envelope)
             envelope.hasChat() -> {

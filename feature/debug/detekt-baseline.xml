@@ -1,0 +1,8 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>LongMethod:LogsRoute.kt$@Composable fun LogsRoute( onNavigateBack: () -&gt; Unit = {}, viewModel: LogsViewModel = hiltViewModel(), )</ID>
+    <ID>NoUnusedImports:DebugViewModel.kt$ir.vmessenger.feature.debug.DebugViewModel.kt</ID>
+  </CurrentIssues>
+</SmellBaseline>

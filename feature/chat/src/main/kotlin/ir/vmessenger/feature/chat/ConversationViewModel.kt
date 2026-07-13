@@ -8,6 +8,7 @@ import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.repository.ConversationRepository
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -25,6 +26,16 @@ class ConversationViewModel @Inject constructor(
             scope = viewModelScope,
             started = SharingStarted.Eagerly,
             initialValue = emptyList(),
+        )
+
+    /** Contact display name for the screen title (null while loading). */
+    val contactName: StateFlow<String?> = conversationRepository
+        .observeConversations()
+        .map { conversations -> conversations.firstOrNull { it.id == conversationId }?.contactName }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.Eagerly,
+            initialValue = null,
         )
 
     fun send(text: String) {

@@ -1,0 +1,7 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues></ManuallySuppressedIssues>
+  <CurrentIssues>
+    <ID>ReturnCount:NodeLinkCodec.kt$NodeLinkCodec$fun decode(text: String): NodeLink?</ID>
+  </CurrentIssues>
+</SmellBaseline>
