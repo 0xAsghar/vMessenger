@@ -79,7 +79,9 @@ sequenceDiagram
 - **Multi-node network:** Settings → **نودهای شبکه** — add bootstrap/relay nodes, health ranking, `vmnode:` link import/export.
 - **P2P migration scaffolding and partial phases 0–9** (see [docs/P2P-Phases.md](docs/P2P-Phases.md)).
 
-Designed for but intentionally deferred to later phases: groups, voice/video calls, file and image transfer, Bluetooth and Wi-Fi Direct transports, mesh networking, geofencing, location history analytics, SOS mode, team and family management, plugin system, and full Kademlia/ICE hole-punching. **Relay fallback** via `relay.vmessenger.ir` (DHT + circuit relay, E2E only) is implemented — see [deploy/README.md](deploy/README.md).
+- **Attachments:** photos, videos, and files (chunked E2E transfer, 25 MB limit) with image thumbnails and tap-to-open.
+
+Designed for but intentionally deferred to later phases: groups, voice/video calls, Bluetooth and Wi-Fi Direct transports, mesh networking, geofencing, location history analytics, SOS mode, team and family management, plugin system, and full Kademlia/ICE hole-punching. **Relay fallback** via `relay.vmessenger.ir` (DHT + circuit relay, E2E only) is implemented — see [deploy/README.md](deploy/README.md).
 
 ---
 

@@ -9,6 +9,9 @@ enum class MessageContentType {
     TEXT,
     LOCATION_CONTROL,
     RECEIPT,
+    IMAGE,
+    VIDEO,
+    FILE,
 }
 
 enum class DeliveryStatus {

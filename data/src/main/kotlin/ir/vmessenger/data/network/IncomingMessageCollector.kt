@@ -32,6 +32,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
+@Suppress("LongParameterList")
 class IncomingMessageCollector @Inject constructor(
     private val messagingService: MessagingService,
     private val identityRepository: IdentityRepository,
@@ -48,6 +49,7 @@ class IncomingMessageCollector @Inject constructor(
     private val locationSharingCoordinator: LocationSharingCoordinator,
     private val messageNotificationManager: MessageNotificationManager,
     private val privacyPreferences: PrivacyPreferences,
+    private val attachmentReceiver: AttachmentReceiver,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -90,6 +92,8 @@ class IncomingMessageCollector @Inject constructor(
                     locationSharingCoordinator.handleIncomingControl(incoming.contactId, envelope)
                 }
             }
+            envelope.hasAttachmentInfo() || envelope.hasAttachmentChunk() ->
+                handleAttachmentEnvelope(incoming.contactId, envelope)
             envelope.hasReceipt() -> handleReceipt(envelope.receipt)
             envelope.hasNetworkNodes() -> peerExchangeService.ingestFromEnvelope(envelope)
             envelope.hasMailboxBlob() -> mailboxService.storeIncoming(envelope.mailboxBlob)
@@ -162,6 +166,26 @@ class IncomingMessageCollector @Inject constructor(
         AppLogger.info("Messaging", "incoming chat messageId=$messageId contact=$contactId")
         notifyIncomingChat(contactId, conversationId, envelope.chat.text)
         sendDeliveryReceipt(contactId, messageId, now)
+    }
+
+    private suspend fun handleAttachmentEnvelope(contactId: String, envelope: MessageEnvelope) {
+        if (!isApprovedContact(contactId)) return
+        if (envelope.hasAttachmentInfo()) {
+            val alreadyDelivered = attachmentReceiver.handleInfo(contactId, envelope)
+            if (alreadyDelivered) {
+                sendDeliveryReceipt(contactId, envelope.messageId.toStringUtf8(), System.currentTimeMillis())
+            }
+            return
+        }
+        attachmentReceiver.handleChunk(contactId, envelope)?.let { done ->
+            notifyIncomingAttachment(done)
+            sendDeliveryReceipt(done.contactId, done.messageId, System.currentTimeMillis())
+        }
+    }
+
+    private suspend fun notifyIncomingAttachment(done: CompletedAttachment) {
+        val conversationId = conversationDao.getByContactId(done.contactId)?.id ?: done.messageId
+        notifyIncomingChat(done.contactId, conversationId, "📎 ${done.fileName}")
     }
 
     private suspend fun notifyIncomingChat(contactId: String, conversationId: String, text: String) {

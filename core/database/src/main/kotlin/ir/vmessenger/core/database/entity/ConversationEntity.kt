@@ -50,6 +50,11 @@ data class MessageEntity(
     val sentAtUnixMs: Long?,
     val deliveredAtUnixMs: Long?,
     val readAtUnixMs: Long?,
+    // Attachment metadata (IMAGE/VIDEO/FILE messages); path is app-private.
+    val attachmentName: String? = null,
+    val attachmentMimeType: String? = null,
+    val attachmentSizeBytes: Long? = null,
+    val attachmentPath: String? = null,
 )
 
 @Entity(

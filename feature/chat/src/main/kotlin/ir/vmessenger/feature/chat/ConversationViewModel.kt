@@ -45,4 +45,10 @@ class ConversationViewModel @Inject constructor(
             conversationRepository.sendMessage(conversationId, trimmed)
         }
     }
+
+    fun sendAttachment(uri: String) {
+        viewModelScope.launch {
+            conversationRepository.sendAttachment(conversationId, uri)
+        }
+    }
 }

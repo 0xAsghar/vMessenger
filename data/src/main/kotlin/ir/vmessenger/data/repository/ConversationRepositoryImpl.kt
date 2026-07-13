@@ -1,7 +1,7 @@
 package ir.vmessenger.data.repository
 
-import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.MessageDao
@@ -10,7 +10,10 @@ import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
+import ir.vmessenger.data.attachment.AttachmentStore
 import ir.vmessenger.data.network.OutboxDispatcher
+import ir.vmessenger.domain.model.AttachmentType
+import ir.vmessenger.domain.model.ChatAttachment
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.model.Conversation
 import ir.vmessenger.domain.model.DeliveryStatus
@@ -32,6 +35,7 @@ class ConversationRepositoryImpl @Inject constructor(
     private val outboxDao: OutboxDao,
     private val contactDao: ContactDao,
     private val outboxDispatcher: OutboxDispatcher,
+    private val attachmentStore: AttachmentStore,
 ) : ConversationRepository {
 
     override fun observeConversations(): Flow<List<Conversation>> =
@@ -120,6 +124,54 @@ class ConversationRepositoryImpl @Inject constructor(
         return AppResult.Success(messageId)
     }
 
+    override suspend fun sendAttachment(conversationId: String, sourceUri: String): AppResult<String> =
+        runCatching {
+            val copied = attachmentStore.copyFromUri(sourceUri)
+            val messageId = UUID.randomUUID().toString()
+            val now = System.currentTimeMillis()
+            messageDao.insert(
+                MessageEntity(
+                    messageId = messageId,
+                    conversationId = conversationId,
+                    direction = DbMessageDirection.OUTGOING,
+                    contentType = copied.contentType,
+                    body = null,
+                    replyToMessageId = null,
+                    status = DbDeliveryStatus.QUEUED,
+                    createdAtUnixMs = now,
+                    sentAtUnixMs = null,
+                    deliveredAtUnixMs = null,
+                    readAtUnixMs = null,
+                    attachmentName = copied.fileName,
+                    attachmentMimeType = copied.mimeType,
+                    attachmentSizeBytes = copied.sizeBytes,
+                    attachmentPath = copied.file.absolutePath,
+                ),
+            )
+            outboxDao.enqueue(
+                OutboxEntity(
+                    messageId = messageId,
+                    conversationId = conversationId,
+                    sealedPayload = null,
+                    attemptCount = 0,
+                    nextAttemptUnixMs = now,
+                    lastError = null,
+                ),
+            )
+            conversationDao.getById(conversationId)?.let { conv ->
+                conversationDao.update(conv.copy(lastMessageId = messageId, lastActivityUnixMs = now))
+            }
+            AppLogger.info("Messaging", "outgoing attachment queued messageId=$messageId size=${copied.sizeBytes}")
+            outboxDispatcher.wake()
+            messageId
+        }.fold(
+            onSuccess = { AppResult.Success(it) },
+            onFailure = {
+                AppLogger.warn("Messaging", "attachment queue failed: ${it.message}")
+                AppResult.Error(ir.vmessenger.core.common.AppError.Validation(it.message ?: "پیوست ناموفق"))
+            },
+        )
+
     override suspend fun markConversationRead(conversationId: String) = Unit
 
     private fun MessageEntity.toDomain() = ChatMessage(
@@ -139,5 +191,22 @@ class ConversationRepositoryImpl @Inject constructor(
         },
         createdAtUnixMs = createdAtUnixMs,
         replyToMessageId = replyToMessageId,
+        attachment = toAttachment(),
     )
+
+    private fun MessageEntity.toAttachment(): ChatAttachment? {
+        val type = when (contentType) {
+            MessageContentType.IMAGE -> AttachmentType.IMAGE
+            MessageContentType.VIDEO -> AttachmentType.VIDEO
+            MessageContentType.FILE -> AttachmentType.FILE
+            else -> return null
+        }
+        return ChatAttachment(
+            type = type,
+            fileName = attachmentName ?: "file",
+            mimeType = attachmentMimeType ?: "application/octet-stream",
+            sizeBytes = attachmentSizeBytes ?: 0L,
+            localPath = attachmentPath,
+        )
+    }
 }

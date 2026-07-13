@@ -3,13 +3,13 @@ package ir.vmessenger.data.network
 import com.google.protobuf.ByteString
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
+import ir.vmessenger.core.common.network.NetworkPath
+import ir.vmessenger.core.common.network.NetworkPathTracker
+import ir.vmessenger.core.common.network.P2PConfig
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.dao.OutboxDao
-import ir.vmessenger.core.common.network.NetworkPath
-import ir.vmessenger.core.common.network.NetworkPathTracker
-import ir.vmessenger.core.common.network.P2PConfig
 import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
@@ -26,6 +26,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import ir.vmessenger.core.proto.app.v1.ChatMessage as ProtoChatMessage
@@ -40,6 +41,7 @@ import ir.vmessenger.core.proto.app.v1.ChatMessage as ProtoChatMessage
  * outbound delivery: messages stay queued until a transport send succeeds.
  */
 @Singleton
+@Suppress("LongParameterList")
 class OutboxDispatcher @Inject constructor(
     private val messageDao: MessageDao,
     private val conversationDao: ConversationDao,
@@ -48,6 +50,7 @@ class OutboxDispatcher @Inject constructor(
     private val identityRepository: IdentityRepository,
     private val messagingService: MessagingService,
     private val mailboxService: MailboxService,
+    private val attachmentSender: AttachmentSender,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -110,6 +113,10 @@ class OutboxDispatcher @Inject constructor(
             ed25519PublicKey = contact.ed25519Public,
             x25519StaticPublicKey = contact.x25519StaticPublic ?: ByteArray(X25519_KEY_SIZE),
         )
+        if (message.isAttachment()) {
+            processAttachment(item, message, self, peer, conversation.contactId)
+            return
+        }
         val envelope = buildEnvelope(message, identity)
         when (val result = messagingService.send(conversation.contactId, self, peer, envelope)) {
             is AppResult.Success -> {
@@ -118,6 +125,31 @@ class OutboxDispatcher @Inject constructor(
                 AppLogger.info("Outbox", "sent messageId=${message.messageId} attempt=${item.attemptCount + 1}")
             }
             is AppResult.Error -> backoff(item, result.error.message, peer, envelope)
+        }
+    }
+
+    private suspend fun processAttachment(
+        item: OutboxEntity,
+        message: MessageEntity,
+        self: PeerIdentity,
+        peer: PeerIdentity,
+        contactId: String,
+    ) {
+        val path = message.attachmentPath
+        val file = path?.let(::File)
+        if (file == null || !file.exists()) {
+            messageDao.updateStatus(item.messageId, DeliveryStatus.FAILED)
+            outboxDao.remove(item.messageId)
+            AppLogger.warn("Outbox", "attachment file missing for messageId=${item.messageId}")
+            return
+        }
+        when (val result = attachmentSender.send(contactId, self, peer, message, file)) {
+            is AppResult.Success -> {
+                messageDao.markSent(message.messageId, DeliveryStatus.SENT, System.currentTimeMillis())
+                outboxDao.remove(item.messageId)
+                AppLogger.info("Outbox", "sent attachment messageId=${message.messageId}")
+            }
+            is AppResult.Error -> backoff(item, result.error.message)
         }
     }
 
@@ -167,6 +199,14 @@ class OutboxDispatcher @Inject constructor(
             .setCounter(1)
             .setChat(ProtoChatMessage.newBuilder().setText(message.body.orEmpty()))
             .build()
+
+    private fun MessageEntity.isAttachment(): Boolean = when (contentType) {
+        ir.vmessenger.core.database.entity.MessageContentType.IMAGE,
+        ir.vmessenger.core.database.entity.MessageContentType.VIDEO,
+        ir.vmessenger.core.database.entity.MessageContentType.FILE,
+        -> true
+        else -> false
+    }
 
     private suspend fun selfPeer(identity: Identity): PeerIdentity = PeerIdentity(
         identityHash = identity.identityHash,

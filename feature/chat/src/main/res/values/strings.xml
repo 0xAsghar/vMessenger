@@ -11,4 +11,6 @@
     <string name="feature_chat_status_delivered">تحویل شد</string>
     <string name="feature_chat_status_read">خوانده شد</string>
     <string name="feature_chat_status_failed">ناموفق</string>
+    <string name="feature_chat_attach">پیوست</string>
+    <string name="feature_chat_attachment_open_failed">برنامه‌ای برای باز کردن این فایل یافت نشد</string>
 </resources>

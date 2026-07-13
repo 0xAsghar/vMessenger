@@ -31,7 +31,37 @@ message MessageEnvelope {
     MailboxDeleteAck mailbox_delete_ack = 26;
     ContactRequest contact_request = 27;
     ContactResponse contact_response = 28;
+    AttachmentInfo attachment_info = 29;
+    AttachmentChunk attachment_chunk = 30;
   }
+}
+
+/**
+ * Media/file transfer header. The payload follows as AttachmentChunk envelopes
+ * on the same secure session; the receiver materializes the message once all
+ * chunks arrived. Chunks stay well below the 1 MiB transport frame cap.
+ */
+message AttachmentInfo {
+  bytes transfer_id = 1;
+  string file_name = 2;
+  string mime_type = 3;
+  int64 total_size = 4;
+  int32 chunk_count = 5;
+  AttachmentKind kind = 6;
+  string caption = 7;
+}
+
+message AttachmentChunk {
+  bytes transfer_id = 1;
+  int32 index = 2;
+  bytes data = 3;
+}
+
+enum AttachmentKind {
+  ATTACHMENT_KIND_UNSPECIFIED = 0;
+  ATTACHMENT_KIND_IMAGE = 1;
+  ATTACHMENT_KIND_VIDEO = 2;
+  ATTACHMENT_KIND_FILE = 3;
 }
 
 /** Phase 4: network infrastructure hints exchanged after a secure handshake. */

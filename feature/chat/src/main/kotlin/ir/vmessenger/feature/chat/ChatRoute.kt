@@ -1,5 +1,7 @@
 package ir.vmessenger.feature.chat
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +15,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -28,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -92,6 +99,11 @@ fun ConversationRoute(
     val contactName by viewModel.contactName.collectAsStateWithLifecycle()
     var draft by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
+    val pickAttachment = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        uri?.let { viewModel.sendAttachment(it.toString()) }
+    }
 
     // reverseLayout anchors content to the bottom (messenger convention): with
     // the list reversed, index 0 is the newest message at the very bottom.
@@ -114,6 +126,7 @@ fun ConversationRoute(
                     viewModel.send(draft)
                     draft = ""
                 },
+                onAttach = { pickAttachment.launch("*/*") },
             )
         },
     ) { padding ->
@@ -138,6 +151,7 @@ private fun MessageComposer(
     draft: String,
     onDraftChange: (String) -> Unit,
     onSend: () -> Unit,
+    onAttach: () -> Unit,
 ) {
     Surface(
         tonalElevation = 1.dp,
@@ -150,6 +164,13 @@ private fun MessageComposer(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            IconButton(onClick = onAttach) {
+                Icon(
+                    imageVector = Icons.Outlined.AttachFile,
+                    contentDescription = stringResource(R.string.feature_chat_attach),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             TextField(
                 value = draft,
                 onValueChange = onDraftChange,
@@ -174,52 +195,62 @@ private fun MessageComposer(
     }
 }
 
+private data class BubbleStyle(
+    val alignment: Alignment,
+    val bubbleColor: Color,
+    val contentColor: Color,
+    val statusColor: Color,
+    val shape: RoundedCornerShape,
+)
+
+@Composable
+private fun bubbleStyle(isOutgoing: Boolean): BubbleStyle = if (isOutgoing) {
+    BubbleStyle(
+        alignment = Alignment.CenterStart,
+        bubbleColor = MaterialTheme.colorScheme.secondary,
+        contentColor = MaterialTheme.colorScheme.onSecondary,
+        statusColor = MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.7f),
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 4.dp),
+    )
+} else {
+    BubbleStyle(
+        alignment = Alignment.CenterEnd,
+        bubbleColor = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        statusColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 4.dp, bottomStart = 16.dp),
+    )
+}
+
 @Composable
 private fun MessageBubble(message: ChatMessage) {
     val isOutgoing = message.direction == MessageDirection.OUTGOING
-    val alignment = if (isOutgoing) {
-        Alignment.CenterStart
-    } else {
-        Alignment.CenterEnd
-    }
-    val bubbleColor = if (isOutgoing) {
-        MaterialTheme.colorScheme.secondary
-    } else {
-        MaterialTheme.colorScheme.surfaceVariant
-    }
-    val contentColor = if (isOutgoing) {
-        MaterialTheme.colorScheme.onSecondary
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    val statusColor = if (isOutgoing) {
-        MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.7f)
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    val shape = if (isOutgoing) {
-        RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 4.dp)
-    } else {
-        RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomEnd = 4.dp, bottomStart = 16.dp)
-    }
+    val style = bubbleStyle(isOutgoing)
+    val contentColor = style.contentColor
+    val statusColor = style.statusColor
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp),
-        contentAlignment = alignment,
+        contentAlignment = style.alignment,
     ) {
         Surface(
             modifier = Modifier.widthIn(max = 280.dp),
-            shape = shape,
-            color = bubbleColor,
+            shape = style.shape,
+            color = style.bubbleColor,
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                Text(
-                    text = message.text,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = contentColor,
-                )
+                message.attachment?.let { attachment ->
+                    AttachmentContent(attachment = attachment, contentColor = contentColor)
+                }
+                if (message.text.isNotBlank()) {
+                    Text(
+                        text = message.text,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = contentColor,
+                    )
+                }
                 // Delivery status is only meaningful for the sender's own messages.
                 if (isOutgoing) {
                     Text(

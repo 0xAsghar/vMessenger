@@ -16,6 +16,18 @@ data class ChatMessage(
     val status: DeliveryStatus,
     val createdAtUnixMs: Long,
     val replyToMessageId: String? = null,
+    val attachment: ChatAttachment? = null,
+)
+
+enum class AttachmentType { IMAGE, VIDEO, FILE }
+
+data class ChatAttachment(
+    val type: AttachmentType,
+    val fileName: String,
+    val mimeType: String,
+    val sizeBytes: Long,
+    /** Absolute path in app-private storage; null while an incoming transfer is pending. */
+    val localPath: String?,
 )
 
 enum class MessageDirection {

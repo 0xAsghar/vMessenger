@@ -13,12 +13,12 @@ import ir.vmessenger.core.database.dao.AppMetadataDao
 import ir.vmessenger.core.database.dao.BootstrapNodeDao
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ContactRequestDao
-import ir.vmessenger.core.database.dao.LocationAccessDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.DhtRecordDao
 import ir.vmessenger.core.database.dao.EndpointCacheDao
 import ir.vmessenger.core.database.dao.IdentityDao
 import ir.vmessenger.core.database.dao.KeyMaterialDao
+import ir.vmessenger.core.database.dao.LocationAccessDao
 import ir.vmessenger.core.database.dao.LocationSampleDao
 import ir.vmessenger.core.database.dao.LocationShareDao
 import ir.vmessenger.core.database.dao.MailboxDao
@@ -26,6 +26,9 @@ import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.dao.OutboxDao
 import ir.vmessenger.core.database.dao.RelayNodeDao
 import ir.vmessenger.core.database.dao.SessionDao
+import ir.vmessenger.core.database.migration.MIGRATION_10_11
+import ir.vmessenger.core.database.migration.MIGRATION_11_12
+import ir.vmessenger.core.database.migration.MIGRATION_12_13
 import ir.vmessenger.core.database.migration.MIGRATION_1_2
 import ir.vmessenger.core.database.migration.MIGRATION_2_3
 import ir.vmessenger.core.database.migration.MIGRATION_3_4
@@ -34,8 +37,6 @@ import ir.vmessenger.core.database.migration.MIGRATION_5_6
 import ir.vmessenger.core.database.migration.MIGRATION_6_7
 import ir.vmessenger.core.database.migration.MIGRATION_7_8
 import ir.vmessenger.core.database.migration.MIGRATION_8_9
-import ir.vmessenger.core.database.migration.MIGRATION_10_11
-import ir.vmessenger.core.database.migration.MIGRATION_11_12
 import ir.vmessenger.core.database.migration.MIGRATION_9_10
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 import javax.inject.Singleton
@@ -76,6 +77,7 @@ object DatabaseModule {
                 MIGRATION_9_10,
                 MIGRATION_10_11,
                 MIGRATION_11_12,
+                MIGRATION_12_13,
             )
             .build()
     }
