@@ -20,6 +20,9 @@ interface ContactRequestDao {
     @Query("SELECT * FROM contact_request WHERE requesterIdentityHash = :hash LIMIT 1")
     suspend fun getByRequesterHash(hash: ByteArray): ContactRequestEntity?
 
+    @Query("SELECT rejectCount FROM contact_request WHERE requestId = :requestId LIMIT 1")
+    suspend fun rejectCountOf(requestId: String): Int?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: ContactRequestEntity)
 

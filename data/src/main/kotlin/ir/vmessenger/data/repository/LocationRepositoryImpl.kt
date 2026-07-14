@@ -42,6 +42,27 @@ class LocationRepositoryImpl @Inject constructor(
     override fun observeLatestSample(shareId: String): Flow<LocationSample?> =
         locationSampleDao.observeLatest(shareId).map { entity -> entity?.toDomain() }
 
+    override fun observeIsSharing(): Flow<Boolean> =
+        locationShareDao.observeActive().map { shares ->
+            shares.any { it.direction == MessageDirection.OUTGOING }
+        }
+
+    override fun observeIncomingLocations(): Flow<Map<String, LocationSample>> =
+        combine(
+            locationShareDao.observeActive(),
+            locationSampleDao.observeLatestPerShare(),
+        ) { shares, latestSamples ->
+            val samplesByShare = latestSamples.associateBy { it.shareId }
+            shares
+                .filter { it.direction == MessageDirection.INCOMING }
+                .mapNotNull { share ->
+                    val sample = samplesByShare[share.shareId] ?: return@mapNotNull null
+                    if (sample.sampledAtUnixMs <= 0L) return@mapNotNull null
+                    share.contactId to sample.toDomain()
+                }
+                .toMap()
+        }
+
     /**
      * Latest position per visible share. Combines the share table with a
      * sample-table-reactive query so the map refreshes on every new sample —

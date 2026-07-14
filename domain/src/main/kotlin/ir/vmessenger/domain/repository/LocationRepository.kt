@@ -11,11 +11,18 @@ data class ActiveLocationShare(
     val outgoing: Boolean,
 )
 
+@Suppress("TooManyFunctions")
 interface LocationRepository {
     fun observeActiveShares(): Flow<List<String>>
     fun observeActiveShareDetails(): Flow<List<ActiveLocationShare>>
     fun observeLatestSample(shareId: String): Flow<LocationSample?>
     fun observeLatestSamples(): Flow<Map<String, LocationSample>>
+
+    /** True while this device is actively sharing its location with anyone. */
+    fun observeIsSharing(): Flow<Boolean>
+
+    /** Latest position of each contact currently sharing their location with us (by contactId). */
+    fun observeIncomingLocations(): Flow<Map<String, LocationSample>>
     suspend fun startSharing(contactId: String): AppResult<String>
     suspend fun stopSharing(shareId: String): AppResult<Unit>
     suspend fun startIncomingShare(contactId: String, shareId: String)

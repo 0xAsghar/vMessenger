@@ -24,6 +24,9 @@ class ContactRequestRepositoryImpl @Inject constructor(
         contactRequestDao.observePending().map { list -> list.map { it.toDomain() } }
 
     override suspend fun saveRequest(request: ContactRequest) {
+        // requestId is deterministic per (requester, target), so a resent request
+        // reuses the same row — preserve the reject counter across re-saves.
+        val existingRejects = contactRequestDao.rejectCountOf(request.requestId) ?: 0
         contactRequestDao.upsert(
             ContactRequestEntity(
                 requestId = request.requestId,
@@ -34,9 +37,13 @@ class ContactRequestRepositoryImpl @Inject constructor(
                 requesterX25519StaticPublic = request.requesterX25519StaticPublicKey,
                 receivedAtUnixMs = request.receivedAtUnixMs,
                 status = ContactRequestStatus.PENDING,
+                rejectCount = existingRejects,
             ),
         )
     }
+
+    override suspend fun rejectCountOf(requestId: String): Int =
+        contactRequestDao.rejectCountOf(requestId) ?: 0
 
     override suspend fun getRequest(requestId: String): ContactRequest? =
         contactRequestDao.getById(requestId)?.toDomain()
@@ -59,7 +66,12 @@ class ContactRequestRepositoryImpl @Inject constructor(
 
     override suspend fun rejectRequest(requestId: String) {
         val entity = contactRequestDao.getById(requestId) ?: return
-        contactRequestDao.update(entity.copy(status = ContactRequestStatus.REJECTED))
+        contactRequestDao.update(
+            entity.copy(
+                status = ContactRequestStatus.REJECTED,
+                rejectCount = entity.rejectCount + 1,
+            ),
+        )
     }
 
     private fun ContactRequestEntity.toDomain() = ContactRequest(

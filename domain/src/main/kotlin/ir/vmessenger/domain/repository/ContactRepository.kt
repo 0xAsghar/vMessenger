@@ -31,4 +31,7 @@ interface ContactRequestRepository {
     suspend fun getRequest(requestId: String): ContactRequest?
     suspend fun acceptRequest(requestId: String): AppResult<Contact>
     suspend fun rejectRequest(requestId: String)
+
+    /** Number of times the user has rejected this request/requester so far. */
+    suspend fun rejectCountOf(requestId: String): Int
 }

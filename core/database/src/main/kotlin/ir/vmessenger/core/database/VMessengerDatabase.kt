@@ -59,7 +59,7 @@ import ir.vmessenger.core.database.entity.SessionEntity
         MailboxBlobEntity::class,
         DhtRecordEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)

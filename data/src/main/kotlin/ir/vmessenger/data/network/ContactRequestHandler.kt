@@ -24,6 +24,7 @@ class ContactRequestHandler @Inject constructor(
     private val contactRequestService: ContactRequestService,
     private val contactDao: ContactDao,
 ) {
+    @Suppress("ReturnCount")
     suspend fun handleRequest(envelope: MessageEnvelope, peer: PeerIdentity?) {
         val request = envelope.contactRequest
         val requestId = request.requestId.toStringUtf8()
@@ -49,6 +50,13 @@ class ContactRequestHandler @Inject constructor(
             )
         if (autoAcceptable) {
             approveRequestSilently(domainRequest)
+            return
+        }
+        // The user rejected this requester repeatedly — stop bothering them and
+        // just decline further requests silently (without re-counting).
+        if (contactRequestRepository.rejectCountOf(requestId) >= MAX_REJECTS_BEFORE_SILENT) {
+            sendRejectResponse(domainRequest)
+            AppLogger.info("Contact", "silently declined repeat request from ${request.requesterUserHash}")
             return
         }
         contactRequestRepository.saveRequest(domainRequest)
@@ -142,6 +150,10 @@ class ContactRequestHandler @Inject constructor(
 
     suspend fun rejectRequest(request: ContactRequest) {
         contactRequestRepository.rejectRequest(request.requestId)
+        sendRejectResponse(request)
+    }
+
+    private suspend fun sendRejectResponse(request: ContactRequest) {
         val peer = PeerIdentity(
             identityHash = request.requesterIdentityHash,
             ed25519PublicKey = request.requesterEd25519PublicKey,
@@ -157,6 +169,8 @@ class ContactRequestHandler @Inject constructor(
     }
 
     companion object {
+        private const val MAX_REJECTS_BEFORE_SILENT = 2
+
         fun strangerContactId(identityHash: ByteArray): String =
             "stranger:" + identityHash.joinToString("") { "%02x".format(it) }
     }

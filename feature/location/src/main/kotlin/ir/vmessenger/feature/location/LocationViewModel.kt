@@ -49,10 +49,12 @@ class LocationViewModel @Inject constructor(
             combine(
                 contactRepository.observeContacts(),
                 locationAccessRepository.observeAll(),
-                locationRepository.observeActiveShares(),
+                // Only my own outgoing sharing drives the Start/Stop button; an
+                // incoming share from someone else must not make it show "Stop".
+                locationRepository.observeIsSharing(),
                 locationRepository.observeLatestSamples(),
                 _hint,
-            ) { contacts, access, activeShareIds, samples, hint ->
+            ) { contacts, access, isSharing, samples, hint ->
                 val approved = contacts.filter {
                     it.relationshipStatus == ContactRelationshipStatus.APPROVED
                 }
@@ -65,7 +67,7 @@ class LocationViewModel @Inject constructor(
                 }
                 LocationUiState(
                     contacts = items,
-                    sharing = activeShareIds.isNotEmpty(),
+                    sharing = isSharing,
                     samples = samples,
                     hint = hint,
                 )

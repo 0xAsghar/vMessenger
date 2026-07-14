@@ -17,6 +17,9 @@ data class ContactRequestEntity(
     val requesterX25519StaticPublic: ByteArray?,
     val receivedAtUnixMs: Long,
     val status: ContactRequestStatus,
+    // How many times the user rejected this requester; after enough rejections
+    // repeat requests are auto-declined silently instead of re-prompting.
+    val rejectCount: Int = 0,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -29,7 +32,8 @@ data class ContactRequestEntity(
             requesterEd25519Public.contentEquals(other.requesterEd25519Public) &&
             requesterX25519StaticPublic.contentEqualsOrNull(other.requesterX25519StaticPublic) &&
             receivedAtUnixMs == other.receivedAtUnixMs &&
-            status == other.status
+            status == other.status &&
+            rejectCount == other.rejectCount
     }
 
     override fun hashCode(): Int {
@@ -41,6 +45,7 @@ data class ContactRequestEntity(
         result = 31 * result + (requesterX25519StaticPublic?.contentHashCode() ?: 0)
         result = 31 * result + receivedAtUnixMs.hashCode()
         result = 31 * result + status.hashCode()
+        result = 31 * result + rejectCount
         return result
     }
 

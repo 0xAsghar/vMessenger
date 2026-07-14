@@ -304,3 +304,9 @@ val MIGRATION_12_13 = object : Migration(12, 13) {
         db.execSQL("ALTER TABLE message ADD COLUMN attachmentPath TEXT")
     }
 }
+
+val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE contact_request ADD COLUMN rejectCount INTEGER NOT NULL DEFAULT 0")
+    }
+}

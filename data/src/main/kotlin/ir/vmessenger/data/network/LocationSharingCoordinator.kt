@@ -113,14 +113,21 @@ class LocationSharingCoordinator @Inject constructor(
         AppResult.Error(ir.vmessenger.core.common.AppError.Validation("هیچ مخاطبی انتخاب نشده"))
 
     suspend fun stopAllSharing() {
-        LocationService.stop(context)
         val shares = locationShareDao.observeActive().first()
             .filter { it.direction == MessageDirection.OUTGOING }
+        AppLogger.info("Location", "stopAllSharing: ${shares.size} outgoing share(s)")
+        // Mark inactive first so the UI flips to "start" immediately, then stop
+        // the service and best-effort notify peers (a slow/failed send must not
+        // leave the share stuck active).
         for (share in shares) {
-            sendShareStop(share.contactId, share.shareId)
             locationRepository.stopSharing(share.shareId)
         }
         outgoingShareIds.clear()
+        LocationService.stop(context)
+        for (share in shares) {
+            runCatching { sendShareStop(share.contactId, share.shareId) }
+                .onFailure { AppLogger.warn("Location", "share stop notify failed: ${it.message}") }
+        }
     }
 
     suspend fun handleIncomingLocation(contactId: String, envelope: MessageEnvelope) {

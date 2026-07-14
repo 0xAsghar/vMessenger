@@ -10,4 +10,12 @@
     <string name="contacts_status_pending_out">در انتظار تأیید</string>
     <string name="contacts_status_pending_in">درخواست دریافتی</string>
     <string name="contacts_status_rejected">رد شده</string>
+    <string name="contacts_requests_title">درخواست‌های مخاطبی</string>
+    <string name="contacts_request_approve">تأیید</string>
+    <string name="contacts_request_reject">رد</string>
+    <string name="contacts_resend_request">ارسال مجدد درخواست</string>
+    <string name="contacts_location_shared">موقعیت به اشتراک گذاشته شده</string>
+    <string name="contacts_location_title">موقعیت زندهٔ مخاطب</string>
+    <string name="contacts_distance_meters">%1$d متر</string>
+    <string name="contacts_distance_km">%1$.1f کیلومتر</string>
 </resources>
