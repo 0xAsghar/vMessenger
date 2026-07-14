@@ -25,6 +25,10 @@ interface ContactDao {
     @Query("SELECT * FROM contact")
     suspend fun getAll(): List<ContactEntity>
 
+    /** Marks that we just received something from this contact (stops re-requesting). */
+    @Query("UPDATE contact SET lastSeenUnixMs = :ts WHERE id = :id")
+    suspend fun touchLastSeen(id: String, ts: Long)
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: ContactEntity)
 

@@ -190,9 +190,27 @@ class RelayListener @Inject constructor(
         }
         try {
             openLatch.await()
+            val keepAlive = scope.launch { keepAliveLoop(webSocket, closeLatch) }
             closeLatch.await()
+            keepAlive.cancel()
         } finally {
             webSocket.cancel()
+        }
+    }
+
+    /**
+     * The listener control channel is idle most of the time (it only carries a
+     * frame when a dialer arrives), so CDNs/proxies close it on their read
+     * timeout — observed dropping every ~100s on mobile, leaving the device
+     * briefly unreachable during each reconnect. Push a tiny app-level frame so
+     * the path sees traffic. The relay server reads and ignores any non-close
+     * frame on a listener session, so this is a safe no-op server-side.
+     */
+    private suspend fun keepAliveLoop(webSocket: WebSocket, closeLatch: CompletableDeferred<Unit>) {
+        var alive = true
+        while (alive && !closeLatch.isCompleted) {
+            delay(KEEPALIVE_INTERVAL_MS)
+            alive = !closeLatch.isCompleted && webSocket.send(KEEPALIVE_FRAME.toByteString())
         }
     }
 
@@ -201,5 +219,10 @@ class RelayListener @Inject constructor(
         val hello = relayHelloFactory.buildAcceptHello(circuitId)
         val connection = relayTransport.openRelayCircuit(url, hello, awaitReady = true)
         inbound.onInboundConnection(connection)
+    }
+
+    companion object {
+        private const val KEEPALIVE_INTERVAL_MS = 40_000L
+        private val KEEPALIVE_FRAME = byteArrayOf(0)
     }
 }

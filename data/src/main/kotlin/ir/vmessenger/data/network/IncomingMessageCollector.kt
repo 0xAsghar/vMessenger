@@ -70,6 +70,11 @@ class IncomingMessageCollector @Inject constructor(
 
     private suspend fun handleIncoming(incoming: IncomingEnvelope) {
         val envelope = incoming.envelope
+        // Any inbound frame from a known contact proves the peer is reachable and
+        // has us, so the request-retry worker can stop re-sending to them.
+        if (!incoming.contactId.startsWith("stranger:")) {
+            runCatching { contactDao.touchLastSeen(incoming.contactId, System.currentTimeMillis()) }
+        }
         when {
             envelope.hasContactRequest() ->
                 contactRequestHandler.handleRequest(envelope, incoming.session?.peer)

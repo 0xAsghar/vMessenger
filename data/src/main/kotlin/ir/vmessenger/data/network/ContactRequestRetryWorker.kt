@@ -18,12 +18,18 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Re-sends contact requests for contacts stuck in PENDING_OUT.
+ * Re-sends contact requests until the peer answers.
  *
- * A hash-added contact only becomes usable after the peer receives our
- * ContactRequest and answers. The initial send is best-effort (the peer may be
- * offline or unreachable), so without retries the request is silently lost and
- * the relationship never completes. Request ids are deterministic per
+ * Two cases both need a durable outbound request:
+ *  - hash-added contacts (PENDING_OUT): usable only after the peer approves;
+ *  - QR-added contacts (APPROVED locally): the peer still has to learn about us,
+ *    so we owe them a request too until they respond.
+ *
+ * A contact is considered "answered" once we have received anything from it
+ * (lastSeenUnixMs set), so retries stop as soon as the peer responds. The
+ * initial send is best-effort (the peer may be offline or, on mobile, briefly
+ * off the relay), so without retries the request is silently lost and the
+ * relationship never completes. Request ids are deterministic per
  * (requester, target) pair, so the receiver dedupes repeated deliveries.
  */
 @Singleton
@@ -57,9 +63,18 @@ class ContactRequestRetryWorker @Inject constructor(
     private suspend fun retryPendingRequests() {
         if (identityRepository.getIdentity() == null) return
         val now = System.currentTimeMillis()
-        val pendingOut = contactDao.getAll()
-            .filter { it.relationshipStatus == ContactRelationshipStatus.PENDING_OUT }
-        val due = pendingOut.filter { entity ->
+        // PENDING_OUT: hash-added, waiting for approval.
+        // APPROVED + never heard from: QR-added (or an unacknowledged add) — the
+        // peer still needs our request. Once they respond, lastSeenUnixMs is set
+        // and we stop.
+        val owed = contactDao.getAll().filter { entity ->
+            !entity.blocked && when (entity.relationshipStatus) {
+                ContactRelationshipStatus.PENDING_OUT -> true
+                ContactRelationshipStatus.APPROVED -> entity.lastSeenUnixMs == null
+                else -> false
+            }
+        }
+        val due = owed.filter { entity ->
             val state = attempts[entity.id]
             state == null || now >= state.nextAttemptUnixMs
         }
@@ -68,7 +83,7 @@ class ContactRequestRetryWorker @Inject constructor(
                 sendWithBackoff(entity.id, contact, now)
             }
         }
-        attempts.keys.retainAll(pendingOut.map { it.id }.toSet())
+        attempts.keys.retainAll(owed.map { it.id }.toSet())
     }
 
     private suspend fun sendWithBackoff(
