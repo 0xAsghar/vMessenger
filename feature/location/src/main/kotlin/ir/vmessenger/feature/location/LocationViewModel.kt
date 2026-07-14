@@ -27,7 +27,10 @@ data class LocationUiState(
     val sharing: Boolean = false,
     val contacts: List<ContactAccessItem> = emptyList(),
     val samples: Map<String, ir.vmessenger.domain.model.LocationSample> = emptyMap(),
+    val hint: LocationHint? = null,
 )
+
+enum class LocationHint { SELECT_CONTACT_FIRST }
 
 @HiltViewModel
 class LocationViewModel @Inject constructor(
@@ -39,6 +42,8 @@ class LocationViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(LocationUiState())
     val uiState: StateFlow<LocationUiState> = _uiState.asStateFlow()
 
+    private val _hint = MutableStateFlow<LocationHint?>(null)
+
     init {
         viewModelScope.launch {
             combine(
@@ -46,7 +51,8 @@ class LocationViewModel @Inject constructor(
                 locationAccessRepository.observeAll(),
                 locationRepository.observeActiveShares(),
                 locationRepository.observeLatestSamples(),
-            ) { contacts, access, activeShareIds, samples ->
+                _hint,
+            ) { contacts, access, activeShareIds, samples, hint ->
                 val approved = contacts.filter {
                     it.relationshipStatus == ContactRelationshipStatus.APPROVED
                 }
@@ -61,6 +67,7 @@ class LocationViewModel @Inject constructor(
                     contacts = items,
                     sharing = activeShareIds.isNotEmpty(),
                     samples = samples,
+                    hint = hint,
                 )
             }.collect { state ->
                 _uiState.value = state
@@ -69,6 +76,7 @@ class LocationViewModel @Inject constructor(
     }
 
     fun toggleAccess(contactId: String, granted: Boolean) {
+        _hint.value = null
         viewModelScope.launch {
             locationAccessRepository.setAccess(contactId, granted)
         }
@@ -77,9 +85,14 @@ class LocationViewModel @Inject constructor(
     fun toggleSharing() {
         viewModelScope.launch {
             if (_uiState.value.sharing) {
+                _hint.value = null
                 locationSharingCoordinator.stopAllSharing()
             } else {
-                locationSharingCoordinator.startSharingToGrantedContacts()
+                when (locationSharingCoordinator.startSharingToGrantedContacts()) {
+                    is AppResult.Success -> _hint.value = null
+                    // The only start failure today is "no (approved) contact selected".
+                    is AppResult.Error -> _hint.value = LocationHint.SELECT_CONTACT_FIRST
+                }
             }
         }
     }

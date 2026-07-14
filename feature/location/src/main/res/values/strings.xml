@@ -8,4 +8,6 @@
     <string name="feature_location_stop">توقف اشتراک‌گذاری</string>
     <string name="feature_location_access_title">چه کسی موقعیت من را ببیند؟</string>
     <string name="feature_location_permission_required">برای اشتراک‌گذاری موقعیت به دسترسی مکان نیاز است</string>
+    <string name="feature_location_grant_access">اجازه دسترسی به موقعیت</string>
+    <string name="feature_location_select_contact_first">ابتدا حداقل یک مخاطب را انتخاب کنید</string>
 </resources>

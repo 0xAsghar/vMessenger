@@ -79,23 +79,38 @@ class LocationSharingCoordinator @Inject constructor(
 
     suspend fun startSharingToGrantedContacts(): AppResult<Unit> {
         val granted = locationAccessRepository.grantedContactIds()
-        if (granted.isEmpty()) {
-            return AppResult.Error(ir.vmessenger.core.common.AppError.Validation("هیچ مخاطبی انتخاب نشده"))
-        }
+        if (granted.isEmpty()) return noContactSelectedError()
         LocationService.start(context)
+        val started = startSharesFor(granted)
+        return if (started == 0) {
+            // Nothing actually started (e.g. selected contacts not approved yet);
+            // report it instead of leaving the UI silently in the "off" state.
+            LocationService.stop(context)
+            noContactSelectedError()
+        } else {
+            AppResult.Success(Unit)
+        }
+    }
+
+    private suspend fun startSharesFor(granted: List<String>): Int {
+        var started = 0
         for (contactId in granted) {
             val contact = contactDao.getById(contactId) ?: continue
             if (contact.relationshipStatus != ContactRelationshipStatus.APPROVED) continue
             when (val result = locationRepository.startSharing(contactId)) {
                 is AppResult.Success -> {
+                    started++
                     outgoingShareIds[contactId] = result.data
                     sendShareStart(contactId, result.data)
                 }
                 is AppResult.Error -> Unit
             }
         }
-        return AppResult.Success(Unit)
+        return started
     }
+
+    private fun noContactSelectedError(): AppResult<Unit> =
+        AppResult.Error(ir.vmessenger.core.common.AppError.Validation("هیچ مخاطبی انتخاب نشده"))
 
     suspend fun stopAllSharing() {
         LocationService.stop(context)
