@@ -10,11 +10,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -24,6 +26,7 @@ import ir.vmessenger.core.designsystem.theme.RtlLayout
 import ir.vmessenger.core.designsystem.theme.VMessengerTheme
 import ir.vmessenger.navigation.VMessengerNavHost
 import ir.vmessenger.ui.contact.ContactRequestOverlay
+import ir.vmessenger.ui.network.ClockWarningBanner
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -65,8 +68,11 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background,
                     ) {
-                        ContactRequestOverlay()
-                        VMessengerNavHost()
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            ContactRequestOverlay()
+                            VMessengerNavHost()
+                            ClockWarningBanner(modifier = Modifier.align(Alignment.TopCenter))
+                        }
                     }
                 }
             }

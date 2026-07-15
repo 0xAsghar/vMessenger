@@ -4,6 +4,7 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.LengthPrefixedFrames
 import ir.vmessenger.core.common.network.NetworkConfig
+import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.common.network.WebSocketFrameClient
 import ir.vmessenger.core.proto.dht.v1.DhtRpcRequest
 import ir.vmessenger.core.proto.dht.v1.DhtRpcResponse
@@ -29,9 +30,11 @@ class DhtRpcClient @Inject constructor() {
                 sendTcp(address, request)
             }
             AppLogger.debug("DhtRpc", "OK $address in ${System.currentTimeMillis() - started}ms")
+            NetworkPathTracker.reportConnectionSuccess()
             response
         } catch (e: Exception) {
             AppLogger.error("DhtRpc", "FAIL $address: ${e.message}")
+            NetworkPathTracker.reportConnectionError(e)
             throw e
         }
     }

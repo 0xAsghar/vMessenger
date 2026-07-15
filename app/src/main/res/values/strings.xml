@@ -9,4 +9,7 @@
     <string name="contact_request_body">%1$s با شناسه %2$s شما را به مخاطبین اضافه کرده است. آیا این فرد را به مخاطبین خود اضافه می‌کنید؟</string>
     <string name="contact_request_approve">تأیید</string>
     <string name="contact_request_reject">رد</string>
+    <string name="clock_warning_title">تاریخ و ساعت دستگاه را بررسی کنید</string>
+    <string name="clock_warning_body">اتصال به شبکه به دلیل خطای گواهی امنیتی ناموفق است. معمولاً این مشکل با تنظیم صحیح تاریخ و ساعت (ترجیحاً حالت خودکار) برطرف می‌شود.</string>
+    <string name="clock_warning_dismiss">بستن</string>
 </resources>

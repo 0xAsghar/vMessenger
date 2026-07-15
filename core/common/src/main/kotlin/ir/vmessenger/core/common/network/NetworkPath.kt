@@ -83,6 +83,16 @@ object NetworkPathTracker {
     private val _snapshot = MutableStateFlow(NetworkDiagnosticsSnapshot())
     val snapshot: StateFlow<NetworkDiagnosticsSnapshot> = _snapshot
 
+    private val _clockWarning = MutableStateFlow(false)
+
+    /**
+     * True when relay/DHT connections are failing TLS certificate validation.
+     * This almost always means the device clock sits outside the server
+     * certificate's validity window (a wrong date/time), so the UI can prompt
+     * the user to check it instead of silently retrying forever.
+     */
+    val clockWarning: StateFlow<Boolean> = _clockWarning
+
     fun record(path: NetworkPath, detail: String, atUnixMs: Long = System.currentTimeMillis()) {
         val event = NetworkPathEvent(path = path, detail = detail, atUnixMs = atUnixMs)
         _lastPath.value = event
@@ -170,10 +180,76 @@ object NetworkPathTracker {
         return "$pct% $ok/${list.size}"
     }
 
+    /**
+     * Report a failed connection attempt. If the failure is a TLS certificate
+     * chain/validity error, raise [clockWarning] so the UI can hint that the
+     * device date & time may be wrong. Non-certificate failures (plain offline,
+     * timeouts, resets) are ignored so an ordinary outage never shows the hint.
+     */
+    fun reportConnectionError(error: Throwable?) {
+        if (isCertValidityError(error)) {
+            _clockWarning.value = true
+        }
+    }
+
+    /** A successful connection proves the clock/cert are fine — clear the hint. */
+    fun reportConnectionSuccess() {
+        if (_clockWarning.value) {
+            _clockWarning.value = false
+        }
+    }
+
     fun clear() {
         _events.value = emptyList()
         _lastPath.value = null
         _attempts.value = emptyList()
         _snapshot.value = NetworkDiagnosticsSnapshot()
+        _clockWarning.value = false
     }
+
+    /**
+     * True when a throwable (or anything in its cause chain) is an X.509
+     * certificate path/validity failure — e.g. Conscrypt's "Chain validation
+     * failed", CertPathValidatorException, or a not-yet-valid/expired cert. We
+     * deliberately do NOT treat a bare SSLHandshakeException as one, since those
+     * also fire on protocol errors and mid-handshake resets that are unrelated
+     * to the clock.
+     */
+    private fun isCertValidityError(error: Throwable?): Boolean {
+        var cause = error
+        var depth = 0
+        while (cause != null && depth < MAX_CAUSE_DEPTH) {
+            if (matchesCertMarker(cause)) return true
+            cause = cause.cause
+            depth++
+        }
+        return false
+    }
+
+    private fun matchesCertMarker(error: Throwable): Boolean {
+        val className = error.javaClass.name
+        val message = error.message?.lowercase().orEmpty()
+        return CERT_EXCEPTION_MARKERS.any { className.contains(it) } ||
+            CERT_MESSAGE_MARKERS.any { message.contains(it) }
+    }
+
+    private const val MAX_CAUSE_DEPTH = 8
+
+    private val CERT_EXCEPTION_MARKERS = listOf(
+        "CertPathValidator",
+        "CertificateExpired",
+        "CertificateNotYetValid",
+        "CertificateException",
+    )
+
+    private val CERT_MESSAGE_MARKERS = listOf(
+        "chain validation failed",
+        "trust anchor",
+        "certificate expired",
+        "certificate has expired",
+        "not yet valid",
+        "certpath",
+        "certificate is not valid",
+        "timestamp check failed",
+    )
 }

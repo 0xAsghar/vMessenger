@@ -1,6 +1,7 @@
 package ir.vmessenger.network.messaging
 
 import ir.vmessenger.core.common.logging.AppLogger
+import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.common.network.RelayDns
 import ir.vmessenger.core.common.network.WebSocketFrameClient
 import ir.vmessenger.core.proto.relay.v1.RelayEvent
@@ -93,11 +94,13 @@ class RelayListener @Inject constructor(
                 AppLogger.info("Relay", "control channel connecting via $url")
                 connectControlChannel(url, hash, pub, key)
                 relayDirectory.reportResult(url, ok = true)
+                NetworkPathTracker.reportConnectionSuccess()
                 backoffMs = 1_000L
                 AppLogger.info("Relay", "control channel ended, reconnecting in ${backoffMs}ms")
                 delay(backoffMs)
             } catch (e: Exception) {
                 relayDirectory.reportResult(url, ok = false)
+                NetworkPathTracker.reportConnectionError(e)
                 AppLogger.warn("Relay", "control channel lost ($url): ${e.message}, retry in ${backoffMs}ms")
                 delay(backoffMs)
                 backoffMs = (backoffMs * 2).coerceAtMost(60_000L)
