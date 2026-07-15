@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -34,6 +35,10 @@ import kotlin.coroutines.resumeWithException
 class RelayTransport @Inject constructor() : Transport {
     override val id = TransportIds.RELAY
     override val capabilities = TransportCapabilities(reliable = true, ordered = true, mtu = 65_535)
+
+    private companion object {
+        const val DIAL_TIMEOUT_MS = 15_000L
+    }
 
     override fun canReach(endpoint: Endpoint): Boolean =
         endpoint.transport == TransportIds.RELAY &&
@@ -66,12 +71,12 @@ class RelayTransport @Inject constructor() : Transport {
         val host = RelayDns.hostFromUrl(url)
         val ips = host?.let { RelayDns.candidateIps(it) }.orEmpty()
         if (host == null || ips.isEmpty()) {
-            return openRelayCircuitOnce(url, hello, awaitReady, host, targetIp = null)
+            return dialWithTimeout(url, hello, awaitReady, host, targetIp = null)
         }
         var lastError: Exception? = null
         for (ip in ips) {
             try {
-                return openRelayCircuitOnce(url, hello, awaitReady, host, ip)
+                return dialWithTimeout(url, hello, awaitReady, host, ip)
             } catch (e: Exception) {
                 lastError = e
                 if (!shouldRetryRelayDial(e)) throw e
@@ -80,6 +85,24 @@ class RelayTransport @Inject constructor() : Transport {
         }
         throw lastError ?: IllegalStateException("Relay connect failed")
     }
+
+    /**
+     * A relay that accepts the socket but never returns READY (or ERROR) would
+     * otherwise leave the dial suspended forever — OkHttp pings keep the socket
+     * alive, so no timeout fires. Because this runs while holding the messaging
+     * send mutex, a single hung dial freezes all outbound delivery after a
+     * network/IP change. Bound each attempt so the mutex is always released.
+     */
+    private suspend fun dialWithTimeout(
+        url: String,
+        hello: RelayHello,
+        awaitReady: Boolean,
+        host: String?,
+        targetIp: String?,
+    ): RelayConnection =
+        withTimeoutOrNull(DIAL_TIMEOUT_MS) {
+            openRelayCircuitOnce(url, hello, awaitReady, host, targetIp)
+        } ?: throw java.net.SocketTimeoutException("Relay dial timed out after ${DIAL_TIMEOUT_MS}ms")
 
     private suspend fun openRelayCircuitOnce(
         url: String,

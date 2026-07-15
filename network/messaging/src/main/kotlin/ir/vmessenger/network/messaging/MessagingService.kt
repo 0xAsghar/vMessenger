@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -144,7 +145,7 @@ class MessagingService @Inject constructor(
                     if (ordered.isEmpty()) {
                         AppResult.Error(AppError.Network("endpoint یافت نشد"))
                     } else {
-                        sendWithFallback(
+                        val result = sendWithFallback(
                             contactId,
                             self,
                             peer,
@@ -152,6 +153,14 @@ class MessagingService @Inject constructor(
                             envelope,
                             fromPeerCache = resolved.data.fromPeerCache,
                         )
+                        // If the cached endpoint failed, the peer likely moved
+                        // (IP/relay changed). Drop the cache so the next attempt
+                        // re-resolves the freshly republished record from the DHT
+                        // instead of retrying the stale endpoint until TTL.
+                        if (result is AppResult.Error && resolved.data.fromPeerCache) {
+                            endpointResolveService.invalidate(peer.identityHash)
+                        }
+                        result
                     }
                 }
                 is AppResult.Error -> resolved
@@ -213,18 +222,23 @@ class MessagingService @Inject constructor(
         endpoint: Endpoint,
         envelope: MessageEnvelope,
     ): AppResult<Unit> = runCatching {
-        val session = sessionMutex.withLock {
-            outboundSessions[contactId] ?: establishSession(contactId, self, peer, endpoint).also { established ->
-                outboundSessions[contactId] = established
+        // Backstop timeout: bound connect + handshake + first write so a hung
+        // transport can never keep the send/session mutexes held indefinitely.
+        // The session's long-lived read loop runs on its own scope, unaffected.
+        withTimeout(SEND_TIMEOUT_MS) {
+            val session = sessionMutex.withLock {
+                outboundSessions[contactId] ?: establishSession(contactId, self, peer, endpoint).also { established ->
+                    outboundSessions[contactId] = established
+                }
             }
+            val sealed = session.seal(envelope.toByteArray())
+            val frame = Frame.newBuilder()
+                .setVersion(1)
+                .setType(FrameType.FRAME_TYPE_SECURE)
+                .setBody(ByteString.copyFrom(sealed))
+                .build()
+            session.writeFrame(frame.toByteArray())
         }
-        val sealed = session.seal(envelope.toByteArray())
-        val frame = Frame.newBuilder()
-            .setVersion(1)
-            .setType(FrameType.FRAME_TYPE_SECURE)
-            .setBody(ByteString.copyFrom(sealed))
-            .build()
-        session.writeFrame(frame.toByteArray())
     }.fold(
         onSuccess = { AppResult.Success(Unit) },
         onFailure = {
@@ -386,6 +400,13 @@ class MessagingService @Inject constructor(
     private suspend fun awaitCloseOutbound(contactId: String) {
         val previous = sessionMutex.withLock { outboundSessions.remove(contactId) }
         previous?.close()
+    }
+
+    private companion object {
+        // Bounds connect + handshake + first write. Comfortably above the relay
+        // dial timeout (15s) and handshake read timeout (15s) so a legitimately
+        // slow path still completes, but a wedged one is always released.
+        const val SEND_TIMEOUT_MS = 40_000L
     }
 }
 

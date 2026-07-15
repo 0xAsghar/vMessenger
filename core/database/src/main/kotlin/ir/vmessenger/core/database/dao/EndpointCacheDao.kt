@@ -16,4 +16,7 @@ interface EndpointCacheDao {
 
     @Query("DELETE FROM endpoint_cache WHERE expiresAtUnixMs < :now")
     suspend fun purgeExpired(now: Long)
+
+    @Query("DELETE FROM endpoint_cache WHERE identityHash = :hash")
+    suspend fun delete(hash: ByteArray)
 }

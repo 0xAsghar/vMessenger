@@ -51,6 +51,10 @@ class PeerEndpointCacheImpl @Inject constructor(
         )
     }
 
+    override suspend fun evict(identityHash: ByteArray) {
+        endpointCacheDao.delete(IdentityHashMatcher.routingHash(identityHash))
+    }
+
     override suspend fun lookup(identityHash: ByteArray): List<Endpoint>? {
         val now = System.currentTimeMillis()
         endpointCacheDao.purgeExpired(now)

@@ -17,4 +17,7 @@ interface PeerEndpointCache {
 
     /** Stores a verified record if it is newer than any cached entry. */
     suspend fun store(record: EndpointRecord)
+
+    /** Removes any cached entry for [identityHash] (e.g. after it fails to connect). */
+    suspend fun evict(identityHash: ByteArray)
 }

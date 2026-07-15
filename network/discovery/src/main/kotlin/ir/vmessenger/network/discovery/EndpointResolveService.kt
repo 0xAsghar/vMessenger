@@ -22,6 +22,11 @@ class EndpointResolveService @Inject constructor(
         val fromPeerCache: Boolean,
     )
 
+    /** Drops any cached endpoints for a peer so the next resolve re-hits the DHT. */
+    suspend fun invalidate(identityHash: ByteArray) {
+        peerEndpointCache.evict(identityHash)
+    }
+
     suspend fun resolve(identityHash: ByteArray): AppResult<Resolved> {
         if (P2PConfig.peerCacheEnabled) {
             val cached = peerEndpointCache.lookup(identityHash)

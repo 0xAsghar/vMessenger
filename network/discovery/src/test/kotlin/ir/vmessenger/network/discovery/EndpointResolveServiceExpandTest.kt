@@ -20,6 +20,7 @@ class EndpointResolveServiceExpandTest {
             peerEndpointCache = object : PeerEndpointCache {
                 override suspend fun lookup(identityHash: ByteArray) = endpoints
                 override suspend fun store(record: ir.vmessenger.core.proto.dht.v1.EndpointRecord) = Unit
+                override suspend fun evict(identityHash: ByteArray) = Unit
             },
             discoveryManager = DiscoveryManager(emptySet()),
         )
@@ -34,6 +35,7 @@ class EndpointResolveServiceExpandTest {
             peerEndpointCache = object : PeerEndpointCache {
                 override suspend fun lookup(identityHash: ByteArray) = null
                 override suspend fun store(record: ir.vmessenger.core.proto.dht.v1.EndpointRecord) = Unit
+                override suspend fun evict(identityHash: ByteArray) = Unit
             },
             discoveryManager = DiscoveryManager(emptySet()),
         )
