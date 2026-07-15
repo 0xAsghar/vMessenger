@@ -125,7 +125,14 @@ class IncomingMessageCollector @Inject constructor(
 
     private suspend fun persistChatMessage(contactId: String, envelope: MessageEnvelope) {
         val messageId = envelope.messageId.toStringUtf8()
-        if (messageDao.getById(messageId) != null) return
+        if (messageDao.getById(messageId) != null) {
+            // We already have this message. The sender is re-delivering because it
+            // never saw our receipt (its send looked like it failed, or the ack
+            // was lost), so re-acknowledge — otherwise the sender keeps retrying
+            // and eventually marks a delivered message as Failed.
+            sendDeliveryReceipt(contactId, messageId, System.currentTimeMillis())
+            return
+        }
         val now = System.currentTimeMillis()
         val activityMs = envelope.sentAtUnixMs
         val existingConversation = conversationDao.getByContactId(contactId)
