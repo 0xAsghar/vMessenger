@@ -68,6 +68,10 @@ data class OutboxEntity(
     val attemptCount: Int,
     val nextAttemptUnixMs: Long,
     val lastError: String?,
+    // After the message is transport-delivered (status SENT) we keep the row and
+    // re-send until a delivery receipt arrives; this counts those receipt-wait
+    // re-sends so we can stop after a bounded number.
+    val receiptWaitCount: Int = 0,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -78,7 +82,8 @@ data class OutboxEntity(
             sealedPayload.contentEqualsOrNull(other.sealedPayload) &&
             attemptCount == other.attemptCount &&
             nextAttemptUnixMs == other.nextAttemptUnixMs &&
-            lastError == other.lastError
+            lastError == other.lastError &&
+            receiptWaitCount == other.receiptWaitCount
     }
 
     override fun hashCode(): Int {
@@ -88,6 +93,7 @@ data class OutboxEntity(
         result = 31 * result + attemptCount
         result = 31 * result + nextAttemptUnixMs.hashCode()
         result = 31 * result + (lastError?.hashCode() ?: 0)
+        result = 31 * result + receiptWaitCount
         return result
     }
 

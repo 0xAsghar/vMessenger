@@ -310,3 +310,9 @@ val MIGRATION_13_14 = object : Migration(13, 14) {
         db.execSQL("ALTER TABLE contact_request ADD COLUMN rejectCount INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE outbox ADD COLUMN receiptWaitCount INTEGER NOT NULL DEFAULT 0")
+    }
+}

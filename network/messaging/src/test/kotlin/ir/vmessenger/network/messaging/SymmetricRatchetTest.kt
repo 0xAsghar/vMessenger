@@ -52,6 +52,22 @@ class SymmetricRatchetTest {
     }
 
     @Test
+    fun lostFrameDoesNotWedgeSession() {
+        val root = crypto.randomBytes(32)
+        val alice = ratchet.initFromRoot(root, isInitiator = true)
+        val bob = ratchet.initFromRoot(root, isInitiator = false)
+        val ad = ByteArray(0)
+        // Sender seals 1,2,3,4; frame 2 is "lost" in transit. With the real
+        // counter carried per frame, 3 and 4 must still decrypt (no wedge).
+        val sealed = (1..4).map { ratchet.seal(alice, "m$it".toByteArray(), ad) }
+        assertArrayEquals("m1".toByteArray(), ratchet.open(bob, sealed[0], counter = 1, ad))
+        // counter 2 dropped; deliver 3 and 4 with their true counters
+        assertArrayEquals("m3".toByteArray(), ratchet.open(bob, sealed[2], counter = 3, ad))
+        assertArrayEquals("m4".toByteArray(), ratchet.open(bob, sealed[3], counter = 4, ad))
+        assertEquals(4L, bob.recvCounter)
+    }
+
+    @Test
     fun outOfOrderMessagesDecrypt() {
         val root = crypto.randomBytes(32)
         val alice = ratchet.initFromRoot(root, isInitiator = true)

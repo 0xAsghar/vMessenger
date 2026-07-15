@@ -5,6 +5,7 @@ import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.MessageDao
+import ir.vmessenger.core.database.dao.OutboxDao
 import ir.vmessenger.core.database.entity.ContactRelationshipStatus
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.DeliveryStatus
@@ -39,6 +40,7 @@ class IncomingMessageCollector @Inject constructor(
     private val contactDao: ContactDao,
     private val conversationDao: ConversationDao,
     private val messageDao: MessageDao,
+    private val outboxDao: OutboxDao,
     private val peerExchangeService: PeerExchangeService,
     private val mailboxService: MailboxService,
     private val mailboxProtocolService: MailboxProtocolService,
@@ -221,8 +223,11 @@ class IncomingMessageCollector @Inject constructor(
                 messageDao.markDelivered(refId, DeliveryStatus.DELIVERED, now)
             ReceiptType.RECEIPT_TYPE_READ ->
                 messageDao.markRead(refId, DeliveryStatus.READ, now)
-            else -> Unit
+            else -> return
         }
+        // The message is confirmed delivered — stop the receipt-wait re-sends
+        // promptly instead of waiting for the outbox to notice on its next tick.
+        outboxDao.remove(refId)
     }
 
     private suspend fun sendDeliveryReceipt(contactId: String, messageId: String, now: Long) {

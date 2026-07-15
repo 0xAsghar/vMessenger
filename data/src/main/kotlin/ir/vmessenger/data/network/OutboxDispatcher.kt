@@ -41,7 +41,7 @@ import ir.vmessenger.core.proto.app.v1.ChatMessage as ProtoChatMessage
  * outbound delivery: messages stay queued until a transport send succeeds.
  */
 @Singleton
-@Suppress("LongParameterList")
+@Suppress("LongParameterList", "TooManyFunctions")
 class OutboxDispatcher @Inject constructor(
     private val messageDao: MessageDao,
     private val conversationDao: ConversationDao,
@@ -74,6 +74,19 @@ class OutboxDispatcher @Inject constructor(
     /** Trigger an immediate drain (e.g. a new message was queued or a peer just connected). */
     fun wake() {
         wakeups.trySend(Unit)
+    }
+
+    /**
+     * Clears pending backoff so every queued message is retried immediately.
+     * Called when connectivity is (re)established, so messages that piled up
+     * while offline go out at once instead of waiting out their backoff timers.
+     */
+    fun retryNow() {
+        scope.launch {
+            runCatching { outboxDao.resetBackoff() }
+                .onFailure { AppLogger.warn("Outbox", "resetBackoff failed: ${it.message}") }
+            wake()
+        }
     }
 
     private suspend fun drainOnce() {
@@ -115,17 +128,59 @@ class OutboxDispatcher @Inject constructor(
         )
         if (message.isAttachment()) {
             processAttachment(item, message, self, peer, conversation.contactId)
+        } else {
+            sendChatMessage(item, message, identity, self, peer, conversation.contactId)
+        }
+    }
+
+    private suspend fun sendChatMessage(
+        item: OutboxEntity,
+        message: MessageEntity,
+        identity: Identity,
+        self: PeerIdentity,
+        peer: PeerIdentity,
+        contactId: String,
+    ) {
+        // Once transport-delivered (status SENT) we keep the row and re-send until
+        // a delivery receipt arrives, so a lost receipt doesn't strand the message
+        // on "Sent". The recipient dedups and re-acks, so no duplicate is shown.
+        val awaitingReceipt = message.status == DeliveryStatus.SENT
+        if (awaitingReceipt && item.receiptWaitCount >= MAX_RECEIPT_WAITS) {
+            outboxDao.remove(item.messageId)
+            AppLogger.info("Outbox", "receipt wait exhausted messageId=${message.messageId}, left as sent")
             return
         }
         val envelope = buildEnvelope(message, identity)
-        when (val result = messagingService.send(conversation.contactId, self, peer, envelope)) {
+        // A receipt-wait re-send forces a fresh session: if the reused session had
+        // silently died the message would otherwise vanish without another receipt.
+        val result = messagingService.send(contactId, self, peer, envelope, forceReconnect = awaitingReceipt)
+        when (result) {
             is AppResult.Success -> {
-                messageDao.markSent(message.messageId, DeliveryStatus.SENT, System.currentTimeMillis())
-                outboxDao.remove(item.messageId)
-                AppLogger.info("Outbox", "sent messageId=${message.messageId} attempt=${item.attemptCount + 1}")
+                if (!awaitingReceipt) {
+                    messageDao.markSent(message.messageId, DeliveryStatus.SENT, System.currentTimeMillis())
+                    AppLogger.info("Outbox", "sent messageId=${message.messageId}, awaiting receipt")
+                }
+                rescheduleForReceipt(item, if (awaitingReceipt) item.receiptWaitCount + 1 else 0)
             }
-            is AppResult.Error -> backoff(item, result.error.message, peer, envelope)
+            // Delivered once already: keep waiting for the ack rather than failing.
+            is AppResult.Error ->
+                if (awaitingReceipt) {
+                    rescheduleForReceipt(item, item.receiptWaitCount + 1)
+                } else {
+                    backoff(item, result.error.message, peer, envelope, message.createdAtUnixMs)
+                }
         }
+    }
+
+    private suspend fun rescheduleForReceipt(item: OutboxEntity, waitCount: Int) {
+        outboxDao.update(
+            item.copy(
+                attemptCount = 0,
+                receiptWaitCount = waitCount,
+                nextAttemptUnixMs = System.currentTimeMillis() + RECEIPT_WAIT_MS,
+                lastError = null,
+            ),
+        )
     }
 
     private suspend fun processAttachment(
@@ -149,35 +204,38 @@ class OutboxDispatcher @Inject constructor(
                 outboxDao.remove(item.messageId)
                 AppLogger.info("Outbox", "sent attachment messageId=${message.messageId}")
             }
-            is AppResult.Error -> backoff(item, result.error.message)
+            is AppResult.Error -> backoff(item, result.error.message, createdAtUnixMs = message.createdAtUnixMs)
         }
     }
 
+    @Suppress("LongParameterList")
     private suspend fun backoff(
         item: OutboxEntity,
         error: String?,
         peer: PeerIdentity? = null,
         envelope: MessageEnvelope? = null,
+        createdAtUnixMs: Long = 0L,
     ) {
         val attempt = item.attemptCount + 1
-        if (attempt >= MAX_ATTEMPTS) {
-            if (P2PConfig.storeAndForwardEnabled && peer != null && envelope != null) {
-                mailboxService.enqueueForRecipient(
-                    recipientHash = peer.identityHash,
-                    sealedPayload = envelope.toByteArray(),
-                )
-                NetworkPathTracker.record(
-                    path = NetworkPath.STORE_AND_FORWARD,
-                    detail = "outbox-${item.messageId}",
-                )
-                messageDao.markSent(item.messageId, DeliveryStatus.SENT, System.currentTimeMillis())
-                outboxDao.remove(item.messageId)
-                AppLogger.info("Outbox", "queued to mailbox messageId=${item.messageId}")
-                return
-            }
+        // With store-and-forward on, hand the message to a mailbox peer once the
+        // direct-retry budget is spent instead of holding it in the outbox.
+        val canMailbox = P2PConfig.storeAndForwardEnabled && peer != null && envelope != null
+        if (attempt >= MAX_ATTEMPTS && canMailbox) {
+            mailboxService.enqueueForRecipient(peer!!.identityHash, envelope!!.toByteArray())
+            NetworkPathTracker.record(NetworkPath.STORE_AND_FORWARD, "outbox-${item.messageId}")
+            messageDao.markSent(item.messageId, DeliveryStatus.SENT, System.currentTimeMillis())
+            outboxDao.remove(item.messageId)
+            AppLogger.info("Outbox", "queued to mailbox messageId=${item.messageId}")
+            return
+        }
+        // Otherwise keep retrying (capped backoff) so a message to a temporarily
+        // offline peer still delivers when they return; only give up after a long
+        // window instead of dropping it after a handful of minutes.
+        val expired = createdAtUnixMs > 0 && System.currentTimeMillis() - createdAtUnixMs >= RETRY_WINDOW_MS
+        if (expired) {
             messageDao.updateStatus(item.messageId, DeliveryStatus.FAILED)
             outboxDao.remove(item.messageId)
-            AppLogger.warn("Outbox", "giving up messageId=${item.messageId} after $attempt attempts: $error")
+            AppLogger.warn("Outbox", "giving up messageId=${item.messageId} after retry window: $error")
             return
         }
         val backoffMs = (BASE_BACKOFF_MS shl minOf(attempt, MAX_SHIFT)).coerceAtMost(MAX_BACKOFF_MS)
@@ -223,5 +281,11 @@ class OutboxDispatcher @Inject constructor(
         private const val MAX_SHIFT = 5
         private const val MAX_ATTEMPTS = 12
         private const val X25519_KEY_SIZE = 32
+        private const val RECEIPT_WAIT_MS = 15_000L
+        private const val MAX_RECEIPT_WAITS = 4
+
+        // Keep retrying an undelivered message this long (capped backoff) so it
+        // arrives when a temporarily-offline peer returns, before giving up.
+        private const val RETRY_WINDOW_MS = 24 * 60 * 60_000L
     }
 }

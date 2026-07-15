@@ -18,6 +18,7 @@ import ir.vmessenger.core.proto.wire.v1.FrameType
 import ir.vmessenger.network.discovery.EndpointResolveService
 import ir.vmessenger.network.messaging.EndpointOrder
 import ir.vmessenger.network.transport.Connection
+import ir.vmessenger.network.transport.ConnectionState
 import ir.vmessenger.network.transport.InternetTransport
 import ir.vmessenger.network.transport.TransportSelector
 import kotlinx.coroutines.CoroutineScope
@@ -136,9 +137,19 @@ class MessagingService @Inject constructor(
         self: PeerIdentity,
         peer: PeerIdentity,
         envelope: MessageEnvelope,
+        forceReconnect: Boolean = false,
     ): AppResult<Unit> {
         val mutex = sendMutexes.getOrPut(contactId) { Mutex() }
         return mutex.withLock {
+            // Reuse the already-open session for follow-up messages instead of
+            // re-dialing the relay and repeating the handshake for every message.
+            // Retries that force a reconnect (e.g. receipt-wait re-sends) skip
+            // reuse so they don't keep hitting a silently-dead session.
+            if (forceReconnect) {
+                awaitCloseOutbound(contactId)
+            } else {
+                sendOnExistingSession(contactId, envelope)?.let { return@withLock it }
+            }
             when (val resolved = endpointResolveService.resolve(peer.identityHash)) {
                 is AppResult.Success -> {
                     val ordered = EndpointOrder.order(resolved.data.endpoints)
@@ -166,6 +177,29 @@ class MessagingService @Inject constructor(
                 is AppResult.Error -> resolved
             }
         }
+    }
+
+    /**
+     * Writes on the existing open outbound session if there is one. Returns null
+     * (so the caller falls through to establish a fresh session) when there is no
+     * session or the write fails — the dead session is dropped first.
+     */
+    private suspend fun sendOnExistingSession(contactId: String, envelope: MessageEnvelope): AppResult<Unit>? {
+        val session = sessionMutex.withLock {
+            outboundSessions[contactId]?.takeIf { it.connection.state.value == ConnectionState.OPEN }
+        } ?: return null
+        return runCatching {
+            session.writeFrame(sealSecureFrame(session, envelope).toByteArray())
+        }.fold(
+            onSuccess = {
+                AppLogger.info("Messaging", "reused session for contact=$contactId")
+                AppResult.Success(Unit)
+            },
+            onFailure = {
+                awaitCloseOutbound(contactId)
+                null
+            },
+        )
     }
 
     private suspend fun sendWithFallback(
@@ -231,13 +265,7 @@ class MessagingService @Inject constructor(
                     outboundSessions[contactId] = established
                 }
             }
-            val sealed = session.seal(envelope.toByteArray())
-            val frame = Frame.newBuilder()
-                .setVersion(1)
-                .setType(FrameType.FRAME_TYPE_SECURE)
-                .setBody(ByteString.copyFrom(sealed))
-                .build()
-            session.writeFrame(frame.toByteArray())
+            session.writeFrame(sealSecureFrame(session, envelope).toByteArray())
         }
     }.fold(
         onSuccess = { AppResult.Success(Unit) },
@@ -304,7 +332,10 @@ class MessagingService @Inject constructor(
             AppLogger.debug("Messaging", "inbound skip frame type=${frame.type} contact=$contactId")
             return
         }
-        val counter = session.ratchetState.recvCounter + 1
+        // Prefer the sender's actual counter; fall back to the sequential guess
+        // only for legacy frames (counter unset). This keeps one lost/reordered
+        // frame from wedging every subsequent frame on the session.
+        val counter = if (frame.counter > 0) frame.counter else session.ratchetState.recvCounter + 1
         val plaintext = session.open(frame.body.toByteArray(), counter)
         if (plaintext == null) {
             AppLogger.warn(
@@ -388,13 +419,23 @@ class MessagingService @Inject constructor(
     )
 
     suspend fun sendProtocolReply(session: ActiveSecureSession, reply: MessageEnvelope) {
-        val sealed = session.seal(reply.toByteArray())
-        val frame = Frame.newBuilder()
+        session.writeFrame(sealSecureFrame(session, reply).toByteArray())
+    }
+
+    /**
+     * Seals [envelope] on [session] and wraps it in a secure frame stamped with
+     * the ratchet counter it was sealed under. seal() bumps sendCounter to that
+     * value; reading it immediately is safe because sends on a session are
+     * serialized by the per-contact send mutex.
+     */
+    private suspend fun sealSecureFrame(session: ActiveSecureSession, envelope: MessageEnvelope): Frame {
+        val sealed = session.seal(envelope.toByteArray())
+        return Frame.newBuilder()
             .setVersion(1)
             .setType(FrameType.FRAME_TYPE_SECURE)
             .setBody(ByteString.copyFrom(sealed))
+            .setCounter(session.ratchetState.sendCounter)
             .build()
-        session.writeFrame(frame.toByteArray())
     }
 
     private suspend fun awaitCloseOutbound(contactId: String) {

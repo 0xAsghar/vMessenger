@@ -9,6 +9,10 @@ message Frame {
   uint32 version = 1;
   FrameType type = 2;
   bytes body = 3;
+  // Ratchet counter of the sealed body, so the receiver selects the right
+  // message key by the actual counter instead of assuming strict, gap-free
+  // ordering. 0 = unset (legacy sender); receiver then falls back to recvCounter+1.
+  uint64 counter = 4;
 }
 
 enum FrameType {

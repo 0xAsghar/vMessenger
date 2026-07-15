@@ -1,5 +1,9 @@
 package ir.vmessenger.data.network
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import dagger.hilt.android.qualifiers.ApplicationContext
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.encoding.UserHashEncoder
@@ -42,12 +46,27 @@ class NetworkCoordinator @Inject constructor(
     private val embeddedDhtService: ir.vmessenger.network.dht.EmbeddedDhtService,
     private val peerRelayCoordinator: PeerRelayCoordinator,
     private val p2pConfigLoader: P2PConfigLoader,
+    @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     @Volatile
     private var started = false
+
+    @Volatile
+    private var connectivityRegistered = false
+
+    // When the device switches network (Wi-Fi <-> mobile data) or regains
+    // connectivity, immediately flush queued messages instead of waiting out
+    // their backoff. The relay listener reconnects on its own; this just makes
+    // pending sends prompt.
+    private val connectivityCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            AppLogger.info("Network", "connectivity available; flushing outbox")
+            outboxDispatcher.retryNow()
+        }
+    }
 
     fun start(
         listenPort: Int,
@@ -68,6 +87,7 @@ class NetworkCoordinator @Inject constructor(
             return
         }
         started = true
+        registerConnectivityCallback()
         scope.launch {
             p2pConfigLoader.loadIntoConfig()
             relayDirectory.activeRelay()
@@ -97,6 +117,14 @@ class NetworkCoordinator @Inject constructor(
                 scope.launch { retryBootstrapAndPublish(directHost, directPort) }
             }
         }
+    }
+
+    private fun registerConnectivityCallback() {
+        if (connectivityRegistered) return
+        val manager = context.getSystemService(ConnectivityManager::class.java) ?: return
+        runCatching { manager.registerDefaultNetworkCallback(connectivityCallback) }
+            .onSuccess { connectivityRegistered = true }
+            .onFailure { AppLogger.warn("Network", "connectivity callback register failed: ${it.message}") }
     }
 
     private fun rejoin(directHost: String?, directPort: Int?) {
@@ -133,7 +161,8 @@ class NetworkCoordinator @Inject constructor(
                         is AppResult.Error ->
                             AppLogger.error("Network", "publish endpoints failed after retry: ${publish.error.message}")
                     }
-                    outboxDispatcher.wake()
+                    // Connectivity recovered — flush anything that piled up offline.
+                    outboxDispatcher.retryNow()
                     return
                 }
                 is AppResult.Error -> {
@@ -174,7 +203,8 @@ class NetworkCoordinator @Inject constructor(
         if (ir.vmessenger.core.common.network.P2PConfig.relayPeerModeEnabled) {
             peerRelayCoordinator.logStatus()
         }
-        outboxDispatcher.wake()
+        // Listener is up and endpoints are published — retry any queued messages now.
+        outboxDispatcher.retryNow()
     }
 
     private suspend fun awaitIdentityWithKey(): Pair<Identity, ByteArray> {

@@ -89,6 +89,10 @@ interface OutboxDao {
     @Query("DELETE FROM outbox WHERE messageId = :messageId")
     suspend fun remove(messageId: String)
 
+    /** Makes every queued item immediately due (used on connectivity recovery). */
+    @Query("UPDATE outbox SET nextAttemptUnixMs = 0")
+    suspend fun resetBackoff()
+
     @Update
     suspend fun update(item: OutboxEntity)
 }
