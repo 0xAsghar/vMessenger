@@ -41,6 +41,7 @@ NODE_PORT="$DEFAULT_NODE_PORT"
 CERT_DIR="$DEFAULT_CERT_DIR"
 TLS_MODE=""            # letsencrypt | selfsigned (default: letsencrypt when --domain, else selfsigned)
 ACME_EMAIL=""
+ACME_NO_EMAIL=false
 BEHIND_CDN="none"      # none | arvan
 DIST_TAR=""
 DIST_URL=""
@@ -67,7 +68,8 @@ Production (requires root):
   --domain HOST         Public hostname (TLS SAN + advertised URLs). Enables Let's Encrypt by default.
   --ip ADDRESS          Public IP when no domain (default: auto-detect outbound IP)
   --tls MODE            letsencrypt | selfsigned (default: letsencrypt with --domain, else selfsigned)
-  --acme-email EMAIL    Contact e-mail for Let's Encrypt (required for --tls letsencrypt)
+  --acme-email EMAIL    Contact e-mail for Let's Encrypt expiry notices
+  --acme-no-email       Register with Let's Encrypt without a contact e-mail
   --behind-cdn NAME     none | arvan — restore the real client IP from the CDN's X-Forwarded-For
   --firewall            Configure ufw (allow OpenSSH, 80, 443; deny other inbound)
   --dist-tar PATH       Install this vmessenger-node-<ver>.tar.gz (built with ./gradlew :node:distTar)
@@ -125,6 +127,7 @@ parse_args() {
             --ip) PUBLIC_IP="${2:-}"; shift 2 ;;
             --tls) TLS_MODE="${2:-}"; shift 2 ;;
             --acme-email) ACME_EMAIL="${2:-}"; shift 2 ;;
+            --acme-no-email) ACME_NO_EMAIL=true; shift ;;
             --behind-cdn) BEHIND_CDN="${2:-}"; shift 2 ;;
             --firewall) FIREWALL=true; shift ;;
             --dist-tar) DIST_TAR="${2:-}"; shift 2 ;;
@@ -186,8 +189,8 @@ validate_args() {
     case "$TLS_MODE" in
         letsencrypt)
             [[ -n "$DOMAIN" ]] || die "--tls letsencrypt requires --domain"
-            if [[ "$SKIP_CERT" == false && -z "$ACME_EMAIL" ]]; then
-                die "--tls letsencrypt requires --acme-email (or pass --skip-cert with certs already issued)"
+            if [[ "$SKIP_CERT" == false && -z "$ACME_EMAIL" && "$ACME_NO_EMAIL" == false ]]; then
+                die "--tls letsencrypt requires --acme-email EMAIL or --acme-no-email (or --skip-cert with certs already issued)"
             fi
             ;;
         selfsigned) ;;
@@ -497,16 +500,24 @@ obtain_letsencrypt() {
     fi
     rm -f "$probe"
 
+    local contact_args=()
+    if [[ -n "$ACME_EMAIL" ]]; then
+        contact_args=(-m "$ACME_EMAIL")
+    else
+        contact_args=(--register-unsafely-without-email)
+    fi
     if certbot certonly --webroot -w "$ACME_WEBROOT" -d "$DOMAIN" \
-        --agree-tos -m "$ACME_EMAIL" -n --keep-until-expiring \
+        --agree-tos "${contact_args[@]}" -n --keep-until-expiring \
         --deploy-hook 'systemctl reload nginx'; then
         log "Let's Encrypt certificate issued for $DOMAIN"
         return 0
     fi
+    local contact_flag="--acme-no-email"
+    [[ -n "$ACME_EMAIL" ]] && contact_flag="--acme-email $ACME_EMAIL"
     warn "certbot failed; staying on the self-signed certificate in $CERT_DIR."
     cat >&2 <<EOF
     Fallbacks:
-      * Point DNS/CDN at this host, then re-run:  sudo $0 --domain $DOMAIN --acme-email $ACME_EMAIL --skip-build $( [[ -n "$DIST_TAR" ]] && printf -- '--dist-tar %q' "$DIST_TAR" )
+      * Point DNS/CDN at this host, then re-run:  sudo $0 --domain $DOMAIN $contact_flag $( [[ -n "$DIST_TAR" ]] && printf -- '--dist-tar %q' "$DIST_TAR" )
       * DNS-01 (manual TXT record):  certbot certonly --manual --preferred-challenges dns -d $DOMAIN
         then: sudo $0 --domain $DOMAIN --tls letsencrypt --skip-cert ...
 EOF
