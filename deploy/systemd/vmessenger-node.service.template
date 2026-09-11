@@ -1,0 +1,42 @@
+# vMessenger DHT + relay node — systemd unit (rendered by scripts/setup-node.sh).
+# Placeholders: __INSTALL_DIR__  __NODE_PORT__  __PUBLIC_NAME__
+[Unit]
+Description=vMessenger DHT + relay node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vmessenger
+Group=vmessenger
+WorkingDirectory=__INSTALL_DIR__
+StateDirectory=vmessenger
+Environment=VMESSENGER_NODE_PORT=__NODE_PORT__
+Environment=VMESSENGER_PUBLIC_HOST=__PUBLIC_NAME__
+Environment=VMESSENGER_STATE_DIR=/var/lib/vmessenger
+Environment=VMESSENGER_TRUST_PROXY=1
+# Small heap for a 1 GB VPS; JNA/Lazysodium extract native libs into a
+# writable, exec-capable tmp dir (system /tmp may be mounted noexec).
+# journald stamps every line, so the SimpleLogger date is disabled.
+Environment="JAVA_OPTS=-Xms128m -Xmx512m -XX:+UseSerialGC -Djava.io.tmpdir=/var/lib/vmessenger/tmp -Djna.tmpdir=/var/lib/vmessenger/tmp -Dorg.slf4j.simpleLogger.defaultLogLevel=info -Dorg.slf4j.simpleLogger.showDateTime=false"
+# Operator overrides (limits, peer nodes, log level) — optional.
+EnvironmentFile=-/etc/vmessenger/node.env
+ExecStart=__INSTALL_DIR__/bin/node
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=20
+LimitNOFILE=65536
+
+# Hardening. No MemoryDenyWriteExecute: the JVM JIT needs W+X pages.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/vmessenger
+
+[Install]
+WantedBy=multi-user.target
