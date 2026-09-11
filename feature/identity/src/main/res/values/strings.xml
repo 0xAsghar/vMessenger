@@ -18,4 +18,21 @@
     <string name="my_identity_hint">این شناسه را با مخاطبان خود به اشتراک بگذارید تا بتوانند شما را اضافه کنند.</string>
     <string name="my_identity_display_name_label">نام نمایشی</string>
     <string name="my_identity_display_name_save">ذخیره نام</string>
+    <string name="restore_backup_action">بازیابی از پشتیبان</string>
+    <string name="restore_backup_reading">در حال خواندن فایل پشتیبان…</string>
+    <string name="restore_backup_confirm_title">بازیابی از پشتیبان</string>
+    <string name="restore_backup_confirm_body">گذرواژه‌ای را که هنگام ساخت فایل پشتیبان انتخاب کردید وارد کنید.</string>
+    <string name="restore_backup_format_version">نسخهٔ قالب فایل: %1$d</string>
+    <string name="restore_backup_kdf_params">پارامترهای مشتق‌سازی کلید: %1$d تکرار، %2$d مگابایت حافظه</string>
+    <string name="restore_backup_passphrase_label">گذرواژه</string>
+    <string name="restore_backup_confirm_action">بازیابی</string>
+    <string name="restore_backup_cancel">انصراف</string>
+    <string name="restore_backup_back">بازگشت</string>
+    <string name="restore_backup_restoring">در حال بازیابی…</string>
+    <string name="restore_backup_success_title">هویت شما بازیابی شد</string>
+    <string name="restore_backup_summary">%1$d مخاطب، %2$d گفتگو و %3$d پیام بازیابی شد.</string>
+    <string name="restore_backup_error_wrong_passphrase">گذرواژه نادرست است</string>
+    <string name="restore_backup_error_passphrase_short">گذرواژه باید حداقل ۸ کاراکتر باشد</string>
+    <string name="restore_backup_error_unreadable">فایل پشتیبان قابل خواندن نیست</string>
+    <string name="restore_backup_error_generic">بازیابی ناموفق بود</string>
 </resources>

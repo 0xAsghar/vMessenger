@@ -62,4 +62,19 @@
     <string name="settings_identity_section">هویت</string>
     <string name="settings_identity">هویت من</string>
     <string name="settings_about">درباره</string>
+    <string name="settings_backup_section">پشتیبان‌گیری</string>
+    <string name="settings_backup_export">ساخت فایل پشتیبان</string>
+    <string name="settings_backup_export_body">شامل هویت، مخاطبین و گفتگوها؛ رمزنگاری‌شده با گذرواژهٔ شما</string>
+    <string name="settings_backup_icon">پشتیبان‌گیری</string>
+    <string name="settings_backup_passphrase_title">گذرواژهٔ فایل پشتیبان</string>
+    <string name="settings_backup_passphrase_body">برای بازیابی به همین گذرواژه نیاز دارید و راهی برای بازیابی آن وجود ندارد؛ آن را در جای امنی نگه دارید.</string>
+    <string name="settings_backup_passphrase_label">گذرواژه</string>
+    <string name="settings_backup_passphrase_confirm_label">تکرار گذرواژه</string>
+    <string name="settings_backup_passphrase_too_short">گذرواژه باید حداقل ۸ کاراکتر باشد</string>
+    <string name="settings_backup_passphrase_mismatch">گذرواژه‌ها یکسان نیستند</string>
+    <string name="settings_backup_passphrase_action">ادامه</string>
+    <string name="settings_backup_cancel">انصراف</string>
+    <string name="settings_backup_in_progress">در حال ساخت فایل پشتیبان…</string>
+    <string name="settings_backup_saved">فایل پشتیبان ذخیره شد</string>
+    <string name="settings_backup_write_failed">ذخیرهٔ فایل پشتیبان ناموفق بود</string>
 </resources>

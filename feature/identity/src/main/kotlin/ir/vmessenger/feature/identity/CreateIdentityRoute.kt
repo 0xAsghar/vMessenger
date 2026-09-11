@@ -1,5 +1,8 @@
 package ir.vmessenger.feature.identity
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -28,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.UserHashLabel
 import ir.vmessenger.core.designsystem.component.UserHashShareRow
 import ir.vmessenger.core.designsystem.component.UserHashText
+import ir.vmessenger.domain.model.RestoreSummary
 import ir.vmessenger.core.designsystem.R as DesignR
 
 @Composable
@@ -44,7 +49,10 @@ fun CreateIdentityRoute(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         when (val state = uiState) {
-            CreateIdentityUiState.Intro -> CreateIdentityIntro(onContinue = viewModel::onIntroContinue)
+            CreateIdentityUiState.Intro -> CreateIdentityIntro(
+                onContinue = viewModel::onIntroContinue,
+                onRestoreFile = viewModel::onBackupFileSelected,
+            )
             is CreateIdentityUiState.NameEntry -> CreateIdentityNameEntry(
                 displayName = state.displayName,
                 error = state.error,
@@ -55,18 +63,37 @@ fun CreateIdentityRoute(
             is CreateIdentityUiState.Success -> CreateIdentitySuccess(
                 userHash = state.identity.userHash,
                 displayName = state.identity.displayName,
+                restored = state.restored,
                 onContinue = onIdentityCreated,
             )
             is CreateIdentityUiState.Error -> CreateIdentityError(
                 message = state.message,
                 onRetry = viewModel::retryFromError,
             )
+            CreateIdentityUiState.InspectingBackup -> RestoreProgressStep(inspecting = true)
+            is CreateIdentityUiState.RestoreConfirm -> RestoreConfirmStep(
+                state = state,
+                onPassphraseChange = viewModel::onRestorePassphraseChange,
+                onRestore = viewModel::restoreBackup,
+                onCancel = viewModel::cancelRestore,
+            )
+            CreateIdentityUiState.Restoring -> RestoreProgressStep(inspecting = false)
+            is CreateIdentityUiState.RestoreFailed -> RestoreFailedStep(
+                failure = state.failure,
+                onBack = viewModel::cancelRestore,
+            )
         }
     }
 }
 
 @Composable
-private fun CreateIdentityIntro(onContinue: () -> Unit) {
+private fun CreateIdentityIntro(
+    onContinue: () -> Unit,
+    onRestoreFile: (Uri) -> Unit,
+) {
+    val openBackupDocument = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(onRestoreFile) }
     Icon(
         painter = painterResource(DesignR.drawable.ic_vmessenger_logo),
         contentDescription = stringResource(DesignR.string.vmessenger_logo),
@@ -89,6 +116,13 @@ private fun CreateIdentityIntro(onContinue: () -> Unit) {
     Spacer(modifier = Modifier.height(32.dp))
     Button(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {
         Text(text = stringResource(R.string.create_identity_action))
+    }
+    Spacer(modifier = Modifier.height(12.dp))
+    OutlinedButton(
+        onClick = { openBackupDocument.launch(arrayOf("application/octet-stream", "*/*")) },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(text = stringResource(R.string.restore_backup_action))
     }
 }
 
@@ -135,12 +169,33 @@ private fun CreateIdentityLoading() {
 }
 
 @Composable
-private fun CreateIdentitySuccess(userHash: String, displayName: String, onContinue: () -> Unit) {
+private fun CreateIdentitySuccess(
+    userHash: String,
+    displayName: String,
+    restored: RestoreSummary?,
+    onContinue: () -> Unit,
+) {
     Text(
-        text = stringResource(R.string.create_identity_success_title),
+        text = stringResource(
+            if (restored != null) R.string.restore_backup_success_title else R.string.create_identity_success_title,
+        ),
         style = MaterialTheme.typography.headlineSmall,
         textAlign = TextAlign.Center,
     )
+    if (restored != null) {
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = stringResource(
+                R.string.restore_backup_summary,
+                restored.contacts,
+                restored.conversations,
+                restored.messages,
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
     if (displayName.isNotBlank()) {
         Spacer(modifier = Modifier.height(8.dp))
         Text(

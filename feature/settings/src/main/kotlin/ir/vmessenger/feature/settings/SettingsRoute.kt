@@ -1,5 +1,7 @@
 package ir.vmessenger.feature.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,12 +10,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.BatteryAlert
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.BugReport
@@ -23,6 +25,7 @@ import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -54,6 +57,7 @@ private data class SettingsNavigation(
     val onAbout: () -> Unit,
     val onIdentity: () -> Unit,
     val onSecureWipe: () -> Unit,
+    val onBackup: () -> Unit,
 )
 
 @Composable
@@ -65,6 +69,11 @@ fun SettingsRoute(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     var showWipeDialog by remember { mutableStateOf(false) }
+    var showBackupDialog by remember { mutableStateOf(false) }
+    // The passphrase is staged in the ViewModel so a configuration change while the picker is open keeps it.
+    val createBackupDocument = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri -> viewModel.exportTo(uri) }
 
     VMessengerScaffold(
         title = stringResource(R.string.settings_title),
@@ -77,6 +86,10 @@ fun SettingsRoute(
                 onAbout = onNavigateToAbout,
                 onIdentity = onNavigateToIdentity,
                 onSecureWipe = { showWipeDialog = true },
+                onBackup = {
+                    viewModel.dismissBackupStatus()
+                    showBackupDialog = true
+                },
             ),
             modifier = Modifier.padding(padding),
         )
@@ -91,6 +104,16 @@ fun SettingsRoute(
             onDismiss = { showWipeDialog = false },
         )
     }
+    if (showBackupDialog) {
+        BackupPassphraseDialog(
+            onConfirm = { passphrase ->
+                showBackupDialog = false
+                viewModel.beginExport(passphrase)
+                createBackupDocument.launch(SettingsViewModel.suggestedBackupFileName())
+            },
+            onDismiss = { showBackupDialog = false },
+        )
+    }
 }
 
 @Composable
@@ -102,6 +125,7 @@ private fun SettingsContent(
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val screenSecurity by viewModel.screenSecurityEnabled.collectAsStateWithLifecycle()
     val hideNotifications by viewModel.hideNotificationContent.collectAsStateWithLifecycle()
+    val backupStatus by viewModel.backupExportStatus.collectAsStateWithLifecycle()
 
     Column(
         modifier = modifier
@@ -136,6 +160,74 @@ private fun SettingsContent(
         SettingsIdentitySection(
             onIdentity = navigation.onIdentity,
             onAbout = navigation.onAbout,
+        )
+        SettingsBackupSection(status = backupStatus, onExport = navigation.onBackup)
+    }
+}
+
+@Composable
+private fun SettingsBackupSection(
+    status: BackupExportStatus,
+    onExport: () -> Unit,
+) {
+    SettingsSection(title = stringResource(R.string.settings_backup_section)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = status !is BackupExportStatus.InProgress, onClick = onExport)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Backup,
+                    contentDescription = stringResource(R.string.settings_backup_icon),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(R.string.settings_backup_export),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            Text(
+                text = stringResource(R.string.settings_backup_export_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            BackupExportStatusText(status = status)
+        }
+    }
+}
+
+@Composable
+private fun BackupExportStatusText(status: BackupExportStatus) {
+    when (status) {
+        BackupExportStatus.Idle -> Unit
+        BackupExportStatus.InProgress -> Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            Text(
+                text = stringResource(R.string.settings_backup_in_progress),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        BackupExportStatus.Saved -> Text(
+            text = stringResource(R.string.settings_backup_saved),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        is BackupExportStatus.Failed -> Text(
+            text = when (val failure = status.failure) {
+                is BackupExportFailure.Bundle -> failure.message
+                BackupExportFailure.Write -> stringResource(R.string.settings_backup_write_failed)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
         )
     }
 }

@@ -24,6 +24,9 @@ dependencies {
     implementation(project(":core:notifications"))
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    // RoomTransactionRunner wraps VMessengerDatabase.withTransaction for atomic backup restores.
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
     testImplementation(libs.junit)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)

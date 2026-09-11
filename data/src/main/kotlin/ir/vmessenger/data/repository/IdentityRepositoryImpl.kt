@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.mapLatest
 import javax.inject.Inject
 import javax.inject.Singleton
 
+// Single owner of the identity lifecycle (generate, import, rename, wipe, key access) and its Keystore wrapping.
+@Suppress("TooManyFunctions")
 @Singleton
 class IdentityRepositoryImpl @Inject constructor(
     private val identityDao: IdentityDao,
@@ -55,24 +57,60 @@ class IdentityRepositoryImpl @Inject constructor(
             createdAtUnixMs = now,
         )
         identityDao.insertIdentity(entity)
-        keyMaterialDao.insert(
-            KeyMaterialEntity(
-                alias = ALIAS_ED25519,
-                wrappedPrivateKey = keyStoreKeyManager.wrapPrivateKey(ALIAS_ED25519, ed25519.privateKey),
-                updatedAtUnixMs = now,
-            ),
-        )
-        keyMaterialDao.insert(
-            KeyMaterialEntity(
-                alias = ALIAS_X25519,
-                wrappedPrivateKey = keyStoreKeyManager.wrapPrivateKey(ALIAS_X25519, x25519.privateKey),
-                updatedAtUnixMs = now,
-            ),
-        )
+        wrapKeyMaterial(ed25519.privateKey, x25519.privateKey, now).forEach { keyMaterialDao.insert(it) }
         entity.toDomain()
     }.fold(
         onSuccess = { AppResult.Success(it) },
         onFailure = { AppResult.Error(AppError.Crypto(it.message ?: "خطا در ایجاد هویت")) },
+    )
+
+    @Suppress("LongParameterList")
+    override suspend fun importIdentity(
+        ed25519Public: ByteArray,
+        ed25519Private: ByteArray,
+        x25519StaticPublic: ByteArray,
+        x25519StaticPrivate: ByteArray,
+        displayName: String,
+        createdAtUnixMs: Long,
+    ): AppResult<Identity> = runCatching {
+        require(!hasIdentity()) { "هویت از قبل وجود دارد" }
+        val trimmed = displayName.trim()
+        require(trimmed.length in DISPLAY_NAME_MIN..DISPLAY_NAME_MAX) {
+            "نام باید بین $DISPLAY_NAME_MIN تا $DISPLAY_NAME_MAX کاراکتر باشد"
+        }
+        require(cryptoEngine.ed25519PublicFromPrivate(ed25519Private).contentEquals(ed25519Public)) {
+            "کلید عمومی هویت با کلید خصوصی آن مطابقت ندارد"
+        }
+        require(cryptoEngine.x25519PublicFromPrivate(x25519StaticPrivate).contentEquals(x25519StaticPublic)) {
+            "کلید عمومی X25519 با کلید خصوصی آن مطابقت ندارد"
+        }
+        val identityHash = UserHashEncoder.identityHashFromPublicKey(ed25519Public)
+        val now = System.currentTimeMillis()
+        // Wrap before touching the database so a Keystore failure leaves no half-installed identity.
+        val keyMaterial = wrapKeyMaterial(ed25519Private, x25519StaticPrivate, now)
+        val entity = IdentityEntity(
+            ed25519Public = ed25519Public.copyOf(),
+            identityHash = identityHash,
+            userHash = UserHashEncoder.encode(identityHash),
+            displayName = trimmed,
+            x25519StaticPublic = x25519StaticPublic.copyOf(),
+            createdAtUnixMs = createdAtUnixMs.takeIf { it > 0 } ?: now,
+        )
+        identityDao.insertIdentity(entity)
+        keyMaterial.forEach { keyMaterialDao.insert(it) }
+        AppLogger.info("Identity", "identity imported from backup")
+        entity.toDomain()
+    }.also {
+        cryptoEngine.memzero(ed25519Private)
+        cryptoEngine.memzero(x25519StaticPrivate)
+    }.fold(
+        onSuccess = { AppResult.Success(it) },
+        onFailure = { failure ->
+            val message = failure.message ?: "بازیابی هویت ناموفق بود"
+            AppResult.Error(
+                if (failure is IllegalArgumentException) AppError.Validation(message) else AppError.Crypto(message),
+            )
+        },
     )
 
     override suspend fun updateDisplayName(displayName: String): AppResult<Unit> = runCatching {
@@ -101,6 +139,24 @@ class IdentityRepositoryImpl @Inject constructor(
         identityDao.deleteAll()
         keyMaterialDao.deleteAll()
     }
+
+    /** Keystore-wraps both private keys; the plaintext inputs are left untouched for the caller to zeroize. */
+    private fun wrapKeyMaterial(
+        ed25519Private: ByteArray,
+        x25519Private: ByteArray,
+        now: Long,
+    ): List<KeyMaterialEntity> = listOf(
+        KeyMaterialEntity(
+            alias = ALIAS_ED25519,
+            wrappedPrivateKey = keyStoreKeyManager.wrapPrivateKey(ALIAS_ED25519, ed25519Private),
+            updatedAtUnixMs = now,
+        ),
+        KeyMaterialEntity(
+            alias = ALIAS_X25519,
+            wrappedPrivateKey = keyStoreKeyManager.wrapPrivateKey(ALIAS_X25519, x25519Private),
+            updatedAtUnixMs = now,
+        ),
+    )
 
     private suspend fun migrateUserHashIfNeeded(entity: IdentityEntity): IdentityEntity {
         val fixed = UserHashEncoder.encode(entity.identityHash)
