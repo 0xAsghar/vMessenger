@@ -24,6 +24,11 @@ android {
         }
     }
 
+    buildFeatures {
+        // BuildConfig.DEBUG / VERSION_NAME drive debug-screen gating and the updater.
+        buildConfig = true
+    }
+
     signingConfigs {
         create("release") {
             val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
@@ -38,15 +43,24 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            signingConfig = if (!System.getenv("ANDROID_KEYSTORE_PATH").isNullOrBlank()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            // Signing policy: the release keystore when configured; on CI without
+            // one build UNSIGNED (the release workflow refuses to publish anyway)
+            // so a debug-signed "release" can never be produced by automation.
+            // Local builds fall back to the debug key for on-device testing.
+            val releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+            val onCi = System.getenv("CI") == "true"
+            signingConfig = when {
+                releaseKeystorePath != null -> signingConfigs.getByName("release")
+                onCi -> null
+                else -> signingConfigs.getByName("debug").also {
+                    logger.warn("assembleRelease: DEBUG-signed (ANDROID_KEYSTORE_PATH unset) — local use only")
+                }
             }
         }
     }

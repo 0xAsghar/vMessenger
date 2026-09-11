@@ -20,6 +20,13 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Evaluated at job level so step `if:` conditions can see them. A step-level
+      # env is NOT visible to that same step's `if:`, which is why the keystore
+      # step silently never ran before (every published APK was debug-signed).
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      IS_PRERELEASE: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
 
     steps:
       - name: Checkout
@@ -30,7 +37,9 @@ jobs:
         with:
           java-version: "21"
           distribution: "temurin"
-          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -49,8 +58,22 @@ jobs:
           echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
 
+      - name: Tag must match versionName
+        if: env.IS_TAG == 'true'
+        run: |
+          if [ "$GITHUB_REF_NAME" != "v${{ steps.version.outputs.name }}" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match versionName ${{ steps.version.outputs.name }} in gradle/version.properties"
+            exit 1
+          fi
+
+      - name: Refuse to publish without the release keystore
+        if: env.IS_TAG == 'true' && env.HAS_KEYSTORE != 'true'
+        run: |
+          echo "::error::ANDROID_KEYSTORE_BASE64 is not set; refusing to publish a debug-signed release. Add the ANDROID_KEYSTORE_* secrets and re-push the tag."
+          exit 1
+
       - name: Decode release keystore
-        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        if: env.HAS_KEYSTORE == 'true'
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
@@ -60,16 +83,21 @@ jobs:
           echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> "$GITHUB_ENV"
           echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> "$GITHUB_ENV"
 
-      - name: Build release APKs (per ABI + universal)
-        run: ./gradlew :app:assembleRelease --no-daemon
+      - name: Quality gates (detekt + all unit tests)
+        run: ./gradlew detekt unitTests --no-daemon
 
-      - name: Package APKs for release
+      - name: Build release APKs (per ABI + universal) and node distribution
+        run: ./gradlew :app:assembleRelease :node:distTar --no-daemon
+
+      - name: Package artifacts
         run: |
           VERSION="${{ steps.version.outputs.name }}"
           OUT="app/build/outputs/apk/release"
           mkdir -p dist
           for apk in "$OUT"/*.apk; do
+            # Signed builds: app-<abi>-release.apk; unsigned (no keystore): app-<abi>-release-unsigned.apk
             base=$(basename "$apk" .apk)
+            base="${base%-unsigned}"
             case "$base" in
               app-universal-release)
                 cp "$apk" "dist/vMessenger-${VERSION}-universal.apk"
@@ -81,24 +109,67 @@ jobs:
                 ;;
             esac
           done
+          cp "node/build/distributions/vmessenger-node-${VERSION}.tar.gz" dist/
+          if [ -f app/build/outputs/mapping/release/mapping.txt ]; then
+            cp app/build/outputs/mapping/release/mapping.txt "dist/vMessenger-${VERSION}-mapping.txt"
+          fi
+          (
+            cd dist
+            sha256sum -- *.apk *.tar.gz > SHA256SUMS.txt
+            for f in *.apk; do sha256sum -- "$f" > "$f.sha256"; done
+          )
           ls -la dist/
+          cat dist/SHA256SUMS.txt
 
-      # GitHub Actions artifact storage is limited on free plans; publish APKs via
+      - name: Verify APK signatures
+        if: env.HAS_KEYSTORE == 'true'
+        run: |
+          APKSIGNER="$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -1)/apksigner"
+          : > dist/SIGNING.txt
+          for apk in dist/*.apk; do
+            echo "== $(basename "$apk")" >> dist/SIGNING.txt
+            "$APKSIGNER" verify --print-certs "$apk" >> dist/SIGNING.txt
+          done
+          if grep -q 'CN=Android Debug' dist/SIGNING.txt; then
+            echo "::error::release APK is debug-signed"
+            exit 1
+          fi
+          # One signer for every ABI, otherwise the in-app updater breaks.
+          if [ "$(grep -c 'Signer #1 certificate SHA-256 digest' dist/SIGNING.txt)" -ne "$(ls dist/*.apk | wc -l)" ] \
+             || [ "$(grep 'Signer #1 certificate SHA-256 digest' dist/SIGNING.txt | sort -u | wc -l)" -ne 1 ]; then
+            echo "::error::APKs are not all signed by the same certificate"
+            exit 1
+          fi
+          {
+            echo "### APK signing"
+            echo '```'
+            cat dist/SIGNING.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # GitHub Actions artifact storage is limited on free plans; publish via
       # GitHub Releases on version tags instead of upload-artifact.
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.IS_TAG == 'true'
         uses: softprops/action-gh-release@v2
         with:
           name: vMessenger ${{ steps.version.outputs.name }}
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
-          files: dist/*.apk
+          prerelease: ${{ env.IS_PRERELEASE == 'true' }}
+          make_latest: ${{ env.IS_PRERELEASE != 'true' }}
+          files: |
+            dist/*.apk
+            dist/*.apk.sha256
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+            dist/SIGNING.txt
+            dist/*-mapping.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build-only summary
-        if: "!startsWith(github.ref, 'refs/tags/v')"
+        if: env.IS_TAG != 'true'
         run: |
-          echo "Release APK build succeeded for version ${{ steps.version.outputs.name }}."
-          echo "Push a version tag (e.g. v${{ steps.version.outputs.name }}) to publish APKs on GitHub Releases."
-          echo "APKs are not uploaded to Actions artifacts (avoids artifact storage quota)."
+          echo "Release build succeeded for version ${{ steps.version.outputs.name }} (signed: ${HAS_KEYSTORE})."
+          echo "Push a version tag (e.g. v${{ steps.version.outputs.name }}) to publish on GitHub Releases."

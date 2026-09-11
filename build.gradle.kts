@@ -32,3 +32,19 @@ subprojects {
 tasks.register("clean", Delete::class) {
     delete(rootProject.layout.buildDirectory)
 }
+
+// Every unit test in the build: Android modules expose `testDebugUnitTest`,
+// while JVM modules (core:common, domain, node) only expose `test` — a plain
+// `./gradlew testDebugUnitTest` silently skips the latter.
+tasks.register("unitTests") {
+    group = "verification"
+    description = "Runs testDebugUnitTest in Android modules and test in JVM modules"
+    dependsOn(
+        subprojects.map { sp ->
+            sp.tasks.matching { t ->
+                t.name == "testDebugUnitTest" ||
+                    (t.name == "test" && sp.plugins.hasPlugin("org.jetbrains.kotlin.jvm"))
+            }
+        },
+    )
+}

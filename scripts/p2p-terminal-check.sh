@@ -15,7 +15,7 @@ echo "Running P2P-focused unit tests..."
   :data:testDebugUnitTest --tests 'ir.vmessenger.data.network.RelaySelectionTest' \
   :data:testDebugUnitTest --tests 'ir.vmessenger.data.network.RelayPublishAlignmentTest' \
   :data:testDebugUnitTest --tests 'ir.vmessenger.data.network.P2PConfigLoaderTest' \
-  :core:common:testDebugUnitTest --tests 'ir.vmessenger.core.common.network.NetworkPathTrackerTest' \
+  :core:common:test --tests 'ir.vmessenger.core.common.network.NetworkPathTrackerTest' \
   :network:messaging:testDebugUnitTest --tests 'ir.vmessenger.network.messaging.PeerRelayServiceTest' \
   :network:dht:testDebugUnitTest --tests 'ir.vmessenger.network.dht.EmbeddedDhtRoutingTableTest' \
   --quiet
@@ -29,4 +29,4 @@ else
   echo "curl not installed"
 fi
 echo ""
-echo "Done. See docs/P2P-Testing.md for real-device matrix."
+echo "Done. See docs/Testing.md for the two-emulator scenario matrix."
