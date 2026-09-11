@@ -2,6 +2,7 @@ package ir.vmessenger.node
 
 import ir.vmessenger.core.common.network.LengthPrefixedFrames
 import ir.vmessenger.core.proto.dht.v1.DhtRpcRequest
+import org.slf4j.LoggerFactory
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.IOException
@@ -16,8 +17,10 @@ class TcpDhtNodeServer(
     private val port: Int,
     private val handler: DhtRequestHandler,
 ) {
+    private val log = LoggerFactory.getLogger(TcpDhtNodeServer::class.java)
+
     fun start() {
-        println("vMessenger TCP DHT node listening on port $port")
+        log.info("tcp_dht_node_starting port={}", port)
         ServerSocket(port).use { server ->
             while (true) {
                 val socket = server.accept()
@@ -36,7 +39,7 @@ class TcpDhtNodeServer(
                 val response = handler.handle(request)
                 LengthPrefixedFrames.writeFrame(output, response.toByteArray())
             } catch (e: IOException) {
-                System.err.println("Client error: ${e.message}")
+                log.debug("tcp_dht_client_error reason=\"{}\"", e.message)
             }
         }
     }
