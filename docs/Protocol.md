@@ -4,7 +4,7 @@ This document specifies the vMessenger wire protocol as implemented: framing, ve
 
 Everything below was read off the current source. Paths are given so each claim can be checked. The cryptographic rationale and threat model live in [Security.md](Security.md); the transports that carry these frames are in [Network.md](Network.md).
 
-**Protocol major is 2.** A peer on any other major is rejected — there is no negotiation and no downgrade. See §14.
+**Protocol major is 2.** A peer on any other major is rejected — there is no negotiation and no downgrade. See §15.
 
 ---
 
@@ -241,7 +241,7 @@ Sessions are **connection-scoped and never persisted**. `ActiveSecureSession` (`
 
 The outbound side keeps at most one open session per contact in a `SessionSlot` (`MessagingService.kt`); `sendBatch` holds that slot for a whole batch so an attachment transfer costs one handshake.
 
-A `session` table still exists in the Room schema but nothing reads or writes it — see [Database.md](Database.md) §2.
+Nothing about a session is persisted; the dead `session` table was dropped in schema 18 — see [Database.md](Database.md) §2.
 
 ---
 
@@ -285,7 +285,7 @@ Application-level deduplication is separate: `message_id` is unique per conversa
 ### 7.4 What forward secrecy this does and does not give
 
 - **Does:** compromising the device now does not reveal earlier frames of a live session — both chain keys are one-way KDF steps and old keys are zeroized. Session keys never touch disk, and a fresh handshake with fresh ephemerals starts every connection.
-- **Does not:** there is no DH ratchet, so it is **not** a Double Ratchet and there is no post-compromise security — an attacker who takes the session state can follow the session until it ends. Mailbox (store-and-forward) delivery has no forward secrecy at all (§10). See [Security.md](Security.md) "Known limitations".
+- **Does not:** there is no DH ratchet, so it is **not** a Double Ratchet and there is no post-compromise security — an attacker who takes the session state can follow the session until it ends. Mailbox (store-and-forward) delivery has no forward secrecy at all (§11). See [Security.md](Security.md) "Known limitations".
 
 ---
 
