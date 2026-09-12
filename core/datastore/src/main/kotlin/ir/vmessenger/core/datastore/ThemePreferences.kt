@@ -35,4 +35,9 @@ class ThemePreferences @Inject constructor(
             preferences[THEME_MODE_KEY] = mode.name
         }
     }
+
+    /** Back to the system theme (secure wipe). */
+    suspend fun clear() {
+        context.themeDataStore.edit { it.clear() }
+    }
 }

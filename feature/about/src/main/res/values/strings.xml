@@ -5,4 +5,7 @@
     <string name="feature_about_version">نسخه %1$s</string>
     <string name="feature_about_description">پیام‌رسان غیرمتمرکز با رمزنگاری سرتاسری. بدون حساب کاربری، بدون سرور مرکزی.</string>
     <string name="feature_about_docs_hint">مستندات کامل در پوشه docs/ مخزن موجود است.</string>
+    <string name="feature_about_developer_mode_countdown">%1$d مرحله تا تغییر وضعیت حالت توسعه‌دهنده</string>
+    <string name="feature_about_developer_mode_enabled">حالت توسعه‌دهنده فعال شد؛ بخش اشکال‌زدایی در تنظیمات نمایش داده می‌شود.</string>
+    <string name="feature_about_developer_mode_disabled">حالت توسعه‌دهنده غیرفعال شد.</string>
 </resources>

@@ -3,6 +3,7 @@ package ir.vmessenger
 import android.Manifest
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -20,13 +21,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import ir.vmessenger.core.designsystem.theme.RtlLayout
 import ir.vmessenger.core.designsystem.theme.VMessengerTheme
 import ir.vmessenger.navigation.VMessengerNavHost
 import ir.vmessenger.ui.contact.ContactRequestOverlay
 import ir.vmessenger.ui.network.ClockWarningBanner
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -36,6 +41,11 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Secure by default: the flag is set before any content is drawn so the
+        // first frame can never reach a screenshot, the recents thumbnail or a
+        // screen recorder. It is cleared only if the user turned the setting off.
+        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        observeScreenSecurity()
 
         setContent {
             val darkThemePref by viewModel.darkTheme.collectAsStateWithLifecycle()
@@ -73,6 +83,20 @@ class MainActivity : ComponentActivity() {
                             VMessengerNavHost()
                             ClockWarningBanner(modifier = Modifier.align(Alignment.TopCenter))
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun observeScreenSecurity() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.screenSecurityEnabled.collect { enabled ->
+                    if (enabled) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                     }
                 }
             }

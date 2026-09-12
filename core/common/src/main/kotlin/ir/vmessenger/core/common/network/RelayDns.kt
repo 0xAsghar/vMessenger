@@ -49,6 +49,11 @@ object RelayDns {
 
     fun pinnedIp(hostname: String): String? = pinnedIpByHost[hostname]
 
+    /** Forgets every pinned backend IP (secure wipe, and tests). */
+    fun clearPins() {
+        pinnedIpByHost.clear()
+    }
+
     fun dnsTargeting(hostname: String, ip: String): Dns = object : Dns {
         override fun lookup(requested: String): List<InetAddress> =
             if (requested.equals(hostname, ignoreCase = true)) {

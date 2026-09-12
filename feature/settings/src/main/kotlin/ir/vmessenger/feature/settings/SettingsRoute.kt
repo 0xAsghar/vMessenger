@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.BatteryAlert
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.DeleteForever
+import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.NotificationsOff
@@ -44,6 +45,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.datastore.ThemeMode
@@ -60,6 +62,13 @@ private data class SettingsNavigation(
     val onBackup: () -> Unit,
 )
 
+/** The privacy section's switch states, bundled so the composable stays short on parameters. */
+private data class PrivacyToggles(
+    val screenSecurity: Boolean,
+    val hideNotifications: Boolean,
+    val sendReadReceipts: Boolean,
+)
+
 @Composable
 fun SettingsRoute(
     onNavigateToDebug: () -> Unit = {},
@@ -70,6 +79,7 @@ fun SettingsRoute(
 ) {
     var showWipeDialog by remember { mutableStateOf(false) }
     var showBackupDialog by remember { mutableStateOf(false) }
+    val wipeInProgress by viewModel.wipeInProgress.collectAsStateWithLifecycle()
     // The passphrase is staged in the ViewModel so a configuration change while the picker is open keeps it.
     val createBackupDocument = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
@@ -104,6 +114,11 @@ fun SettingsRoute(
             onDismiss = { showWipeDialog = false },
         )
     }
+    // The wipe cannot be cancelled and ends by killing the process; the screen
+    // is blocked meanwhile so nothing else touches the data being deleted.
+    if (wipeInProgress) {
+        WipeProgressDialog()
+    }
     if (showBackupDialog) {
         BackupPassphraseDialog(
             onConfirm = { passphrase ->
@@ -125,7 +140,9 @@ private fun SettingsContent(
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val screenSecurity by viewModel.screenSecurityEnabled.collectAsStateWithLifecycle()
     val hideNotifications by viewModel.hideNotificationContent.collectAsStateWithLifecycle()
+    val sendReadReceipts by viewModel.sendReadReceipts.collectAsStateWithLifecycle()
     val backupStatus by viewModel.backupExportStatus.collectAsStateWithLifecycle()
+    val developerToolsVisible by viewModel.developerToolsVisible.collectAsStateWithLifecycle()
 
     Column(
         modifier = modifier
@@ -136,10 +153,14 @@ private fun SettingsContent(
     ) {
         SettingsThemeSection(themeMode = themeMode, onThemeMode = viewModel::setThemeMode)
         SettingsPrivacySection(
-            screenSecurity = screenSecurity,
-            hideNotifications = hideNotifications,
+            toggles = PrivacyToggles(
+                screenSecurity = screenSecurity,
+                hideNotifications = hideNotifications,
+                sendReadReceipts = sendReadReceipts,
+            ),
             onScreenSecurity = viewModel::setScreenSecurity,
             onHideNotifications = viewModel::setHideNotificationContent,
+            onSendReadReceipts = viewModel::setSendReadReceipts,
             onSecureWipe = navigation.onSecureWipe,
         )
         SettingsSection(title = stringResource(R.string.settings_network_section)) {
@@ -150,12 +171,15 @@ private fun SettingsContent(
             )
             SettingsDivider()
             BatteryOptimizationRow()
-            SettingsDivider()
-            SettingsActionRow(
-                label = stringResource(R.string.settings_debug),
-                icon = Icons.Outlined.BugReport,
-                onClick = navigation.onDebug,
-            )
+            // Hidden in release builds until developer mode is unlocked in About.
+            if (developerToolsVisible) {
+                SettingsDivider()
+                SettingsActionRow(
+                    label = stringResource(R.string.settings_debug),
+                    icon = Icons.Outlined.BugReport,
+                    onClick = navigation.onDebug,
+                )
+            }
         }
         SettingsIdentitySection(
             onIdentity = navigation.onIdentity,
@@ -273,25 +297,32 @@ private fun SettingsThemeSection(
 
 @Composable
 private fun SettingsPrivacySection(
-    screenSecurity: Boolean,
-    hideNotifications: Boolean,
+    toggles: PrivacyToggles,
     onScreenSecurity: (Boolean) -> Unit,
     onHideNotifications: (Boolean) -> Unit,
+    onSendReadReceipts: (Boolean) -> Unit,
     onSecureWipe: () -> Unit,
 ) {
     SettingsSection(title = stringResource(R.string.settings_privacy_section)) {
         SettingsToggleRow(
             label = stringResource(R.string.settings_screen_security),
             icon = Icons.Outlined.Security,
-            checked = screenSecurity,
+            checked = toggles.screenSecurity,
             onCheckedChange = onScreenSecurity,
         )
         SettingsDivider()
         SettingsToggleRow(
             label = stringResource(R.string.settings_hide_notifications),
             icon = Icons.Outlined.NotificationsOff,
-            checked = hideNotifications,
+            checked = toggles.hideNotifications,
             onCheckedChange = onHideNotifications,
+        )
+        SettingsDivider()
+        SettingsToggleRow(
+            label = stringResource(R.string.settings_read_receipts),
+            icon = Icons.Outlined.DoneAll,
+            checked = toggles.sendReadReceipts,
+            onCheckedChange = onSendReadReceipts,
         )
         SettingsDivider()
         SettingsActionRow(
@@ -447,6 +478,26 @@ private fun WipeConfirmDialog(
                 Text(text = stringResource(R.string.settings_wipe_cancel))
             }
         },
+    )
+}
+
+/** Modal, not dismissible: the wipe runs to the end and the process exits by itself. */
+@Composable
+private fun WipeProgressDialog() {
+    AlertDialog(
+        onDismissRequest = {},
+        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+        title = { Text(text = stringResource(R.string.settings_wipe_confirm_title)) },
+        text = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                Text(text = stringResource(R.string.settings_wipe_in_progress))
+            }
+        },
+        confirmButton = {},
     )
 }
 

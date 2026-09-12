@@ -8,11 +8,13 @@
     <string name="settings_privacy_section">حریم خصوصی</string>
     <string name="settings_screen_security">امنیت صفحه</string>
     <string name="settings_hide_notifications">مخفی‌کردن محتوای اعلان</string>
+    <string name="settings_read_receipts">رسید خواندن</string>
     <string name="settings_secure_wipe">پاک‌سازی امن داده‌ها</string>
     <string name="settings_wipe_confirm_title">پاک‌سازی امن</string>
     <string name="settings_wipe_confirm_body">هویت، کلیدها و داده‌های محلی حذف می‌شوند. این عمل قابل بازگشت نیست.</string>
     <string name="settings_wipe_confirm_action">حذف</string>
     <string name="settings_wipe_cancel">انصراف</string>
+    <string name="settings_wipe_in_progress">در حال پاک‌سازی؛ برنامه پس از پایان دوباره باز می‌شود.</string>
     <string name="settings_network_section">شبکه</string>
     <string name="settings_debug">اشکال‌زدایی</string>
     <string name="settings_nodes">نودهای شبکه</string>

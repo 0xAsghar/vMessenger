@@ -45,12 +45,14 @@ class AttachmentKeyProvider @Inject constructor(
     private suspend fun load(): ByteArray {
         val wrapped = securityPreferences.getWrappedAttachmentKey()
         if (wrapped != null && wrapped.isNotEmpty()) {
-            val key = keyStoreKeyManager.unwrap(wrapped)
+            val key = keyStoreKeyManager.unwrap(KeyStoreKeyManager.ALIAS_ATTACHMENTS, wrapped)
             check(key.size == KEY_BYTES) { "attachment master key has unexpected size" }
             return key
         }
         val key = cryptoEngine.randomBytes(KEY_BYTES)
-        securityPreferences.setWrappedAttachmentKey(keyStoreKeyManager.wrap(key))
+        securityPreferences.setWrappedAttachmentKey(
+            keyStoreKeyManager.wrap(KeyStoreKeyManager.ALIAS_ATTACHMENTS, key),
+        )
         AppLogger.info("Attachment", "attachment master key created")
         return key
     }

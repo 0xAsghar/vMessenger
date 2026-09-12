@@ -90,13 +90,17 @@ fun VMessengerNavHost(
 
 private fun NavGraphBuilder.debugRoutes(navController: NavHostController) {
     composable(Routes.DEBUG) {
-        DebugRoute(
-            onNavigateBack = { navController.popBackStack() },
-            onNavigateToLogs = { navController.navigate(Routes.LOGS) },
-        )
+        DeveloperToolsGate(onDenied = { navController.popBackStack() }) {
+            DebugRoute(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToLogs = { navController.navigate(Routes.LOGS) },
+            )
+        }
     }
     composable(Routes.LOGS) {
-        LogsRoute(onNavigateBack = { navController.popBackStack() })
+        DeveloperToolsGate(onDenied = { navController.popBackStack() }) {
+            LogsRoute(onNavigateBack = { navController.popBackStack() })
+        }
     }
     composable(Routes.NODES) {
         NodesRoute(
@@ -109,6 +113,25 @@ private fun NavGraphBuilder.debugRoutes(navController: NavHostController) {
             onDone = { navController.popBackStack() },
             onNavigateBack = { navController.popBackStack() },
         )
+    }
+}
+
+/**
+ * Renders [content] only while the developer tools are unlocked; otherwise pops
+ * the destination, so a release build cannot reach Debug or Logs even through a
+ * stale back stack entry after developer mode is switched off again.
+ */
+@Composable
+private fun DeveloperToolsGate(
+    onDenied: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val viewModel: DeveloperToolsViewModel = hiltViewModel()
+    val enabled by viewModel.developerToolsEnabled.collectAsStateWithLifecycle()
+    when (enabled) {
+        null -> Unit
+        true -> content()
+        false -> LaunchedEffect(Unit) { onDenied() }
     }
 }
 

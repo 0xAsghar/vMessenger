@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Release policy: no cleartext at all. Relay and DHT are reached over wss://
+  only (NodeAddressPolicy refuses ws:// in release builds), so any plaintext
+  HTTP/WebSocket attempt is a bug or a downgrade attack and must fail loudly.
+  The debug build type overlays this file to allow the emulator/LAN bootstrap.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

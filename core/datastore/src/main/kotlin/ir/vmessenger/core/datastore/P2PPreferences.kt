@@ -66,6 +66,11 @@ class P2PPreferences @Inject constructor(
         save(P2PFlagSnapshot())
     }
 
+    /** Drops every stored flag (secure wipe); later reads fall back to the defaults. */
+    suspend fun clear() {
+        context.p2pDataStore.edit { it.clear() }
+    }
+
     companion object {
         // 1.0 defaults: multi-node + peer cache on, every other experimental path off.
         const val P2P_DEFAULT_MULTI_NODE = P2PConfig.DEFAULT_MULTI_NODE

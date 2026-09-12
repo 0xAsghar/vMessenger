@@ -10,6 +10,10 @@ import ir.vmessenger.data.network.InboundRoutes
 import ir.vmessenger.data.network.IncomingMessageNotifier
 import ir.vmessenger.data.network.MessagingPort
 import ir.vmessenger.data.network.MessagingServicePort
+import ir.vmessenger.data.repository.AndroidConversationNotificationCanceller
+import ir.vmessenger.data.repository.ConversationNotificationCanceller
+import ir.vmessenger.data.repository.PreferenceReadReceiptPolicy
+import ir.vmessenger.data.repository.ReadReceiptPolicy
 import javax.inject.Singleton
 
 /** Ports the inbound pipeline depends on; bound to their transport/Android-backed implementations. */
@@ -27,4 +31,14 @@ abstract class InboundModule {
     @Binds
     @Singleton
     abstract fun bindIncomingMessageNotifier(impl: DefaultIncomingMessageNotifier): IncomingMessageNotifier
+
+    @Binds
+    @Singleton
+    abstract fun bindReadReceiptPolicy(impl: PreferenceReadReceiptPolicy): ReadReceiptPolicy
+
+    @Binds
+    @Singleton
+    abstract fun bindConversationNotificationCanceller(
+        impl: AndroidConversationNotificationCanceller,
+    ): ConversationNotificationCanceller
 }

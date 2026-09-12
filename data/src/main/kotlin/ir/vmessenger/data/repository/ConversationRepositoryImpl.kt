@@ -47,6 +47,7 @@ class ConversationRepositoryImpl @Inject constructor(
     private val outboxDispatcher: OutboxDispatcher,
     private val attachmentStore: AttachmentStore,
     private val transferTracker: AttachmentTransferTracker,
+    private val readMarker: ConversationReadMarker,
 ) : ConversationRepository {
 
     override fun observeConversations(): Flow<List<Conversation>> =
@@ -185,7 +186,7 @@ class ConversationRepositoryImpl @Inject constructor(
             },
         )
 
-    override suspend fun markConversationRead(conversationId: String) = Unit
+    override suspend fun markConversationRead(conversationId: String) = readMarker.markRead(conversationId)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeAttachmentProgress(conversationId: String): Flow<Map<String, AttachmentProgress>> =

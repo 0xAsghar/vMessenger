@@ -48,7 +48,8 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 @Suppress("TooManyFunctions")
 object DatabaseModule {
-    private const val DATABASE_NAME = "vmessenger.db"
+    /** Also the file the secure wipe deletes (with its -wal/-shm/-journal siblings). */
+    const val DATABASE_NAME = "vmessenger.db"
 
     @Provides
     @Singleton

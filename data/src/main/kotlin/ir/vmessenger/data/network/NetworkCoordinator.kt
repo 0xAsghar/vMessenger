@@ -45,6 +45,7 @@ class NetworkCoordinator @Inject constructor(
     private val incomingMessageCollector: IncomingMessageCollector,
     private val outboxDispatcher: OutboxDispatcher,
     private val contactRequestRetryWorker: ContactRequestRetryWorker,
+    private val endpointAnnouncer: EndpointAnnouncer,
     private val identityRepository: IdentityRepository,
     private val selfIdentityCache: SelfIdentityCache,
     private val contactDao: ContactDao,
@@ -66,12 +67,14 @@ class NetworkCoordinator @Inject constructor(
 
     // When the device switches network (Wi-Fi <-> mobile data) or regains
     // connectivity, immediately flush queued messages instead of waiting out
-    // their backoff. The relay listener reconnects on its own; this just makes
-    // pending sends prompt.
+    // their backoff and re-publish our endpoint record (the old one may have
+    // expired while we were offline, and our address may have changed). The
+    // relay listener reconnects on its own.
     private val connectivityCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            AppLogger.info("Network", "connectivity available; flushing outbox")
+            AppLogger.info("Network", "connectivity available; flushing outbox and re-announcing")
             outboxDispatcher.retryNow()
+            endpointAnnouncer.announceNow()
         }
     }
 
@@ -95,36 +98,62 @@ class NetworkCoordinator @Inject constructor(
         }
         started = true
         registerConnectivityCallback()
-        scope.launch {
-            p2pConfigLoader.loadIntoConfig()
-            relayDirectory.activeRelay()
-            AppLogger.info("Network", "coordinator start listenPort=$listenPort dev=${directHost != null}")
-            runCatching { contactRepository.normalizeUserHashes() }
-                .onFailure { AppLogger.warn("Network", "user hash normalization failed: ${it.message}") }
-            configureInbound()
-            incomingMessageCollector.start()
-            outboxDispatcher.start()
-            contactRequestRetryWorker.start()
-            messagingService.startListening(listenPort)
-            AppLogger.info("Network", "TCP listener started on $listenPort")
-            if (ir.vmessenger.core.common.network.P2PConfig.dhtParticipationEnabled) {
-                val dhtPort = listenPort + ir.vmessenger.network.dht.EmbeddedDhtService.PORT_OFFSET
-                val host = directHost ?: "0.0.0.0"
-                embeddedDhtService.start(dhtPort, host)
+        scope.launch { runStart(listenPort, directHost, directPort) }
+    }
+
+    /**
+     * In-process fallback for the keep-alive worker: the platform refuses a
+     * background foreground-service start on the very devices whose battery
+     * manager killed the service, so the work is done here instead, for as long
+     * as the worker's process lives. Suspends until the stack is up (or the
+     * queued messages have been re-tried) so the worker does not report success
+     * before anything happened.
+     */
+    suspend fun ensureStartedInline(listenPort: Int) {
+        if (started) {
+            AppLogger.info("Network", "keep-alive: coordinator already started; flushing outbox")
+            outboxDispatcher.retryNow()
+            return
+        }
+        AppLogger.info("Network", "keep-alive: service start refused, starting network in-process")
+        started = true
+        registerConnectivityCallback()
+        runStart(listenPort, directHost = null, directPort = null)
+    }
+
+    private suspend fun runStart(
+        listenPort: Int,
+        directHost: String?,
+        directPort: Int?,
+    ) {
+        p2pConfigLoader.loadIntoConfig()
+        relayDirectory.activeRelay()
+        AppLogger.info("Network", "coordinator start listenPort=$listenPort dev=${directHost != null}")
+        runCatching { contactRepository.normalizeUserHashes() }
+            .onFailure { AppLogger.warn("Network", "user hash normalization failed: ${it.message}") }
+        configureInbound()
+        incomingMessageCollector.start()
+        outboxDispatcher.start()
+        contactRequestRetryWorker.start()
+        messagingService.startListening(listenPort)
+        AppLogger.info("Network", "TCP listener started on $listenPort")
+        if (ir.vmessenger.core.common.network.P2PConfig.dhtParticipationEnabled) {
+            val dhtPort = listenPort + ir.vmessenger.network.dht.EmbeddedDhtService.PORT_OFFSET
+            val host = directHost ?: "0.0.0.0"
+            embeddedDhtService.start(dhtPort, host)
+        }
+        var joinSucceeded = false
+        when (val join = joinNetworkUseCase()) {
+            is AppResult.Success -> {
+                joinSucceeded = true
+                AppLogger.info("Network", "join network OK")
             }
-            var joinSucceeded = false
-            when (val join = joinNetworkUseCase()) {
-                is AppResult.Success -> {
-                    joinSucceeded = true
-                    AppLogger.info("Network", "join network OK")
-                }
-                is AppResult.Error ->
-                    AppLogger.error("Network", "join network failed: ${join.error.message}")
-            }
-            publishAndStartRelay(directHost = directHost, directPort = directPort)
-            if (!joinSucceeded) {
-                scope.launch { retryBootstrapAndPublish(directHost, directPort) }
-            }
+            is AppResult.Error ->
+                AppLogger.error("Network", "join network failed: ${join.error.message}")
+        }
+        publishAndStartRelay(directHost = directHost, directPort = directPort)
+        if (!joinSucceeded) {
+            scope.launch { retryBootstrapAndPublish(directHost, directPort) }
         }
     }
 
@@ -140,6 +169,7 @@ class NetworkCoordinator @Inject constructor(
         started = false
         unregisterConnectivityCallback()
         scope.coroutineContext.cancelChildren()
+        endpointAnnouncer.stop()
         outboxDispatcher.stop()
         contactRequestRetryWorker.stop()
         relayListener.stop()
@@ -188,18 +218,12 @@ class NetworkCoordinator @Inject constructor(
                     AppLogger.info("Network", "join network recovered after retry")
                     val selectedRelay = relayDirectory.activeRelay()
                     NetworkPathTracker.setActiveRelay(selectedRelay.url)
-                    when (
-                        val publish = publishNetworkEndpointsUseCase(
-                            directHost = directHost,
-                            directPort = directPort,
-                            relayUrl = selectedRelay.url,
-                        )
-                    ) {
-                        is AppResult.Success ->
-                            AppLogger.info("Network", "publish endpoints OK after retry")
-                        is AppResult.Error ->
-                            AppLogger.error("Network", "publish endpoints failed after retry: ${publish.error.message}")
-                    }
+                    publishAndArmReannounce(
+                        directHost = directHost,
+                        directPort = directPort,
+                        relayUrl = selectedRelay.url,
+                        retry = true,
+                    )
                     // Connectivity recovered — flush anything that piled up offline.
                     outboxDispatcher.retryNow()
                     return
@@ -221,18 +245,12 @@ class NetworkCoordinator @Inject constructor(
         val selectedRelay = relayDirectory.activeRelay()
         NetworkPathTracker.setActiveRelay(selectedRelay.url)
         AppLogger.info("Network", "active relay=${selectedRelay.url} source=${selectedRelay.source}")
-        when (
-            val publish = publishNetworkEndpointsUseCase(
-                directHost = directHost,
-                directPort = directPort,
-                relayUrl = selectedRelay.url,
-            )
-        ) {
-            is AppResult.Success ->
-                AppLogger.info("Network", "publish endpoints OK")
-            is AppResult.Error ->
-                AppLogger.error("Network", "publish endpoints failed: ${publish.error.message}")
-        }
+        publishAndArmReannounce(
+            directHost = directHost,
+            directPort = directPort,
+            relayUrl = selectedRelay.url,
+            retry = false,
+        )
         messagingService.startRelayListener(
             identityHash = self.identityHash,
             identityPub = self.ed25519PublicKey,
@@ -244,6 +262,35 @@ class NetworkCoordinator @Inject constructor(
         }
         // Listener is up and endpoints are published — retry any queued messages now.
         outboxDispatcher.retryNow()
+    }
+
+    /**
+     * Publishes our endpoint record and arms the periodic re-announce with the
+     * very same endpoints: the record expires after the provider's TTL, so
+     * publishing only at start left us unresolvable for peers without a cached
+     * endpoint. A failed publish is retried by the announcer right away (and
+     * then backs off) instead of waiting out a whole period.
+     */
+    private suspend fun publishAndArmReannounce(
+        directHost: String?,
+        directPort: Int?,
+        relayUrl: String,
+        retry: Boolean,
+    ) {
+        val suffix = if (retry) " after retry" else ""
+        val publish = publishNetworkEndpointsUseCase(
+            directHost = directHost,
+            directPort = directPort,
+            relayUrl = relayUrl,
+        )
+        when (publish) {
+            is AppResult.Success ->
+                AppLogger.info("Network", "publish endpoints OK$suffix")
+            is AppResult.Error ->
+                AppLogger.error("Network", "publish endpoints failed$suffix: ${publish.error.message}")
+        }
+        endpointAnnouncer.start(directHost = directHost, directPort = directPort, relayUrl = relayUrl)
+        if (publish is AppResult.Error) endpointAnnouncer.announceNow()
     }
 
     /** Waits until an identity exists *and* its key material is unwrappable (the cache serves it). */

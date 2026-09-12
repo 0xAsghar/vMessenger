@@ -40,6 +40,11 @@ class DiscoveryPreferences @Inject constructor(
         return next
     }
 
+    /** Forgets every publish sequence (secure wipe); the new identity starts at 1. */
+    suspend fun clear() {
+        context.discoveryDataStore.edit { it.clear() }
+    }
+
     private fun sequenceKey(identityHash: ByteArray): Preferences.Key<Long> =
         longPreferencesKey("publish_seq_${identityHash.toHexKey()}")
 

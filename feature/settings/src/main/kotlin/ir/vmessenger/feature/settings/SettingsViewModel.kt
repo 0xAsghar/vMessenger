@@ -6,17 +6,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import ir.vmessenger.core.common.AppBuildInfo
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.datastore.PrivacyPreferences
 import ir.vmessenger.core.datastore.ThemeMode
 import ir.vmessenger.core.datastore.ThemePreferences
-import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.domain.usecase.identity.ExportIdentityBackupUseCase
+import ir.vmessenger.domain.usecase.settings.SecureWipeUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -40,13 +42,18 @@ sealed class BackupExportFailure {
     data object Write : BackupExportFailure()
 }
 
+// One screen with independent sections (theme, privacy toggles, backup export,
+// secure wipe), each contributing its own small handler; splitting them across
+// ViewModels would only fragment a single settings screen's state.
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
+    appBuildInfo: AppBuildInfo,
     private val themePreferences: ThemePreferences,
     private val privacyPreferences: PrivacyPreferences,
-    private val identityRepository: IdentityRepository,
     private val exportIdentityBackupUseCase: ExportIdentityBackupUseCase,
+    private val secureWipeUseCase: SecureWipeUseCase,
 ) : ViewModel() {
     val themeMode: StateFlow<ThemeMode> = themePreferences.themeMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThemeMode.SYSTEM)
@@ -57,8 +64,25 @@ class SettingsViewModel @Inject constructor(
     val hideNotificationContent: StateFlow<Boolean> = privacyPreferences.hideNotificationContent
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    val sendReadReceipts: StateFlow<Boolean> = privacyPreferences.sendReadReceipts
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            PrivacyPreferences.DEFAULT_SEND_READ_RECEIPTS,
+        )
+
+    /** The debug row is always there in a debug build, and in release only once developer mode is unlocked. */
+    val developerToolsVisible: StateFlow<Boolean> = privacyPreferences.developerModeEnabled
+        .map { enabled -> appBuildInfo.isDebug || enabled }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), appBuildInfo.isDebug)
+
     private val _backupExportStatus = MutableStateFlow<BackupExportStatus>(BackupExportStatus.Idle)
     val backupExportStatus: StateFlow<BackupExportStatus> = _backupExportStatus.asStateFlow()
+
+    private val _wipeInProgress = MutableStateFlow(false)
+
+    /** True from the moment the wipe starts until the process exits; the screen blocks while it is set. */
+    val wipeInProgress: StateFlow<Boolean> = _wipeInProgress.asStateFlow()
 
     /**
      * Passphrase staged by [beginExport] while the system file picker is open. Lives here (not in
@@ -79,8 +103,21 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { privacyPreferences.setHideNotificationContent(enabled) }
     }
 
+    fun setSendReadReceipts(enabled: Boolean) {
+        viewModelScope.launch { privacyPreferences.setSendReadReceipts(enabled) }
+    }
+
+    /**
+     * Irreversible; the caller must have confirmed with the user. The app
+     * restarts at the end, so this never completes normally. The screen blocks
+     * on [wipeInProgress] while it runs: the wipe itself cannot be cancelled,
+     * and letting the user keep tapping a UI whose database is being deleted
+     * only produces errors.
+     */
     fun secureWipe() {
-        viewModelScope.launch { identityRepository.wipeIdentity() }
+        if (_wipeInProgress.value) return
+        _wipeInProgress.value = true
+        viewModelScope.launch { secureWipeUseCase() }
     }
 
     /**

@@ -1,22 +1,41 @@
 package ir.vmessenger
 
 import android.app.Application
-import android.content.Intent
-import android.os.Build
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.WorkManager
 import dagger.hilt.android.HiltAndroidApp
-import ir.vmessenger.app.network.NetworkLifecycleService
+import ir.vmessenger.app.network.NetworkKeepAliveWorker
+import ir.vmessenger.app.network.startNetworkService
+import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NodeAddressPolicy
 import ir.vmessenger.core.database.DatabaseKeyProvider
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.maplibre.android.MapLibre
 import javax.inject.Inject
 
 @HiltAndroidApp
-class VMessengerApplication : Application() {
+class VMessengerApplication : Application(), Configuration.Provider {
     @Inject lateinit var databaseKeyProvider: DatabaseKeyProvider
 
+    @Inject lateinit var workerFactory: HiltWorkerFactory
+
+    private val applicationScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + loggingExceptionHandler(TAG),
+    )
+
     private lateinit var fileLogSink: FileLogSink
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .build()
 
     override fun onCreate() {
         System.loadLibrary("sqlcipher")
@@ -26,24 +45,38 @@ class VMessengerApplication : Application() {
         MapLibre.getInstance(this)
         fileLogSink = FileLogSink(this)
         AppLogger.addSink(fileLogSink)
-        AppLogger.info("App", "vMessenger started")
-        runBlocking { databaseKeyProvider.initialize() }
-        val networkIntent = Intent(this, NetworkLifecycleService::class.java).apply {
-            putExtra(NetworkLifecycleService.EXTRA_LISTEN_PORT, NetworkLifecycleService.DEFAULT_LISTEN_PORT)
-            putExtra(NetworkLifecycleService.EXTRA_FORWARD_PORT, NetworkLifecycleService.DEFAULT_LISTEN_PORT)
+        if (BuildConfig.DEBUG) {
+            AppLogger.addSink(LogcatSink())
         }
-        // On Android 12+ a background process restart (e.g. START_STICKY) reaches
-        // here with no foreground activity, and startForegroundService throws
-        // ForegroundServiceStartNotAllowedException — which would crash-loop the
-        // app. The system restarts the sticky service itself in that case.
-        runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(networkIntent)
-            } else {
-                startService(networkIntent)
+        AppLogger.info(TAG, "vMessenger started")
+        startKeepAliveWork()
+        // The passphrase is unwrapped from the Keystore, which can take hundreds
+        // of milliseconds on first use — never on the main thread. The network
+        // service is started only once a key exists, since everything it does
+        // needs the database open.
+        applicationScope.launch {
+            val keyReady = runCatching { databaseKeyProvider.initialize() }
+                .onFailure { AppLogger.error(TAG, "database key init failed, service not started: $it") }
+                .isSuccess
+            if (keyReady) {
+                withContext(Dispatchers.Main) {
+                    startNetworkService(this@VMessengerApplication, reason = "app start")
+                }
             }
-        }.onFailure {
-            AppLogger.warn("App", "network service start deferred: ${it.message}")
         }
+    }
+
+    private fun startKeepAliveWork() {
+        runCatching {
+            WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                NetworkKeepAliveWorker.UNIQUE_WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                NetworkKeepAliveWorker.periodicRequest(),
+            )
+        }.onFailure { AppLogger.warn(TAG, "keep-alive work not enqueued: $it") }
+    }
+
+    private companion object {
+        const val TAG = "App"
     }
 }
