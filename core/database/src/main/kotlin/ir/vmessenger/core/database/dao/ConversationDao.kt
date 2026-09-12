@@ -12,7 +12,6 @@ import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageDirection
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
-import ir.vmessenger.core.database.entity.SessionEntity
 import kotlinx.coroutines.flow.Flow
 
 data class ConversationWithPreview(
@@ -29,9 +28,15 @@ data class ConversationWithPreview(
  */
 data class ChatListRow(
     val conversationId: String,
-    val contactId: String,
+    /** Null for a group row; exactly one of this and [groupId] is set. */
+    val contactId: String?,
+    val groupId: String?,
     val displayName: String?,
     val identityHash: ByteArray?,
+    /** Identicon seed of a group row; null for 1:1. */
+    val groupAvatarSeed: String?,
+    /** Who sent the last group message, for the "name: text" preview; null for 1:1 and for our own. */
+    val lastSenderName: String?,
     val lastMessageId: String?,
     val lastBody: String?,
     val lastAttachmentName: String?,
@@ -57,7 +62,10 @@ data class ChatListRow(
     private fun scalarFields(): List<Any?> = listOf(
         conversationId,
         contactId,
+        groupId,
         displayName,
+        groupAvatarSeed,
+        lastSenderName,
         lastMessageId,
         lastBody,
         lastAttachmentName,
@@ -89,6 +97,12 @@ data class MessageWithReply(
     val replyDirection: MessageDirection?,
     /** Last delivery failure recorded by the outbox dispatcher; null once delivered or never failed. */
     val lastError: String?,
+    /**
+     * Display name of an incoming group message's sender — the user's own name for
+     * them when they are a contact, otherwise the name from the group snapshot.
+     * Null in 1:1 chats and for our own messages.
+     */
+    val senderName: String?,
 )
 
 @Dao
@@ -128,6 +142,9 @@ interface ConversationDao {
     @Query("SELECT * FROM conversation WHERE contactId = :contactId LIMIT 1")
     suspend fun getByContactId(contactId: String): ConversationEntity?
 
+    @Query("SELECT * FROM conversation WHERE groupId = :groupId LIMIT 1")
+    suspend fun getByGroupId(groupId: String): ConversationEntity?
+
     @Query("UPDATE conversation SET unreadCount = 0 WHERE id = :id")
     suspend fun resetUnread(id: String)
 
@@ -141,8 +158,11 @@ interface ConversationDao {
         SELECT
             c.id AS conversationId,
             c.contactId AS contactId,
-            ct.displayName AS displayName,
+            c.groupId AS groupId,
+            COALESCE(g.name, ct.displayName) AS displayName,
             ct.identityHash AS identityHash,
+            g.avatarSeed AS groupAvatarSeed,
+            gm.displayName AS lastSenderName,
             m.messageId AS lastMessageId,
             m.body AS lastBody,
             m.attachmentName AS lastAttachmentName,
@@ -155,7 +175,10 @@ interface ConversationDao {
             c.muted AS muted
         FROM conversation c
         LEFT JOIN contact ct ON ct.id = c.contactId
+        LEFT JOIN chat_group g ON g.id = c.groupId
         LEFT JOIN message m ON m.messageId = c.lastMessageId
+        LEFT JOIN chat_group_member gm
+            ON gm.groupId = c.groupId AND gm.identityHash = m.senderIdentityHash
         ORDER BY c.lastActivityUnixMs DESC
         """,
     )
@@ -175,6 +198,9 @@ interface ConversationDao {
     @Query("UPDATE conversation SET lastMessageId = :messageId WHERE id = :id")
     suspend fun setLastMessageId(id: String, messageId: String?)
 }
+
+/** One unread incoming message and its group sender (null in a 1:1 chat). */
+data class UnreadIncoming(val messageId: String, val senderIdentityHash: String?)
 
 @Dao
 // One query per message operation (paging, status transitions, deletes); a DAO is a query catalogue.
@@ -210,6 +236,19 @@ interface MessageDao {
     )
     suspend fun selectUnreadIncomingIds(cid: String): List<String>
 
+    /**
+     * Unread incoming messages with whoever sent them, so a read receipt in a
+     * group can be addressed to each sender instead of to "the" peer — a group
+     * conversation has no single one.
+     */
+    @Query(
+        """
+        SELECT messageId, senderIdentityHash FROM message
+        WHERE conversationId = :cid AND direction = 'INCOMING' AND status != 'READ'
+        """,
+    )
+    suspend fun selectUnreadIncoming(cid: String): List<UnreadIncoming>
+
     @Query(
         """
         UPDATE message SET status = 'READ', readAtUnixMs = :ts
@@ -236,10 +275,18 @@ interface MessageDao {
             r.attachmentName AS replyAttachmentName,
             r.contentType AS replyContentType,
             r.direction AS replyDirection,
-            o.lastError AS lastError
+            (
+                SELECT o.lastError FROM outbox o
+                WHERE o.messageId = m.messageId AND o.lastError IS NOT NULL LIMIT 1
+            ) AS lastError,
+            COALESCE(ct.displayName, gm.displayName) AS senderName
         FROM message m
         LEFT JOIN message r ON r.messageId = m.replyToMessageId AND r.conversationId = m.conversationId
-        LEFT JOIN outbox o ON o.messageId = m.messageId
+        LEFT JOIN conversation cv ON cv.id = m.conversationId
+        LEFT JOIN chat_group_member gm
+            ON gm.groupId = cv.groupId AND gm.identityHash = m.senderIdentityHash
+        LEFT JOIN contact ct
+            ON m.senderIdentityHash IS NOT NULL AND lower(hex(ct.identityHash)) = m.senderIdentityHash
         WHERE m.conversationId = :cid
         ORDER BY m.createdAtUnixMs DESC, m.messageId DESC
         LIMIT :limit
@@ -300,15 +347,20 @@ interface OutboxDao {
     @Query("SELECT * FROM outbox WHERE nextAttemptUnixMs <= :now ORDER BY nextAttemptUnixMs ASC")
     suspend fun due(now: Long): List<OutboxEntity>
 
+    /** Drops one recipient's pending delivery; the other members of a group keep theirs. */
+    @Query("DELETE FROM outbox WHERE messageId = :messageId AND recipientIdentityHash = :recipient")
+    suspend fun remove(messageId: String, recipient: String)
+
+    /** Drops every recipient of a message (the message was deleted, or is fully resolved). */
     @Query("DELETE FROM outbox WHERE messageId = :messageId")
-    suspend fun remove(messageId: String)
+    suspend fun removeAll(messageId: String)
 
     /** Drops every queued item of a conversation (contact deleted). */
     @Query("DELETE FROM outbox WHERE conversationId = :cid")
     suspend fun removeByConversation(cid: String)
 
-    @Query("SELECT * FROM outbox WHERE messageId = :messageId LIMIT 1")
-    suspend fun getByMessageId(messageId: String): OutboxEntity?
+    @Query("SELECT * FROM outbox WHERE messageId = :messageId")
+    suspend fun forMessage(messageId: String): List<OutboxEntity>
 
     /** Makes every queued item immediately due (used on connectivity recovery). */
     @Query("UPDATE outbox SET nextAttemptUnixMs = 0")
@@ -323,18 +375,10 @@ interface OutboxDao {
     )
     suspend fun resetBackoffFor(messageId: String)
 
+    /** Members that still have this message queued; used to decide when nothing is left to wait for. */
+    @Query("SELECT recipientIdentityHash FROM outbox WHERE messageId = :messageId")
+    suspend fun pendingRecipients(messageId: String): List<String>
+
     @Update
     suspend fun update(item: OutboxEntity)
-}
-
-@Dao
-interface SessionDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(session: SessionEntity)
-
-    @Query("SELECT * FROM session WHERE contactId = :contactId LIMIT 1")
-    suspend fun getByContactId(contactId: String): SessionEntity?
-
-    @Query("DELETE FROM session WHERE contactId = :contactId")
-    suspend fun delete(contactId: String)
 }

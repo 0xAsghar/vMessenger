@@ -10,6 +10,12 @@ message MessageEnvelope {
   bytes sender_identity_hash = 2;
   int64 sent_at_unix_ms = 3;
   uint64 counter = 4;
+  // 16 random bytes identifying the group this envelope belongs to; empty for a
+  // 1:1 chat. Groups are client-side fan-out: the envelope is still delivered
+  // over a pairwise secure session per member, so `sender_identity_hash` must
+  // equal the session peer's hash and membership is checked against the local
+  // group snapshot before anything is persisted.
+  bytes group_id = 5;
 
   oneof content {
     ChatMessage chat = 10;
@@ -33,7 +39,47 @@ message MessageEnvelope {
     ContactResponse contact_response = 28;
     AttachmentInfo attachment_info = 29;
     AttachmentChunk attachment_chunk = 30;
+    GroupControl group_control = 31;
   }
+}
+
+/** One member of a group, carried in snapshots so fan-out can reach a non-contact. */
+message GroupMember {
+  bytes identity_hash = 1;
+  bytes identity_pub = 2;
+  string display_name = 3;
+  bytes x25519_static_pub = 4;
+}
+
+/**
+ * A membership change. Authority is the creator: every device accepts
+ * CREATE/SNAPSHOT only from `creator_identity_hash`, and an incremental change
+ * only when `version` is exactly its local version + 1 — a gap means a control
+ * was missed, so the receiver asks for a SNAPSHOT instead of guessing. LEAVE is
+ * the one control a member sends about itself.
+ */
+message GroupControl {
+  bytes group_id = 1;
+  GroupControlType type = 2;
+  string name = 3;
+  repeated GroupMember members = 4;
+  uint64 version = 5;
+  bytes creator_identity_hash = 6;
+  int64 at_unix_ms = 7;
+  // The member an ADD/REMOVE is about; unset for the other types.
+  bytes target_identity_hash = 8;
+}
+
+enum GroupControlType {
+  GROUP_CONTROL_TYPE_UNSPECIFIED = 0;
+  GROUP_CONTROL_TYPE_CREATE = 1;
+  GROUP_CONTROL_TYPE_UPDATE_NAME = 2;
+  GROUP_CONTROL_TYPE_ADD = 3;
+  GROUP_CONTROL_TYPE_REMOVE = 4;
+  GROUP_CONTROL_TYPE_LEAVE = 5;
+  GROUP_CONTROL_TYPE_SNAPSHOT = 6;
+  GROUP_CONTROL_TYPE_SNAPSHOT_REQUEST = 7;
+  GROUP_CONTROL_TYPE_CLOSE = 8;
 }
 
 /**
@@ -52,6 +98,10 @@ message AttachmentInfo {
   // SHA-256 of the plaintext file; the receiver verifies it once every chunk
   // arrived and discards the transfer on mismatch. Required (32 bytes) in v2.
   bytes sha256 = 8;
+  // Voice/video length, so the bubble shows a duration before the file lands.
+  int64 duration_ms = 9;
+  // 64 amplitude buckets (one byte each, 0..255) drawn as the voice waveform.
+  bytes waveform = 10;
 }
 
 message AttachmentChunk {
@@ -65,6 +115,7 @@ enum AttachmentKind {
   ATTACHMENT_KIND_IMAGE = 1;
   ATTACHMENT_KIND_VIDEO = 2;
   ATTACHMENT_KIND_FILE = 3;
+  ATTACHMENT_KIND_AUDIO = 4;
 }
 
 /** Phase 4: network infrastructure hints exchanged after a secure handshake. */

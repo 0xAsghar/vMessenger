@@ -31,6 +31,7 @@ private val ERROR_TEXT: Map<KClass<out AppError>, Int> = mapOf(
     AppError.AttachmentFailed::class to R.string.vm_error_attachment_failed,
     AppError.NotGroupMember::class to R.string.vm_error_not_group_member,
     AppError.GroupClosed::class to R.string.vm_error_group_closed,
+    AppError.NotGroupCreator::class to R.string.vm_error_not_group_creator,
     AppError.NoReachableMembers::class to R.string.vm_error_no_reachable_members,
     AppError.UpdateRateLimited::class to R.string.vm_error_update_rate_limited,
     AppError.UpdateChecksumMismatch::class to R.string.vm_error_update_checksum_mismatch,

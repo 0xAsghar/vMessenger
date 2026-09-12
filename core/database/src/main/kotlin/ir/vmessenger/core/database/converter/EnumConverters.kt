@@ -4,9 +4,11 @@ import androidx.room.TypeConverter
 import ir.vmessenger.core.database.entity.ContactRelationshipStatus
 import ir.vmessenger.core.database.entity.ContactRequestStatus
 import ir.vmessenger.core.database.entity.DeliveryStatus
+import ir.vmessenger.core.database.entity.GroupMemberRole
 import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageDirection
 
+@Suppress("TooManyFunctions") // two converter methods per persisted enum
 class EnumConverters {
     @TypeConverter
     fun fromDirection(value: MessageDirection): String = value.name
@@ -31,6 +33,12 @@ class EnumConverters {
 
     @TypeConverter
     fun toRelationshipStatus(value: String): ContactRelationshipStatus = ContactRelationshipStatus.valueOf(value)
+
+    @TypeConverter
+    fun fromGroupMemberRole(value: GroupMemberRole): String = value.name
+
+    @TypeConverter
+    fun toGroupMemberRole(value: String): GroupMemberRole = GroupMemberRole.valueOf(value)
 
     @TypeConverter
     fun fromContactRequestStatus(value: ContactRequestStatus): String = value.name

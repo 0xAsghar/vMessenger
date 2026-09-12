@@ -39,6 +39,7 @@ sealed class AppError(open val message: String) {
     /** The group already holds [max] members. */
     data class GroupFull(val max: Int) : AppError("group already has $max members")
     data object NotGroupMember : AppError("sender is not an active member of the group")
+    data object NotGroupCreator : AppError("only the group creator may change its membership")
     data object GroupClosed : AppError("the group is closed")
     data object NoReachableMembers : AppError("no approved, reachable group members")
 

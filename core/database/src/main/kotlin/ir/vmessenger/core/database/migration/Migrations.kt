@@ -367,3 +367,148 @@ val MIGRATION_16_17 = object : Migration(16, 17) {
 val MIGRATION_16_17_STATEMENTS: List<String> = listOf(
     "CREATE INDEX IF NOT EXISTS index_message_conv_created ON message(conversationId, createdAtUnixMs)",
 )
+
+/**
+ * Version 18: groups, voice messages and per-recipient delivery.
+ *
+ * Three tables are recreated rather than altered, because SQLite's `ALTER TABLE`
+ * cannot relax a NOT NULL column (`conversation.contactId`) or change a primary
+ * key (`outbox`):
+ * - `conversation` gains a nullable `contactId` and a `groupId`, so one row shape
+ *   serves both 1:1 and group threads;
+ * - `outbox` is re-keyed to `(messageId, recipientIdentityHash)`, and existing
+ *   rows are re-keyed by joining through the conversation to its contact — a
+ *   1:1 message is simply the one-recipient case of a group fan-out;
+ * - `message_recipient` holds the per-member delivery state the bubble's single
+ *   status is aggregated from.
+ *
+ * Foreign keys are **not** enforced inside a Room migration (Room runs migrations
+ * with `foreign_keys = OFF` and validates afterwards), which is what makes the
+ * DROP/RENAME dance safe: dropping the old `conversation` would otherwise cascade
+ * every message away.
+ *
+ * Also drops the dead `session` table. It has been unused since sessions moved
+ * into the network layer, was supposed to go in migration 16 and was missed;
+ * nothing outside `:core:database` ever referenced it.
+ */
+val MIGRATION_17_18 = object : Migration(17, 18) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_17_18_STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/** Exposed so a plain-SQLite test can replay the migration without Room. */
+@Suppress("MaxLineLength") // SQLite DDL mirrors Room's generated schema verbatim; wrapping it invites drift
+val MIGRATION_17_18_STATEMENTS: List<String> = listOf(
+    // --- groups -----------------------------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS `chat_group` (
+        `id` TEXT NOT NULL,
+        `name` TEXT NOT NULL,
+        `creatorIdentityHash` TEXT NOT NULL,
+        `createdAtUnixMs` INTEGER NOT NULL,
+        `version` INTEGER NOT NULL,
+        `closed` INTEGER NOT NULL,
+        `avatarSeed` TEXT NOT NULL,
+        PRIMARY KEY(`id`)
+    )
+    """.trimIndent(),
+    """
+    CREATE TABLE IF NOT EXISTS `chat_group_member` (
+        `groupId` TEXT NOT NULL,
+        `identityHash` TEXT NOT NULL,
+        `identityPub` BLOB NOT NULL,
+        `x25519StaticPub` BLOB,
+        `displayName` TEXT NOT NULL,
+        `role` TEXT NOT NULL,
+        `joinedAtUnixMs` INTEGER NOT NULL,
+        `removedAtUnixMs` INTEGER,
+        PRIMARY KEY(`groupId`, `identityHash`),
+        FOREIGN KEY(`groupId`) REFERENCES `chat_group`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+    )
+    """.trimIndent(),
+    "CREATE INDEX IF NOT EXISTS `index_chat_group_member_identityHash` ON `chat_group_member` (`identityHash`)",
+
+    // --- conversation: nullable contactId + groupId ------------------------
+    """
+    CREATE TABLE IF NOT EXISTS `conversation_new` (
+        `id` TEXT NOT NULL,
+        `contactId` TEXT,
+        `groupId` TEXT,
+        `lastMessageId` TEXT,
+        `lastActivityUnixMs` INTEGER NOT NULL,
+        `unreadCount` INTEGER NOT NULL,
+        `muted` INTEGER NOT NULL,
+        PRIMARY KEY(`id`),
+        FOREIGN KEY(`contactId`) REFERENCES `contact`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+        FOREIGN KEY(`groupId`) REFERENCES `chat_group`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+    )
+    """.trimIndent(),
+    """
+    INSERT INTO `conversation_new` (`id`, `contactId`, `groupId`, `lastMessageId`, `lastActivityUnixMs`, `unreadCount`, `muted`)
+    SELECT `id`, `contactId`, NULL, `lastMessageId`, `lastActivityUnixMs`, `unreadCount`, `muted` FROM `conversation`
+    """.trimIndent(),
+    "DROP TABLE `conversation`",
+    "ALTER TABLE `conversation_new` RENAME TO `conversation`",
+    "CREATE INDEX IF NOT EXISTS `index_conversation_contactId` ON `conversation` (`contactId`)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS `index_conversation_groupId` ON `conversation` (`groupId`)",
+
+    // --- message: sender, caption, voice metadata --------------------------
+    "ALTER TABLE `message` ADD COLUMN `senderIdentityHash` TEXT",
+    "ALTER TABLE `message` ADD COLUMN `caption` TEXT",
+    "ALTER TABLE `message` ADD COLUMN `attachmentDurationMs` INTEGER",
+    "ALTER TABLE `message` ADD COLUMN `attachmentWaveform` BLOB",
+
+    // --- per-recipient delivery state --------------------------------------
+    """
+    CREATE TABLE IF NOT EXISTS `message_recipient` (
+        `messageId` TEXT NOT NULL,
+        `identityHash` TEXT NOT NULL,
+        `status` TEXT NOT NULL,
+        `sentAtUnixMs` INTEGER,
+        `deliveredAtUnixMs` INTEGER,
+        `readAtUnixMs` INTEGER,
+        PRIMARY KEY(`messageId`, `identityHash`),
+        FOREIGN KEY(`messageId`) REFERENCES `message`(`messageId`) ON UPDATE NO ACTION ON DELETE CASCADE
+    )
+    """.trimIndent(),
+    "CREATE INDEX IF NOT EXISTS `index_message_recipient_identityHash` ON `message_recipient` (`identityHash`)",
+
+    // --- outbox re-keyed to (messageId, recipient) -------------------------
+    """
+    CREATE TABLE IF NOT EXISTS `outbox_new` (
+        `messageId` TEXT NOT NULL,
+        `recipientIdentityHash` TEXT NOT NULL,
+        `conversationId` TEXT NOT NULL,
+        `envelopeBytes` BLOB,
+        `attemptCount` INTEGER NOT NULL,
+        `nextAttemptUnixMs` INTEGER NOT NULL,
+        `lastError` TEXT,
+        `receiptWaitCount` INTEGER NOT NULL,
+        PRIMARY KEY(`messageId`, `recipientIdentityHash`)
+    )
+    """.trimIndent(),
+    // A queued 1:1 message is re-keyed to its one recipient. The key is the first
+    // 16 bytes of the identity hash in lowercase hex — the same routing prefix the
+    // rest of the app keys on, so a contact learned from a user hash (which only
+    // carries the prefix) and one learned in full resolve to the same recipient.
+    // A row whose contact vanished under it has no recipient to address and is
+    // dropped by the JOIN, which is what the dispatcher would have done anyway.
+    // `envelopeBytes` starts null: the old `sealedPayload` column was never
+    // written and means something else here (a pre-built group-control envelope).
+    """
+    INSERT INTO `outbox_new` (`messageId`, `recipientIdentityHash`, `conversationId`, `envelopeBytes`, `attemptCount`, `nextAttemptUnixMs`, `lastError`, `receiptWaitCount`)
+    SELECT o.`messageId`, lower(substr(hex(ct.`identityHash`), 1, 32)), o.`conversationId`, NULL, o.`attemptCount`, o.`nextAttemptUnixMs`, o.`lastError`, o.`receiptWaitCount`
+    FROM `outbox` o
+    JOIN `conversation` c ON c.`id` = o.`conversationId`
+    JOIN `contact` ct ON ct.`id` = c.`contactId`
+    """.trimIndent(),
+    "DROP TABLE `outbox`",
+    "ALTER TABLE `outbox_new` RENAME TO `outbox`",
+    "CREATE INDEX IF NOT EXISTS `index_outbox_conversationId` ON `outbox` (`conversationId`)",
+    "CREATE INDEX IF NOT EXISTS `index_outbox_nextAttemptUnixMs` ON `outbox` (`nextAttemptUnixMs`)",
+    "CREATE INDEX IF NOT EXISTS `index_outbox_messageId` ON `outbox` (`messageId`)",
+
+    // --- carry-over from migration 16: the dead session table --------------
+    "DROP TABLE IF EXISTS `session`",
+)

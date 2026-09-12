@@ -24,6 +24,17 @@ interface ContactDao {
     @Query("SELECT * FROM contact WHERE identityHash = :identityHash LIMIT 1")
     suspend fun getByIdentityHash(identityHash: ByteArray): ContactEntity?
 
+    /**
+     * The contact whose identity hash starts with this 16-byte routing prefix
+     * (lowercase hex, as produced by `IdentityHashMatcher.routingKeyHex`).
+     *
+     * Pairing by user hash only ever learns the prefix, so the prefix — not the
+     * whole hash — is the stable key between a contact and a group member. The
+     * expression is unindexed, but the table holds tens of rows.
+     */
+    @Query("SELECT * FROM contact WHERE lower(substr(hex(identityHash), 1, 32)) = :routingKeyHex LIMIT 1")
+    suspend fun getByRoutingKey(routingKeyHex: String): ContactEntity?
+
     @Query("SELECT * FROM contact WHERE ed25519Public = :ed25519Public LIMIT 1")
     suspend fun getByEd25519Public(ed25519Public: ByteArray): ContactEntity?
 

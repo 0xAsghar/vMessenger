@@ -49,6 +49,19 @@ interface ConversationRepository {
      * the system picker; the file is copied (encrypted) into app-private storage first.
      */
     suspend fun sendAttachment(conversationId: String, sourceUri: String): AppResult<String>
+
+    /**
+     * Queues a recorded voice message. [filePath] is a plaintext file the recorder
+     * wrote into the cache; it is encrypted into app-private storage and deleted.
+     * [waveform] is 64 amplitude buckets (0..255) drawn in the bubble, and
+     * [durationMs] is shown before the audio finishes arriving on the other side.
+     */
+    suspend fun sendVoice(
+        conversationId: String,
+        filePath: String,
+        durationMs: Long,
+        waveform: ByteArray,
+    ): AppResult<String>
     suspend fun markConversationRead(conversationId: String)
 
     /** Removes the local copy only; nothing is sent to the peer and their copy stays. */

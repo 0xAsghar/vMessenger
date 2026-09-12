@@ -5,6 +5,13 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+/**
+ * A chat thread: exactly one of [contactId] (1:1) and [groupId] (group) is set.
+ *
+ * Both are nullable rather than a sealed pair because SQLite has no sum type;
+ * the invariant is enforced where conversations are created, and every read path
+ * branches on which one is present.
+ */
 @Entity(
     tableName = "conversation",
     foreignKeys = [
@@ -14,12 +21,21 @@ import androidx.room.PrimaryKey
             childColumns = ["contactId"],
             onDelete = ForeignKey.CASCADE,
         ),
+        ForeignKey(
+            entity = GroupEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["groupId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
     ],
-    indices = [Index("contactId")],
+    // Unique on groupId: one conversation per group. SQLite treats NULLs as
+    // distinct, so every 1:1 row (groupId NULL) still passes.
+    indices = [Index("contactId"), Index(value = ["groupId"], unique = true)],
 )
 data class ConversationEntity(
     @PrimaryKey val id: String,
-    val contactId: String,
+    val contactId: String?,
+    val groupId: String? = null,
     val lastMessageId: String?,
     val lastActivityUnixMs: Long,
     val unreadCount: Int,
@@ -65,16 +81,33 @@ data class MessageEntity(
     val attachmentSha256: ByteArray? = null,
     /** True when the file at [attachmentPath] is in the encrypted `VMA1` container format. */
     val attachmentEncrypted: Boolean = false,
+    /**
+     * Lowercase hex identity hash of whoever sent an INCOMING group message, so
+     * the bubble can name and colour them without a contact row. Null for 1:1
+     * chats and for our own messages, where the direction already says who sent it.
+     */
+    val senderIdentityHash: String? = null,
+    /** Text sent alongside an attachment (photo caption); the body stays null for attachments. */
+    val caption: String? = null,
+    /** Voice/video length in milliseconds, so the bubble shows a duration before the file arrives. */
+    val attachmentDurationMs: Long? = null,
+    /** 64 amplitude buckets (0..255), one byte each, rendered as the voice bubble's waveform. */
+    val attachmentWaveform: ByteArray? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
         other as MessageEntity
         return scalarFields() == other.scalarFields() &&
-            (attachmentSha256 ?: EMPTY).contentEquals(other.attachmentSha256 ?: EMPTY)
+            (attachmentSha256 ?: EMPTY).contentEquals(other.attachmentSha256 ?: EMPTY) &&
+            (attachmentWaveform ?: EMPTY).contentEquals(other.attachmentWaveform ?: EMPTY)
     }
 
-    override fun hashCode(): Int = 31 * scalarFields().hashCode() + (attachmentSha256?.contentHashCode() ?: 0)
+    override fun hashCode(): Int {
+        var result = 31 * scalarFields().hashCode() + (attachmentSha256?.contentHashCode() ?: 0)
+        result = 31 * result + (attachmentWaveform?.contentHashCode() ?: 0)
+        return result
+    }
 
     /** Every field except the byte array, so equality/hash stay in step with the data-class semantics. */
     private fun scalarFields(): List<Any?> = listOf(
@@ -94,6 +127,9 @@ data class MessageEntity(
         attachmentSizeBytes,
         attachmentPath,
         attachmentEncrypted,
+        senderIdentityHash,
+        caption,
+        attachmentDurationMs,
     )
 
     private companion object {
@@ -101,14 +137,30 @@ data class MessageEntity(
     }
 }
 
+/**
+ * One pending delivery of one message to one recipient.
+ *
+ * A group message fans out to N rows sharing a [messageId]; a 1:1 message is the
+ * N = 1 case of the same thing, so there is a single delivery pipeline. Backoff,
+ * receipt waiting and the mailbox hand-off are therefore per recipient: one
+ * unreachable member never stalls delivery to the rest.
+ */
 @Entity(
     tableName = "outbox",
-    indices = [Index("conversationId"), Index("nextAttemptUnixMs")],
+    primaryKeys = ["messageId", "recipientIdentityHash"],
+    indices = [Index("conversationId"), Index("nextAttemptUnixMs"), Index("messageId")],
 )
 data class OutboxEntity(
-    @PrimaryKey val messageId: String,
+    val messageId: String,
+    /** Lowercase hex identity hash of the member this row delivers to. */
+    val recipientIdentityHash: String,
     val conversationId: String,
-    val sealedPayload: ByteArray?,
+    /**
+     * The exact envelope to send, for a message the dispatcher cannot rebuild from
+     * its row — a group control carries a snapshot of the group *at its version*,
+     * not of the group as it is now. Null for ordinary messages.
+     */
+    val envelopeBytes: ByteArray?,
     val attemptCount: Int,
     val nextAttemptUnixMs: Long,
     val lastError: String?,
@@ -122,8 +174,9 @@ data class OutboxEntity(
         if (javaClass != other?.javaClass) return false
         other as OutboxEntity
         return messageId == other.messageId &&
+            recipientIdentityHash == other.recipientIdentityHash &&
             conversationId == other.conversationId &&
-            sealedPayload.contentEqualsOrNull(other.sealedPayload) &&
+            envelopeBytes.contentEqualsOrNull(other.envelopeBytes) &&
             attemptCount == other.attemptCount &&
             nextAttemptUnixMs == other.nextAttemptUnixMs &&
             lastError == other.lastError &&
@@ -132,8 +185,9 @@ data class OutboxEntity(
 
     override fun hashCode(): Int {
         var result = messageId.hashCode()
+        result = 31 * result + recipientIdentityHash.hashCode()
         result = 31 * result + conversationId.hashCode()
-        result = 31 * result + (sealedPayload?.contentHashCode() ?: 0)
+        result = 31 * result + (envelopeBytes?.contentHashCode() ?: 0)
         result = 31 * result + attemptCount
         result = 31 * result + nextAttemptUnixMs.hashCode()
         result = 31 * result + (lastError?.hashCode() ?: 0)
@@ -147,26 +201,4 @@ data class OutboxEntity(
             this == null || other == null -> false
             else -> contentEquals(other)
         }
-}
-
-@Entity(
-    tableName = "session",
-    indices = [Index(value = ["contactId"], unique = true)],
-)
-data class SessionEntity(
-    @PrimaryKey val contactId: String,
-    val sealedState: ByteArray,
-    val updatedAtUnixMs: Long,
-) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-        other as SessionEntity
-        return contactId == other.contactId &&
-            sealedState.contentEquals(other.sealedState) &&
-            updatedAtUnixMs == other.updatedAtUnixMs
-    }
-
-    override fun hashCode(): Int =
-        31 * (31 * contactId.hashCode() + sealedState.contentHashCode()) + updatedAtUnixMs.hashCode()
 }

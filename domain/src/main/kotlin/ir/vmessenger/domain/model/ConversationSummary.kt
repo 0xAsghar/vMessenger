@@ -9,10 +9,18 @@ package ir.vmessenger.domain.model
  */
 data class ConversationSummary(
     val id: String,
-    val contactId: String,
+    /** Null for a group row; exactly one of this and [groupId] is set. */
+    val contactId: String?,
+    val groupId: String?,
+    /** The contact's name, or the group's. */
     val contactName: String,
-    /** Identicon seed; empty only if the contact row vanished under the conversation. */
+    /** Identicon seed; empty for a group row, and if the contact row vanished under the conversation. */
     val identityHash: ByteArray,
+    /**
+     * Who sent the last message of a group, so the row reads "Name: text" the way
+     * every messenger shows it. Null for 1:1 rows and for our own last message.
+     */
+    val lastSenderName: String?,
     val preview: String?,
     val previewKind: MessagePreviewKind?,
     val lastDirection: MessageDirection?,
@@ -30,11 +38,15 @@ data class ConversationSummary(
 
     override fun hashCode(): Int = 31 * scalarFields().hashCode() + identityHash.contentHashCode()
 
+    val isGroup: Boolean get() = groupId != null
+
     /** Every field except the byte array, so equality/hash keep data-class semantics. */
     private fun scalarFields(): List<Any?> = listOf(
         id,
         contactId,
+        groupId,
         contactName,
+        lastSenderName,
         preview,
         previewKind,
         lastDirection,

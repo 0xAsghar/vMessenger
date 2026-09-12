@@ -16,6 +16,7 @@ import ir.vmessenger.core.database.dao.ContactRequestDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.DhtRecordDao
 import ir.vmessenger.core.database.dao.EndpointCacheDao
+import ir.vmessenger.core.database.dao.GroupDao
 import ir.vmessenger.core.database.dao.IdentityDao
 import ir.vmessenger.core.database.dao.KeyMaterialDao
 import ir.vmessenger.core.database.dao.LocationAccessDao
@@ -23,9 +24,9 @@ import ir.vmessenger.core.database.dao.LocationSampleDao
 import ir.vmessenger.core.database.dao.LocationShareDao
 import ir.vmessenger.core.database.dao.MailboxDao
 import ir.vmessenger.core.database.dao.MessageDao
+import ir.vmessenger.core.database.dao.MessageRecipientDao
 import ir.vmessenger.core.database.dao.OutboxDao
 import ir.vmessenger.core.database.dao.RelayNodeDao
-import ir.vmessenger.core.database.dao.SessionDao
 import ir.vmessenger.core.database.migration.MIGRATION_10_11
 import ir.vmessenger.core.database.migration.MIGRATION_11_12
 import ir.vmessenger.core.database.migration.MIGRATION_12_13
@@ -33,6 +34,7 @@ import ir.vmessenger.core.database.migration.MIGRATION_13_14
 import ir.vmessenger.core.database.migration.MIGRATION_14_15
 import ir.vmessenger.core.database.migration.MIGRATION_15_16
 import ir.vmessenger.core.database.migration.MIGRATION_16_17
+import ir.vmessenger.core.database.migration.MIGRATION_17_18
 import ir.vmessenger.core.database.migration.MIGRATION_1_2
 import ir.vmessenger.core.database.migration.MIGRATION_2_3
 import ir.vmessenger.core.database.migration.MIGRATION_3_4
@@ -87,6 +89,7 @@ object DatabaseModule {
                 MIGRATION_14_15,
                 MIGRATION_15_16,
                 MIGRATION_16_17,
+                MIGRATION_17_18,
             )
             .build()
     }
@@ -128,7 +131,11 @@ object DatabaseModule {
     fun provideOutboxDao(database: VMessengerDatabase): OutboxDao = database.outboxDao()
 
     @Provides
-    fun provideSessionDao(database: VMessengerDatabase): SessionDao = database.sessionDao()
+    fun provideMessageRecipientDao(database: VMessengerDatabase): MessageRecipientDao =
+        database.messageRecipientDao()
+
+    @Provides
+    fun provideGroupDao(database: VMessengerDatabase): GroupDao = database.groupDao()
 
     @Provides
     fun provideLocationShareDao(database: VMessengerDatabase): LocationShareDao = database.locationShareDao()
