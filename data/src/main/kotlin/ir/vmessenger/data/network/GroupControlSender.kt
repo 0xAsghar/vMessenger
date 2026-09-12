@@ -8,7 +8,6 @@ import ir.vmessenger.core.database.entity.GroupEntity
 import ir.vmessenger.core.database.entity.GroupMemberEntity
 import ir.vmessenger.core.proto.app.v1.GroupControlType
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
-import ir.vmessenger.network.messaging.MessagingService
 import ir.vmessenger.network.messaging.PeerIdentity
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,7 +26,7 @@ import javax.inject.Singleton
 class GroupControlSender @Inject constructor(
     private val groupDao: GroupDao,
     private val contactDao: ContactDao,
-    private val messagingService: MessagingService,
+    private val messaging: MessagingPort,
     private val selfIdentity: SelfIdentityCache,
 ) {
     /** Answers a peer that asked for the authoritative membership. */
@@ -69,7 +68,7 @@ class GroupControlSender @Inject constructor(
             ed25519PublicKey = contact.ed25519Public,
             x25519StaticPublicKey = contact.x25519StaticPublic ?: ByteArray(X25519_KEY_SIZE),
         )
-        val result = messagingService.send(contact.id, self, peer, envelope)
+        val result = messaging.send(contact.id, self, peer, envelope)
         if (result is AppResult.Error) {
             AppLogger.info(TAG, "control to $recipientKey not delivered now: ${result.error.message}")
         }

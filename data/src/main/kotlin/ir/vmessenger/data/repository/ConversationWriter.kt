@@ -120,7 +120,7 @@ class ConversationWriter @Inject constructor(
     suspend fun recordGroupEvent(conversationId: String, text: String): String {
         val messageId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
-        messageDao.insert(groupEvent(messageId, conversationId, text, now))
+        messageDao.insert(groupEvent(messageId, conversationId, text, now, MessageDirection.INCOMING))
         conversationDao.getById(conversationId)?.let {
             conversationDao.update(it.copy(lastMessageId = messageId, lastActivityUnixMs = now))
         }
@@ -145,7 +145,7 @@ class ConversationWriter @Inject constructor(
     ): String {
         val messageId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
-        messageDao.insert(groupEvent(messageId, conversationId, text, now))
+        messageDao.insert(groupEvent(messageId, conversationId, text, now, MessageDirection.OUTGOING))
         recipientDao.insertAll(recipients.map { queuedRecipient(messageId, it) })
         for (recipient in recipients) {
             outboxDao.enqueue(
@@ -168,22 +168,30 @@ class ConversationWriter @Inject constructor(
     }
 
     /**
-     * A system line: READ on arrival (it is not a message anyone has to open) and
-     * INCOMING whoever made the change, because it renders centred either way and
-     * an outgoing one would otherwise grow delivery ticks.
+     * A system line. It renders centred whichever direction it carries, so direction is
+     * free to mean the useful thing: a change **we** made is OUTGOING, which is what lets
+     * the recipients' delivery receipts validate against it and stop the re-sends. One
+     * that arrived is INCOMING and already READ — nobody has to open a membership line.
      */
-    private fun groupEvent(messageId: String, conversationId: String, text: String, now: Long) = MessageEntity(
+    @Suppress("LongParameterList") // a message row is this many columns
+    private fun groupEvent(
+        messageId: String,
+        conversationId: String,
+        text: String,
+        now: Long,
+        direction: MessageDirection,
+    ) = MessageEntity(
         messageId = messageId,
         conversationId = conversationId,
-        direction = MessageDirection.INCOMING,
+        direction = direction,
         contentType = MessageContentType.GROUP_CONTROL,
         body = text,
         replyToMessageId = null,
-        status = DeliveryStatus.READ,
+        status = if (direction == MessageDirection.OUTGOING) DeliveryStatus.QUEUED else DeliveryStatus.READ,
         createdAtUnixMs = now,
-        sentAtUnixMs = now,
-        deliveredAtUnixMs = now,
-        readAtUnixMs = now,
+        sentAtUnixMs = null,
+        deliveredAtUnixMs = null,
+        readAtUnixMs = if (direction == MessageDirection.OUTGOING) null else now,
     )
 
     /**
@@ -259,9 +267,12 @@ class ConversationWriter @Inject constructor(
         val pending = outboxDao.pendingRecipients(message.messageId).toSet()
         val known = recipientDao.forMessage(message.messageId)
         if (known.isEmpty()) {
+            // A message written before its delivery rows existed, or one that failed with
+            // nobody reachable: resolve from scratch, but still skip whatever the outbox
+            // already holds, or the retry would reset that row's backoff and receipt wait.
             val resolved = recipientResolver.resolve(message.conversationId)
             recipientDao.insertAll(resolved.map { queuedRecipient(message.messageId, it) })
-            return resolved
+            return resolved.filterNot { it in pending }
         }
         return known
             .filter { it.status != DeliveryStatus.DELIVERED && it.status != DeliveryStatus.READ }

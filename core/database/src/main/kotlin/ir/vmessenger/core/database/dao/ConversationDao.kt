@@ -293,7 +293,8 @@ interface MessageDao {
         LEFT JOIN chat_group_member gm
             ON gm.groupId = cv.groupId AND gm.identityHash = m.senderIdentityHash
         LEFT JOIN contact ct
-            ON m.senderIdentityHash IS NOT NULL AND lower(hex(ct.identityHash)) = m.senderIdentityHash
+            ON m.senderIdentityHash IS NOT NULL
+            AND lower(substr(hex(ct.identityHash), 1, 32)) = m.senderIdentityHash
         WHERE m.conversationId = :cid
         ORDER BY m.createdAtUnixMs DESC, m.messageId DESC
         LIMIT :limit

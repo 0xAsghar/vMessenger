@@ -31,6 +31,7 @@ class ConversationRepositoryImplTest {
 
     private lateinit var messageDao: FakeMessageDao
     private lateinit var conversationDao: FakeConversationDao
+    private lateinit var contactDao: FakeContactDao
     private lateinit var messaging: FakeMessagingPort
     private lateinit var receiptSender: ReceiptSender
     private lateinit var canceller: RecordingNotificationCanceller
@@ -48,7 +49,7 @@ class ConversationRepositoryImplTest {
     fun setUp() {
         val identityRepository = FakeIdentityRepository(cryptoEngine)
         InboundFixtures.installIdentity(identityRepository, 0x01)
-        val contactDao = FakeContactDao().apply { contacts += InboundFixtures.contact(CONTACT_ID, peer) }
+        contactDao = FakeContactDao().apply { contacts += InboundFixtures.contact(CONTACT_ID, peer) }
         messageDao = FakeMessageDao()
         conversationDao = FakeConversationDao()
         messaging = FakeMessagingPort()
@@ -65,6 +66,7 @@ class ConversationRepositoryImplTest {
     private fun marker() = ConversationReadMarker(
         messageDao = messageDao,
         conversationDao = conversationDao,
+        contactDao = contactDao,
         receiptSender = receiptSender,
         readReceiptPolicy = object : ReadReceiptPolicy {
             override suspend fun readReceiptsEnabled(): Boolean = receiptsAllowed

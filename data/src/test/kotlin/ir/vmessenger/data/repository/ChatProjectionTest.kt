@@ -156,8 +156,11 @@ class ChatProjectionTest {
         val summary = ChatListRow(
             conversationId = CONVERSATION_ID,
             contactId = CONTACT_ID,
+            groupId = null,
             displayName = null,
             identityHash = null,
+            groupAvatarSeed = null,
+            lastSenderName = null,
             lastMessageId = null,
             lastBody = null,
             lastAttachmentName = null,
@@ -184,8 +187,11 @@ class ChatProjectionTest {
         val summary = ChatListRow(
             conversationId = CONVERSATION_ID,
             contactId = CONTACT_ID,
+            groupId = null,
             displayName = "Ali",
             identityHash = byteArrayOf(1, 2, 3),
+            groupAvatarSeed = null,
+            lastSenderName = null,
             lastMessageId = "m1",
             lastBody = null,
             lastAttachmentName = "report.pdf",
@@ -225,5 +231,8 @@ class ChatProjectionTest {
     private companion object {
         const val CONVERSATION_ID = "c1"
         const val CONTACT_ID = "a"
+
+        /** Routing key of the one recipient; the outbox row is keyed by it. */
+        const val RECIPIENT = "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
     }
 }

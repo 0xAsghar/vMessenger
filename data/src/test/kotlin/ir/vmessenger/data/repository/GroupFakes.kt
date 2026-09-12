@@ -12,6 +12,7 @@ import ir.vmessenger.core.database.entity.GroupMemberRole
 import ir.vmessenger.core.database.entity.IdentityEntity
 import ir.vmessenger.core.database.entity.MessageRecipientEntity
 import ir.vmessenger.data.network.rank
+import ir.vmessenger.domain.model.Identity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 
@@ -27,9 +28,13 @@ class FakeGroupDao(
     val groups: MutableList<GroupEntity> = mutableListOf(),
     val members: MutableList<GroupMemberEntity> = mutableListOf(),
 ) : GroupDao {
-    override suspend fun upsert(group: GroupEntity) {
-        groups.removeAll { it.id == group.id }
-        groups += group
+    /** IGNORE, like the real DAO: replacing the row would cascade the group's history away. */
+    override suspend fun insert(group: GroupEntity) {
+        if (groups.none { it.id == group.id }) groups += group
+    }
+
+    override suspend fun update(group: GroupEntity) {
+        groups.replaceAll { if (it.id == group.id) group else it }
     }
 
     override suspend fun getById(groupId: String): GroupEntity? = groups.firstOrNull { it.id == groupId }
@@ -198,13 +203,25 @@ object GroupFixtures {
         removedAtUnixMs = removedAtUnixMs,
     )
 
-    fun identityRow(seed: Byte) = IdentityEntity(
-        ed25519Public = ByteArray(32) { seed },
-        identityHash = identityHash(seed),
-        userHash = UserHashEncoder.encode(identityHash(seed)),
-        displayName = "Me",
-        x25519StaticPublic = ByteArray(32) { (seed + 1).toByte() },
-        createdAtUnixMs = 0L,
+    fun identityRow(seed: Byte) = identityRow(
+        Identity(
+            ed25519PublicKey = ByteArray(32) { seed },
+            identityHash = identityHash(seed),
+            userHash = UserHashEncoder.encode(identityHash(seed)),
+            displayName = "Me",
+            x25519StaticPublicKey = ByteArray(32) { (seed + 1).toByte() },
+            createdAtUnixMs = 0L,
+        ),
+    )
+
+    /** The `identity` row matching a domain identity, so both views of "us" agree. */
+    fun identityRow(identity: Identity) = IdentityEntity(
+        ed25519Public = identity.ed25519PublicKey,
+        identityHash = identity.identityHash,
+        userHash = identity.userHash,
+        displayName = identity.displayName,
+        x25519StaticPublic = identity.x25519StaticPublicKey,
+        createdAtUnixMs = identity.createdAtUnixMs,
     )
 
     /** 32 hex chars, the shape `GroupControlCodec.groupIdOf` accepts on the wire. */

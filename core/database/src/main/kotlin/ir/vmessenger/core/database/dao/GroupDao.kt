@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 import ir.vmessenger.core.database.entity.GroupEntity
 import ir.vmessenger.core.database.entity.GroupMemberEntity
 import kotlinx.coroutines.flow.Flow
@@ -12,8 +13,17 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 @Suppress("TooManyFunctions") // one query per thing the group screens and the control handler ask
 interface GroupDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(group: GroupEntity)
+    /**
+     * Inserts a group we do not have yet. IGNORE, not REPLACE: `INSERT OR REPLACE` deletes
+     * the existing row first, which cascades through `conversation` to every message in the
+     * group. A re-sent snapshot would then silently erase the whole history — use [update]
+     * to change a group that already exists.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(group: GroupEntity)
+
+    @Update
+    suspend fun update(group: GroupEntity)
 
     @Query("SELECT * FROM chat_group WHERE id = :groupId LIMIT 1")
     suspend fun getById(groupId: String): GroupEntity?

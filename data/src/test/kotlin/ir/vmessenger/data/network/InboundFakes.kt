@@ -301,6 +301,7 @@ object InboundFixtures {
         text: String = "hi",
         sentAtUnixMs: Long = System.currentTimeMillis(),
         replyToMessageId: String? = null,
+        groupId: String? = null,
     ): MessageEnvelope {
         val chat = ChatMessage.newBuilder().setText(text)
         replyToMessageId?.let { chat.replyToMessageId = ByteString.copyFromUtf8(it) }
@@ -308,6 +309,7 @@ object InboundFixtures {
             .setMessageId(ByteString.copyFromUtf8(messageId))
             .setSentAtUnixMs(sentAtUnixMs)
             .setCounter(1)
+            .applyGroup(groupId)
             .setChat(chat)
             .build()
     }

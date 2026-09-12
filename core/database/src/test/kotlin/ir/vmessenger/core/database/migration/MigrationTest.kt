@@ -8,6 +8,16 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+/** Every migration up to 17, in order; [UP_TO_18] adds the current one. */
+internal val UP_TO_17 = listOf(
+    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+    MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
+    MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15,
+    MIGRATION_15_16, MIGRATION_16_17,
+)
+
+internal val UP_TO_18 = UP_TO_17 + MIGRATION_17_18
+
 /**
  * Replays every migration on a real SQLite engine (JDBC, in memory), because a
  * broken migration is only discovered on a user's device otherwise: Room does not
@@ -23,14 +33,7 @@ class MigrationTest {
     @AfterTest
     fun tearDown() = database.close()
 
-    private val upTo17 = listOf(
-        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-        MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
-        MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15,
-        MIGRATION_15_16, MIGRATION_16_17,
-    )
-
-    private fun migrateTo17() = upTo17.forEach { it.migrate(database.db) }
+    private fun migrateTo17() = UP_TO_17.forEach { it.migrate(database.db) }
 
     private fun migrateTo18() {
         migrateTo17()

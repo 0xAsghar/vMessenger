@@ -78,7 +78,7 @@ class IdentityBackupRepositoryImplTest {
         source.identityRepository.generateIdentity("Ali")
         val contact = fixtures.approvedContact("c1", "Sara")
         source.contactDao.contacts += contact
-        source.conversationDao.conversations += ConversationEntity("conv1", "c1", "m2", 2_000L, 0, muted = true)
+        source.conversationDao.conversations += conversation("conv1", "c1", "m2", 2_000L, muted = true)
         source.messageDao.messages += fixtures.textMessage("m1", "conv1", MessageDirection.INCOMING, 1_000L)
         source.messageDao.messages += MessageEntity(
             messageId = "m2",
@@ -218,14 +218,7 @@ class IdentityBackupRepositoryImplTest {
         val target = device()
         val contact = fixtures.approvedContact("backup-c1", "Sara")
         target.contactDao.contacts += contact.copy(id = "local-c1")
-        target.conversationDao.conversations += ConversationEntity(
-            id = "local-conv",
-            contactId = "local-c1",
-            lastMessageId = "kept",
-            lastActivityUnixMs = 50L,
-            unreadCount = 0,
-            muted = false,
-        )
+        target.conversationDao.conversations += conversation("local-conv", "local-c1", "kept", 50L)
         target.messageDao.messages += fixtures.textMessage("kept", "local-conv", MessageDirection.INCOMING, 50L)
         target.conversationDao.upsertCalls = 0
         val conversation = BackupConversation.newBuilder()
@@ -256,4 +249,20 @@ class IdentityBackupRepositoryImplTest {
     }
 
     private fun device(): Device = Device()
+
+    /** A 1:1 conversation row; `groupId` stays null, which is what makes it 1:1. */
+    private fun conversation(
+        id: String,
+        contactId: String,
+        lastMessageId: String,
+        activityUnixMs: Long,
+        muted: Boolean = false,
+    ) = ConversationEntity(
+        id = id,
+        contactId = contactId,
+        lastMessageId = lastMessageId,
+        lastActivityUnixMs = activityUnixMs,
+        unreadCount = 0,
+        muted = muted,
+    )
 }

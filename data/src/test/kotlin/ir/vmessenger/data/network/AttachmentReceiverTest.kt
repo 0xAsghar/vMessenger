@@ -32,6 +32,7 @@ class AttachmentReceiverTest {
     val folder = TemporaryFolder()
 
     private lateinit var store: FakeAttachmentIncomingStore
+    private lateinit var harness: InboundHarness
     private lateinit var conversationDao: FakeConversationDao
     private lateinit var messageDao: FakeMessageDao
     private lateinit var tracker: AttachmentTransferTracker
@@ -45,11 +46,23 @@ class AttachmentReceiverTest {
     @Before
     fun setUp() {
         store = FakeAttachmentIncomingStore(folder.root)
-        conversationDao = FakeConversationDao()
-        messageDao = FakeMessageDao()
+        harness = InboundHarness()
+        conversationDao = harness.conversationDao
+        messageDao = harness.messageDao
         tracker = AttachmentTransferTracker()
-        receiver = AttachmentReceiver(store, conversationDao, messageDao, tracker, dispatcher)
+        receiver = AttachmentReceiver(
+            store = store,
+            conversationDao = conversationDao,
+            conversationResolver = harness.conversationResolver,
+            messageDao = messageDao,
+            tracker = tracker,
+            ioDispatcher = dispatcher,
+        )
         receiver.clock = { now }
+        // The resolver only creates a 1:1 conversation for a known contact, so the
+        // transfers below have somewhere to land.
+        harness.contactDao.contacts += InboundFixtures.contact("a", InboundFixtures.peer(0x0A))
+        harness.contactDao.contacts += InboundFixtures.contact("b", InboundFixtures.peer(0x0B))
     }
 
     @Test

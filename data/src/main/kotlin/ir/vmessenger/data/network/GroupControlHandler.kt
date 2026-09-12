@@ -116,7 +116,9 @@ class GroupControlHandler @Inject constructor(
             closed = false,
             avatarSeed = incoming.groupId,
         )
-        groupDao.upsert(group)
+        // update, never insert-or-replace: replacing the row would cascade the group's
+        // conversation — and every message in it — away on a re-sent snapshot.
+        if (local == null) groupDao.insert(group) else groupDao.update(group)
         groupDao.replaceMembers(incoming.groupId, members, now)
         val conversationId = ensureConversation(incoming.groupId, now)
         if (local == null) writer.recordGroupEvent(conversationId, GroupEventText.created(group.name))

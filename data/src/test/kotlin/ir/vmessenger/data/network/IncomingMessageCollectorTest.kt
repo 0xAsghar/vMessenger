@@ -1,24 +1,23 @@
 package ir.vmessenger.data.network
 
-import com.goterl.lazysodium.LazySodiumJava
-import com.goterl.lazysodium.SodiumJava
-import ir.vmessenger.core.crypto.LazysodiumCryptoEngine
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.database.entity.ContactRelationshipStatus
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageDirection
 import ir.vmessenger.core.database.entity.MessageEntity
+import ir.vmessenger.core.database.entity.MessageRecipientEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
 import ir.vmessenger.core.notifications.ActiveConversationTracker
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import ir.vmessenger.core.proto.app.v1.ReceiptType
 import ir.vmessenger.data.repository.FakeContactDao
 import ir.vmessenger.data.repository.FakeConversationDao
-import ir.vmessenger.data.repository.FakeIdentityRepository
 import ir.vmessenger.data.repository.FakeMessageDao
+import ir.vmessenger.data.repository.FakeMessageRecipientDao
 import ir.vmessenger.network.messaging.IncomingEnvelope
-import kotlinx.coroutines.Dispatchers
+import ir.vmessenger.network.messaging.PeerIdentity
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -32,11 +31,12 @@ class IncomingMessageCollectorTest {
     private val peerA = InboundFixtures.peer(0x0A)
     private val peerB = InboundFixtures.peer(0x0B)
 
-    private lateinit var identityRepository: FakeIdentityRepository
+    private lateinit var harness: InboundHarness
     private lateinit var contactDao: FakeContactDao
     private lateinit var conversationDao: FakeConversationDao
     private lateinit var messageDao: FakeMessageDao
     private lateinit var outboxDao: FakeOutboxDao
+    private lateinit var recipientDao: FakeMessageRecipientDao
     private lateinit var messaging: FakeMessagingPort
     private lateinit var notifier: FakeIncomingMessageNotifier
     private lateinit var routes: FakeInboundRoutes
@@ -44,41 +44,16 @@ class IncomingMessageCollectorTest {
 
     @Before
     fun setUp() {
-        val cryptoEngine = LazysodiumCryptoEngine(LazySodiumJava(SodiumJava()))
-        identityRepository = FakeIdentityRepository(cryptoEngine)
-        InboundFixtures.installIdentity(identityRepository, 0x01)
-        val selfIdentityCache = SelfIdentityCache(identityRepository, cryptoEngine)
-        contactDao = FakeContactDao()
-        conversationDao = FakeConversationDao()
-        messageDao = FakeMessageDao()
-        outboxDao = FakeOutboxDao()
-        messaging = FakeMessagingPort()
-        notifier = FakeIncomingMessageNotifier()
-        routes = FakeInboundRoutes()
-        val contactRequestService =
-            ContactRequestService(identityRepository, selfIdentityCache, messaging, ContactRequestRetryBudget())
-        val receiptSender = ReceiptSender(messaging, selfIdentityCache, contactDao, Dispatchers.Unconfined)
-            .also { it.start() }
-        val contactRequestHandler = ContactRequestHandler(
-            contactRequestRepository = FakeContactRequestRepository(),
-            contactRepository = FakeContactRepository(contactDao),
-            contactRequestNotifier = ContactRequestNotifier(),
-            contactRequestService = contactRequestService,
-            contactDao = contactDao,
-            identityRepository = identityRepository,
-        )
-        collector = IncomingMessageCollector(
-            messaging = messaging,
-            contactDao = contactDao,
-            conversationDao = conversationDao,
-            messageDao = messageDao,
-            contactRequestHandler = contactRequestHandler,
-            receiptHandler = InboundReceiptHandler(messageDao, conversationDao, outboxDao),
-            receiptSender = receiptSender,
-            routes = routes,
-            notifier = notifier,
-            ioDispatcher = Dispatchers.Unconfined,
-        )
+        harness = InboundHarness()
+        contactDao = harness.contactDao
+        conversationDao = harness.conversationDao
+        messageDao = harness.messageDao
+        outboxDao = harness.outboxDao
+        recipientDao = harness.recipientDao
+        messaging = harness.messaging
+        notifier = harness.notifier
+        routes = harness.routes
+        collector = harness.collector
         ActiveConversationTracker.activeConversationId = null
     }
 
@@ -186,7 +161,7 @@ class IncomingMessageCollectorTest {
         contactDao.contacts += InboundFixtures.contact("a", peerA)
         conversationDao.conversations += conversation("conv-a", "a")
         messageDao.messages += message("m1", "conv-a", MessageDirection.INCOMING, DeliveryStatus.DELIVERED)
-        outboxDao.items += outbox("m1", "conv-a")
+        outboxDao.items += outbox("m1", "conv-a", peerA)
 
         deliver("a", InboundFixtures.receiptEnvelope("m1", ReceiptType.RECEIPT_TYPE_READ, now()))
 
@@ -201,7 +176,8 @@ class IncomingMessageCollectorTest {
         contactDao.contacts += InboundFixtures.contact("b", peerB)
         conversationDao.conversations += conversation("conv-a", "a")
         messageDao.messages += message("m1", "conv-a", MessageDirection.OUTGOING, DeliveryStatus.SENT)
-        outboxDao.items += outbox("m1", "conv-a")
+        outboxDao.items += outbox("m1", "conv-a", peerA)
+        recipientDao.rows += recipient("m1", peerA, DeliveryStatus.SENT)
 
         deliver("b", InboundFixtures.receiptEnvelope("m1", ReceiptType.RECEIPT_TYPE_DELIVERED, now()))
 
@@ -221,6 +197,8 @@ class IncomingMessageCollectorTest {
         val createdAt = now() - 60_000L
         messageDao.messages += message("past", "conv-a", MessageDirection.OUTGOING, DeliveryStatus.SENT, createdAt)
         messageDao.messages += message("future", "conv-a", MessageDirection.OUTGOING, DeliveryStatus.SENT, createdAt)
+        recipientDao.rows += recipient("past", peerA, DeliveryStatus.SENT)
+        recipientDao.rows += recipient("future", peerA, DeliveryStatus.SENT)
 
         deliver("a", InboundFixtures.receiptEnvelope("past", ReceiptType.RECEIPT_TYPE_DELIVERED, atUnixMs = 1L))
         val before = now()
@@ -239,6 +217,7 @@ class IncomingMessageCollectorTest {
         conversationDao.conversations += conversation("conv-a", "a")
         messageDao.messages += message("m1", "conv-a", MessageDirection.OUTGOING, DeliveryStatus.READ)
             .copy(readAtUnixMs = 5_000L)
+        recipientDao.rows += recipient("m1", peerA, DeliveryStatus.READ).copy(readAtUnixMs = 5_000L)
 
         deliver("a", InboundFixtures.receiptEnvelope("m1", ReceiptType.RECEIPT_TYPE_DELIVERED, now()))
 
@@ -256,6 +235,9 @@ class IncomingMessageCollectorTest {
         messageDao.messages += message("m1", "conv-a", MessageDirection.OUTGOING, DeliveryStatus.DELIVERED)
         messageDao.messages += message("m2", "conv-a", MessageDirection.OUTGOING, DeliveryStatus.SENT)
         messageDao.messages += message("other", "conv-b", MessageDirection.OUTGOING, DeliveryStatus.SENT)
+        recipientDao.rows += recipient("m1", peerA, DeliveryStatus.DELIVERED)
+        recipientDao.rows += recipient("m2", peerA, DeliveryStatus.SENT)
+        recipientDao.rows += recipient("other", peerB, DeliveryStatus.SENT)
 
         val batch = InboundFixtures.receiptEnvelope("m1", ReceiptType.RECEIPT_TYPE_READ, now(), listOf("m2", "other"))
         deliver("a", batch)
@@ -275,7 +257,13 @@ class IncomingMessageCollectorTest {
         deliver("a", InboundFixtures.chatEnvelope("m1", "shadow"))
 
         assertEquals("conv-b", messageDao.getById("m1")!!.conversationId)
-        assertNull(conversationDao.getByContactId("a"))
+        // The 1:1 conversation is now resolved (and created) before the id
+        // collision is spotted, so an empty row for the sender exists; nothing of
+        // theirs is written into it, and the collision is neither stored nor acked.
+        val shadowed = conversationDao.getByContactId("a")
+        assertNull(shadowed?.lastMessageId)
+        assertEquals(0, shadowed?.unreadCount)
+        assertEquals(1, messageDao.messages.size)
         assertTrue(messaging.sent.isEmpty())
         assertTrue(notifier.shown.isEmpty())
     }
@@ -375,13 +363,23 @@ class IncomingMessageCollectorTest {
         readAtUnixMs = null,
     )
 
-    private fun outbox(messageId: String, conversationId: String) = OutboxEntity(
+    private fun outbox(messageId: String, conversationId: String, recipient: PeerIdentity) = OutboxEntity(
         messageId = messageId,
+        recipientIdentityHash = IdentityHashMatcher.routingKeyHex(recipient.identityHash),
         conversationId = conversationId,
-        recipientIdentityHash = RECIPIENT,
         envelopeBytes = null,
         attemptCount = 0,
         nextAttemptUnixMs = 0L,
         lastError = null,
+    )
+
+    /** The per-recipient delivery row an outgoing message needs before a receipt counts. */
+    private fun recipient(messageId: String, peer: PeerIdentity, status: DeliveryStatus) = MessageRecipientEntity(
+        messageId = messageId,
+        identityHash = IdentityHashMatcher.routingKeyHex(peer.identityHash),
+        status = status,
+        sentAtUnixMs = null,
+        deliveredAtUnixMs = null,
+        readAtUnixMs = null,
     )
 }

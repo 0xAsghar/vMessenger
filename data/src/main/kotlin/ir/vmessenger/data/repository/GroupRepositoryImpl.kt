@@ -102,7 +102,7 @@ class GroupRepositoryImpl @Inject constructor(
         )
         val members = listOf(self.copy(groupId = groupId, joinedAtUnixMs = now)) +
             others.map { it.toMember(groupId, now) }
-        groupDao.upsert(group)
+        groupDao.insert(group)
         groupDao.upsertMembers(members)
         val conversationId = createConversation(groupId, now)
         fanOut.send(

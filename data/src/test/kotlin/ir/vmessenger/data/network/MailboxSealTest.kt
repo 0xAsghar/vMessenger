@@ -15,12 +15,8 @@ import ir.vmessenger.core.database.entity.MessageDirection
 import ir.vmessenger.core.notifications.ActiveConversationTracker
 import ir.vmessenger.core.proto.app.v1.MailboxInner
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
-import ir.vmessenger.data.repository.FakeContactDao
-import ir.vmessenger.data.repository.FakeConversationDao
 import ir.vmessenger.data.repository.FakeIdentityRepository
-import ir.vmessenger.data.repository.FakeMessageDao
 import ir.vmessenger.domain.model.Identity
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -195,46 +191,23 @@ class MailboxSealTest {
 
     /** A real identity with real static keys plus the collector wired up on fakes. */
     private inner class DeliveryStack {
+        // A generated identity, not a fixture: opening a sealed blob needs the real
+        // X25519 private key, which the placeholder fixtures do not carry.
         val identityRepository = FakeIdentityRepository(cryptoEngine)
-        val identity: Identity
-        val contactDao = FakeContactDao()
-        val conversationDao = FakeConversationDao()
-        val messageDao = FakeMessageDao()
-        val messaging = FakeMessagingPort()
+            .also { runBlocking { it.generateIdentity("Me") } }
+        val harness = InboundHarness(cryptoEngine = cryptoEngine, identityRepository = identityRepository)
+        val identity: Identity = harness.self
+        val contactDao = harness.contactDao
+        val conversationDao = harness.conversationDao
+        val messageDao = harness.messageDao
+        val messaging = harness.messaging
         val sync: MailboxSyncService
 
         init {
-            runBlocking { identityRepository.generateIdentity("Me") }
-            identity = requireNotNull(identityRepository.identity)
-            val selfIdentityCache = SelfIdentityCache(identityRepository, cryptoEngine)
-            val contactRequestService =
-                ContactRequestService(identityRepository, selfIdentityCache, messaging, ContactRequestRetryBudget())
-            val receiptSender = ReceiptSender(messaging, selfIdentityCache, contactDao, Dispatchers.Unconfined)
-                .also { it.start() }
-            val contactRequestHandler = ContactRequestHandler(
-                contactRequestRepository = FakeContactRequestRepository(),
-                contactRepository = FakeContactRepository(contactDao),
-                contactRequestNotifier = ContactRequestNotifier(),
-                contactRequestService = contactRequestService,
-                contactDao = contactDao,
-                identityRepository = identityRepository,
-            )
-            val collector = IncomingMessageCollector(
-                messaging = messaging,
-                contactDao = contactDao,
-                conversationDao = conversationDao,
-                messageDao = messageDao,
-                contactRequestHandler = contactRequestHandler,
-                receiptHandler = InboundReceiptHandler(messageDao, conversationDao, FakeOutboxDao()),
-                receiptSender = receiptSender,
-                routes = FakeInboundRoutes(),
-                notifier = FakeIncomingMessageNotifier(),
-                ioDispatcher = Dispatchers.Unconfined,
-            )
             val mailboxDao = FakeMailboxDao()
             val mailboxService = MailboxService(mailboxDao, identityRepository, seal)
             val protocol = MailboxProtocolService(mailboxDao, mailboxService, contactDao)
-            sync = MailboxSyncService(protocol, seal, identityRepository, contactDao, Lazy { collector })
+            sync = MailboxSyncService(protocol, seal, identityRepository, contactDao, Lazy { harness.collector })
         }
 
         fun senderContact(senderPub: ByteArray): ContactEntity {

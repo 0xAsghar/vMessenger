@@ -39,7 +39,10 @@ import ir.vmessenger.core.proto.app.v1.ChatMessage as ProtoChatMessage
  * the outbox.
  */
 @Singleton
-@Suppress("LongParameterList") // one collaborator per inbound concern; grouping them would only hide the wiring
+// LongParameterList/TooManyFunctions: one collaborator and one step per inbound concern
+// (policy, chat, attachments, group control, receipts, notification); grouping them would
+// only hide the wiring this class exists to make explicit.
+@Suppress("LongParameterList", "TooManyFunctions")
 class IncomingMessageCollector @Inject constructor(
     private val messaging: MessagingPort,
     private val contactDao: ContactDao,
@@ -135,7 +138,7 @@ class IncomingMessageCollector @Inject constructor(
             InboundKind.LOCATION -> routes.location(contactId, envelope)
             InboundKind.CONTROL -> routes.control(contactId, envelope)
             InboundKind.RECEIPT -> receiptHandler.handle(contactId, envelope.receipt)
-            InboundKind.GROUP_CONTROL -> groupControlHandler.handle(contactId, envelope)
+            InboundKind.GROUP_CONTROL -> acknowledgeControl(contactId, envelope, incoming.session)
             InboundKind.NETWORK_NODES, null -> routes.infrastructure(incoming)
         }
     }
@@ -174,6 +177,23 @@ class IncomingMessageCollector @Inject constructor(
         AppLogger.info("Messaging", "incoming chat messageId=$messageId contact=$contactId")
         notifyIncomingChat(contactId, target, envelope.chat.text)
         receiptSender.enqueueDelivered(contactId, messageId, now, session)
+    }
+
+    /**
+     * Membership changes are acknowledged like messages: without a receipt the sender's
+     * outbox keeps re-sending the control until its wait budget runs out, reopening a
+     * session every few seconds for a change that already landed.
+     */
+    private suspend fun acknowledgeControl(
+        contactId: String,
+        envelope: MessageEnvelope,
+        session: ActiveSecureSession?,
+    ) {
+        groupControlHandler.handle(contactId, envelope)
+        val messageId = envelope.messageId.toStringUtf8()
+        if (messageId.isNotBlank()) {
+            receiptSender.enqueueDelivered(contactId, messageId, System.currentTimeMillis(), session)
+        }
     }
 
     private suspend fun bumpConversation(conversationId: String, messageId: String, now: Long) {

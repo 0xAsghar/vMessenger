@@ -268,6 +268,11 @@ class FakeMessageDao(
     override suspend fun updateStatus(id: String, status: DeliveryStatus) =
         replace(id) { it.copy(status = status) }
 
+    /** First listen only, like the real UPDATE's `IS NULL` guard. */
+    override suspend fun markVoicePlayed(id: String, ts: Long) = replace(id) {
+        if (it.attachmentPlayedAtUnixMs == null) it.copy(attachmentPlayedAtUnixMs = ts) else it
+    }
+
     override suspend fun getById(id: String): MessageEntity? = messages.firstOrNull { it.messageId == id }
 
     override suspend fun getByIdInConversation(id: String, cid: String): MessageEntity? =
