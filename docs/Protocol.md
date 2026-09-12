@@ -299,6 +299,7 @@ message MessageEnvelope {
   bytes sender_identity_hash = 2;
   int64 sent_at_unix_ms = 3;   // sender clock; advisory
   uint64 counter = 4;
+  bytes group_id = 5;          // 16 bytes as hex; empty for a 1:1 chat
 
   oneof content {
     ChatMessage chat = 10;
@@ -322,6 +323,7 @@ message MessageEnvelope {
     ContactResponse contact_response = 28;
     AttachmentInfo attachment_info = 29;
     AttachmentChunk attachment_chunk = 30;
+    GroupControl group_control = 31;
   }
 }
 ```
@@ -332,11 +334,13 @@ Every envelope is classified and gated before it is dispatched (`data/.../networ
 
 | `InboundKind` | Required sender state |
 |---|---|
-| `CHAT`, `ATTACHMENT`, `LOCATION`, `CONTROL`, `RECEIPT`, `NETWORK_NODES` | contact exists, not blocked, `relationshipStatus == APPROVED` |
+| `CHAT`, `ATTACHMENT`, `LOCATION`, `CONTROL`, `RECEIPT`, `NETWORK_NODES`, `GROUP_CONTROL` | contact exists, not blocked, `relationshipStatus == APPROVED` |
 | `CONTACT_REQUEST`, `CONTACT_RESPONSE` | sender not blocked (strangers and pending contacts may pass) |
 | mailbox / relay traffic | no `InboundKind`; authorized inside `MailboxProtocolService` / `PeerRelayForwarder` against the session peer |
 
 Because the contact id is resolved once at handshake time, a stranger that becomes an approved contact mid-session is re-resolved per frame while the id is still provisional (`MessagingService.refreshProvisionalContactId`), so the first message after approval is delivered instead of dropped.
+
+Being an approved contact is **not** enough to write into a group. `group_id` is peer-controlled, so a second gate runs for any envelope that carries one (`InboundConversationResolver`): the group must exist on this device, must not be closed, and the sender must be one of its active members. Otherwise a single contact could write into any group whose id they ever saw, or into one they were removed from. The check runs before a message is persisted and before a single attachment chunk is staged.
 
 ### 8.2 Receipts
 
@@ -376,7 +380,9 @@ stateDiagram-v2
   FAILED --> QUEUED: manual retry
 ```
 
-Outbox behaviour (`data/.../network/OutboxDispatcher.kt`): exponential backoff from 2 s, doubling, capped at 60 s; `MAX_ATTEMPTS = 12`; after transport delivery the row is kept and re-sent every 15 s up to `MAX_RECEIPT_WAITS = 4` until a receipt arrives; a 24 h retry window; at most 8 conversations drained in parallel; poll interval 5 s. Failure reasons are stored as stable codes (`peer_protocol_outdated`, `peer_key_changed`, `endpoint_not_found`, `network_unavailable`, `send_failed`, `mailbox_handoff`, `contact_missing`, `contact_blocked`, `contact_not_approved`).
+The state above is the **aggregate** of one row per recipient (`message_recipient`). A 1:1 message has exactly one, so it behaves as it always did; a group message has one per member, and the aggregate is READ only when everyone read it, DELIVERED only when everyone received it, FAILED only when every recipient was given up on, and SENT as soon as any recipient has it on the wire. Showing two ticks while a member is still offline would be a lie, so it is not shown. Per-recipient rows only ever move forward (`MessageRecipientDao.advance`), which is what makes an out-of-order or replayed receipt harmless.
+
+Outbox behaviour (`data/.../network/OutboxDispatcher.kt`): one queue row per `(message, recipient)`; exponential backoff from 2 s, doubling, capped at 60 s; `MAX_ATTEMPTS = 12`; after transport delivery the row is kept and re-sent every 15 s up to `MAX_RECEIPT_WAITS = 4` until a receipt arrives; a 24 h retry window **per recipient**, so one unreachable member is given up on without failing the message for the others; at most 8 `(conversation, recipient)` pairs drained in parallel; poll interval 5 s. Failure reasons are stored as stable codes (`peer_protocol_outdated`, `peer_key_changed`, `endpoint_not_found`, `network_unavailable`, `send_failed`, `mailbox_handoff`, `contact_missing`, `contact_blocked`, `contact_not_approved`).
 
 ### 8.4 Chat, control and location
 
@@ -445,9 +451,11 @@ message AttachmentInfo {
   string mime_type = 3;
   int64 total_size = 4;
   int32 chunk_count = 5;
-  AttachmentKind kind = 6;      // IMAGE | VIDEO | FILE
+  AttachmentKind kind = 6;      // IMAGE | VIDEO | FILE | AUDIO
   string caption = 7;
   bytes sha256 = 8;             // SHA-256 of the plaintext file; required (32 B) in v2
+  int64 duration_ms = 9;        // voice/video length
+  bytes waveform = 10;          // exactly 64 amplitude buckets, one byte each (0..255)
 }
 
 message AttachmentChunk { bytes transfer_id = 1; int32 index = 2; bytes data = 3; }
@@ -471,9 +479,75 @@ Receiver rules: chunks may arrive in any order (a `BitSet` tracks arrivals, dupl
 
 Chunks are libsodium `secretstream_xchacha20poly1305` frames of at most 64 KiB plaintext, the last tagged FINAL so truncation is detected. The per-file key is `HKDF-SHA256(master, salt = fileId, info = "vmessenger-attachment-v1")`, so a key or header swapped in from another file fails to open. `message.attachmentEncrypted` records whether a stored file is in this container.
 
+**Voice messages** are an attachment of kind `AUDIO` (AAC in an MP4 container, 16 kHz mono). `duration_ms` and `waveform` travel in the *header*, not with the audio, so the receiving bubble has its full shape and length while the file is still arriving. A waveform that is not exactly 64 bytes is discarded rather than drawn. The recording itself is written plaintext to the cache and is encrypted into app-private storage by `AttachmentStore.importFile`, which deletes the plaintext source — nothing readable outlives the recording.
+
+In a group, an attachment is transferred **once per recipient**: there is no shared storage to upload to, so this is O(n) by design and is bounded by the 32-member cap.
+
 ---
 
-## 10. Mailbox (store-and-forward)
+## 10. Groups
+
+`core/proto/.../messaging.proto`, `data/.../network/GroupControlCodec.kt`, `GroupControlHandler.kt`, `GroupControlFanOut.kt`, `data/.../repository/GroupRepositoryImpl.kt`.
+
+There is no group server and no group key. A group is **client-side fan-out**: a message is delivered over the same pairwise secure sessions as a 1:1 message, once per member, and `group_id` on the envelope says which thread it belongs to. Every security property of a 1:1 chat therefore holds unchanged — nothing new is trusted, and a group adds no new key material to lose.
+
+```proto
+message GroupMember {
+  bytes identity_hash = 1;   // 16-byte routing prefix, lowercase hex
+  bytes identity_pub = 2;    // Ed25519
+  string display_name = 3;
+  bytes x25519_static_pub = 4;
+}
+
+message GroupControl {
+  bytes group_id = 1;
+  GroupControlType type = 2;          // CREATE | UPDATE_NAME | ADD | REMOVE | LEAVE
+                                      // | SNAPSHOT | SNAPSHOT_REQUEST | CLOSE
+  string name = 3;
+  repeated GroupMember members = 4;
+  uint64 version = 5;
+  bytes creator_identity_hash = 6;
+  int64 at_unix_ms = 7;
+  bytes target_identity_hash = 8;     // the member an ADD/REMOVE/LEAVE is about
+}
+```
+
+### 10.1 Authority
+
+Membership is **creator-authoritative and versioned**. Without a server there has to be exactly one writer, or two devices can disagree forever:
+
+| Control | Accepted from | Accepted when |
+|---|---|---|
+| `CREATE`, `SNAPSHOT` | the named `creator_identity_hash`, and only if that is the session peer | `version >= local` (a re-sent snapshot at the current version still repairs drift) |
+| `UPDATE_NAME`, `ADD`, `REMOVE`, `CLOSE` | the creator | `version == local + 1` |
+| `LEAVE` | the member it is about | always |
+| `SNAPSHOT_REQUEST` | any member | answered only by the creator |
+
+A control at `version > local + 1` means one was missed: the receiver sends a `SNAPSHOT_REQUEST` and **drops** the control rather than applying a change it cannot place. A control below the local version is a replay and is ignored. Every structural control carries the full member list, so a snapshot is always enough to recover.
+
+Two further rules close the obvious gaps: a snapshot that does not list us is dropped (a creator cannot push us into a group we are not in), and a `REMOVE` naming us marks the local group `closed` — the history stays readable, but nothing more is sent or accepted.
+
+### 10.2 Membership and keys
+
+Members carry their own `identity_pub` and `x25519_static_pub` in the snapshot, so fan-out can address someone who is not a contact of ours. That is deliberate: sharing a group is not consent to a private chat, so a non-contact member is shown as «ناشناس» and adding them goes through the ordinary contact-request flow (`GroupRepository.addMemberAsContact`), never by silently creating an approved contact.
+
+Sending is restricted to members we hold an approved, unblocked contact for. A member we cannot address is skipped rather than queued forever; a message with no reachable recipient at all fails immediately with `NoReachableMembers` instead of spinning.
+
+Departures are tombstones (`chat_group_member.removedAtUnixMs`), not deletes, so a control that arrives after someone left is recognised instead of quietly re-adding them.
+
+| Limit | Value |
+|---|---|
+| Members (the user included) | 32 (`MAX_GROUP_MEMBERS`) |
+| Group name | 64 characters |
+| Group id | 16 random bytes, lowercase hex |
+
+### 10.3 Non-goals
+
+Deliberately not implemented, and not planned for 1.0: admin transfer, uploaded group avatars, invite links, message forwarding, mentions, and disappearing messages. Each of them needs either a shared secret or a trusted third party, which is what this design is built to avoid.
+
+---
+
+## 11. Mailbox (store-and-forward)
 
 Off by default (`P2PConfig.DEFAULT_STORE_AND_FORWARD = false`). `data/.../network/MailboxSeal.kt`, `MailboxProtocolService.kt`.
 
@@ -501,7 +575,7 @@ message MailboxInner {
 
 ---
 
-## 11. Peer-exchanged node records
+## 12. Peer-exchanged node records
 
 Off by default (`P2PConfig.DEFAULT_PEER_EXCHANGE = false`).
 
@@ -528,7 +602,7 @@ A valid record signed by the operator key (`NetworkConfig.OPERATOR_ED25519_PUBLI
 
 ---
 
-## 12. Relay control protocol
+## 13. Relay control protocol
 
 `core/proto/src/main/proto/vmessenger/relay/v1/relay.proto`; server side in `node/src/main/kotlin/ir/vmessenger/node/`.
 
@@ -552,7 +626,7 @@ message RelayEvent { RelayEventType type = 1; string circuit_id = 2; string mess
 
 A `/relay` WebSocket starts with exactly one binary `RelayHello`; `RelaySessionHandler` dispatches on the role.
 
-### 12.1 LISTENER
+### 13.1 LISTENER
 
 Proof transcript (v2, `core/common/.../network/RelayProof.kt`, shared by app and node):
 
@@ -576,7 +650,7 @@ signed with the listener's Ed25519 identity key. The app only ever signs v2 (`Re
 
 A successful registration replaces any previous socket for the same key (the old one is closed with `replaced`). The listener socket then only drains — the app sends a single `0x00` keep-alive byte every 40 s (the node reads and ignores any non-close frame) because idle control channels were being closed by CDNs after roughly 100 s.
 
-### 12.2 DIALER and ACCEPT
+### 13.2 DIALER and ACCEPT
 
 ```mermaid
 sequenceDiagram
@@ -612,7 +686,7 @@ The listener lookup keys on the 16-byte routing prefix (`IdentityHashMatcher.rou
 
 ---
 
-## 13. DHT RPC
+## 14. DHT RPC
 
 `core/proto/src/main/proto/vmessenger/dht/v1/dht.proto`. One request, one response, then the socket closes (`/dht` WebSocket, or `u32be`-prefixed frames over plain TCP in dev).
 
@@ -652,7 +726,7 @@ Publishing: TTL 20 min (`DhtDiscoveryProvider.DEFAULT_TTL_MS`), re-announced eve
 
 ---
 
-## 14. Version history
+## 15. Version history
 
 | Major | Status |
 |---|---|
@@ -670,9 +744,11 @@ Two transitional exceptions exist on the **node** only, because a node serves wh
 
 Because there was no in-place upgrade path from 0.x anyway, no compatibility shim was built into the app: a 0.x install must be removed before installing a 2.x build.
 
+Groups and voice messages were added **within** major 2, additively: `MessageEnvelope.group_id = 5`, `group_control = 31`, `AttachmentKind.ATTACHMENT_KIND_AUDIO = 4` and `AttachmentInfo.duration_ms = 9` / `waveform = 10` are all new fields, so a peer that predates them parses the envelope and simply ignores what it does not know. The practical effect is graceful: such a peer treats a group message as a 1:1 message from its sender and a voice message as an unknown-kind file. No version bump was needed, and none is claimed.
+
 ---
 
-## 15. Extensibility
+## 16. Extensibility
 
 - New content types are new `oneof` arms in `MessageEnvelope`; old clients see them as unknown and `InboundKind.of` returns null, which routes them to infrastructure handling and drops them.
 - New frame types extend `FrameType`; `SecureFrameGuard` ignores types it does not know.

@@ -10,7 +10,7 @@ vMessenger is a privacy-first messenger where each Android device is a peer that
 | Version | **0.5.1** (`versionCode` 45, `gradle/version.properties`) |
 | Platform | Android 8.0+ (API 26), compile/target SDK 35 |
 | UI language | Persian (RTL), Material 3, light/dark |
-| Wire protocol | **major 2** — not interoperable with 0.x builds ([docs/Protocol.md](docs/Protocol.md) §14) |
+| Wire protocol | **major 2** — not interoperable with 0.x builds ([docs/Protocol.md](docs/Protocol.md) §15) |
 | Database | Room over SQLCipher, **schema 17** |
 | License | GPL-3.0 ([LICENSE](LICENSE)) |
 

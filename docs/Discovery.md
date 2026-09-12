@@ -121,7 +121,7 @@ Hash-only adds are **not** instant contacts. They initiate a contact-request pro
 
 QR pairing (Section 4) remains **instant** (`APPROVED` immediately) because it is an in-person, signed descriptor exchange.
 
-Until approval, only `contact_request` / `contact_response` frames are accepted from the stranger; chat and location are rejected. See [Protocol.md](Protocol.md) §12.1 and [Security.md](Security.md) §11.1.
+Until approval, only `contact_request` / `contact_response` frames are accepted from the stranger; chat and location are rejected. See [Protocol.md](Protocol.md) §8.1 and [Security.md](Security.md) §11.1.
 
 ```mermaid
 sequenceDiagram
