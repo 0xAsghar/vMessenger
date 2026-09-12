@@ -23,7 +23,7 @@ import ir.vmessenger.core.designsystem.component.EmptyState
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
 import ir.vmessenger.feature.chat.voice.ComposerMicButton
-import ir.vmessenger.feature.chat.voice.RecordingBar
+import ir.vmessenger.feature.chat.voice.RecordingRow
 import kotlinx.coroutines.launch
 
 private const val JUMP_VISIBLE_FROM_INDEX = 4
@@ -127,16 +127,6 @@ private fun ConversationComposer(
     viewModel: ConversationViewModel,
 ) {
     val recorder by viewModel.voice.recorderState.collectAsStateWithLifecycle()
-    if (recorder.recording) {
-        RecordingBar(
-            state = recorder,
-            locked = host.mic.locked.value,
-            slide = host.mic.slide.value,
-            onCancel = host.mic.onCancel,
-            onSend = host.mic.onSend,
-        )
-        return
-    }
     val reply = state.composer.replyTo?.let { rememberReplyPreview(it, state.header.title) }
     Composer(
         state = ComposerState(text = state.composer.text, enabled = state.composer.enabled),
@@ -146,6 +136,19 @@ private fun ConversationComposer(
         replyTo = reply,
         onClearReply = viewModel::onClearReply,
         micButton = { ComposerMicButton(actions = host.mic.actions, enabled = state.composer.enabled) },
+        // Same bar, different contents: the mic must not leave composition mid-gesture.
+        recordingContent = if (!recorder.recording) {
+            null
+        } else {
+            {
+                RecordingRow(
+                    state = recorder,
+                    locked = host.mic.locked.value,
+                    slide = host.mic.slide.value,
+                    onCancel = host.mic.onCancel,
+                )
+            }
+        },
     )
 }
 
