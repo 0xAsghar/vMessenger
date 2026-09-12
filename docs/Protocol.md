@@ -514,7 +514,7 @@ message GroupControl {
 
 ### 10.1 Authority
 
-Membership is **creator-authoritative and versioned**. Without a server there has to be exactly one writer, or two devices can disagree forever:
+Membership is **creator-authoritative and versioned**. Without a server there has to be exactly one writer, or two devices can disagree forever. Throughout, "the sender" means *the identity the secure session authenticated*, never `MessageEnvelope.sender_identity_hash` — that field is advisory and is not verified anywhere, so nothing may be decided from it:
 
 | Control | Accepted from | Accepted when |
 |---|---|---|

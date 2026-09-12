@@ -12,9 +12,10 @@ message MessageEnvelope {
   uint64 counter = 4;
   // 16 random bytes identifying the group this envelope belongs to; empty for a
   // 1:1 chat. Groups are client-side fan-out: the envelope is still delivered
-  // over a pairwise secure session per member, so `sender_identity_hash` must
-  // equal the session peer's hash and membership is checked against the local
-  // group snapshot before anything is persisted.
+  // over a pairwise secure session per member, and the receiver checks the
+  // sender against the local group snapshot before persisting anything. Who the
+  // sender is comes from the authenticated session, never from
+  // `sender_identity_hash` above, which is advisory and is not verified.
   bytes group_id = 5;
 
   oneof content {

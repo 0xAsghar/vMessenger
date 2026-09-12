@@ -107,17 +107,28 @@ class FakeIncomingMessageNotifier : IncomingMessageNotifier {
     }
 }
 
+/**
+ * Rows are keyed by the `(messageId, recipientIdentityHash)` pair, exactly like
+ * the real primary key: a fake that kept one row per message would collapse a
+ * group fan-out into a single delivery and hide the bug this table exists for.
+ */
+@Suppress("TooManyFunctions") // mirrors the full OutboxDao contract
 class FakeOutboxDao : OutboxDao {
     val items = mutableListOf<OutboxEntity>()
 
     override suspend fun enqueue(item: OutboxEntity) {
-        items.removeAll { it.messageId == item.messageId }
+        items.removeAll { it.key() == item.key() }
         items += item
     }
 
-    override suspend fun due(now: Long): List<OutboxEntity> = items.filter { it.nextAttemptUnixMs <= now }
+    override suspend fun due(now: Long): List<OutboxEntity> =
+        items.filter { it.nextAttemptUnixMs <= now }.sortedBy { it.nextAttemptUnixMs }
 
-    override suspend fun remove(messageId: String) {
+    override suspend fun remove(messageId: String, recipient: String) {
+        items.removeAll { it.messageId == messageId && it.recipientIdentityHash == recipient }
+    }
+
+    override suspend fun removeAll(messageId: String) {
         items.removeAll { it.messageId == messageId }
     }
 
@@ -125,8 +136,8 @@ class FakeOutboxDao : OutboxDao {
         items.removeAll { it.conversationId == cid }
     }
 
-    override suspend fun getByMessageId(messageId: String): OutboxEntity? =
-        items.firstOrNull { it.messageId == messageId }
+    override suspend fun forMessage(messageId: String): List<OutboxEntity> =
+        items.filter { it.messageId == messageId }
 
     override suspend fun resetBackoff() {
         items.replaceAll { it.copy(nextAttemptUnixMs = 0) }
@@ -142,9 +153,14 @@ class FakeOutboxDao : OutboxDao {
         }
     }
 
+    override suspend fun pendingRecipients(messageId: String): List<String> =
+        items.filter { it.messageId == messageId }.map { it.recipientIdentityHash }
+
     override suspend fun update(item: OutboxEntity) {
-        items.replaceAll { if (it.messageId == item.messageId) item else it }
+        items.replaceAll { if (it.key() == item.key()) item else it }
     }
+
+    private fun OutboxEntity.key(): Pair<String, String> = messageId to recipientIdentityHash
 }
 
 /** Only the relationship-status path is exercised by the handler tests; everything else is inert. */

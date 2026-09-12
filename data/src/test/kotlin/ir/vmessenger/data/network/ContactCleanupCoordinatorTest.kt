@@ -131,8 +131,8 @@ class ContactCleanupCoordinatorTest {
         harness.messageDao.insert(message("m-a", "conv-a", attachmentPath = "/data/attachments/in/a-photo.jpg"))
         harness.messageDao.insert(message("m-a2", "conv-a", attachmentPath = null))
         harness.messageDao.insert(message("m-b", "conv-b", attachmentPath = "/data/attachments/in/b-photo.jpg"))
-        harness.outboxDao.enqueue(outbox("m-a", "conv-a"))
-        harness.outboxDao.enqueue(outbox("m-b", "conv-b"))
+        harness.outboxDao.enqueue(outbox("m-a", "conv-a", peerA.identityHash))
+        harness.outboxDao.enqueue(outbox("m-b", "conv-b", peerB.identityHash))
         harness.shareDao.upsert(share("out-a", "a", MessageDirection.OUTGOING))
         harness.shareDao.upsert(share("in-a", "a", MessageDirection.INCOMING))
         harness.shareDao.upsert(share("in-b", "b", MessageDirection.INCOMING))
@@ -173,10 +173,11 @@ class ContactCleanupCoordinatorTest {
         attachmentPath = attachmentPath,
     )
 
-    private fun outbox(messageId: String, conversationId: String) = OutboxEntity(
+    private fun outbox(messageId: String, conversationId: String, recipient: ByteArray) = OutboxEntity(
         messageId = messageId,
+        recipientIdentityHash = IdentityHashMatcher.routingKeyHex(recipient),
         conversationId = conversationId,
-        sealedPayload = null,
+        envelopeBytes = null,
         attemptCount = 0,
         nextAttemptUnixMs = 0L,
         lastError = null,

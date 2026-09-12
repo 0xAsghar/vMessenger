@@ -378,7 +378,8 @@ class IncomingMessageCollectorTest {
     private fun outbox(messageId: String, conversationId: String) = OutboxEntity(
         messageId = messageId,
         conversationId = conversationId,
-        sealedPayload = null,
+        recipientIdentityHash = RECIPIENT,
+        envelopeBytes = null,
         attemptCount = 0,
         nextAttemptUnixMs = 0L,
         lastError = null,

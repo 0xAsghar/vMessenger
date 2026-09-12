@@ -232,7 +232,8 @@ class ConversationWriterTest {
     private fun outboxRow(id: String) = OutboxEntity(
         messageId = id,
         conversationId = CONVERSATION_ID,
-        sealedPayload = null,
+        recipientIdentityHash = RECIPIENT,
+        envelopeBytes = null,
         attemptCount = 0,
         nextAttemptUnixMs = 0L,
         lastError = null,

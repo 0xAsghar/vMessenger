@@ -107,7 +107,8 @@ class ChatProjectionTest {
             OutboxEntity(
                 messageId = "m1",
                 conversationId = CONVERSATION_ID,
-                sealedPayload = null,
+                recipientIdentityHash = RECIPIENT,
+                envelopeBytes = null,
                 attemptCount = 3,
                 nextAttemptUnixMs = 0L,
                 lastError = "peer protocol major=1",

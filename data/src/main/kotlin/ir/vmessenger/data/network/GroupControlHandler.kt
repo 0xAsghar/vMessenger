@@ -46,10 +46,11 @@ class GroupControlHandler @Inject constructor(
     private val selfIdentity: SelfIdentityCache,
 ) {
     /**
-     * Handles one inbound control. [contactId] is the contact the session
-     * authenticated, which is what makes "the sender is the creator" checkable:
-     * the envelope's own sender field is peer-controlled and is verified against
-     * the session before anything here runs.
+     * Handles one inbound control. The sender is taken from [contactId] — the
+     * contact the *session* authenticated — and never from the envelope's own
+     * `sender_identity_hash`, which is peer-controlled and is not checked
+     * anywhere. That is what makes "the sender is the creator" a real check
+     * rather than a claim the sender makes about itself.
      */
     suspend fun handle(contactId: String, envelope: MessageEnvelope) {
         val control = envelope.groupControl
@@ -109,7 +110,10 @@ class GroupControlHandler @Inject constructor(
             creatorIdentityHash = incoming.creatorKey,
             createdAtUnixMs = local?.createdAtUnixMs ?: now,
             version = incoming.version,
-            closed = local?.closed ?: false,
+            // A snapshot that lists us reopens the group: being removed and then
+            // added back is exactly how a device recovers, and leaving it closed
+            // would make the group readable but permanently mute.
+            closed = false,
             avatarSeed = incoming.groupId,
         )
         groupDao.upsert(group)

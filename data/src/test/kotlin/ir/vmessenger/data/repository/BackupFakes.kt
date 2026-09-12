@@ -2,6 +2,7 @@ package ir.vmessenger.data.repository
 
 import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.common.network.NodeTrust
 import ir.vmessenger.core.crypto.CryptoEngine
@@ -12,9 +13,12 @@ import ir.vmessenger.core.database.dao.ConversationWithPreview
 import ir.vmessenger.core.database.dao.LocationAccessDao
 import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.dao.MessageWithReply
+import ir.vmessenger.core.database.dao.UnreadIncoming
 import ir.vmessenger.core.database.entity.ContactEntity
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.DeliveryStatus
+import ir.vmessenger.core.database.entity.GroupEntity
+import ir.vmessenger.core.database.entity.GroupMemberEntity
 import ir.vmessenger.core.database.entity.LocationAccessEntity
 import ir.vmessenger.core.database.entity.MessageDirection
 import ir.vmessenger.core.database.entity.MessageEntity
@@ -94,6 +98,7 @@ class FakeIdentityRepository(private val cryptoEngine: CryptoEngine) : IdentityR
     }
 }
 
+@Suppress("TooManyFunctions") // mirrors the full ContactDao contract
 class FakeContactDao : ContactDao {
     val contacts = mutableListOf<ContactEntity>()
 
@@ -105,6 +110,10 @@ class FakeContactDao : ContactDao {
 
     override suspend fun getByIdentityHash(identityHash: ByteArray): ContactEntity? =
         contacts.firstOrNull { it.identityHash.contentEquals(identityHash) }
+
+    /** The real query compares the first 16 bytes of the hash as lowercase hex. */
+    override suspend fun getByRoutingKey(routingKeyHex: String): ContactEntity? =
+        contacts.firstOrNull { IdentityHashMatcher.routingKeyHex(it.identityHash) == routingKeyHex }
 
     override suspend fun getByEd25519Public(ed25519Public: ByteArray): ContactEntity? =
         contacts.firstOrNull { it.ed25519Public.contentEquals(ed25519Public) }
@@ -138,14 +147,17 @@ class FakeContactDao : ContactDao {
 }
 
 /**
- * [contacts] and [messages] are the *same* list instances the contact/message
- * fakes hold, so `observeChatList` can join over them exactly like the real
- * query does (and [deleteById] can cascade the way the foreign key does).
+ * [contacts], [messages], [groups] and [members] are the *same* list instances
+ * the contact/message/group fakes hold, so `observeChatList` can join over them
+ * exactly like the real query does (and [deleteById] can cascade the way the
+ * foreign key does).
  */
 @Suppress("TooManyFunctions") // mirrors the full ConversationDao contract
 class FakeConversationDao(
     private val contacts: MutableList<ContactEntity> = mutableListOf(),
     private val messages: MutableList<MessageEntity> = mutableListOf(),
+    private val groups: MutableList<GroupEntity> = mutableListOf(),
+    private val members: MutableList<GroupMemberEntity> = mutableListOf(),
 ) : ConversationDao {
     val conversations = mutableListOf<ConversationEntity>()
     var upsertCalls = 0
@@ -170,6 +182,9 @@ class FakeConversationDao(
     override suspend fun getByContactId(contactId: String): ConversationEntity? =
         conversations.firstOrNull { it.contactId == contactId }
 
+    override suspend fun getByGroupId(groupId: String): ConversationEntity? =
+        conversations.firstOrNull { it.groupId == groupId }
+
     override suspend fun resetUnread(id: String) {
         conversations.replaceAll { if (it.id == id) it.copy(unreadCount = 0) else it }
     }
@@ -177,12 +192,20 @@ class FakeConversationDao(
     override fun observeChatList(): Flow<List<ChatListRow>> = flowOf(
         conversations.sortedByDescending { it.lastActivityUnixMs }.map { conversation ->
             val contact = contacts.firstOrNull { it.id == conversation.contactId }
+            val group = groups.firstOrNull { it.id == conversation.groupId }
             val last = messages.firstOrNull { it.messageId == conversation.lastMessageId }
+            // The real query joins the sender through (groupId, senderIdentityHash).
+            val sender = members.firstOrNull {
+                it.groupId == conversation.groupId && it.identityHash == last?.senderIdentityHash
+            }
             ChatListRow(
                 conversationId = conversation.id,
                 contactId = conversation.contactId,
-                displayName = contact?.displayName,
+                groupId = conversation.groupId,
+                displayName = group?.name ?: contact?.displayName,
                 identityHash = contact?.identityHash,
+                groupAvatarSeed = group?.avatarSeed,
+                lastSenderName = sender?.displayName,
                 lastMessageId = last?.messageId,
                 lastBody = last?.body,
                 lastAttachmentName = last?.attachmentName,
@@ -212,10 +235,16 @@ class FakeConversationDao(
     }
 }
 
-/** [outbox] is the same list [FakeOutboxDao] holds, so `lastError` joins like the real query. */
+/**
+ * [outbox] is the same list [FakeOutboxDao] holds, so `lastError` joins like the
+ * real query; [contacts] and [members] back the sender-name join of a group
+ * message the same way.
+ */
 @Suppress("TooManyFunctions") // mirrors the full MessageDao contract
 class FakeMessageDao(
     private val outbox: MutableList<OutboxEntity> = mutableListOf(),
+    private val contacts: MutableList<ContactEntity> = mutableListOf(),
+    private val members: MutableList<GroupMemberEntity> = mutableListOf(),
 ) : MessageDao {
     val messages = mutableListOf<MessageEntity>()
 
@@ -246,6 +275,10 @@ class FakeMessageDao(
 
     override suspend fun selectUnreadIncomingIds(cid: String): List<String> =
         messages.filter { it.conversationId == cid && it.isUnreadIncoming() }.map { it.messageId }
+
+    override suspend fun selectUnreadIncoming(cid: String): List<UnreadIncoming> =
+        messages.filter { it.conversationId == cid && it.isUnreadIncoming() }
+            .map { UnreadIncoming(it.messageId, it.senderIdentityHash) }
 
     override suspend fun markIncomingRead(cid: String, ts: Long) {
         messages.replaceAll {
@@ -295,7 +328,23 @@ class FakeMessageDao(
             replyContentType = quoted?.contentType,
             replyDirection = quoted?.direction,
             lastError = outbox.firstOrNull { it.messageId == messageId }?.lastError,
+            senderName = senderNameOf(senderIdentityHash),
         )
+    }
+
+    /**
+     * The real query is `COALESCE(contact.displayName, groupMember.displayName)`.
+     * The contact side compares the *full* hex of the stored hash, so it is
+     * reproduced here verbatim rather than by routing key; the group side is keyed
+     * on the identity hash alone because the fake has no conversation row to reach
+     * the group id through.
+     */
+    private fun senderNameOf(senderIdentityHash: String?): String? {
+        if (senderIdentityHash == null) return null
+        val contactName = contacts
+            .firstOrNull { it.identityHash.joinToString("") { byte -> "%02x".format(byte) } == senderIdentityHash }
+            ?.displayName
+        return contactName ?: members.firstOrNull { it.identityHash == senderIdentityHash }?.displayName
     }
 
     private fun MessageEntity.isUnreadIncoming(): Boolean =
