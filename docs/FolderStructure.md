@@ -53,7 +53,6 @@ flowchart TD
     cLoc["core:location"]
     cNotif["core:notifications"]
     cDesign["core:designsystem"]
-    cTest["core:testing"]
   end
 
   app --> featureLayer
@@ -99,7 +98,7 @@ The project brief lists conceptual modules. Each maps to one or more Gradle modu
 | Utilities | `core:common` |
 | Notifications | `core:notifications` |
 | Settings | `feature:settings`, `core:datastore` |
-| Testing | `core:testing` (plus test sources in every module) |
+| Testing | test sources in every module; `./gradlew unitTests` aggregates them (see [Testing.md](Testing.md)) |
 
 Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pieces of "Networking" are first-class modules (`network:dht`, `network:bootstrap`).
 
@@ -209,9 +208,9 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 - Material 3 theme (color/typography/shape tokens), RTL setup, reusable Compose components (message bubble, identicon, QR card, security banner). See [UI.md](UI.md).
 - Depends on: `core:common`.
 
-### core:testing
-- Shared fakes (fake repositories, in-memory transport, simulated DHT), fixtures, test dispatchers, KAT vectors for crypto.
-- Depends on: `domain`, `core:common` (test-only consumers).
+### node
+- Standalone JVM (Ktor) bootstrap/DHT + relay node: `/healthz`, `/dht` RPC socket, `/relay` control socket. Shares `core:common` and `core:proto` with the app so transcripts and framing cannot drift.
+- Depends on: `core:common`, `core:proto`. Operating it: [Deployment.md](Deployment.md).
 
 ---
 
@@ -270,13 +269,14 @@ vMessenger/
   build.gradle.kts
   gradle/
     libs.versions.toml
-    version.properties          <- versionName / versionCode (currently 0.2.0 / 35)
+    version.properties          <- versionName / versionCode (currently 0.5.1 / 45)
   build-logic/                 <- convention plugins
   app/
     src/main/kotlin/ir/vmessenger/
-      navigation/                <- VMessengerNavHost, Routes
-      ui/                        <- splash, home, contact (ContactRequestOverlay)
-      app/network/               <- NetworkLifecycleService
+      navigation/                <- VMessengerNavHost, VmRoute, per-tab graphs
+      ui/                        <- VMessengerApp, home, contact, network, placeholder
+      app/network/               <- NetworkLifecycleService, BootCompletedReceiver,
+                                    NetworkKeepAliveWorker, NetworkServiceStarter
   domain/
   data/
     src/main/kotlin/ir/vmessenger/data/
@@ -288,16 +288,16 @@ vMessenger/
   network/
     discovery/  dht/  bootstrap/  transport/  messaging/
   core/
-    common/  crypto/  proto/  database/  storage/  datastore/  location/  notifications/  designsystem/  testing/
+    common/  crypto/  proto/  database/  storage/  datastore/  location/  notifications/  designsystem/
   node/                        <- standalone JVM bootstrap/DHT + relay node (`:node` Gradle module)
-  deploy/                      <- production relay host (nginx, systemd)
-  scripts/                     <- setup-node.sh, emulator-connect.sh
+  deploy/                      <- nginx + systemd templates for a node host
+  scripts/                     <- setup-node.sh, emulator-connect.sh, cli-smoke-test.sh, sign-node-record
   docs/                        <- this documentation set
   vMessenger-icon/             <- launcher icons and brand logos
   README.md
 ```
 
-The full multi-module tree above is implemented. New capabilities are added as vertical slices behind existing interfaces (see [Architecture.md](Architecture.md) and [Roadmap.md](Roadmap.md)).
+The tree above is implemented. New capabilities are added as vertical slices behind existing interfaces (see [Architecture.md](Architecture.md)).
 
 ---
 

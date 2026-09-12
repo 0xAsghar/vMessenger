@@ -211,7 +211,7 @@ class EmbeddedDhtRecordStore @Inject constructor(
 
 /**
  * TCP DHT RPC listener so online Android clients can store and return signed
- * endpoint records (docs/P2P-Phases.md Phase 5). Off by default (`P2PConfig`);
+ * endpoint records. Off by default (`P2PConfig`);
  * when on, at most [MAX_CONCURRENT_CLIENTS] clients are served at once, each
  * with a [CLIENT_TIMEOUT_MS] socket timeout, and [stop] closes the listener.
  */

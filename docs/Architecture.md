@@ -2,7 +2,7 @@
 
 This document defines the overall software architecture of vMessenger: the requirements it must satisfy, the architectural style, the module decomposition, dependency rules, dependency injection, concurrency model, and the end-to-end data flows that tie everything together.
 
-Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Security.md](Security.md), [Discovery.md](Discovery.md), [DHT.md](DHT.md), [Bootstrap.md](Bootstrap.md), [Database.md](Database.md), [UI.md](UI.md), [FolderStructure.md](FolderStructure.md), [Roadmap.md](Roadmap.md).
+Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Security.md](Security.md), [Discovery.md](Discovery.md), [DHT.md](DHT.md), [Bootstrap.md](Bootstrap.md), [Database.md](Database.md), [Testing.md](Testing.md), [Deployment.md](Deployment.md), [UI.md](UI.md), [FolderStructure.md](FolderStructure.md).
 
 ---
 
@@ -17,7 +17,7 @@ Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Securi
 - FR-5 Delivery semantics: track per-message status (queued, sent, delivered, read, failed).
 - FR-6 Queues: retry transient failures; hold messages in an offline queue until the peer is reachable.
 - FR-7 Live Location: share live location through a foreground service with a per-contact allow list; render mutual shares on a MapLibre map; stop/revoke at any time.
-- FR-8 Storage: persist contacts, conversations, messages, keys, sessions, settings, contact requests, location access grants, and location history, encrypted at rest.
+- FR-8 Storage: persist contacts, conversations, messages, wrapped private keys, settings, contact requests, location access grants and location history, encrypted at rest. Encryption sessions are **not** persisted — they are connection-scoped (see [Protocol.md](Protocol.md) §6).
 - FR-9 Contact management: list, rename (local alias), verify, block, and delete contacts; show pending/rejected relationship status; gate chat and location to `APPROVED` contacts only.
 
 ### 1.2 Non-functional requirements
@@ -35,7 +35,7 @@ Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Securi
 ### 1.3 Constraints and assumptions
 
 - Minimum SDK 26 (Android 8.0); target the latest stable SDK.
-- The MVP uses direct TCP when possible and falls back to an encrypted circuit relay (`relay.vmessenger.ir` or user-configured nodes). Full ICE/STUN hole punching remains post-MVP (see [Roadmap.md](Roadmap.md)).
+- The app uses direct TCP when possible and falls back to an encrypted circuit relay (`relay.vmessenger.ir` or user-configured nodes). ICE/STUN hole punching is not implemented.
 - Bootstrap nodes are used only to join the DHT; the app becomes bootstrap-independent after joining (see [Bootstrap.md](Bootstrap.md)).
 
 ---
@@ -99,7 +99,7 @@ flowchart TD
 
 - Identity: owns the device keypair, identity hash, User Hash, and signing. Source of truth for "who am I" and "who is this peer". See [Security.md](Security.md).
 - Discovery: turns an identity hash into reachable endpoints. Independent of Messaging. Implemented for MVP via QR/User Hash (identity exchange) and the DHT (endpoint resolution). See [Discovery.md](Discovery.md).
-- Transport: establishes raw bidirectional byte channels to an endpoint. MVP implements an Internet (TCP) transport; Bluetooth, Wi-Fi Direct, and mesh are future. See [Network.md](Network.md).
+- Transport: establishes raw bidirectional byte channels to an endpoint. Implemented: Internet (TCP), relay circuits over WebSocket, and a UDP transport that is off by default. Bluetooth, Wi-Fi Direct and mesh do not exist. See [Network.md](Network.md).
 - Encryption: performs the handshake, key derivation, ratcheting, and AEAD framing. Plaintext crosses this boundary only on the device. See [Security.md](Security.md) and [Protocol.md](Protocol.md).
 - Messaging: sequences, acknowledges, retries, and queues application messages over an encrypted session. See [Protocol.md](Protocol.md).
 
@@ -223,9 +223,9 @@ vMessenger is built on Kotlin Coroutines and Flow with structured concurrency.
 
 ## 9. Background execution
 
-- Live Location runs in a foreground service (`LocationService`) with a persistent notification and a 15s GPS/network sampling interval. `LocationSharingCoordinator` encrypts samples and sends `LocationPacket`s to granted approved contacts. See [UI.md](UI.md) and [Roadmap.md](Roadmap.md).
+- Live Location runs in a foreground service (`LocationService`, `foregroundServiceType="location"`) with a persistent notification and a 15s GPS/network sampling interval. `LocationSharingCoordinator` encrypts samples and sends `LocationPacket`s to granted approved contacts. See [UI.md](UI.md).
 - Outbox delivery and DHT endpoint refresh run in the application scope while the app is alive, and are additionally scheduled with WorkManager for periodic refresh and retry when the app is backgrounded, subject to OS constraints.
-- The networking stack favors short-lived direct connections in the MVP; persistent presence and push-style wake-ups are a later-phase concern documented in [Roadmap.md](Roadmap.md).
+- The messaging service keeps at most one outbound session per contact and re-handshakes after 65 536 frames or 12 hours; sessions are never persisted. `NetworkLifecycleService` (`foregroundServiceType="remoteMessaging|dataSync"`) keeps the listener and relay control channel alive, and `BootCompletedReceiver` restarts it after a reboot.
 
 ---
 
@@ -254,7 +254,7 @@ vMessenger is built on Kotlin Coroutines and Flow with structured concurrency.
 4. On approve: recipient inserts/updates an `APPROVED` contact and sends `ContactResponse ACCEPT`; sender upgrades `PENDING_OUT` → `APPROVED`. Chat and location are gated until both sides are `APPROVED`.
 5. On reject: recipient sends `ContactResponse REJECT`; sender may mark `REJECTED`.
 
-Strangers may complete a handshake for contact-request frames only; `chat` and `location` envelopes from non-approved contacts are dropped. See [Security.md](Security.md) Section 11.1.
+Strangers may complete a handshake, but only `ContactRequest` / `ContactResponse` envelopes are accepted from them; chat, attachments, location, control, receipts and node hints from a non-approved contact are dropped by `InboundPolicy`. See [Security.md](Security.md) "Inbound authorization".
 
 ### 10.3 Send a message
 
@@ -293,7 +293,7 @@ If endpoint resolution or connection fails, the message remains in the offline/r
 ### 10.4 Receive a message
 
 1. An inbound connection is accepted by the Transport listener.
-2. Encryption completes/loads the session and decrypts the frame; replay protection rejects duplicates.
+2. The guard validates the frame header, the ratchet opens the body under the connection's session, and the bounded skipped-key store rejects replays.
 3. Messaging validates and acknowledges; the Data layer persists the message and emits it through the conversation Flow.
 4. A read receipt is sent when the user views the conversation.
 
@@ -323,7 +323,7 @@ If endpoint resolution or connection fails, the message remains in the offline/r
 - Crypto: known-answer tests and round-trip seal/open tests; negative tests for tampered frames and replays. See [Security.md](Security.md).
 - Network/DHT: deterministic tests using an in-memory transport and a simulated DHT; TTL/refresh/expiry behavior tests. See [DHT.md](DHT.md).
 - Presentation: ViewModel state tests with test dispatchers; Compose UI tests for critical screens.
-- A dedicated `core:testing` module provides shared fakes, fixtures, and test dispatchers.
+- Shared fakes and fixtures live in each module's own `src/test` source set; there is no separate testing module. `./gradlew unitTests` runs every module's unit tests (Android `testDebugUnitTest` plus the JVM modules' `test`) — see [Testing.md](Testing.md).
 
 ---
 
@@ -334,4 +334,4 @@ If endpoint resolution or connection fails, the message remains in the offline/r
 - Calls (voice/video): add a real-time media module that reuses Identity, Discovery, and the handshake for signaling.
 - Plugin system: plugins register via multibinding into well-defined extension points (transports, discovery providers, message handlers).
 
-See [Roadmap.md](Roadmap.md) for sequencing.
+The open gaps are listed in the "Known limitations" section of the [README](../README.md).

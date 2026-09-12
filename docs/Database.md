@@ -1,26 +1,38 @@
 # vMessenger - Local Database
 
-vMessenger has no server, so the on-device database is the single source of truth for the UI and the durable backing store for messaging queues. Everything sensitive is encrypted at rest. This document defines the storage philosophy, encryption, schema (entities, relationships, DAOs), type conversion, reactive queries, migrations, and data-retention/deletion policy.
+The on-device store: Room over SQLCipher, **schema version 17**.
 
-Encryption key management is detailed in [Security.md](Security.md); how the data layer uses these stores is in [Architecture.md](Architecture.md).
+Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/database/` and the exported schema `core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/17.json`.
 
 ---
 
 ## 1. Storage philosophy
 
-- Offline-first: the UI reads from the database and observes it via Flow; the network updates the database. The app is fully usable with no connectivity (reading history, composing, queueing).
-- Source of truth: message status, conversations, contacts, and queues live here, not on any server.
-- Encrypted at rest: the entire database is encrypted with SQLCipher; additional blobs are encrypted with AEAD. Plaintext exists only in memory while in use.
-- Minimal and purposeful: store what the app needs; avoid accumulating metadata. Routing data is cached briefly and expires.
+- The device is the only authority. There is no server copy of messages, contacts or keys, so the local database *is* the user's data.
+- Nothing sensitive is written outside it except attachment files, which have their own container ([Security.md](Security.md) §7.2), and the Keystore-wrapped blobs in DataStore.
+- `android:allowBackup="false"` — the database is never included in a cloud backup.
+- Every enum is persisted as its Kotlin `name`, not an ordinal, so reordering an enum cannot silently reinterpret stored rows.
 
 ---
 
-## 2. Encryption and engine
+## 2. Engine and encryption
 
-- Engine: Room (the Jetpack persistence library) over SQLCipher (encrypted SQLite).
-- Key: a random 256-bit database key, wrapped by the Android Keystore master key; supplied to SQLCipher via a `SupportFactory` at open time. The plaintext key is never persisted. See [Security.md](Security.md) Section 12.
-- Optional auth binding: the Keystore master key can require device unlock/biometric, so the database opens only when the device is unlocked.
-- Blob fields: large or especially sensitive payloads (for example serialized session state, key material) are stored as ChaCha20-Poly1305-sealed bytes under Keystore-wrapped keys, layered on top of SQLCipher.
+`core/database/.../di/DatabaseModule.kt`
+
+```kotlin
+Room.databaseBuilder(context, VMessengerDatabase::class.java, "vmessenger.db")
+    .openHelperFactory(SupportOpenHelperFactory(passphrase))   // net.zetetic SQLCipher
+    .addMigrations(MIGRATION_1_2 … MIGRATION_16_17)
+    .build()
+```
+
+- File: `vmessenger.db` (`DatabaseModule.DATABASE_NAME`), also what the secure wipe deletes together with its `-wal` / `-shm` / `-journal` siblings.
+- Passphrase: 32 random bytes, Keystore-wrapped, cached for the process lifetime by `DatabaseKeyProvider` under a mutex (see [Security.md](Security.md) §7.1).
+- `exportSchema = true`; schemas land in `core/database/schemas/`.
+- No `fallbackToDestructiveMigration` — every version step has an explicit migration.
+- 17 entities, 17 DAOs.
+
+**Note on the `session` table.** It is still declared (`SessionEntity`, `SessionDao`, table `session`) and still present in schema 17, but **nothing outside `:core:database` references it**: sessions are connection-scoped and never persisted ([Protocol.md](Protocol.md) §6). It is dead weight kept only because dropping a table requires a migration; treat it as unused.
 
 ---
 
@@ -28,352 +40,365 @@ Encryption key management is detailed in [Security.md](Security.md); how the dat
 
 ```mermaid
 erDiagram
-  IDENTITY ||--|| SETTINGS : owns
-  CONTACT ||--o{ CONVERSATION : participates
-  CONVERSATION ||--o{ MESSAGE : contains
-  MESSAGE ||--o| OUTBOX : queued_as
-  CONTACT ||--o| SESSION : has
-  CONTACT ||--o{ LOCATIONSHARE : shares
-  LOCATIONSHARE ||--o{ LOCATIONSAMPLE : records
-  CONTACT ||--o{ ENDPOINTCACHE : resolved_to
-  BOOTSTRAPNODE }o--|| SETTINGS : configured_in
+  identity ||--o{ key_material : "wrapped private keys"
+  contact ||--o| conversation : "1:1"
+  contact ||--o| location_access : "grant"
+  conversation ||--o{ message : "cascade"
+  message ||--o| outbox : "queued send (no FK)"
+  location_share ||--o{ location_sample : "cascade"
+  contact_request }o--|| contact : "becomes on approval (no FK)"
 ```
+
+Only four foreign keys exist (all `ON DELETE CASCADE`, `ON UPDATE NO ACTION`):
+
+| Child | Parent | Effect |
+|---|---|---|
+| `conversation.contactId` | `contact.id` | deleting a contact deletes the conversation |
+| `message.conversationId` | `conversation.id` | deleting a conversation deletes its messages |
+| `location_access.contactId` | `contact.id` | deleting a contact revokes the grant |
+| `location_sample.shareId` | `location_share.shareId` | deleting a share deletes its samples |
+
+`outbox` has **no** foreign key on purpose, so deleting a conversation does not silently drop queued rows — callers must call `OutboxDao.removeByConversation` explicitly, otherwise the dispatcher keeps retrying orphans (documented on `ConversationDao.deleteById`).
+
+A second trap is documented on `ConversationDao.update`: never use `upsert` to modify an existing conversation. `@Insert(REPLACE)` is `INSERT OR REPLACE`, which deletes the old row first and cascades away every message in the conversation.
 
 ---
 
 ## 4. Entities
 
-The following are illustrative Room entity definitions. Byte-array columns hold keys, hashes, signatures, and serialized Protobuf. Enums and timestamps use type converters (Section 6).
+Types below are the SQLite affinities from `17.json`. `?` marks a nullable column.
 
-### 4.1 Identity and keys
+### 4.1 `app_metadata`
 
-```kotlin
-@Entity(tableName = "identity")
-data class IdentityEntity(
-    @PrimaryKey val id: Int = 0,            // single-row table
-    val ed25519Public: ByteArray,
-    val identityHash: ByteArray,            // SHA-256(ed25519Public)
-    val userHash: String,                   // human-readable encoding
-    val displayName: String,                // self display name (v0.2.0); editable in settings
-    val x25519StaticPublic: ByteArray,
-    val createdAtUnixMs: Long
-    // Private keys are NOT stored here in plaintext; they are Keystore-wrapped (see Security.md)
-)
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER | PK, always 0 |
+| `schemaVersion` | INTEGER | app-written marker |
 
-@Entity(tableName = "key_material")
-data class KeyMaterialEntity(
-    @PrimaryKey val alias: String,          // logical name, e.g. "identity", "x25519-static"
-    val wrappedPrivateKey: ByteArray,       // encrypted (Keystore-wrapped) private key
-    val updatedAtUnixMs: Long
-)
-```
+### 4.2 `identity`
 
-### 4.2 Contact
+Single row, `id = 0`.
 
-```kotlin
-@Entity(
-    tableName = "contact",
-    indices = [Index(value = ["identityHash"], unique = true)]
-)
-data class ContactEntity(
-    @PrimaryKey val id: String,             // UUID
-    val identityHash: ByteArray,
-    val ed25519Public: ByteArray,
-    val userHash: String,
-    val displayName: String,                // local alias; may be seeded from pairing label or contact request
-    val verified: Boolean,                  // safety-number verified
-    val blocked: Boolean,
-    val relationshipStatus: String,         // APPROVED | PENDING_OUT | PENDING_IN | REJECTED (v0.2.0)
-    val createdAtUnixMs: Long,
-    val lastSeenUnixMs: Long?
-)
-```
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER | PK, 0 |
+| `ed25519Public` | BLOB | identity public key |
+| `identityHash` | BLOB | `SHA256(ed25519Public)` |
+| `userHash` | TEXT | `vm2-…` form ([Protocol.md](Protocol.md) §8.5) |
+| `displayName` | TEXT | default `""` |
+| `x25519StaticPublic` | BLOB | static DH public key |
+| `createdAtUnixMs` | INTEGER | |
 
-### 4.3 Conversation
+### 4.3 `key_material`
 
-```kotlin
-@Entity(
-    tableName = "conversation",
-    foreignKeys = [ForeignKey(
-        entity = ContactEntity::class,
-        parentColumns = ["id"],
-        childColumns = ["contactId"],
-        onDelete = ForeignKey.CASCADE
-    )],
-    indices = [Index("contactId")]
-)
-data class ConversationEntity(
-    @PrimaryKey val id: String,             // UUID
-    val contactId: String,                  // 1:1 in MVP; group support added later
-    val lastMessageId: String?,
-    val lastActivityUnixMs: Long,
-    val unreadCount: Int,
-    val muted: Boolean
-)
-```
+Wrapped private keys. Aliases: `identity-ed25519`, `identity-x25519-static`.
 
-### 4.4 Message
+| Column | Type | Notes |
+|---|---|---|
+| `alias` | TEXT | PK |
+| `wrappedPrivateKey` | BLOB | `0x02 ‖ iv ‖ ct`, Keystore AES-GCM, alias-bound AAD |
+| `updatedAtUnixMs` | INTEGER | |
 
-```kotlin
-@Entity(
-    tableName = "message",
-    foreignKeys = [ForeignKey(
-        entity = ConversationEntity::class,
-        parentColumns = ["id"],
-        childColumns = ["conversationId"],
-        onDelete = ForeignKey.CASCADE
-    )],
-    indices = [Index("conversationId"), Index(value = ["messageId"], unique = true)]
-)
-data class MessageEntity(
-    @PrimaryKey val messageId: String,      // matches wire message_id for dedup
-    val conversationId: String,
-    val direction: Direction,               // OUTGOING / INCOMING
-    val contentType: ContentType,           // TEXT / LOCATION_CONTROL / ...
-    val body: String?,                      // text content (already decrypted, stored encrypted-at-rest)
-    val replyToMessageId: String?,
-    val status: DeliveryStatus,             // QUEUED/SENT/DELIVERED/READ/FAILED
-    val createdAtUnixMs: Long,
-    val sentAtUnixMs: Long?,
-    val deliveredAtUnixMs: Long?,
-    val readAtUnixMs: Long?
-)
-```
+### 4.4 `contact`
 
-### 4.5 Outbox (retry / offline queue)
+| Column | Type | Notes |
+|---|---|---|
+| `id` | TEXT | PK |
+| `identityHash` | BLOB | **unique index** `index_contact_identityHash` |
+| `ed25519Public` | BLOB | pinned identity key |
+| `x25519StaticPublic` | BLOB? | pinned static key; null until learned |
+| `userHash` | TEXT | |
+| `displayName` | TEXT | |
+| `verified` | INTEGER | boolean |
+| `blocked` | INTEGER | boolean |
+| `relationshipStatus` | TEXT | `ContactRelationshipStatus` name |
+| `createdAtUnixMs` | INTEGER | |
+| `lastSeenUnixMs` | INTEGER? | last inbound traffic |
+| `pendingX25519StaticPublic` | BLOB? | key the peer presented that differs from the pin; the handshake was **refused** |
+| `keyChangedAtUnixMs` | INTEGER? | when that happened |
 
-```kotlin
-@Entity(
-    tableName = "outbox",
-    indices = [Index("conversationId"), Index("nextAttemptUnixMs")]
-)
-data class OutboxEntity(
-    @PrimaryKey val messageId: String,
-    val conversationId: String,
-    val sealedPayload: ByteArray?,          // optional precomputed payload
-    val attemptCount: Int,
-    val nextAttemptUnixMs: Long,            // backoff schedule
-    val lastError: String?
-)
-```
+### 4.5 `contact_request`
 
-### 4.6 Session (encryption state)
+| Column | Type | Notes |
+|---|---|---|
+| `requestId` | TEXT | PK; deterministic over (requester, us) |
+| `requesterIdentityHash` | BLOB | index `index_contact_request_requesterIdentityHash` |
+| `requesterUserHash` | TEXT | derived from the proven identity, not the payload |
+| `requesterDisplayName` | TEXT | |
+| `requesterEd25519Public` | BLOB | |
+| `requesterX25519StaticPublic` | BLOB? | |
+| `receivedAtUnixMs` | INTEGER | |
+| `status` | TEXT | `ContactRequestStatus` name |
+| `rejectCount` | INTEGER | repeat requests are auto-declined silently past a threshold |
 
-```kotlin
-@Entity(tableName = "session", indices = [Index(value = ["contactId"], unique = true)])
-data class SessionEntity(
-    @PrimaryKey val contactId: String,
-    val sealedState: ByteArray,             // AEAD-sealed ratchet/session state (see Security.md)
-    val updatedAtUnixMs: Long
-)
-```
+### 4.6 `location_access`
 
-### 4.7 Endpoint cache (DHT routing cache)
+| Column | Type | Notes |
+|---|---|---|
+| `contactId` | TEXT | PK, FK → `contact.id` CASCADE |
+| `canSeeMyLocation` | INTEGER | boolean |
+| `updatedAtUnixMs` | INTEGER | |
 
-```kotlin
-@Entity(tableName = "endpoint_cache", indices = [Index("identityHash")])
-data class EndpointCacheEntity(
-    @PrimaryKey val identityHash: ByteArray,
-    val endpointsProto: ByteArray,          // serialized endpoints
-    val sequence: Long,
-    val fetchedAtUnixMs: Long,
-    val expiresAtUnixMs: Long               // honor record TTL; purge on expiry
-)
-```
+### 4.7 `conversation`
 
-### 4.8 Live location
+| Column | Type | Notes |
+|---|---|---|
+| `id` | TEXT | PK |
+| `contactId` | TEXT | FK → `contact.id` CASCADE, index |
+| `lastMessageId` | TEXT? | chat-list preview pointer |
+| `lastActivityUnixMs` | INTEGER | chat-list ordering |
+| `unreadCount` | INTEGER | |
+| `muted` | INTEGER | boolean |
 
-```kotlin
-@Entity(tableName = "location_share", indices = [Index("contactId")])
-data class LocationShareEntity(
-    @PrimaryKey val shareId: String,
-    val contactId: String,
-    val direction: Direction,               // OUTGOING (we share) / INCOMING (they share)
-    val active: Boolean,
-    val startedAtUnixMs: Long,
-    val endedAtUnixMs: Long?
-)
+### 4.8 `message`
 
-@Entity(
-    tableName = "location_sample",
-    foreignKeys = [ForeignKey(
-        entity = LocationShareEntity::class,
-        parentColumns = ["shareId"],
-        childColumns = ["shareId"],
-        onDelete = ForeignKey.CASCADE
-    )],
-    indices = [Index("shareId"), Index("sampledAtUnixMs")]
-)
-data class LocationSampleEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val shareId: String,
-    val latitude: Double,
-    val longitude: Double,
-    val accuracyM: Float,
-    val speedMps: Float?,
-    val headingDeg: Float?,
-    val batteryPct: Int?,
-    val sampledAtUnixMs: Long
-)
-```
+| Column | Type | Notes |
+|---|---|---|
+| `messageId` | TEXT | PK; also **unique index** `index_message_messageId` |
+| `conversationId` | TEXT | FK → `conversation.id` CASCADE |
+| `direction` | TEXT | `MessageDirection` name |
+| `contentType` | TEXT | `MessageContentType` name |
+| `body` | TEXT? | chat text |
+| `replyToMessageId` | TEXT? | quoted message |
+| `status` | TEXT | `DeliveryStatus` name |
+| `createdAtUnixMs` | INTEGER | local insert time; the ordering key |
+| `sentAtUnixMs` | INTEGER? | |
+| `deliveredAtUnixMs` | INTEGER? | clamped receipt time |
+| `readAtUnixMs` | INTEGER? | clamped receipt time |
+| `attachmentName` | TEXT? | |
+| `attachmentMimeType` | TEXT? | |
+| `attachmentSizeBytes` | INTEGER? | |
+| `attachmentPath` | TEXT? | app-private path |
+| `attachmentSha256` | BLOB? | plaintext digest from the transfer header |
+| `attachmentEncrypted` | INTEGER | true when the file is in the `VMA1` container |
 
-Location samples are persisted only when the user enables location history (a setting). Without history enabled, incoming samples are rendered live and not stored. This table is the foundation for future location-history and geofencing features (see [Roadmap.md](Roadmap.md)).
+Indices:
 
-### 4.9 Settings and bootstrap configuration
+| Index | Columns | Purpose |
+|---|---|---|
+| `index_message_conversationId` | `conversationId` | FK support |
+| `index_message_messageId` | `messageId` (unique) | dedup |
+| `index_message_conv_dir_status` | `conversationId, direction, status` | unread scans, `markIncomingRead` |
+| `index_message_conv_created` | `conversationId, createdAtUnixMs` | windowed paging (added in v17) |
 
-```kotlin
-@Entity(tableName = "settings")
-data class SettingsEntity(
-    @PrimaryKey val id: Int = 0,
-    val themeMode: ThemeMode,               // LIGHT / DARK / SYSTEM
-    val locationHistoryEnabled: Boolean,
-    val screenSecurityEnabled: Boolean,     // FLAG_SECURE
-    val requireUnlockForKeys: Boolean,
-    val updatedAtUnixMs: Long
-)
+### 4.9 `outbox`
 
-@Entity(tableName = "bootstrap_node", indices = [Index(value = ["address"], unique = true)])
-data class BootstrapNodeEntity(
-    @PrimaryKey val address: String,        // host:port
-    val publicKey: ByteArray?,
-    val source: String,                     // BUILT_IN / COMMUNITY / USER / SELF_HOSTED
-    val enabled: Boolean,
-    val lastOkUnixMs: Long?
-)
-```
+| Column | Type | Notes |
+|---|---|---|
+| `messageId` | TEXT | PK |
+| `conversationId` | TEXT | index |
+| `sealedPayload` | BLOB? | |
+| `attemptCount` | INTEGER | |
+| `nextAttemptUnixMs` | INTEGER | index; `0` means due now |
+| `lastError` | TEXT? | stable failure code, surfaced in the chat UI |
+| `receiptWaitCount` | INTEGER | re-sends after transport delivery while waiting for a receipt |
 
-Note: simple key/value preferences that are not sensitive may live in Jetpack DataStore instead of the `settings` table; sensitive flags stay in the encrypted database. See [Architecture.md](Architecture.md).
+### 4.10 `session` (unused)
 
----
+| Column | Type | Notes |
+|---|---|---|
+| `contactId` | TEXT | PK; unique index `index_session_contactId` |
+| `sealedState` | BLOB | |
+| `updatedAtUnixMs` | INTEGER | |
 
-## 5. DAOs
+No production code reads or writes it — see §2.
 
-DAOs expose suspend functions for writes/one-shot reads and `Flow` for observation, enabling the reactive UI described in [Architecture.md](Architecture.md).
+### 4.11 `endpoint_cache`
 
-```kotlin
-@Dao
-interface MessageDao {
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun insert(message: MessageEntity)
+| Column | Type | Notes |
+|---|---|---|
+| `identityHash` | BLOB | PK, index |
+| `endpointsProto` | BLOB | serialized record |
+| `sequence` | INTEGER | monotonic per publisher |
+| `fetchedAtUnixMs` | INTEGER | |
+| `expiresAtUnixMs` | INTEGER | purge key |
 
-    @Query("SELECT * FROM message WHERE conversationId = :cid ORDER BY createdAtUnixMs ASC")
-    fun observeConversation(cid: String): Flow<List<MessageEntity>>
+### 4.12 `bootstrap_node` and `relay_node`
 
-    @Query("UPDATE message SET status = :status, deliveredAtUnixMs = :ts WHERE messageId = :id")
-    suspend fun markDelivered(id: String, status: DeliveryStatus, ts: Long)
+Identical shape, one per role.
 
-    @Query("UPDATE message SET status = :status, readAtUnixMs = :ts WHERE messageId = :id")
-    suspend fun markRead(id: String, status: DeliveryStatus, ts: Long)
-}
+| Column | Type | Notes |
+|---|---|---|
+| `address` | TEXT | PK, **unique index** |
+| `publicKey` | BLOB? | |
+| `source` | TEXT | `BUILT_IN`, `USER`, `PEER_EXCHANGE`, `CACHED_DHT` |
+| `enabled` | INTEGER | community nodes are stored **disabled** |
+| `lastOkUnixMs` | INTEGER? | |
+| `priority` | INTEGER | default 100 |
+| `lastFailUnixMs` | INTEGER? | |
+| `failCount` | INTEGER | reset to 0 by `markOk` |
+| `trust` | TEXT | `NodeTrust` name, default `COMMUNITY` |
+| `learnedFromHash` | BLOB? | identity hash of the peer that told us |
 
-@Dao
-interface OutboxDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun enqueue(item: OutboxEntity)
+Ranking is **not** done in SQL: `getEnabled()` returns rows unordered and `core/common/.../network/NodeRanking.kt` applies the policy — healthy bucket first (`failCount < 3`), then `priority DESC`, `failCount ASC`, `lastOkUnixMs DESC`. Default priorities: user 150, built-in 100, official 100, community 80.
 
-    @Query("SELECT * FROM outbox WHERE nextAttemptUnixMs <= :now ORDER BY nextAttemptUnixMs ASC")
-    suspend fun due(now: Long): List<OutboxEntity>
+### 4.13 `location_share` and `location_sample`
 
-    @Delete suspend fun remove(item: OutboxEntity)
-}
+| `location_share` | Type | Notes |
+|---|---|---|
+| `shareId` | TEXT | PK |
+| `contactId` | TEXT | index |
+| `direction` | TEXT | `MessageDirection` name (outgoing = we share) |
+| `active` | INTEGER | boolean |
+| `startedAtUnixMs` | INTEGER | |
+| `endedAtUnixMs` | INTEGER? | |
 
-@Dao
-interface ContactDao {
-    @Query("SELECT * FROM contact WHERE blocked = 0 ORDER BY displayName")
-    fun observeContacts(): Flow<List<ContactEntity>>
+| `location_sample` | Type | Notes |
+|---|---|---|
+| `id` | INTEGER | PK, autogenerated |
+| `shareId` | TEXT | FK → `location_share.shareId` CASCADE, index |
+| `latitude` / `longitude` | REAL | |
+| `accuracyM` | REAL | |
+| `speedMps` / `headingDeg` | REAL? | |
+| `batteryPct` | INTEGER? | |
+| `sampledAtUnixMs` | INTEGER | index, retention key |
 
-    @Insert(onConflict = OnConflictStrategy.ABORT)
-    suspend fun add(contact: ContactEntity)
-}
+### 4.14 `mailbox_blob`
 
-@Dao
-interface ConversationDao {
-    @Query("SELECT * FROM conversation ORDER BY lastActivityUnixMs DESC")
-    fun observeChats(): Flow<List<ConversationEntity>>
-}
+| Column | Type | Notes |
+|---|---|---|
+| `blobId` | TEXT | PK; content-addressed `hex(SHA256(sealed))[0..32)` |
+| `recipientIdentityHash` | BLOB | index |
+| `sealedPayload` | BLOB | `crypto_box_seal` output; never plaintext |
+| `expiresAtUnixMs` | INTEGER | index, purge key |
+| `createdAtUnixMs` | INTEGER | |
+| `senderIdentityHash` | BLOB? | authenticated peer that stored it; null when queued by this device. Backs the per-sender quota |
 
-@Dao
-interface LocationDao {
-    @Insert suspend fun insertSample(sample: LocationSampleEntity)
+### 4.15 `dht_record`
 
-    @Query("SELECT * FROM location_sample WHERE shareId = :sid ORDER BY sampledAtUnixMs ASC")
-    fun observeShare(sid: String): Flow<List<LocationSampleEntity>>
-}
-```
+Embedded-DHT record store (off by default).
 
-The full set also includes `IdentityDao`, `KeyMaterialDao`, `SessionDao`, `EndpointCacheDao`, `SettingsDao`, `BootstrapNodeDao`, `ContactRequestDao`, and `LocationAccessDao`.
-
-### 5.1 v0.2.0 tables
-
-**`contact_request`** — inbound hash-add inbox (strangers not yet in `contact`):
-
-```kotlin
-@Entity(tableName = "contact_request")
-data class ContactRequestEntity(
-    @PrimaryKey val requestId: String,
-    val requesterIdentityHash: ByteArray,
-    val requesterUserHash: String,
-    val requesterDisplayName: String,
-    val requesterEd25519Public: ByteArray,
-    val requesterX25519StaticPublic: ByteArray?,
-    val receivedAtUnixMs: Long,
-    val status: ContactRequestStatus,  // PENDING | ACCEPTED | REJECTED
-)
-```
-
-**`location_access`** — per-contact outbound grant (who may see my location when sharing):
-
-```kotlin
-@Entity(tableName = "location_access")
-data class LocationAccessEntity(
-    @PrimaryKey val contactId: String,
-    val canSeeMyLocation: Boolean,
-    val updatedAtUnixMs: Long,
-)
-```
-
-Current schema version: **12** (`MIGRATION_10_11` adds `identity.displayName`; `MIGRATION_11_12` adds contact status + new tables).
+| Column | Type | Notes |
+|---|---|---|
+| `recordKey` | TEXT | PK |
+| `recordProto` | BLOB | |
+| `sequence` | INTEGER | |
+| `expiresAtUnixMs` | INTEGER | |
+| `storedAtUnixMs` | INTEGER | eviction order |
 
 ---
 
-## 6. Type converters
+## 5. Enums and type converters
 
-- Enums (`Direction`, `ContentType`, `DeliveryStatus`, `ContactRelationshipStatus`, `ContactRequestStatus`, `ThemeMode`) are stored as their stable string names.
-- Timestamps are stored as `Long` epoch milliseconds; domain models convert to `Instant`.
-- Byte arrays (keys, hashes, signatures, serialized Protobuf) are stored as `BLOB` directly.
-- Larger structured payloads are stored as serialized Protobuf bytes and parsed in the data layer with mappers (see [Architecture.md](Architecture.md) Section 4.2).
+`core/database/.../converter/EnumConverters.kt` stores every enum as `value.name` (TEXT) and reads it back with `valueOf`. An unknown stored value therefore **throws** rather than silently mapping to a default — except `NodeTrust`, which is stored as a plain `String` column and parsed by `NodeTrust.fromName`, falling back to `COMMUNITY`.
 
----
+| Enum | Values | Used by |
+|---|---|---|
+| `MessageDirection` | `OUTGOING`, `INCOMING` | `message.direction`, `location_share.direction` |
+| `MessageContentType` | `TEXT`, `LOCATION_CONTROL`, `RECEIPT`, `IMAGE`, `VIDEO`, `FILE` | `message.contentType` |
+| `DeliveryStatus` | `QUEUED`, `SENT`, `DELIVERED`, `READ`, `FAILED` | `message.status` |
+| `ContactRelationshipStatus` | `APPROVED`, `PENDING_OUT`, `PENDING_IN`, `REJECTED` | `contact.relationshipStatus` |
+| `ContactRequestStatus` | `PENDING`, `ACCEPTED`, `REJECTED` | `contact_request.status` |
+| `NodeTrust` (not a converter) | `BUILT_IN`, `USER`, `OFFICIAL`, `COMMUNITY` | `relay_node.trust`, `bootstrap_node.trust` |
 
-## 7. Reactive queries
-
-- The UI never polls. Conversation lists, message threads, contact lists, and live-location samples are exposed as `Flow` and collected by ViewModels.
-- Writes (new message, status change, incoming sample) automatically propagate to the UI via Room's `Flow` invalidation.
-
----
-
-## 8. Migrations
-
-- Schema is versioned; Room schemas are exported (the schema JSON is committed) for diffing and test-based migration validation.
-- Every schema change ships an explicit `Migration` with a migration test that opens an old database and verifies the upgrade.
-- Destructive fallback is disabled in release builds; data is never silently dropped on upgrade.
-- Protobuf payloads stored as bytes evolve independently using proto3 forward/backward compatibility, decoupling wire/payload evolution from SQL schema changes.
+Several queries hard-code the stored names (`WHERE status = 'PENDING'`, `direction = 'INCOMING'`, `status != 'READ'`), so renaming an enum constant requires a migration.
 
 ---
 
-## 9. Retention, deletion, and panic
+## 6. DAO surface
 
-- Per-conversation deletion cascades to messages and outbox entries via foreign keys.
-- Location history is opt-in and can be cleared by time range; samples auto-expire if a retention window is configured.
-- Endpoint cache entries are purged on TTL expiry.
-- Secure wipe / panic: a user-initiated wipe deletes the database and the Keystore-wrapped keys, rendering any residual encrypted bytes permanently unreadable (the wrapping key is destroyed). This is the decentralized equivalent of account deletion.
-- `android:allowBackup=false` and exclusion of key/database files from auto-backup prevent secret material from leaving the device. See [Security.md](Security.md).
+Seventeen DAOs, all in `core/database/.../dao/`. Suspend functions for one-shot work, `Flow` for anything the UI observes.
+
+| DAO | Notable operations |
+|---|---|
+| `AppMetadataDao` | `get`, `upsert` |
+| `IdentityDao` | `observeIdentity` (Flow), `getIdentity`, `insertIdentity`, `deleteAll` |
+| `KeyMaterialDao` | `getByAlias`, `insert`, `deleteAll` |
+| `ContactDao` | `observeContacts` (Flow, non-blocked, name-sorted `COLLATE NOCASE`), `getById`, `getByIdentityHash`, `getByEd25519Public`, `getAll`, `touchLastSeen`, `recordPendingKeyChange`, `insert` (ABORT on conflict), `update`, `deleteById`, `deleteAll` |
+| `ContactRequestDao` | `observePending` (Flow), `getById`, `getByRequesterHash`, `rejectCountOf`, `upsert`, `update`, `deleteById`, `deleteByRequesterHash` |
+| `LocationAccessDao` | `observeGranted`, `observeAll`, `getByContactId`, `grantedContactIds`, `upsert`, `deleteByContactId` |
+| `ConversationDao` | `upsert`, **`update`** (never upsert an existing row — §3), `observeAll`, `observeAllWithPreview`, `observeChatList`, `getById`, `getByContactId`, `resetUnread`, `setMuted`, `deleteById`, `setLastMessageId` |
+| `MessageDao` | `insert` (IGNORE on conflict), `observeConversation(cid)`, `observeConversation(cid, limit)`, `markSent`/`markDelivered`/`markRead`/`updateStatus`, `getById`, `getByIdInConversation`, `selectUnreadIncomingIds`, `markIncomingRead`, `countForConversation`, `indexOf`, `latestMessageId`, `attachmentPaths`, `deleteById`, `deleteByConversation` |
+| `OutboxDao` | `enqueue`, `due(now)`, `remove`, `removeByConversation`, `getByMessageId`, `resetBackoff`, `resetBackoffFor`, `update` |
+| `SessionDao` | `upsert`, `getByContactId`, `delete` — **unused** |
+| `EndpointCacheDao` | `upsert`, `get`, `purgeExpired`, `delete` |
+| `BootstrapNodeDao` / `RelayNodeDao` | `upsert`, `observeAll`, `observeEnabled` (bootstrap only), `getEnabled` (unordered), `getAll`, `getByAddress`, `markOk`, `markFail`, `setEnabled`, `deleteByAddress` |
+| `LocationShareDao` | `upsert`, `observeActive`, `getById`, `getActiveByContact`, `getActiveByContactAndDirection`, `update`, `deleteByContact`, `allShareIds`, `deleteEndedBefore` |
+| `LocationSampleDao` | `insert`, `observeLatest`, `getLatest`, `observeLatestPerShare`, `purgeOlderThan`, `deleteExcessForShare` |
+| `MailboxDao` | `upsert`, `forRecipient`, `getById`, `countActive`, `countBySenderSince`, `delete`, `deleteForRecipient`, `purgeExpired` |
+| `DhtRecordDao` | `active(now)`, `count`, `upsert`, `purgeExpired`, `evictOldest` |
+
+Three projection types keep the UI off N+1 queries:
+
+| Type | Built by | Contents |
+|---|---|---|
+| `ChatListRow` | `ConversationDao.observeChatList` | one JOIN over `conversation` + `contact` + last `message`; the chat list renders it verbatim |
+| `ConversationWithPreview` | `ConversationDao.observeAllWithPreview` | conversation plus the last message body |
+| `MessageWithReply` | `MessageDao.observeConversation(cid, limit)` | message + quoted-message preview (self LEFT JOIN) + the outbox `lastError` |
+
+`observeConversation(cid, limit)` is the paging query: `ORDER BY createdAtUnixMs DESC, messageId DESC LIMIT :limit`, rendered with `reverseLayout = true` so a new message never shifts the scroll anchor. "Load earlier" grows `limit`. `indexOf(cid, messageId)` returns the zero-based position in that same total order (or `-1`) so the window can be grown until a quoted message is inside it.
 
 ---
 
-## 10. Performance
+## 7. Migrations
 
-- Indices on hot paths: `conversationId`, `identityHash`, `nextAttemptUnixMs`, `sampledAtUnixMs`.
-- Paging for long conversations (Paging 3) so threads with large histories scroll efficiently.
-- The single-writer outbox worker preserves per-conversation ordering without lock contention (see [Protocol.md](Protocol.md) Section 9).
-- Bulk inserts for location samples are batched to reduce write amplification during active sharing.
+`core/database/.../migration/Migrations.kt`; all sixteen are registered in `DatabaseModule`.
+
+| Step | Adds |
+|---|---|
+| 1 → 2 | `identity`, `key_material` |
+| 2 → 3 | `contact` + unique index on `identityHash` |
+| 3 → 4 | `endpoint_cache`, `bootstrap_node` |
+| 4 → 5 | `conversation`, `message`, `outbox`, `session` (+ their indices) |
+| 5 → 6 | `location_share`, `location_sample` |
+| 6 → 7 | `contact.x25519StaticPublic` |
+| 7 → 8 | `bootstrap_node.priority` / `lastFailUnixMs` / `failCount`; new `relay_node` table |
+| 8 → 9 | `mailbox_blob` |
+| 9 → 10 | `dht_record` |
+| 10 → 11 | `identity.displayName` |
+| 11 → 12 | `contact.relationshipStatus`; `contact_request`; `location_access` |
+| 12 → 13 | `message.attachmentName` / `attachmentMimeType` / `attachmentSizeBytes` / `attachmentPath` |
+| 13 → 14 | `contact_request.rejectCount` |
+| 14 → 15 | `outbox.receiptWaitCount` |
+| 15 → 16 | **Protocol v2 batch** — see below |
+| 16 → 17 | `CREATE INDEX index_message_conv_created ON message(conversationId, createdAtUnixMs)` |
+
+### 15 → 16 in detail
+
+Exported as `MIGRATION_15_16_STATEMENTS` so a plain-SQLite test can replay it without Room:
+
+- Static-key pinning: `contact.pendingX25519StaticPublic`, `contact.keyChangedAtUnixMs`.
+- Mailbox per-sender quota: `mailbox_blob.senderIdentityHash`.
+- Attachments: `message.attachmentSha256`, `message.attachmentEncrypted` (default 0), index `index_message_conv_dir_status`.
+- Node trust: `trust` (default `'COMMUNITY'`) and `learnedFromHash` on both `relay_node` and `bootstrap_node`; existing rows are back-filled from `source` (`BUILT_IN` → `BUILT_IN`, `USER` → `USER`); rows whose source is `PEER_EXCHANGE` or `CACHED_DHT` are **disabled** (`enabled = 0`), which is the data-layer half of the node-trust model.
+
+### 16 → 17 in detail
+
+Also exported as `MIGRATION_16_17_STATEMENTS`. `MessageDao.observeConversation(cid, limit)` runs `WHERE conversationId = ? ORDER BY createdAtUnixMs DESC LIMIT ?`; without the composite index SQLite sorted the whole conversation on every emission. The index turns the window into a bounded index scan.
+
+### Gaps in the exported schema history
+
+`core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/` contains `1, 2, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17.json`. **Versions 3, 4, 5 and 11 have no exported JSON** because they were never committed as released database versions — the migrations exist (and run) but the intermediate schema was folded into the next commit before export. The gap is expected and is not a missing-file bug. Room only validates against the *current* version's JSON, and the migration chain is continuous, so upgrades from any shipped version still work.
+
+---
+
+## 8. Reactive queries
+
+DAOs return `Flow<T>` for anything the UI observes; Room re-emits on every write to the underlying tables. Repositories map entities to domain models and the ViewModels expose `StateFlow`. Nothing in the UI polls the database.
+
+The chat list is a single `observeChatList()` flow, so adding a contact, receiving a message and a status change all arrive as one recomposition rather than a per-row fan-out.
+
+---
+
+## 9. Retention and deletion
+
+| Scope | Behaviour |
+|---|---|
+| Delete one message | `MessageDao.deleteById` — local copy only, nothing is sent to the peer |
+| Delete a conversation | `ConversationDao.deleteById` cascades messages; the caller must also `OutboxDao.removeByConversation` and erase files listed by `MessageDao.attachmentPaths` |
+| Delete a contact | cascades `conversation` (and therefore `message`) and `location_access`; `MailboxDao.deleteForRecipient` and `ContactRequestDao.deleteByRequesterHash` clean up the rest |
+| Location retention | `LocationSampleDao.purgeOlderThan` (window) and `deleteExcessForShare` (cap per share); `LocationShareDao.deleteEndedBefore` removes finished shares and cascades their samples |
+| Endpoint cache | `purgeExpired(now)` |
+| Mailbox | `purgeExpired(now)`; per-sender quota via `countBySenderSince` |
+| DHT records | `purgeExpired(now)` plus `evictOldest(excess)` by `storedAtUnixMs` |
+| Secure wipe | `clearAllTables()` → `close()` → delete `vmessenger.db` and its journal siblings → destroy the Keystore master key ([Security.md](Security.md) §9) |
+
+---
+
+## 10. Performance notes
+
+- Every foreign key column is indexed, so cascades and joins do not table-scan.
+- `index_message_conv_created` (v17) and `index_message_conv_dir_status` (v16) cover the two hot message queries: windowed paging and the unread scan.
+- `outbox(nextAttemptUnixMs)` is indexed so `due(now)` is a range scan; the dispatcher drains at most 8 conversations in parallel.
+- Node ranking is done in Kotlin (`NodeRanking`), not SQL, so the policy is unit-testable and the DAO stays a plain query catalogue.
+- `LocationSampleDao.observeLatestPerShare` uses `id IN (SELECT MAX(id) … GROUP BY shareId)`, which is reactive on the sample table so the map refreshes on every new position rather than only when shares start and stop.

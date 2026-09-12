@@ -14,4 +14,4 @@ echo "Forwarding peer listen port $LISTEN_PORT on emulator -> host $FORWARD_PORT
 adb forward tcp:"$FORWARD_PORT" tcp:"$LISTEN_PORT"
 
 echo "Done. For TCP dev node: ./gradlew :node:run --args=\"--tcp\""
-echo "Production node uses WebSocket on :8443 behind nginx (see deploy/README.md)."
+echo "Production node uses WebSocket on :8443 behind nginx (see docs/Deployment.md)."

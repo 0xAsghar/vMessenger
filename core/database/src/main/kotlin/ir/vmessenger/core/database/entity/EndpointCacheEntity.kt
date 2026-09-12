@@ -95,7 +95,7 @@ data class BootstrapNodeEntity(
 /**
  * A relay endpoint the device can use to forward encrypted frames. Mirrors
  * [BootstrapNodeEntity] but for the relay role, so the app no longer depends on a
- * single hardcoded relay (see docs/P2P-Phases.md Phase 1).
+ * single hardcoded relay.
  */
 @Entity(
     tableName = "relay_node",

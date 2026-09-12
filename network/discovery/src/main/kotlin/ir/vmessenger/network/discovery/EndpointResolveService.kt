@@ -9,7 +9,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Resolves peer endpoints with a cache-first policy (docs/P2P-Phases.md Phase 3).
+ * Resolves peer endpoints with a cache-first policy.
  * Only endpoints the peer actually published are returned (plus the default
  * relay as a last resort); direct TCP endpoints are no longer mirrored as UDP
  * candidates — UDP cannot carry a handshake and NAT traversal is off in 1.0.

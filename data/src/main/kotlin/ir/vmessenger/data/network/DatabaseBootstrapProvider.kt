@@ -12,7 +12,7 @@ import javax.inject.Singleton
  * Contributes the user/community/cached bootstrap nodes stored in the database,
  * ordered healthiest-first. Higher priority than the built-in provider so that
  * the broader node list is preferred while the built-in default remains as a
- * guaranteed fallback entry (docs/P2P-Phases.md Phase 1).
+ * guaranteed fallback entry.
  */
 @Singleton
 class DatabaseBootstrapProvider @Inject constructor(

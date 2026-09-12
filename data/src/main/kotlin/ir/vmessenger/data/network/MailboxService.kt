@@ -19,7 +19,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Store-and-forward for sealed offline blobs (docs/P2P-Phases.md Phase 8).
+ * Store-and-forward for sealed offline blobs.
  *
  * Kept safe even though the feature flag defaults off: only APPROVED,
  * non-blocked session peers may store blobs here, each sender is capped per

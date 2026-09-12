@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.Flow
 /**
  * Lets users add, remove, enable/disable, import, and export bootstrap/relay
  * nodes, turning app-owned infrastructure into community-operated infrastructure
- * (docs/P2P-Phases.md Phase 2).
+ *.
  */
 interface NodeManagementRepository {
     fun observeNodes(): Flow<List<NetworkNode>>

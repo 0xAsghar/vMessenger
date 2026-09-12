@@ -5,7 +5,7 @@ import ir.vmessenger.core.proto.dht.v1.EndpointRecord
 
 /**
  * Local cache of previously resolved, signature-verified peer endpoint records
- * (docs/P2P-Phases.md Phase 3). Lets the app reach known peers even when public
+ *. Lets the app reach known peers even when public
  * bootstrap infrastructure is unreachable.
  *
  * Security: implementations must verify record signatures, expire stale entries,

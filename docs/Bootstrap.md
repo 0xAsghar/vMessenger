@@ -132,7 +132,7 @@ Because anyone can run one, bootstrap operation is part of the product. **Step-b
 - Node software: a lightweight, standalone vMessenger DHT node (the same `DhtNode` RPC surface from [DHT.md](DHT.md) Section 4.6) with a stable public address. It stores only signed, expiring `EndpointRecord`s and serves Ping/FindNode/Store/FindValue.
 - Requirements: a reachable host (public IP or port forwarding), modest CPU/RAM, and a persistent listening port. No database of users, no message storage, no logs of content (operators are encouraged to minimize connection logging for privacy).
 - Configuration: bind address/port, optional node keypair (for authenticated bootstrap), resource limits (max records per key, per-source rate limits, record TTL ceilings), and an optional peering list of other nodes.
-- Distribution: the node is intended to be packaged for easy self-hosting (container image and/or static binary) so families, teams, and communities can run their own; see [Roadmap.md](Roadmap.md).
+- Distribution: the node ships as a Gradle `distTar` (`vmessenger-node-<version>.tar.gz`, attached to every GitHub Release) and is installed by `scripts/setup-node.sh`; see [Deployment.md](Deployment.md).
 
 Example configuration shape (illustrative):
 

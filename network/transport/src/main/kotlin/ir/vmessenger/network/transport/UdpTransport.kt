@@ -18,7 +18,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * UDP transport for NAT traversal attempts (docs/P2P-Phases.md Phase 7).
+ * UDP transport for NAT traversal attempts.
  *
  * Uses the same length-prefixed framing as TCP. When [P2PConfig.natTraversalEnabled]
  * is off, [canReach] returns false so the transport is skipped.

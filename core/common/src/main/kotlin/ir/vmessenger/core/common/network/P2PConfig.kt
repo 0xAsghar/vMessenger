@@ -2,7 +2,7 @@ package ir.vmessenger.core.common.network
 
 /**
  * Runtime feature flags that guard the staged migration from the relay-assisted
- * design toward a serverless peer-to-peer network (see docs/P2P-Phases.md).
+ * design toward a serverless peer-to-peer network.
  *
  * Every experimental P2P path is gated here so it can be enabled/disabled at
  * runtime (debug screen) without rebuilding. The default relay remains available

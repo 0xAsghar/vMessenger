@@ -98,18 +98,28 @@ interface Connection {
 ### 3.4 Encryption
 
 ```kotlin
-interface SecureChannelFactory {
-    suspend fun initiate(connection: Connection, peer: Contact): Result<SecureSession>
-    suspend fun accept(connection: Connection): Result<SecureSession>
+// network/messaging/.../SecureChannelFactory.kt
+class SecureChannelFactory {
+    suspend fun initiate(connection: Connection, self: PeerIdentity, peer: PeerIdentity): Result<SecureSession>
+    suspend fun accept(connection: Connection, self: PeerIdentity, expectedPeer: PeerIdentity): Result<SecureSession>
+    // Inbound: the peer is resolved from the keys it actually presented.
+    suspend fun acceptResolving(
+        connection: Connection,
+        self: PeerIdentity,
+        resolvePeer: suspend (identityPub: ByteArray, staticPub: ByteArray) -> PeerIdentity?,
+    ): Result<SecureSession>
 }
 
 interface SecureSession {
-    val peer: Identity
-    suspend fun seal(plaintext: ByteArray): ByteArray   // AEAD + ratchet
-    suspend fun open(frame: ByteArray): ByteArray        // verifies + replay check
-    suspend fun close()
+    val peer: PeerIdentity
+    val ratchetState: RatchetState
+    suspend fun seal(plaintext: ByteArray, frameType: FrameType = FRAME_TYPE_SECURE): ByteArray
+    suspend fun open(frame: ByteArray, counter: Long, frameType: FrameType = FRAME_TYPE_SECURE): ByteArray?
+    suspend fun close()   // zeroizes the ratchet state
 }
 ```
+
+The handshake is the three-step, doubly-signed v2 exchange with three Diffie-Hellman operations; `counter` is the ratchet counter carried in the frame header and bound into the AEAD associated data. See [Protocol.md](Protocol.md) §5 and §7.
 
 ### 3.5 Messaging
 
@@ -169,11 +179,11 @@ For the MVP only the Internet transport is registered, so selection trivially re
 - Reliable, ordered byte stream over TCP, carrying length-delimited frames (see [Protocol.md](Protocol.md)). TLS-style transport encryption is unnecessary because every frame is already end-to-end encrypted; the Encryption layer authenticates the peer by identity key, which is stronger than CA-based TLS for this use case.
 - Listens on a local port and registers its address as an `Endpoint` published via the DHT discovery provider.
 - Connection reuse: an established connection is cached per peer and reused for subsequent messages and location packets.
-- **Direct-first, relay-fallback:** the app tries direct `INTERNET` and UDP (NAT traversal) before `RELAY`. The production relay at `wss://relay.vmessenger.ir/relay` bridges opaque E2E-encrypted frames when direct connectivity fails. The relay never decrypts message content.
-- **P2P migration (v0.2.0):** endpoint resolution is cache-first; multiple bootstrap/relay nodes are health-ranked; peers exchange node hints after handshake; default relay is demoted when `P2PConfig.reduceDefaultRelayEnabled` is true (default on). See [P2P-Phases.md](P2P-Phases.md).
+- **Direct-first, relay-fallback:** the app tries direct `INTERNET` before `RELAY`. The built-in relay at `wss://relay.vmessenger.ir/relay` bridges opaque E2E-encrypted frames when direct connectivity fails and never decrypts them. UDP candidates are only tried when `P2PConfig.natTraversalEnabled` is on, which it is not by default.
+- **Runtime flags (`core/common/.../network/P2PConfig.kt`):** endpoint resolution is cache-first and multiple bootstrap/relay nodes are health-ranked — both on by default. Peer exchange, embedded DHT participation, relay-peer mode, UDP attempts, store-and-forward and default-relay demotion (`reduceDefaultRelayEnabled`) all default to **false**; they are reachable code, not proven paths. See the "Known limitations" section of the [README](../README.md).
 - DHT bootstrap and store/find use `wss://relay.vmessenger.ir/dht` through Arvan CDN + nginx TLS.
 - Local emulator dev can use raw TCP bootstrap (`10.0.2.2:46555`) via `NetworkConfig.useDevBootstrap`.
-- Full mobile-to-mobile hole punching (DCUtR/ICE) and full Kademlia remain future work (see [Roadmap.md](Roadmap.md)).
+- There is no NAT traversal: a UDP transport exists and TCP endpoints can be mirrored as UDP candidates, but there is no STUN/ICE candidate gathering, no hole punching and no connectivity checks, and the UDP path is off by default. Full Kademlia routing and replication are likewise not implemented.
 
 ---
 
@@ -206,7 +216,7 @@ stateDiagram-v2
 - Resolution failure (peer offline / no fresh DHT record): message stays in the offline queue; the app periodically re-resolves and retries.
 - Connection failure: try the next candidate endpoint/transport; if all fail, back off with jitter and requeue.
 - Handshake/verification failure: treated as a security event, not retried blindly; surfaced to the user if the peer key mismatches (possible MITM or key change). See [Security.md](Security.md).
-- Mid-session drop: the session can be resumed or re-established; Messaging guarantees at-least-once delivery with deduplication so no message is lost or double-applied.
+- Mid-session drop: sessions are never persisted, so the next send runs a fresh handshake. Messaging is at-least-once with per-conversation `message_id` deduplication, so nothing is lost or applied twice.
 
 ---
 
@@ -219,4 +229,4 @@ To add Bluetooth, Wi-Fi Direct, or mesh:
 3. Register it via a Hilt `@IntoSet` binding.
 4. Optionally add a matching `DiscoveryProvider` (for example, BLE advertisement scanning) that produces endpoints tagged with the new transport.
 
-No changes are required in Encryption, Messaging, Domain, or UI. This is the practical payoff of the layered design and is tracked in [Roadmap.md](Roadmap.md).
+No changes are required in Encryption, Messaging, Domain, or UI. That is the practical payoff of the layered design; no such transport module exists today.

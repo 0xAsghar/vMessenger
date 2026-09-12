@@ -9,7 +9,7 @@ data class NodeLink(
 
 /**
  * Compact, shareable text/QR encoding for network nodes so communities can hand
- * out their bootstrap/relay nodes (docs/P2P-Phases.md Phase 2).
+ * out their bootstrap/relay nodes.
  *
  * Format: `vmnode:<role>:<address>` e.g. `vmnode:relay:wss://relay.example/relay`.
  * The address is everything after the role, so it may freely contain ':' and '/'.

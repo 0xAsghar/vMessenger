@@ -13,7 +13,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * DB-backed [PeerEndpointCache] (docs/P2P-Phases.md Phase 3).
+ * DB-backed [PeerEndpointCache].
  *
  * - Records are signature-verified before storing and again when read.
  * - Entries expire by the record's own TTL.

@@ -29,7 +29,7 @@ import javax.inject.Singleton
 /**
  * Single source of truth for the bootstrap/DHT and relay nodes the app knows
  * about. Replaces the single hardcoded relay/bootstrap dependency with a
- * health-ranked, user-extensible list (docs/P2P-Phases.md Phase 1 & 2).
+ * health-ranked, user-extensible list.
  *
  * Trust rules (Milestone 3d):
  * - built-in and user-added nodes are enabled; nodes learned from peers or the

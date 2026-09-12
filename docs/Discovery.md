@@ -63,7 +63,7 @@ flowchart TD
 
 - `resolve` queries providers in parallel and merges results; endpoints are tagged by transport (see [Network.md](Network.md)) and ranked by freshness and reachability.
 - `announce` fans out to all providers so the device is discoverable through every available channel.
-- For the MVP only `DhtDiscoveryProvider` is registered; the others are designed-for and added later (see [Roadmap.md](Roadmap.md)).
+- Only `DhtDiscoveryProvider` is registered today; the others are designed-for but not implemented.
 
 ---
 
@@ -94,17 +94,17 @@ When scanning is impractical, users exchange a User Hash out-of-band (spoken, me
 
 - Derivation: `identity hash = SHA-256(Ed25519 public key)`. The User Hash is a human-readable, checksummed encoding of that identity hash.
 - Encoding goals: typable, unambiguous (avoid easily confused characters), checksummed to catch typos, and chunked for readability.
-- Proposed format: a Base32 (Crockford) encoding of a truncated-with-checksum identity hash, grouped into blocks, with a short human-readable prefix, for example `vm1-XXXXX-XXXXX-XXXXX-XXXX`. The version prefix (`vm1`) allows the format to evolve; the trailing block carries a checksum.
+- Format v2 (`core/common/.../encoding/UserHashEncoder.kt`): `vm2-` followed by Crockford base32 of `prefix16 || SHA256("vmessenger-userhash-v2" || prefix16)[0..2)`, grouped `5-5-5-5-5-4` (29 symbols), e.g. `vm2-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXX`. The checksum covers all 16 prefix bytes and decoding is canonical-only (leftover pad bits must be zero). Only the `vm2-` prefix is accepted; a `vm1-` string fails with reason `missing_prefix`.
 
 ```mermaid
 flowchart LR
   Pk["Ed25519 public key"] --> Sha["SHA-256"]
   Sha --> Idh["identity hash (32 bytes)"]
   Idh --> Enc["Crockford Base32 + checksum + grouping"]
-  Enc --> UH["User Hash: vm1-XXXXX-XXXXX-..."]
+  Enc --> UH["User Hash: vm2-XXXXX-XXXXX-..."]
 ```
 
-- Security note: the User Hash binds to the full public key via SHA-256. Because it may be truncated for usability, vMessenger treats hash-only pairing as needing confirmation: after resolving and connecting, the full key is verified during the handshake, and a Safety Number screen lets users confirm in-band (see [Security.md](Security.md) Section 11).
+- Security note: the User Hash carries the first 16 bytes of `SHA256(identity_pub)`, so all routing tables key on that prefix (`IdentityHashMatcher.routingKeyHex`). A hash-only contact is matched on the prefix during the handshake and the full identity key is adopted from the first authenticated session, then pinned. There is **no** out-of-band safety-number screen — pairing is trust-on-first-use (see [Security.md](Security.md) "Known limitations").
 
 ### 5.1 User Hash add flow (v0.2.0 — mutual approval)
 
@@ -170,7 +170,7 @@ Verification rules (also in [Security.md](Security.md)):
 
 - Pairing leaks nothing to the network (offline).
 - Announce publishes only ephemeral, signed endpoint hints - never identity, contacts, or content.
-- Resolve reveals to storing DHT nodes that someone is interested in a particular identity hash. This metadata exposure is a known MVP limitation; mitigations (private lookups, lookup blinding) are future work (see [Security.md](Security.md) Section 17 and [Roadmap.md](Roadmap.md)).
+- Resolve reveals to storing DHT nodes that someone is interested in a particular identity hash. This metadata exposure is a known limitation; there is no private or blinded lookup (see [Security.md](Security.md) "Known limitations").
 - Endpoint records have short TTLs so stale location/IP exposure is minimized.
 
 ---

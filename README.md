@@ -1,307 +1,235 @@
 # vMessenger
 
-> A fully decentralized, end-to-end encrypted messenger for Android. No accounts. No phone numbers. No central servers. Every device is a peer.
+> A decentralized, end-to-end encrypted messenger for Android. No accounts. No phone numbers. No message server. Every device owns its own cryptographic identity.
 
-vMessenger is a privacy-first communication platform where each Android device is a sovereign peer that owns its own cryptographic identity. There is no backend to trust, no directory of users, and no company that can read, retain, or hand over your messages. Contacts are added only through QR codes or human-readable User Hashes, messages are end-to-end encrypted, and live location can be shared securely and revocably.
+vMessenger is a privacy-first messenger where each Android device is a peer that owns its own Ed25519 identity. There is no backend that holds messages, no directory of users, and no operator who can read your conversations. Contacts are added through a QR code or a human-readable User Hash, messages are end-to-end encrypted, and live location can be shared per contact and revoked.
 
-- Bundle ID: `ir.vmessenger.android`
-- Platform: Android 8.0+ (API 26+)
-- UI language: Persian (RTL), Material 3, light/dark
-- Status: **v0.2.0** (stable) — identity with display names, QR and hash-based pairing (mutual approval for hash adds), DHT discovery, E2EE messaging, MapLibre live location with per-contact access control, relay fallback, multi-node bootstrap/relay management, and P2P migration scaffolding.
+| | |
+|---|---|
+| Bundle ID | `ir.vmessenger.android` |
+| Version | **0.5.1** (`versionCode` 45, `gradle/version.properties`) |
+| Platform | Android 8.0+ (API 26), compile/target SDK 35 |
+| UI language | Persian (RTL), Material 3, light/dark |
+| Wire protocol | **major 2** — not interoperable with 0.x builds ([docs/Protocol.md](docs/Protocol.md) §14) |
+| Database | Room over SQLCipher, **schema 17** |
+| License | GPL-3.0 ([LICENSE](LICENSE)) |
 
----
-
-## Vision
-
-Build a messenger that cannot be shut down, censored, or surveilled from a single point, because there is no single point. The network is the sum of its users. Trust is rooted in cryptographic identity, not in a service provider.
-
-Guiding values:
-
-- Privacy by default. Plaintext never leaves the device; sensitive data at rest is encrypted.
-- Self-sovereign identity. Your private key is your account, generated on-device and never transmitted.
-- Decentralization without compromise. No central authentication, database, or message server.
-- Calm, premium, minimal UX. The interface should make people feel safe, private, and in control.
+> **0.x installs must be uninstalled before installing a 2.x build.** Protocol major 2 is a deliberate clean break: the handshake, the AEAD associated data, every signed transcript and the User Hash format (`vm1-` → `vm2-`) all changed, and no compatibility shim exists in the app. Identity and contacts do not survive the reinstall.
 
 ---
 
-## Core principles
+## Principles
 
-- No user accounts, email, phone numbers, or usernames.
-- No centralized authentication, database, or message relay.
-- Identity is an on-device Ed25519 keypair. The public key derives a permanent identity hash and a human-readable User Hash.
-- Contacts are added via QR code (instant, in-person trust) or User Hash (sends a contact request; requires mutual approval).
-- The architecture is layered so each concern can be replaced independently: `Identity -> Discovery -> Transport -> Encryption -> Messaging`.
-- The Discovery layer is fully independent from the Messaging layer.
+- No accounts, email addresses, phone numbers or usernames.
+- Identity is an on-device Ed25519 key pair. The private key never leaves the device.
+- No central authentication, database or message store. Relay and DHT nodes forward opaque ciphertext and hold signed, expiring routing records — nothing else.
+- The layers are replaceable independently: `Identity → Discovery → Transport → Encryption → Messaging`.
+- Discovery is fully independent of Messaging.
 
 ---
 
-## How it works (MVP + P2P migration)
+## How it works
 
-The app is functional over the public Internet using a minimal Distributed Hash Table (DHT) for routing and an optional circuit relay when direct connectivity fails.
-
-1. Each device generates an Ed25519 identity locally and chooses a display name shown to contacts.
-2. Two users pair by exchanging long-term public keys via QR (instant) or User Hash (request/approve flow). No network needed for QR pairing.
-3. To become reachable, a device joins the DHT through bootstrap nodes and publishes a signed, timestamped, expiring endpoint record (its current reachable address).
-4. To message a contact, the app resolves endpoints (local peer cache first, then DHT), tries direct TCP/UDP when possible, and falls back to encrypted relay circuits.
-5. Peers run an X25519 handshake, derive session keys with HKDF, and exchange ChaCha20-Poly1305 encrypted messages with forward secrecy and replay protection.
-
-The DHT stores only temporary routing metadata. It never stores messages, contacts, private keys, or profiles.
-
-**P2P migration (v0.2.0):** The staged plan in [docs/P2P-Phases.md](docs/P2P-Phases.md) is partially implemented behind `P2PConfig` flags (persisted in DataStore). Multi-node lists, peer cache, peer exchange, embedded DHT participation, UDP transport attempts, mailbox blobs, and relay demotion have code support, but user-operated relay bridging, full NAT traversal, full DHT routing/replication, and complete mailbox delivery remain incomplete. See [docs/P2P-Bugs-Improvement.md](docs/P2P-Bugs-Improvement.md) and [docs/P2P-Testing.md](docs/P2P-Testing.md). Disable individual flags under **تنظیمات → اشکال‌زدایی** for conservative testing.
+1. The device generates an Ed25519 identity locally, derives its identity hash and a `vm2-…` User Hash, and picks a display name.
+2. Two users pair by exchanging long-term public keys — by QR (in-person, instant) or by User Hash (sends a contact request that the other side approves).
+3. To be reachable, a device joins the DHT through bootstrap nodes and publishes a signed, expiring endpoint record (20-minute TTL, re-announced every 10 minutes).
+4. To message a contact, the app resolves endpoints (local cache first, then the DHT), tries direct TCP, and falls back to an encrypted relay circuit.
+5. Peers run the v2 handshake — three signed steps, three X25519 DHs — and exchange ChaCha20-Poly1305 frames over a symmetric ratchet.
 
 ```mermaid
 sequenceDiagram
   participant A as Device A
-  participant DHT as DHT / Bootstrap
+  participant DHT as DHT / bootstrap node
   participant R as Relay (fallback)
   participant B as Device B
-  Note over A,B: One-time pairing via QR or User Hash exchanges Ed25519 public keys
-  B->>DHT: publish signed endpoint record, key = hash of B pubkey, with TTL
-  A->>DHT: lookup hash of B pubkey (or peer cache)
+  Note over A,B: One-time pairing by QR or User Hash exchanges Ed25519 identity keys
+  B->>DHT: publish signed endpoint record (key = hash of B's identity key, TTL 20 min)
+  A->>DHT: look up that key (peer cache first)
   DHT-->>A: signed endpoint record for B
-  A->>B: direct connect when possible, else relay circuit
-  A->>B: X25519 handshake, then ChaCha20-Poly1305 encrypted message
+  A->>B: direct TCP when reachable, otherwise a relay circuit
+  A->>B: handshake v2, then ChaCha20-Poly1305 frames
   B-->>A: delivery and read receipts
 ```
 
----
-
-## MVP feature scope
-
-- Identity generation (Ed25519), display name, and human-readable User Hash.
-- QR code pairing (instant add) and User Hash pairing (contact request + mutual approval).
-- Contact relationship states: approved, pending outbound/inbound, rejected.
-- Minimal DHT discovery: bootstrap, publish, lookup, TTL, refresh.
-- End-to-end encrypted 1:1 messaging with delivery and read status.
-- Retry queue and offline outbox (`OutboxDispatcher` with backoff).
-- Live Location: MapLibre map, per-contact allow list, mutual visibility, foreground `LocationService`, encrypted location packets.
-- Encrypted local storage (Room over SQLCipher, schema v12) and contact management.
-- **Multi-node network:** Settings → **نودهای شبکه** — add bootstrap/relay nodes, health ranking, `vmnode:` link import/export.
-- **P2P migration scaffolding and partial phases 0–9** (see [docs/P2P-Phases.md](docs/P2P-Phases.md)).
-
-- **Attachments:** photos, videos, and files (chunked E2E transfer, 25 MB limit) with image thumbnails and tap-to-open.
-
-Designed for but intentionally deferred to later phases: groups, voice/video calls, Bluetooth and Wi-Fi Direct transports, mesh networking, geofencing, location history analytics, SOS mode, team and family management, plugin system, and full Kademlia/ICE hole-punching. **Relay fallback** via `relay.vmessenger.ir` (DHT + circuit relay, E2E only) is implemented — see [deploy/README.md](deploy/README.md).
+The DHT stores routing metadata only. It never stores messages, contacts, private keys or profiles.
 
 ---
 
-## Technology stack
+## Features
 
-- Language: Kotlin
-- Architecture: Clean Architecture + MVVM
-- UI: Jetpack Compose + Material 3 (Persian / RTL)
-- DI: Hilt
-- Async: Coroutines + Flow
-- Database: Room over SQLCipher (schema **v12** — identity display name, contact relationship status, contact requests, location access grants)
-- Serialization: Protocol Buffers (proto3)
-- Crypto: Ed25519, X25519, ChaCha20-Poly1305, HKDF, SHA-256 (libsodium / BouncyCastle), Android Keystore for key wrapping
+Implemented and verified on two emulators (see [docs/Testing.md](docs/Testing.md) §4):
 
----
+- **Identity** — Ed25519 + X25519 static key pair, display name, `vm2-` User Hash with a full-prefix checksum.
+- **Pairing** — signed QR descriptor (transcript v2) for instant in-person adds; User Hash adds that require mutual approval, with deterministic request ids and a repeat-request cap.
+- **Messaging** — 1:1 end-to-end encrypted chat with replies, delivery and read receipts (batched), a persistent encrypted outbox with backoff and a 24-hour retry window.
+- **Attachments** — images, videos and files up to 25 MB, chunked at 128 KiB over a single session, with a plaintext SHA-256 the receiver verifies, and encrypted at rest in a `VMA1` container.
+- **Live location** — MapLibre map, per-contact allow list, mutual visibility, foreground service, encrypted location packets, retention limits.
+- **Discovery** — minimal DHT (bootstrap, store, find-value, TTL, re-announce), verified peer/endpoint cache, relay fallback.
+- **Multi-node network** — database-backed bootstrap and relay lists with health ranking and a trust tier (built-in / user / official / community); add, enable, share and import nodes with `vmnode:bootstrap:…` / `vmnode:relay:…` links or QR.
+- **Security** — MITM-resistant v2 handshake, per-contact X25519 key pinning, inbound authorization on every envelope kind, SQLCipher database, Keystore-wrapped keys (StrongBox where available), `FLAG_SECURE`, private lock-screen notifications, boot-restart of the network service, and a complete secure wipe. See [docs/Security.md](docs/Security.md).
+- **Backup** — passphrase-protected identity/contacts backup bundle (Argon2id13 + XChaCha20-Poly1305).
+- **Reference node** — a JVM bootstrap/DHT + relay node anyone can run ([docs/Deployment.md](docs/Deployment.md)).
 
-## Documentation index
-
-Read these in order for a top-down understanding of the system.
-
-- [docs/Architecture.md](docs/Architecture.md) - requirements analysis, Clean Architecture + MVVM, module map, DI, concurrency, end-to-end data flow.
-- [docs/Network.md](docs/Network.md) - the layered networking model and automatic transport selection.
-- [docs/Protocol.md](docs/Protocol.md) - wire format, Protobuf schemas, handshake, sessions, receipts, queues, versioning.
-- [docs/Security.md](docs/Security.md) - cryptographic design, key management, forward secrecy, replay protection, threat model.
-- [docs/Discovery.md](docs/Discovery.md) - the modular Discovery layer, QR and User Hash pairing, DHT-based resolution.
-- [docs/DHT.md](docs/DHT.md) - the minimal DHT design, signed routing records, TTL and refresh, anti-centralization rules.
-- [docs/Bootstrap.md](docs/Bootstrap.md) - the BootstrapProvider interface and how to operate bootstrap nodes.
-- [docs/P2P-Bugs-Improvement.md](docs/P2P-Bugs-Improvement.md) - P2P correctness gaps, risks, and prioritized fix list.
-- [docs/P2P-Testing.md](docs/P2P-Testing.md) - real-device test matrix for P2P and v0.2.0 feature validation.
-- [docs/P2P-Phases.md](docs/P2P-Phases.md) - staged migration from relay-assisted to decentralized P2P, with current implementation status.
-- [docs/Database.md](docs/Database.md) - encrypted local schema (v12), entities, DAOs, and migrations.
-- [docs/UI.md](docs/UI.md) - Persian RTL design system, theme, and screen-by-screen specifications.
-- [docs/FolderStructure.md](docs/FolderStructure.md) - the Gradle multi-module layout.
-- [docs/Roadmap.md](docs/Roadmap.md) - the phased delivery plan from MVP to full feature set.
+Not implemented: groups, voice or video calls, voice messages, Bluetooth / Wi-Fi Direct / mesh transports, geofencing, location analytics, SOS mode, a plugin system.
 
 ---
 
-## Repository status and layout
+## Known limitations
+
+An honest list of what does **not** work or is not protected today. Cryptographic detail is in [docs/Security.md](docs/Security.md) §10.
+
+### Security and privacy
+
+- **No post-compromise security.** The session uses a symmetric ratchet, not a Double Ratchet — there is no DH step. Forward secrecy holds only for earlier frames of a live session; an attacker who captures live session state can follow that session to its end.
+- **Metadata is visible to relay and DHT nodes.** A relay sees which identity hashes are online, their IPs, who dials whom, and circuit lifetimes and byte counts. A DHT node sees every published endpoint record and every lookup. There is no padding, no cover traffic and no blinded lookup.
+- **Mailbox (store-and-forward) delivery has no forward secrecy** — blobs are sealed to a long-term X25519 static key. The feature is off by default.
+- **Contact keys are trust-on-first-use.** There is no out-of-band fingerprint or safety-number comparison.
+- **No UI to accept a contact's key change.** `ContactRepository.acceptKeyChange` is implemented and unit-tested, but nothing calls it, so a contact who reinstalls becomes permanently unreachable until that screen exists.
+- **The operator trust anchor is a placeholder.** `NetworkConfig.OPERATOR_ED25519_PUBLIC_KEY_HEX` is 64 zeros, so no `SignedNodeRecord` can ever be marked `OFFICIAL`. It must be set before release.
+- **The Keystore master key deliberately does not require device unlock**, so the foreground service can decrypt while the screen is locked. An attacker who compromises the running OS also gets the data.
+- **No initiator identity hiding and no deniability** — the initiator's identity key is sent in the clear in handshake step 3, and both sides sign the transcript.
+- `REQUEST_INSTALL_PACKAGES` is declared in the manifest for an in-app updater that is not implemented.
+
+### Networking
+
+- **No NAT traversal.** A UDP transport exists and TCP endpoints can be mirrored as UDP candidates, but there is no STUN/ICE candidate gathering, no hole punching and no connectivity checks. Two phones behind carrier-grade NAT will not connect directly; they go through a relay. The UDP path is off by default.
+- **The node's DHT record store is in-memory.** `DhtRequestHandler` keeps records in a `ConcurrentHashMap`, `FIND_NODE` returns the configured peer nodes rather than the closest ones, and there is no replication, no parallel lookup and no k-bucket routing on the node side. A node restart drops every record it held; devices re-announce within 10 minutes.
+- **Embedded DHT participation on phones is experimental** and off by default. Most phones are not reachable from the public Internet, so it helps in limited cases at best.
+- **User-operated relay mode is off by default.** The circuit protocol, circuit table, TTL and a policy gate (off / contacts-only / Wi-Fi-only / charging-only) exist, but the path has not been through the same verification as the default relay.
+- **Peer exchange of signed node records is off by default.** Records verify correctly and community records are stored disabled, but the flow is unverified end to end.
+- **The default relay remains a single operational dependency in practice.** Demotion (`reduceDefaultRelay`) exists but is off, because the replacement paths above are not proven.
+- **Only one built-in node ships** (`relay.vmessenger.ir`, serving both `/dht` and `/relay`), so "decentralized" today means "self-hostable and multi-node capable", not "no default operator".
+
+### Platform
+
+- **After a secure wipe the app does not come back to the foreground.** Android's background-activity-start restriction blocks the `AlarmManager` relaunch; the data is destroyed and the service restarts, but the user must tap the launcher icon.
+- **The `session` table is dead weight.** It is still in schema 17 but nothing reads or writes it — sessions are connection-scoped and never persisted.
+- **Room schemas 3, 4, 5 and 11 were never committed versions**, so the exported schema history has gaps. The migration chain itself is continuous.
+- **Feature flags gate unproven code paths, not absent ones.** Turning on peer exchange, embedded DHT, relay-peer mode, UDP attempts, store-and-forward or relay demotion in the debug screen enables code that the default build does not exercise.
+
+---
+
+## Technology
+
+- Kotlin, Clean Architecture + MVVM, Jetpack Compose + Material 3 (Persian / RTL)
+- Hilt, Coroutines + Flow
+- Room over SQLCipher (schema 17), DataStore for preferences
+- Protocol Buffers (proto3) for every wire format
+- libsodium (Lazysodium): Ed25519, X25519, ChaCha20-Poly1305-IETF, XChaCha20-Poly1305 secretstream, `crypto_box_seal`, Argon2id13, HKDF-SHA256; Android Keystore (AES-256-GCM, StrongBox where available) for key wrapping
+- MapLibre for the map; Ktor for the reference node
+
+---
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [docs/Architecture.md](docs/Architecture.md) | Clean Architecture + MVVM, module map, DI, concurrency, end-to-end data flows |
+| [docs/Network.md](docs/Network.md) | the layered networking model and transport selection |
+| [docs/Protocol.md](docs/Protocol.md) | framing, version negotiation, the v2 handshake, the ratchet, receipts, attachments, relay control, DHT RPC |
+| [docs/Security.md](docs/Security.md) | threat model, handshake guarantees, key pinning, inbound authorization, encryption at rest, secure wipe, known limitations |
+| [docs/Discovery.md](docs/Discovery.md) | the Discovery layer, QR and User Hash pairing, DHT resolution |
+| [docs/DHT.md](docs/DHT.md) | the minimal DHT design, signed routing records, TTL and refresh |
+| [docs/Bootstrap.md](docs/Bootstrap.md) | the `BootstrapProvider` interface and operating bootstrap nodes |
+| [docs/Database.md](docs/Database.md) | schema 17: entities, enums, indices, DAOs, the 1→17 migration chain |
+| [docs/Testing.md](docs/Testing.md) | unit tests, node tests, the two-emulator procedure, the M3 scenario matrix, release verification |
+| [docs/Deployment.md](docs/Deployment.md) | operator runbook for running a relay/DHT node |
+| [docs/UI.md](docs/UI.md) | Persian RTL design system and screen specifications |
+| [docs/FolderStructure.md](docs/FolderStructure.md) | the Gradle multi-module layout |
+
+---
+
+## Repository layout
 
 ```
 vMessenger/
-  app/                 <- Android application (Hilt, navigation, Splash, ContactRequestOverlay)
+  app/                 <- Android application (Hilt, navigation, lifecycle service)
   build-logic/         <- Gradle convention plugins
-  core/                <- shared libraries (design system, database, proto, location, …)
-  data/                <- repository implementations, network coordinators
+  core/                <- common, crypto, proto, database, storage, datastore, location, notifications, designsystem
+  data/                <- repository implementations, network coordinators, attachment + wipe + backup
   domain/              <- pure Kotlin domain layer
-  feature/             <- feature UI modules (Compose)
-  network/             <- networking stack modules
-  node/                <- host-run bootstrap/DHT + relay reference node
-  deploy/              <- nginx + systemd for production relay host
-  scripts/             <- setup-node.sh, emulator-connect.sh, p2p-terminal-check.sh
-  docs/                <- architecture and protocol documentation
-  vMessenger-icon/     <- app launcher icons and brand logos
+  feature/             <- Compose feature modules
+  network/             <- discovery, dht, bootstrap, transport, messaging
+  node/                <- standalone JVM bootstrap/DHT + relay node
+  deploy/              <- nginx and systemd templates for a production node host
+  scripts/             <- setup-node.sh, emulator-connect.sh, cli-smoke-test.sh, sign-node-record
+  docs/                <- this documentation set
+  vMessenger-icon/     <- launcher icons and brand logos
 ```
-
-MVP phases 1–7 and **v0.2.0** (display names, mutual contacts, live location map) are implemented. P2P migration phases 0–9 have scaffolding behind `P2PConfig` flags (see status matrix in [docs/P2P-Phases.md](docs/P2P-Phases.md)); several phases remain partial. Known gaps and the fix roadmap live in [docs/P2P-Bugs-Improvement.md](docs/P2P-Bugs-Improvement.md). See [docs/Roadmap.md](docs/Roadmap.md) for post-MVP work.
 
 ---
 
-## How to run a node
+## Building
 
-Anyone can run a **bootstrap (DHT)** or **relay** node. Nodes never see message plaintext — they only help with signed, expiring endpoint records and opaque encrypted frame forwarding.
-
-### Build
+Requirements: JDK 21 (Gradle toolchain; CI uses Temurin 21), Android SDK 35 with Build Tools 35, and a `local.properties` with `sdk.dir`.
 
 ```bash
-./gradlew :node:installDist
+./gradlew assembleDebug
+./gradlew installDebug
+./gradlew detekt unitTests     # static analysis + every unit test (Android and JVM modules)
 ```
 
-Artifacts land in `node/build/install/node/`. For production VPS deployment (nginx, systemd, CDN), see [deploy/README.md](deploy/README.md).
+`unitTests` is the aggregate task — a plain `testDebugUnitTest` skips `:core:common`, `:domain` and `:node`. See [docs/Testing.md](docs/Testing.md).
 
-### Production node (DHT + relay over WebSocket)
+### Releases
 
-**One-line setup** on Ubuntu/Debian (no domain required — auto-detects IP, openssl self-signed TLS):
+Updating `gradle/version.properties` on `main` runs a build-only check. Publishing requires a matching tag:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/setup-node.sh | sudo bash -s --
+git tag v0.5.1        # must equal versionName in gradle/version.properties
+git push origin v0.5.1
 ```
 
-With an optional hostname:
+The [Release APK](.github/workflows/release-apk.yml) workflow gates on `detekt unitTests`, refuses to publish without the release keystore, builds per-ABI (`armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64`) plus a universal APK, verifies every signature with `apksigner` (failing on a debug certificate or mismatched signers), and attaches the APKs, `SHA256SUMS.txt`, `SIGNING.txt`, the node tarball and the R8 mapping to the GitHub Release.
+
+Signing secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
+
+---
+
+## Running a node
+
+Anyone can run a bootstrap (DHT) and/or relay node. Nodes never see plaintext — they hold signed, expiring endpoint records and forward opaque encrypted frames.
+
+**Full operator runbook: [docs/Deployment.md](docs/Deployment.md)** — install and update, TLS, running behind a CDN, verification and day-to-day operation.
+
+Quick start on a fresh Ubuntu/Debian host:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/setup-node.sh | sudo bash -s -- --domain relay.example.com
-```
-
-From a clone:
-
-```bash
-sudo ./scripts/setup-node.sh
-sudo ./scripts/setup-node.sh --ip 203.0.113.10
 sudo ./scripts/setup-node.sh --domain relay.example.com
 ```
 
-TLS certificates are generated with **openssl** (self-signed, stored in `/etc/vmessenger/tls/`). No certbot or public DNS required.
-
-The default mode listens on `127.0.0.1:8443` for nginx to terminate TLS and expose:
+The node listens on `127.0.0.1:8443` and nginx terminates TLS and exposes:
 
 | Path | Purpose |
-|------|---------|
-| `wss://your.domain/dht` | DHT bootstrap, store, find |
-| `wss://your.domain/relay` | Circuit relay (listener + dial) |
+|---|---|
+| `GET /healthz` | `ok` (add `?verbose=1` for counters and the config summary) |
+| `wss://<host>/dht` | one `DhtRpcRequest` → one `DhtRpcResponse` |
+| `wss://<host>/relay` | listener control channels and bridged circuits |
 
-```bash
-VMESSENGER_PUBLIC_HOST=your.domain ./gradlew :node:run
-# or after installDist:
-VMESSENGER_PUBLIC_HOST=your.domain VMESSENGER_NODE_PORT=8443 node/build/install/node/bin/node
-```
-
-Health check (when nginx is configured): `curl https://your.domain/healthz` → `ok`
-
-### Local development (TCP DHT)
-
-For two Android emulators on one machine:
+Local development against two emulators:
 
 ```bash
 ./gradlew :node:run --args="--tcp"   # TCP DHT on :46555
 ./scripts/emulator-connect.sh        # adb port forwards
 ```
 
-In the app **Debug** screen, use **Join & Publish** (or start with `use_dev_bootstrap` — see [deploy/README.md](deploy/README.md)).
-
-### Add your node in the app
-
-**تنظیمات → نودهای شبکه** — paste a link or tap **+**:
+Add a node in the app under **تنظیمات → نودهای شبکه**, by pasting a link or scanning its QR:
 
 ```text
-vmnode:relay:wss://relay.example/relay
-vmnode:bootstrap:wss://relay.example/dht
+vmnode:bootstrap:wss://relay.example.com/dht
+vmnode:relay:wss://relay.example.com/relay
 ```
-
-Share your node via QR from the same screen. Built-in defaults include `relay.vmessenger.ir`.
 
 ---
 
-## Two-emulator dev test (Mac)
+## Contributing
 
-Two emulators cannot reach each other directly. Use a host bootstrap node plus `adb` port forwarding:
-
-1. **Terminal A** — start the reference DHT node:
-   ```bash
-   ./gradlew :node:run --args="--tcp"
-   ```
-2. **Terminal B** — forward ports (run once per emulator session):
-   ```bash
-   ./scripts/emulator-connect.sh
-   ```
-3. **Both emulators** — uninstall/reinstall the app, create identity (with display name), pair via **User Hash** (Contacts → add by hash; recipient approves the contact request).
-4. Open **Debug** (Settings) on each device — confirm DHT joined and endpoint published (`10.0.2.2:<port>`).
-5. Send an encrypted message; share live location from a conversation.
-
-Uninstall the app before retesting identity creation. Emulator extended controls can set GPS for location tests.
-
----
-
-## Building and running
-
-Requirements:
-
-- JDK 21 (Gradle toolchain; CI uses Temurin 21)
-- Android SDK 35 with Build Tools 35
-- `local.properties` with `sdk.dir` pointing at your Android SDK
-
-```bash
-./gradlew assembleDebug
-```
-
-Install on a device or emulator:
-
-```bash
-./gradlew installDebug
-```
-
-### Release APKs (CI)
-
-Updating [`gradle/version.properties`](gradle/version.properties) on `main` runs a **build-only** check. To **publish** APKs, push a matching version tag:
-
-```bash
-git tag v0.2.0   # must match versionName in gradle/version.properties
-git push origin v0.2.0
-```
-
-The [Release APK](.github/workflows/release-apk.yml) workflow attaches per-architecture release APKs to the GitHub Release:
-
-- `armeabi-v7a` (32-bit ARM)
-- `arm64-v8a` (64-bit ARM, most phones)
-- `x86` / `x86_64` (emulators)
-- `universal` (all ABIs in one APK)
-
-APKs are published as **GitHub Release assets** (not Actions artifacts), which avoids the Actions artifact storage quota.
-
-Optional repository secrets for Play-ready signing: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without them, CI signs with the debug keystore.
-
-Run static analysis and unit tests:
-
-```bash
-./gradlew detekt testDebugUnitTest
-```
-
-The app launches to a themed Splash screen, then Home with Persian RTL navigation. Theme mode (Light / Dark / System) can be changed under **تنظیمات** (Settings).
-
----
-
-## Release history
-
-| Version | Highlights |
-|---------|------------|
-| **v0.2.0** | Display names; hash-add mutual contact approval (`ContactRequest`); MapLibre live location with per-contact access list and mutual visibility; DB schema v12 |
-| **v0.1.1** | Multi-IP relay dial retry; bootstrap recovery |
-| **v0.1.0** | Stable MVP: identity, pairing, DHT, E2EE messaging, relay fallback, multi-node management |
-
-APKs: [GitHub Releases](https://github.com/0xAsghar/vMessenger/releases).
-
----
-
-## Contributing and bootstrap nodes
-
-vMessenger is designed to be community-operated. Anyone can run a bootstrap node or a relay node — see [How to run a node](#how-to-run-a-node) and [docs/Bootstrap.md](docs/Bootstrap.md). No bootstrap operator can read messages or identify users beyond ephemeral routing metadata, and the app never depends on a single bootstrap server.
+vMessenger is meant to be community-operated: anyone can run a node, and no operator can read messages or identify users beyond the routing metadata listed under [Known limitations](#known-limitations). Changes to crypto, networking or storage need a matching update to the documents in `docs/`.
 
 ---
 
 ## License
 
-To be determined before the first public release. A permissive or copyleft open-source license is expected so the protocol and node software remain auditable and self-hostable.
+**GNU General Public License, version 3.** The full text is in [LICENSE](LICENSE).
+
+This keeps the protocol and the node software auditable and self-hostable: anyone distributing a modified build must make the corresponding source available under the same terms.

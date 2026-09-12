@@ -13,7 +13,7 @@ enum class NetworkNodeRole {
 /**
  * A user-visible network node (bootstrap or relay). Surfaces health so users can
  * see which nodes work and manage their own community infrastructure
- * (docs/P2P-Phases.md Phase 2).
+ *.
  */
 data class NetworkNode(
     val address: String,

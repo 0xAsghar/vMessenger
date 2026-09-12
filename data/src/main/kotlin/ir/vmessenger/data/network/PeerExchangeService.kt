@@ -15,7 +15,7 @@ import javax.inject.Singleton
 
 /**
  * Exchanges network-node hints with a connected peer after the secure handshake
- * completes (docs/P2P-Phases.md Phase 4). Signed records are preferred when keys
+ * completes. Signed records are preferred when keys
  * are available; legacy address strings remain for backward compatibility.
  */
 @Singleton

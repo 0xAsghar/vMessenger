@@ -70,7 +70,7 @@ Record rules:
 - Keys and node IDs live in the same 256-bit space (SHA-256 output).
 - A DHT node's ID is derived from its own key material; the DHT key for a user is their identity hash.
 - Distance is the XOR metric (Kademlia), so "closest nodes to a key" is well-defined and records are stored on the nodes whose IDs are XOR-closest to the identity hash.
-- This is the standard Kademlia foundation; the MVP implements the minimal subset of it (Section 4), and later phases add the full routing-table and lookup optimizations (Section 8).
+- This is the standard Kademlia foundation; only the minimal subset in Section 4 is implemented. There is no k-bucket routing table, no replication and no parallel lookup on the node side.
 
 ---
 
@@ -135,10 +135,11 @@ A realistic, honest description of who does what in the MVP:
 
 - Reachable nodes (public IP / port-forwarded), including community and self-hosted bootstrap nodes, act as full DHT nodes: they participate in routing and store records.
 - Mobile devices behind NAT primarily act as DHT clients: they bootstrap, publish their own record, and perform lookups, but may not reliably serve as storage nodes until NAT traversal lands.
-- Therefore, in the MVP, records are predominantly stored on the reachable node set. This is still decentralized (anyone can run a node, there is no single operator), and it preserves the architecture for a phone-inclusive DHT once NAT traversal/relay arrive (see [Roadmap.md](Roadmap.md)).
-- Connectivity assumption: a successful lookup yields endpoints, but a direct connection still requires the target to be reachable at a published endpoint. Carrier-grade NAT traversal and relay fallback are explicitly future work (see [Security.md](Security.md) Section 17).
+- Records are therefore stored predominantly on the reachable node set. Anyone can run a node and there is no single operator, and the design leaves room for a phone-inclusive DHT if NAT traversal lands.
+- The reference node's record store is **in-memory** (`DhtRequestHandler` keeps a `ConcurrentHashMap`); a restart drops every record it held and devices re-announce within 10 minutes. There is no replication and `FIND_NODE` returns the configured peer nodes rather than the closest ones.
+- Connectivity assumption: a successful lookup yields endpoints, but a direct connection still requires the target to be reachable at a published endpoint. Carrier-grade NAT traversal is not implemented; relay fallback is (see [Security.md](Security.md) "Known limitations").
 
-This division keeps the MVP truthful: it is internet-functional and decentralized, while the hardest connectivity problems are scheduled rather than hand-waved.
+This division keeps the description truthful: the network is internet-functional and self-hostable, while the hardest connectivity problems are named rather than hand-waved. See the "Known limitations" section of the [README](../README.md).
 
 ---
 
@@ -175,7 +176,7 @@ Designed-for, not built in the MVP:
 - Record replication and re-publication across the closest k nodes for resilience.
 - NAT traversal (hole punching) and relay-assisted reachability so phones become full nodes.
 - Private/blinded lookups to reduce metadata exposure.
-- Optional record types beyond endpoints (for example, prekey bundles for asynchronous X3DH session setup - see [Security.md](Security.md) Section 9), still signed and expiring.
+- Optional record types beyond endpoints (for example prekey bundles for asynchronous session setup), still signed and expiring. Not implemented.
 - Mesh and offline DHT operation for transports without Internet.
 
 ---
