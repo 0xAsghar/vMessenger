@@ -4,14 +4,45 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.model.Conversation
+import ir.vmessenger.domain.model.ConversationSummary
 import kotlinx.coroutines.flow.Flow
 import java.io.InputStream
 
+@Suppress("TooManyFunctions") // one method per conversation-screen capability; splitting it would only hide the surface
 interface ConversationRepository {
     fun observeConversations(): Flow<List<Conversation>>
+
+    /**
+     * The whole chat list from one JOIN (conversation + contact + last message),
+     * newest activity first. Prefer this over [observeConversations]: it carries
+     * the preview kind, delivery state and mute flag the list actually renders.
+     */
+    fun observeChatList(): Flow<List<ConversationSummary>>
+
+    /** Every message of a conversation, oldest first. Unbounded — use the windowed overload for the chat screen. */
     fun observeMessages(conversationId: String): Flow<List<ChatMessage>>
+
+    /**
+     * The newest [limit] messages, **newest first** (index 0 is the newest), each
+     * carrying its reply preview and last delivery error. The chat screen renders
+     * it with `reverseLayout = true` and grows [limit] to page backwards.
+     */
+    fun observeMessages(conversationId: String, limit: Int): Flow<List<ChatMessage>>
+
+    /** Total messages in the conversation; `count > limit` is what "load earlier" tests. */
+    suspend fun countMessages(conversationId: String): Int
+
+    /**
+     * Zero-based position of [messageId] in the newest-first order, or -1 when it
+     * is not in the conversation. Grow the window past it, then scroll to it.
+     */
+    suspend fun indexOfMessage(conversationId: String, messageId: String): Int
+
     suspend fun getOrCreateConversation(contactId: String): String
     suspend fun sendMessage(conversationId: String, text: String): AppResult<String>
+
+    /** [replyToMessageId] is carried to the peer in the envelope and quoted in both chats. */
+    suspend fun sendMessage(conversationId: String, text: String, replyToMessageId: String?): AppResult<String>
 
     /**
      * Queues a photo/video/file for delivery. [sourceUri] is a content Uri from
@@ -19,6 +50,23 @@ interface ConversationRepository {
      */
     suspend fun sendAttachment(conversationId: String, sourceUri: String): AppResult<String>
     suspend fun markConversationRead(conversationId: String)
+
+    /** Removes the local copy only; nothing is sent to the peer and their copy stays. */
+    suspend fun deleteMessageForMe(messageId: String)
+
+    /** Deletes the conversation with its messages, queued sends and saved draft. */
+    suspend fun deleteConversation(conversationId: String)
+
+    suspend fun setMuted(conversationId: String, muted: Boolean)
+
+    /** Clears the backoff of a failed/queued message so it is retried right now. */
+    suspend fun retry(messageId: String)
+
+    /** Unsent composer text, empty when there is none. */
+    fun observeDraft(conversationId: String): Flow<String>
+
+    /** Blank [text] deletes the draft. */
+    suspend fun saveDraft(conversationId: String, text: String)
 
     /** Live progress of the attachment transfers of this conversation, keyed by message id. */
     fun observeAttachmentProgress(conversationId: String): Flow<Map<String, AttachmentProgress>>

@@ -16,6 +16,7 @@ import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
 import ir.vmessenger.core.notifications.ActiveConversationTracker
 import ir.vmessenger.core.proto.app.v1.ContactResponseType
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -47,6 +48,8 @@ class ContactCleanupCoordinatorTest {
     fun deleteRemovesAllDerivedState() = runTest {
         seedDerivedState()
         ActiveConversationTracker.activeConversationId = "conv-a"
+        harness.draftStore.save("conv-a", "unsent text")
+        harness.draftStore.save("conv-b", "keep me")
 
         harness.coordinator.deleteContact("a")
 
@@ -72,6 +75,9 @@ class ContactCleanupCoordinatorTest {
         assertEquals(listOf("req-b"), harness.contactRequestDao.requests.map { it.requestId })
         assertNull(harness.contactDao.getById("a"))
         assertNull(ActiveConversationTracker.activeConversationId)
+        // An unsent draft must not outlive the contact it was addressed to.
+        assertEquals("", harness.draftStore.observe("conv-a").first())
+        assertEquals("keep me", harness.draftStore.observe("conv-b").first())
     }
 
     @Test

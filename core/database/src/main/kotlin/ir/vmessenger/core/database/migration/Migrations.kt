@@ -349,3 +349,21 @@ val MIGRATION_15_16_STATEMENTS: List<String> = listOf(
     "UPDATE relay_node SET enabled=0 WHERE source IN ('PEER_EXCHANGE','CACHED_DHT')",
     "UPDATE bootstrap_node SET enabled=0 WHERE source IN ('PEER_EXCHANGE','CACHED_DHT')",
 )
+
+/**
+ * Version 17: the index the conversation's windowed paging query needs.
+ *
+ * `MessageDao.observeConversation(cid, limit)` runs
+ * `WHERE conversationId = ? ORDER BY createdAtUnixMs DESC LIMIT ?`; without a
+ * composite index SQLite sorts the whole conversation on every emission.
+ */
+val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_16_17_STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/** Exposed so a plain-SQLite test can replay the migration without Room. */
+val MIGRATION_16_17_STATEMENTS: List<String> = listOf(
+    "CREATE INDEX IF NOT EXISTS index_message_conv_created ON message(conversationId, createdAtUnixMs)",
+)

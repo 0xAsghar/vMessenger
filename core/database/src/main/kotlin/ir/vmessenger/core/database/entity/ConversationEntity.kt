@@ -40,6 +40,8 @@ data class ConversationEntity(
         Index("conversationId"),
         Index(value = ["messageId"], unique = true),
         Index(value = ["conversationId", "direction", "status"], name = "index_message_conv_dir_status"),
+        // Windowed paging: WHERE conversationId = ? ORDER BY createdAtUnixMs DESC LIMIT ?
+        Index(value = ["conversationId", "createdAtUnixMs"], name = "index_message_conv_created"),
     ],
 )
 data class MessageEntity(

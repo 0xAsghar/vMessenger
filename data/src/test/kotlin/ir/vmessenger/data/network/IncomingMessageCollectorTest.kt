@@ -105,6 +105,33 @@ class IncomingMessageCollectorTest {
     }
 
     @Test
+    fun incomingReplyKeepsTheQuotedMessageId() = runTest {
+        contactDao.contacts += InboundFixtures.contact("a", peerA)
+
+        deliver("a", InboundFixtures.chatEnvelope("m1", "salam", replyToMessageId = "their-m0"))
+
+        assertEquals("their-m0", messageDao.getById("m1")?.replyToMessageId)
+    }
+
+    @Test
+    fun incomingChatWithoutAQuoteStoresNoReplyId() = runTest {
+        contactDao.contacts += InboundFixtures.contact("a", peerA)
+
+        deliver("a", InboundFixtures.chatEnvelope("m1", "salam"))
+
+        assertNull(messageDao.getById("m1")?.replyToMessageId)
+    }
+
+    @Test
+    fun anOversizedQuotedIdIsNotStored() = runTest {
+        contactDao.contacts += InboundFixtures.contact("a", peerA)
+
+        deliver("a", InboundFixtures.chatEnvelope("m1", "salam", replyToMessageId = "x".repeat(200)))
+
+        assertNull(messageDao.getById("m1")?.replyToMessageId)
+    }
+
+    @Test
     fun chatFromBlockedContactDropped() = runTest {
         contactDao.contacts += InboundFixtures.contact("a", peerA, blocked = true)
 

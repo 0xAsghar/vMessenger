@@ -125,8 +125,21 @@ class FakeOutboxDao : OutboxDao {
         items.removeAll { it.conversationId == cid }
     }
 
+    override suspend fun getByMessageId(messageId: String): OutboxEntity? =
+        items.firstOrNull { it.messageId == messageId }
+
     override suspend fun resetBackoff() {
         items.replaceAll { it.copy(nextAttemptUnixMs = 0) }
+    }
+
+    override suspend fun resetBackoffFor(messageId: String) {
+        items.replaceAll {
+            if (it.messageId == messageId) {
+                it.copy(nextAttemptUnixMs = 0, attemptCount = 0, lastError = null)
+            } else {
+                it
+            }
+        }
     }
 
     override suspend fun update(item: OutboxEntity) {
@@ -259,13 +272,21 @@ object InboundFixtures {
         lastSeenUnixMs = null,
     )
 
-    fun chatEnvelope(messageId: String, text: String = "hi", sentAtUnixMs: Long = System.currentTimeMillis()) =
-        MessageEnvelope.newBuilder()
+    fun chatEnvelope(
+        messageId: String,
+        text: String = "hi",
+        sentAtUnixMs: Long = System.currentTimeMillis(),
+        replyToMessageId: String? = null,
+    ): MessageEnvelope {
+        val chat = ChatMessage.newBuilder().setText(text)
+        replyToMessageId?.let { chat.replyToMessageId = ByteString.copyFromUtf8(it) }
+        return MessageEnvelope.newBuilder()
             .setMessageId(ByteString.copyFromUtf8(messageId))
             .setSentAtUnixMs(sentAtUnixMs)
             .setCounter(1)
-            .setChat(ChatMessage.newBuilder().setText(text))
+            .setChat(chat)
             .build()
+    }
 
     fun networkNodesEnvelope(relay: String = "wss://hint.example/relay"): MessageEnvelope =
         MessageEnvelope.newBuilder()

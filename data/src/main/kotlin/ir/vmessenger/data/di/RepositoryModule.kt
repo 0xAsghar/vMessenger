@@ -9,10 +9,14 @@ import ir.vmessenger.data.backup.RoomTransactionRunner
 import ir.vmessenger.data.backup.TransactionRunner
 import ir.vmessenger.data.network.ContactRequestService
 import ir.vmessenger.data.network.NetworkNodeRepository
+import ir.vmessenger.data.network.OutboxDispatcher
+import ir.vmessenger.data.network.OutboxWaker
 import ir.vmessenger.data.network.P2PSessionHooks
 import ir.vmessenger.data.repository.ContactRepositoryImpl
 import ir.vmessenger.data.repository.ContactRequestRepositoryImpl
+import ir.vmessenger.data.repository.ConversationDraftStore
 import ir.vmessenger.data.repository.ConversationRepositoryImpl
+import ir.vmessenger.data.repository.DataStoreConversationDraftStore
 import ir.vmessenger.data.repository.DiscoveryRepositoryImpl
 import ir.vmessenger.data.repository.IdentityBackupRepositoryImpl
 import ir.vmessenger.data.repository.IdentityRepositoryImpl
@@ -86,6 +90,14 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindConversationRepository(impl: ConversationRepositoryImpl): ConversationRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindConversationDraftStore(impl: DataStoreConversationDraftStore): ConversationDraftStore
+
+    @Binds
+    @Singleton
+    abstract fun bindOutboxWaker(impl: OutboxDispatcher): OutboxWaker
 
     @Binds
     @Singleton

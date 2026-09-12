@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import ir.vmessenger.core.proto.app.v1.ChatMessage as ProtoChatMessage
 
 /**
  * Consumes authenticated inbound envelopes and enforces the sender policy
@@ -155,7 +156,7 @@ class IncomingMessageCollector @Inject constructor(
                 direction = MessageDirection.INCOMING,
                 contentType = MessageContentType.TEXT,
                 body = envelope.chat.text,
-                replyToMessageId = null,
+                replyToMessageId = envelope.chat.quotedMessageIdOrNull(),
                 status = DeliveryStatus.DELIVERED,
                 // Arrival order is ours; the peer's clock is only kept as a clamped hint.
                 createdAtUnixMs = now,
@@ -254,3 +255,17 @@ class IncomingMessageCollector @Inject constructor(
         private const val SENT_AT_MAX_FUTURE_MS = 5 * 60_000L
     }
 }
+
+/** Ours are UUID strings (36 chars); anything longer is a peer making things up. */
+private const val MAX_MESSAGE_ID_LENGTH = 64
+
+/**
+ * The id of the message this one quotes, or null when it quotes nothing.
+ *
+ * The value is peer-controlled, so it is length-bounded before it reaches the
+ * database; whether it actually resolves is decided by the reply JOIN, which
+ * only matches ids inside the same conversation.
+ */
+internal fun ProtoChatMessage.quotedMessageIdOrNull(): String? =
+    replyToMessageId.toStringUtf8()
+        .takeIf { it.isNotBlank() && it.length <= MAX_MESSAGE_ID_LENGTH }

@@ -1,6 +1,7 @@
 package ir.vmessenger.data.network
 
 import com.google.protobuf.ByteString
+import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NetworkPath
@@ -36,6 +37,46 @@ import javax.inject.Singleton
 import ir.vmessenger.core.proto.app.v1.ChatMessage as ProtoChatMessage
 
 /**
+ * Stable, developer-facing codes persisted in `outbox.lastError` and surfaced to
+ * the UI as `ChatMessage.lastError`.
+ *
+ * They are codes, not sentences: the user-facing Persian text is chosen in the
+ * UI layer, so nothing here is ever shown as-is.
+ */
+object OutboxError {
+    const val PEER_PROTOCOL_OUTDATED = "peer_protocol_outdated"
+    const val PEER_KEY_CHANGED = "peer_key_changed"
+    const val ENDPOINT_NOT_FOUND = "endpoint_not_found"
+    const val NETWORK_UNAVAILABLE = "network_unavailable"
+    const val SEND_FAILED = "send_failed"
+    const val MAILBOX_HANDOFF = "mailbox_handoff"
+    const val CONTACT_MISSING = "contact_missing"
+    const val CONTACT_BLOCKED = "contact_blocked"
+    const val CONTACT_NOT_APPROVED = "contact_not_approved"
+}
+
+/**
+ * The failure the user should be told about, by [AppError] *type* — never by
+ * matching its message, which is a developer string.
+ */
+internal fun AppError.toOutboxErrorCode(): String = when (this) {
+    is AppError.ProtocolVersion -> OutboxError.PEER_PROTOCOL_OUTDATED
+    is AppError.Security -> OutboxError.PEER_KEY_CHANGED
+    is AppError.NotFound -> OutboxError.ENDPOINT_NOT_FOUND
+    is AppError.Network -> OutboxError.NETWORK_UNAVAILABLE
+    else -> OutboxError.SEND_FAILED
+}
+
+/**
+ * The slice of [OutboxDispatcher] the repository needs, as an interface so
+ * queueing a message is testable without a transport.
+ */
+interface OutboxWaker {
+    /** Trigger an immediate drain (a new message was queued, or a peer just connected). */
+    fun wake()
+}
+
+/**
  * Drains the outbox and retries undelivered messages with exponential backoff.
  *
  * The previous behaviour attempted a single inline send when the user pressed
@@ -56,7 +97,7 @@ class OutboxDispatcher @Inject constructor(
     private val mailboxService: MailboxService,
     private val attachmentSender: AttachmentSender,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
-) {
+) : OutboxWaker {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
     private val parallelism = Semaphore(MAX_PARALLEL_CONVERSATIONS)
@@ -76,8 +117,7 @@ class OutboxDispatcher @Inject constructor(
         }
     }
 
-    /** Trigger an immediate drain (e.g. a new message was queued or a peer just connected). */
-    fun wake() {
+    override fun wake() {
         wakeups.trySend(Unit)
     }
 
@@ -136,16 +176,16 @@ class OutboxDispatcher @Inject constructor(
         val conversation = conversationDao.getById(item.conversationId)
         val contact = conversation?.let { contactDao.getById(it.contactId) }
         if (conversation == null || contact == null) {
-            backoff(item, "contact missing")
+            backoff(item, OutboxError.CONTACT_MISSING)
             return
         }
         // Never send to a blocked contact; the row stays queued so unblocking resumes delivery.
         if (contact.blocked) {
-            backoff(item, "contact blocked")
+            backoff(item, OutboxError.CONTACT_BLOCKED)
             return
         }
         if (contact.relationshipStatus != ir.vmessenger.core.database.entity.ContactRelationshipStatus.APPROVED) {
-            backoff(item, "contact not approved")
+            backoff(item, OutboxError.CONTACT_NOT_APPROVED)
             return
         }
         val peer = PeerIdentity(
@@ -176,7 +216,7 @@ class OutboxDispatcher @Inject constructor(
             AppLogger.info("Outbox", "receipt wait exhausted messageId=${message.messageId}, left as sent")
             return
         }
-        val envelope = buildEnvelope(message, self)
+        val envelope = buildChatEnvelope(message, self)
         // A receipt-wait re-send forces a fresh session: if the reused session had
         // silently died the message would otherwise vanish without another receipt.
         val result = messagingService.send(contactId, self, peer, envelope, forceReconnect = awaitingReceipt)
@@ -193,7 +233,8 @@ class OutboxDispatcher @Inject constructor(
                 if (awaitingReceipt) {
                     rescheduleForReceipt(item, item.receiptWaitCount + 1)
                 } else {
-                    backoff(item, result.error.message, peer, envelope, message.createdAtUnixMs)
+                    AppLogger.warn("Outbox", "send failed messageId=${message.messageId}: ${result.error.message}")
+                    backoff(item, result.error.toOutboxErrorCode(), peer, envelope, message.createdAtUnixMs)
                 }
         }
     }
@@ -230,7 +271,10 @@ class OutboxDispatcher @Inject constructor(
                 outboxDao.remove(item.messageId)
                 AppLogger.info("Outbox", "sent attachment messageId=${message.messageId}")
             }
-            is AppResult.Error -> backoff(item, result.error.message, createdAtUnixMs = message.createdAtUnixMs)
+            is AppResult.Error -> {
+                AppLogger.warn("Outbox", "attachment failed messageId=${message.messageId}: ${result.error.message}")
+                backoff(item, result.error.toOutboxErrorCode(), createdAtUnixMs = message.createdAtUnixMs)
+            }
         }
     }
 
@@ -272,20 +316,11 @@ class OutboxDispatcher @Inject constructor(
             item.copy(
                 attemptCount = attempt,
                 nextAttemptUnixMs = System.currentTimeMillis() + backoffMs,
-                lastError = if (handedOff) MAILBOX_HANDOFF_ERROR else error,
+                lastError = if (handedOff) OutboxError.MAILBOX_HANDOFF else error,
             ),
         )
         AppLogger.info("Outbox", "retry messageId=${item.messageId} attempt=$attempt in ${backoffMs}ms: $error")
     }
-
-    private fun buildEnvelope(message: MessageEntity, self: PeerIdentity): MessageEnvelope =
-        MessageEnvelope.newBuilder()
-            .setMessageId(ByteString.copyFromUtf8(message.messageId))
-            .setSenderIdentityHash(ByteString.copyFrom(self.identityHash))
-            .setSentAtUnixMs(message.createdAtUnixMs)
-            .setCounter(1)
-            .setChat(ProtoChatMessage.newBuilder().setText(message.body.orEmpty()))
-            .build()
 
     private fun MessageEntity.isAttachment(): Boolean = when (contentType) {
         ir.vmessenger.core.database.entity.MessageContentType.IMAGE,
@@ -306,11 +341,29 @@ class OutboxDispatcher @Inject constructor(
         private const val RECEIPT_WAIT_MS = 15_000L
         private const val MAX_RECEIPT_WAITS = 4
 
-        /** Outbox `lastError` shown while a sealed copy waits in the mailbox and direct retries continue. */
-        const val MAILBOX_HANDOFF_ERROR = "در صندوق نگهداری شد"
-
         // Keep retrying an undelivered message this long (capped backoff) so it
         // arrives when a temporarily-offline peer returns, before giving up.
         private const val RETRY_WINDOW_MS = 24 * 60 * 60_000L
     }
+}
+
+/**
+ * The wire form of a stored outgoing chat message.
+ *
+ * A quoted id travels as the UTF-8 bytes of our local message id, exactly like
+ * `message_id`, so the peer can match the quote against the message we sent them;
+ * it is left unset when the message is not a reply.
+ */
+internal fun buildChatEnvelope(message: MessageEntity, self: PeerIdentity): MessageEnvelope {
+    val chat = ProtoChatMessage.newBuilder().setText(message.body.orEmpty())
+    message.replyToMessageId?.takeIf { it.isNotBlank() }?.let {
+        chat.replyToMessageId = ByteString.copyFromUtf8(it)
+    }
+    return MessageEnvelope.newBuilder()
+        .setMessageId(ByteString.copyFromUtf8(message.messageId))
+        .setSenderIdentityHash(ByteString.copyFrom(self.identityHash))
+        .setSentAtUnixMs(message.createdAtUnixMs)
+        .setCounter(1)
+        .setChat(chat)
+        .build()
 }

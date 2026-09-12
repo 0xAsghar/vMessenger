@@ -5,17 +5,20 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.common.network.NodeTrust
 import ir.vmessenger.core.crypto.CryptoEngine
+import ir.vmessenger.core.database.dao.ChatListRow
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.ConversationWithPreview
 import ir.vmessenger.core.database.dao.LocationAccessDao
 import ir.vmessenger.core.database.dao.MessageDao
+import ir.vmessenger.core.database.dao.MessageWithReply
 import ir.vmessenger.core.database.entity.ContactEntity
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.LocationAccessEntity
 import ir.vmessenger.core.database.entity.MessageDirection
 import ir.vmessenger.core.database.entity.MessageEntity
+import ir.vmessenger.core.database.entity.OutboxEntity
 import ir.vmessenger.data.backup.TransactionRunner
 import ir.vmessenger.domain.model.Identity
 import ir.vmessenger.domain.model.NetworkNode
@@ -132,7 +135,16 @@ class FakeContactDao : ContactDao {
     override suspend fun deleteAll() = contacts.clear()
 }
 
-class FakeConversationDao : ConversationDao {
+/**
+ * [contacts] and [messages] are the *same* list instances the contact/message
+ * fakes hold, so `observeChatList` can join over them exactly like the real
+ * query does (and [deleteById] can cascade the way the foreign key does).
+ */
+@Suppress("TooManyFunctions") // mirrors the full ConversationDao contract
+class FakeConversationDao(
+    private val contacts: MutableList<ContactEntity> = mutableListOf(),
+    private val messages: MutableList<MessageEntity> = mutableListOf(),
+) : ConversationDao {
     val conversations = mutableListOf<ConversationEntity>()
     var upsertCalls = 0
 
@@ -159,9 +171,50 @@ class FakeConversationDao : ConversationDao {
     override suspend fun resetUnread(id: String) {
         conversations.replaceAll { if (it.id == id) it.copy(unreadCount = 0) else it }
     }
+
+    override fun observeChatList(): Flow<List<ChatListRow>> = flowOf(
+        conversations.sortedByDescending { it.lastActivityUnixMs }.map { conversation ->
+            val contact = contacts.firstOrNull { it.id == conversation.contactId }
+            val last = messages.firstOrNull { it.messageId == conversation.lastMessageId }
+            ChatListRow(
+                conversationId = conversation.id,
+                contactId = conversation.contactId,
+                displayName = contact?.displayName,
+                identityHash = contact?.identityHash,
+                lastMessageId = last?.messageId,
+                lastBody = last?.body,
+                lastAttachmentName = last?.attachmentName,
+                lastContentType = last?.contentType,
+                lastDirection = last?.direction,
+                lastStatus = last?.status,
+                lastCreatedAtUnixMs = last?.createdAtUnixMs,
+                lastActivityUnixMs = conversation.lastActivityUnixMs,
+                unreadCount = conversation.unreadCount,
+                muted = conversation.muted,
+            )
+        },
+    )
+
+    override suspend fun setMuted(id: String, muted: Boolean) {
+        conversations.replaceAll { if (it.id == id) it.copy(muted = muted) else it }
+    }
+
+    override suspend fun deleteById(id: String) {
+        conversations.removeAll { it.id == id }
+        // The real schema cascades messages with the conversation.
+        messages.removeAll { it.conversationId == id }
+    }
+
+    override suspend fun setLastMessageId(id: String, messageId: String?) {
+        conversations.replaceAll { if (it.id == id) it.copy(lastMessageId = messageId) else it }
+    }
 }
 
-class FakeMessageDao : MessageDao {
+/** [outbox] is the same list [FakeOutboxDao] holds, so `lastError` joins like the real query. */
+@Suppress("TooManyFunctions") // mirrors the full MessageDao contract
+class FakeMessageDao(
+    private val outbox: MutableList<OutboxEntity> = mutableListOf(),
+) : MessageDao {
     val messages = mutableListOf<MessageEntity>()
 
     /** INSERT OR IGNORE semantics, like the real DAO. */
@@ -200,6 +253,47 @@ class FakeMessageDao : MessageDao {
                 it
             }
         }
+    }
+
+    override fun observeConversation(cid: String, limit: Int): Flow<List<MessageWithReply>> =
+        flowOf(newestFirst(cid).take(limit).map { it.withReply(cid) })
+
+    override suspend fun countForConversation(cid: String): Int = messages.count { it.conversationId == cid }
+
+    override suspend fun indexOf(cid: String, messageId: String): Int =
+        newestFirst(cid).indexOfFirst { it.messageId == messageId }
+
+    override suspend fun latestMessageId(cid: String): String? = newestFirst(cid).firstOrNull()?.messageId
+
+    override suspend fun attachmentPaths(cid: String): List<String> =
+        messages.filter { it.conversationId == cid }.mapNotNull { it.attachmentPath }
+
+    override suspend fun deleteById(messageId: String) {
+        messages.removeAll { it.messageId == messageId }
+    }
+
+    override suspend fun deleteByConversation(cid: String) {
+        messages.removeAll { it.conversationId == cid }
+    }
+
+    /** The total order the real query uses: newest first, message id as tiebreaker. */
+    private fun newestFirst(cid: String): List<MessageEntity> =
+        messages.filter { it.conversationId == cid }
+            .sortedWith(compareByDescending<MessageEntity> { it.createdAtUnixMs }.thenByDescending { it.messageId })
+
+    private fun MessageEntity.withReply(cid: String): MessageWithReply {
+        // The real JOIN only matches a quoted id inside the same conversation.
+        val quoted = replyToMessageId?.let { id ->
+            messages.firstOrNull { it.messageId == id && it.conversationId == cid }
+        }
+        return MessageWithReply(
+            message = this,
+            replyBody = quoted?.body,
+            replyAttachmentName = quoted?.attachmentName,
+            replyContentType = quoted?.contentType,
+            replyDirection = quoted?.direction,
+            lastError = outbox.firstOrNull { it.messageId == messageId }?.lastError,
+        )
     }
 
     private fun MessageEntity.isUnreadIncoming(): Boolean =

@@ -18,11 +18,11 @@ import ir.vmessenger.core.notifications.ActiveConversationTracker
 import ir.vmessenger.core.proto.app.v1.ContactResponseType
 import ir.vmessenger.data.attachment.AttachmentFileStore
 import ir.vmessenger.data.di.IoDispatcher
+import ir.vmessenger.data.repository.ConversationDraftStore
 import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.network.messaging.MessagingService
 import ir.vmessenger.network.messaging.PeerIdentity
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
@@ -74,6 +74,7 @@ class ContactCleanupCoordinator @Inject constructor(
     private val endpointCacheDao: EndpointCacheDao,
     private val mailboxDao: MailboxDao,
     private val contactRequestDao: ContactRequestDao,
+    private val draftStore: ConversationDraftStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     suspend fun deleteContact(contactId: String) = withContext(ioDispatcher) {
@@ -135,7 +136,9 @@ class ContactCleanupCoordinator @Inject constructor(
     }
 
     private suspend fun purgeConversation(conversationId: String) {
-        val paths = messageDao.observeConversation(conversationId).first().mapNotNull { it.attachmentPath }
+        // One query for the paths; materialising every message just to read them
+        // is wasteful on a long thread.
+        val paths = messageDao.attachmentPaths(conversationId)
         var deleted = 0
         for (path in paths) {
             if (attachmentFileStore.delete(path)) deleted++
@@ -144,6 +147,8 @@ class ContactCleanupCoordinator @Inject constructor(
             AppLogger.info("Contact", "attachments removed $deleted/${paths.size} conversation=$conversationId")
         }
         outboxDao.removeByConversation(conversationId)
+        // An unsent draft would otherwise outlive the contact it was addressed to.
+        draftStore.clear(conversationId)
     }
 
     /** A hash-added contact may be stored under its 16-byte routing prefix; both forms are purged. */

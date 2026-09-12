@@ -6,21 +6,14 @@ import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.MessageDao
-import ir.vmessenger.core.database.dao.OutboxDao
 import ir.vmessenger.core.database.entity.ConversationEntity
-import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageEntity
-import ir.vmessenger.core.database.entity.OutboxEntity
 import ir.vmessenger.data.attachment.AttachmentStore
 import ir.vmessenger.data.attachment.AttachmentTransferTracker
-import ir.vmessenger.data.network.OutboxDispatcher
 import ir.vmessenger.domain.model.AttachmentProgress
-import ir.vmessenger.domain.model.AttachmentType
-import ir.vmessenger.domain.model.ChatAttachment
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.model.Conversation
-import ir.vmessenger.domain.model.DeliveryStatus
-import ir.vmessenger.domain.model.MessageDirection
+import ir.vmessenger.domain.model.ConversationSummary
 import ir.vmessenger.domain.repository.ConversationRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -37,17 +30,17 @@ import ir.vmessenger.core.database.entity.DeliveryStatus as DbDeliveryStatus
 import ir.vmessenger.core.database.entity.MessageDirection as DbMessageDirection
 
 @Singleton
-// One collaborator per concern (DAOs, dispatcher, attachment store + tracker); one method per contract entry.
+// One collaborator per concern (DAOs, attachment store + tracker, read/write halves);
+// one method per contract entry.
 @Suppress("LongParameterList", "TooManyFunctions")
 class ConversationRepositoryImpl @Inject constructor(
     private val conversationDao: ConversationDao,
     private val messageDao: MessageDao,
-    private val outboxDao: OutboxDao,
     private val contactDao: ContactDao,
-    private val outboxDispatcher: OutboxDispatcher,
     private val attachmentStore: AttachmentStore,
     private val transferTracker: AttachmentTransferTracker,
     private val readMarker: ConversationReadMarker,
+    private val writer: ConversationWriter,
 ) : ConversationRepository {
 
     override fun observeConversations(): Flow<List<Conversation>> =
@@ -70,10 +63,22 @@ class ConversationRepositoryImpl @Inject constructor(
             }
         }
 
+    override fun observeChatList(): Flow<List<ConversationSummary>> =
+        conversationDao.observeChatList().map { rows -> rows.map { it.toSummary() } }
+
     override fun observeMessages(conversationId: String): Flow<List<ChatMessage>> =
         messageDao.observeConversation(conversationId).map { messages ->
-            messages.map { it.toDomain() }
+            messages.map { it.toChatMessage() }
         }
+
+    override fun observeMessages(conversationId: String, limit: Int): Flow<List<ChatMessage>> =
+        messageDao.observeConversation(conversationId, limit).map { rows -> rows.map { it.toChatMessage() } }
+
+    override suspend fun countMessages(conversationId: String): Int =
+        messageDao.countForConversation(conversationId)
+
+    override suspend fun indexOfMessage(conversationId: String, messageId: String): Int =
+        messageDao.indexOf(conversationId, messageId)
 
     override suspend fun getOrCreateConversation(contactId: String): String {
         val existing = conversationDao.getByContactId(contactId)
@@ -93,55 +98,20 @@ class ConversationRepositoryImpl @Inject constructor(
         return id
     }
 
-    override suspend fun sendMessage(conversationId: String, text: String): AppResult<String> {
-        val messageId = UUID.randomUUID().toString()
-        val now = System.currentTimeMillis()
-        messageDao.insert(
-            MessageEntity(
-                messageId = messageId,
-                conversationId = conversationId,
-                direction = DbMessageDirection.OUTGOING,
-                contentType = MessageContentType.TEXT,
-                body = text,
-                replyToMessageId = null,
-                status = DbDeliveryStatus.QUEUED,
-                createdAtUnixMs = now,
-                sentAtUnixMs = null,
-                deliveredAtUnixMs = null,
-                readAtUnixMs = null,
-            ),
-        )
-        AppLogger.info("Messaging", "outgoing chat queued messageId=$messageId conversation=$conversationId")
-        outboxDao.enqueue(
-            OutboxEntity(
-                messageId = messageId,
-                conversationId = conversationId,
-                sealedPayload = null,
-                attemptCount = 0,
-                nextAttemptUnixMs = now,
-                lastError = null,
-            ),
-        )
-        conversationDao.getById(conversationId)?.let { conv ->
-            conversationDao.update(
-                conv.copy(
-                    lastMessageId = messageId,
-                    lastActivityUnixMs = now,
-                ),
-            )
-        }
-        // Delivery (and the SENT/FAILED status) is owned by the outbox dispatcher,
-        // which retries until a transport send actually succeeds.
-        outboxDispatcher.wake()
-        return AppResult.Success(messageId)
-    }
+    override suspend fun sendMessage(conversationId: String, text: String): AppResult<String> =
+        sendMessage(conversationId, text, replyToMessageId = null)
+
+    override suspend fun sendMessage(
+        conversationId: String,
+        text: String,
+        replyToMessageId: String?,
+    ): AppResult<String> = AppResult.Success(writer.sendText(conversationId, text, replyToMessageId))
 
     override suspend fun sendAttachment(conversationId: String, sourceUri: String): AppResult<String> =
         runCatching {
             val copied = attachmentStore.copyFromUri(sourceUri)
             val messageId = UUID.randomUUID().toString()
-            val now = System.currentTimeMillis()
-            messageDao.insert(
+            writer.queue(
                 MessageEntity(
                     messageId = messageId,
                     conversationId = conversationId,
@@ -150,7 +120,7 @@ class ConversationRepositoryImpl @Inject constructor(
                     body = null,
                     replyToMessageId = null,
                     status = DbDeliveryStatus.QUEUED,
-                    createdAtUnixMs = now,
+                    createdAtUnixMs = System.currentTimeMillis(),
                     sentAtUnixMs = null,
                     deliveredAtUnixMs = null,
                     readAtUnixMs = null,
@@ -162,31 +132,29 @@ class ConversationRepositoryImpl @Inject constructor(
                     attachmentEncrypted = true,
                 ),
             )
-            outboxDao.enqueue(
-                OutboxEntity(
-                    messageId = messageId,
-                    conversationId = conversationId,
-                    sealedPayload = null,
-                    attemptCount = 0,
-                    nextAttemptUnixMs = now,
-                    lastError = null,
-                ),
-            )
-            conversationDao.getById(conversationId)?.let { conv ->
-                conversationDao.update(conv.copy(lastMessageId = messageId, lastActivityUnixMs = now))
-            }
             AppLogger.info("Messaging", "outgoing attachment queued messageId=$messageId size=${copied.sizeBytes}")
-            outboxDispatcher.wake()
             messageId
         }.fold(
             onSuccess = { AppResult.Success(it) },
             onFailure = {
                 AppLogger.warn("Messaging", "attachment queue failed: ${it.message}")
-                AppResult.Error(AppError.Validation(it.message ?: "پیوست ناموفق"))
+                AppResult.Error(AppError.AttachmentFailed)
             },
         )
 
     override suspend fun markConversationRead(conversationId: String) = readMarker.markRead(conversationId)
+
+    override suspend fun deleteMessageForMe(messageId: String) = writer.deleteMessageForMe(messageId)
+
+    override suspend fun deleteConversation(conversationId: String) = writer.deleteConversation(conversationId)
+
+    override suspend fun setMuted(conversationId: String, muted: Boolean) = writer.setMuted(conversationId, muted)
+
+    override suspend fun retry(messageId: String) = writer.retry(messageId)
+
+    override fun observeDraft(conversationId: String): Flow<String> = writer.observeDraft(conversationId)
+
+    override suspend fun saveDraft(conversationId: String, text: String) = writer.saveDraft(conversationId, text)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeAttachmentProgress(conversationId: String): Flow<Map<String, AttachmentProgress>> =
@@ -209,48 +177,8 @@ class ConversationRepositoryImpl @Inject constructor(
                 onSuccess = { AppResult.Success(it.absolutePath) },
                 onFailure = {
                     AppLogger.warn("Messaging", "attachment export failed messageId=$messageId: ${it.message}")
-                    AppResult.Error(AppError.Validation(ATTACHMENT_UNAVAILABLE_MESSAGE))
+                    AppResult.Error(AppError.AttachmentFailed)
                 },
             )
-    }
-
-    private fun MessageEntity.toDomain() = ChatMessage(
-        messageId = messageId,
-        conversationId = conversationId,
-        direction = when (direction) {
-            DbMessageDirection.OUTGOING -> MessageDirection.OUTGOING
-            DbMessageDirection.INCOMING -> MessageDirection.INCOMING
-        },
-        text = body.orEmpty(),
-        status = when (status) {
-            DbDeliveryStatus.QUEUED -> DeliveryStatus.QUEUED
-            DbDeliveryStatus.SENT -> DeliveryStatus.SENT
-            DbDeliveryStatus.DELIVERED -> DeliveryStatus.DELIVERED
-            DbDeliveryStatus.READ -> DeliveryStatus.READ
-            DbDeliveryStatus.FAILED -> DeliveryStatus.FAILED
-        },
-        createdAtUnixMs = createdAtUnixMs,
-        replyToMessageId = replyToMessageId,
-        attachment = toAttachment(),
-    )
-
-    private fun MessageEntity.toAttachment(): ChatAttachment? {
-        val type = when (contentType) {
-            MessageContentType.IMAGE -> AttachmentType.IMAGE
-            MessageContentType.VIDEO -> AttachmentType.VIDEO
-            MessageContentType.FILE -> AttachmentType.FILE
-            else -> return null
-        }
-        return ChatAttachment(
-            type = type,
-            fileName = attachmentName ?: "file",
-            mimeType = attachmentMimeType ?: "application/octet-stream",
-            sizeBytes = attachmentSizeBytes ?: 0L,
-            localPath = attachmentPath,
-        )
-    }
-
-    private companion object {
-        const val ATTACHMENT_UNAVAILABLE_MESSAGE = "پیوست در دسترس نیست"
     }
 }

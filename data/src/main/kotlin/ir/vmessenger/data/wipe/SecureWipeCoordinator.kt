@@ -14,6 +14,7 @@ import ir.vmessenger.core.database.DatabaseKeyProvider
 import ir.vmessenger.core.database.VMessengerDatabase
 import ir.vmessenger.core.database.di.DatabaseModule
 import ir.vmessenger.core.datastore.DiscoveryPreferences
+import ir.vmessenger.core.datastore.DraftPreferences
 import ir.vmessenger.core.datastore.P2PPreferences
 import ir.vmessenger.core.datastore.PrivacyPreferences
 import ir.vmessenger.core.datastore.SecurityPreferences
@@ -57,6 +58,7 @@ class SecureWipeCoordinator @Inject constructor(
     private val p2pPreferences: P2PPreferences,
     private val discoveryPreferences: DiscoveryPreferences,
     private val themePreferences: ThemePreferences,
+    private val draftPreferences: DraftPreferences,
     private val keyStoreKeyManager: KeyStoreKeyManager,
     private val selfIdentityCache: SelfIdentityCache,
     private val databaseKeyProvider: DatabaseKeyProvider,
@@ -110,6 +112,7 @@ class SecureWipeCoordinator @Inject constructor(
     }
 
     override suspend fun clearPreferences() {
+        draftPreferences.clear()
         securityPreferences.clear()
         privacyPreferences.clear()
         p2pPreferences.clear()

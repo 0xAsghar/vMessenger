@@ -1,13 +1,15 @@
 package ir.vmessenger.core.database.dao
 
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
-import androidx.room.Embedded
 import androidx.room.Query
 import androidx.room.Update
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.DeliveryStatus
+import ir.vmessenger.core.database.entity.MessageContentType
+import ir.vmessenger.core.database.entity.MessageDirection
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
 import ir.vmessenger.core.database.entity.SessionEntity
@@ -18,7 +20,80 @@ data class ConversationWithPreview(
     val lastMessagePreview: String?,
 )
 
+/**
+ * One chat-list row, built by a single JOIN over conversation + contact + the
+ * conversation's last message. The UI renders this verbatim, so it never has to
+ * combine a conversation flow with a contact flow (and never re-queries per row).
+ *
+ * Every `last*` field is null for a conversation that has no message yet.
+ */
+data class ChatListRow(
+    val conversationId: String,
+    val contactId: String,
+    val displayName: String?,
+    val identityHash: ByteArray?,
+    val lastMessageId: String?,
+    val lastBody: String?,
+    val lastAttachmentName: String?,
+    val lastContentType: MessageContentType?,
+    val lastDirection: MessageDirection?,
+    val lastStatus: DeliveryStatus?,
+    val lastCreatedAtUnixMs: Long?,
+    val lastActivityUnixMs: Long,
+    val unreadCount: Int,
+    val muted: Boolean,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as ChatListRow
+        return scalarFields() == other.scalarFields() &&
+            (identityHash ?: EMPTY).contentEquals(other.identityHash ?: EMPTY)
+    }
+
+    override fun hashCode(): Int = 31 * scalarFields().hashCode() + (identityHash?.contentHashCode() ?: 0)
+
+    /** Every field except the byte array, so equality/hash keep data-class semantics. */
+    private fun scalarFields(): List<Any?> = listOf(
+        conversationId,
+        contactId,
+        displayName,
+        lastMessageId,
+        lastBody,
+        lastAttachmentName,
+        lastContentType,
+        lastDirection,
+        lastStatus,
+        lastCreatedAtUnixMs,
+        lastActivityUnixMs,
+        unreadCount,
+        muted,
+    )
+
+    private companion object {
+        val EMPTY = ByteArray(0)
+    }
+}
+
+/**
+ * A message plus the preview of the message it replies to, resolved by a
+ * LEFT JOIN so rendering a window of replies never costs one lookup per row.
+ * The `reply*` fields are null when the message is not a reply (or the quoted
+ * message was deleted locally, or a peer quoted an id from another chat).
+ */
+data class MessageWithReply(
+    @Embedded val message: MessageEntity,
+    val replyBody: String?,
+    val replyAttachmentName: String?,
+    val replyContentType: MessageContentType?,
+    val replyDirection: MessageDirection?,
+    /** Last delivery failure recorded by the outbox dispatcher; null once delivered or never failed. */
+    val lastError: String?,
+)
+
 @Dao
+// One query per thing the chat list and conversation screen ask of a conversation.
+@Suppress("TooManyFunctions")
 interface ConversationDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: ConversationEntity)
@@ -55,9 +130,55 @@ interface ConversationDao {
 
     @Query("UPDATE conversation SET unreadCount = 0 WHERE id = :id")
     suspend fun resetUnread(id: String)
+
+    /**
+     * The whole chat list in one query: conversation + its contact + its last
+     * message. `COLLATE NOCASE` is not applied — ordering is by recency, and
+     * name sorting is not part of this screen.
+     */
+    @Query(
+        """
+        SELECT
+            c.id AS conversationId,
+            c.contactId AS contactId,
+            ct.displayName AS displayName,
+            ct.identityHash AS identityHash,
+            m.messageId AS lastMessageId,
+            m.body AS lastBody,
+            m.attachmentName AS lastAttachmentName,
+            m.contentType AS lastContentType,
+            m.direction AS lastDirection,
+            m.status AS lastStatus,
+            m.createdAtUnixMs AS lastCreatedAtUnixMs,
+            c.lastActivityUnixMs AS lastActivityUnixMs,
+            c.unreadCount AS unreadCount,
+            c.muted AS muted
+        FROM conversation c
+        LEFT JOIN contact ct ON ct.id = c.contactId
+        LEFT JOIN message m ON m.messageId = c.lastMessageId
+        ORDER BY c.lastActivityUnixMs DESC
+        """,
+    )
+    fun observeChatList(): Flow<List<ChatListRow>>
+
+    @Query("UPDATE conversation SET muted = :muted WHERE id = :id")
+    suspend fun setMuted(id: String, muted: Boolean)
+
+    /**
+     * Messages cascade with the conversation (foreign key). Outbox rows do **not** —
+     * `outbox` has no foreign key — so drop them first with
+     * [OutboxDao.removeByConversation], or the dispatcher keeps retrying orphans.
+     */
+    @Query("DELETE FROM conversation WHERE id = :id")
+    suspend fun deleteById(id: String)
+
+    @Query("UPDATE conversation SET lastMessageId = :messageId WHERE id = :id")
+    suspend fun setLastMessageId(id: String, messageId: String?)
 }
 
 @Dao
+// One query per message operation (paging, status transitions, deletes); a DAO is a query catalogue.
+@Suppress("TooManyFunctions")
 interface MessageDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(message: MessageEntity)
@@ -96,6 +217,79 @@ interface MessageDao {
         """,
     )
     suspend fun markIncomingRead(cid: String, ts: Long)
+
+    /**
+     * The newest [limit] messages of a conversation, newest first, each carrying
+     * the preview of the message it quotes.
+     *
+     * The UI renders this with `reverseLayout = true`, so index 0 is the newest
+     * bubble and a new message never shifts the scroll anchor. Growing [limit]
+     * (by 60 at a time) is how "load earlier" works; `(conversationId,
+     * createdAtUnixMs)` is indexed so the window is a bounded index scan.
+     * The `messageId` tiebreaker keeps the order total, which is what
+     * [indexOf] counts against.
+     */
+    @Query(
+        """
+        SELECT m.*,
+            r.body AS replyBody,
+            r.attachmentName AS replyAttachmentName,
+            r.contentType AS replyContentType,
+            r.direction AS replyDirection,
+            o.lastError AS lastError
+        FROM message m
+        LEFT JOIN message r ON r.messageId = m.replyToMessageId AND r.conversationId = m.conversationId
+        LEFT JOIN outbox o ON o.messageId = m.messageId
+        WHERE m.conversationId = :cid
+        ORDER BY m.createdAtUnixMs DESC, m.messageId DESC
+        LIMIT :limit
+        """,
+    )
+    fun observeConversation(cid: String, limit: Int): Flow<List<MessageWithReply>>
+
+    @Query("SELECT COUNT(*) FROM message WHERE conversationId = :cid")
+    suspend fun countForConversation(cid: String): Int
+
+    /**
+     * Zero-based position of [messageId] in the same order [observeConversation]
+     * uses, or -1 when the message is not in [cid]. Used to grow the window until
+     * a quoted message is inside it before scrolling to it.
+     *
+     * The JOIN is what makes the missing case -1: with no anchor row the join
+     * yields nothing, `COUNT(*)` is 0 and the query returns 0 - 1.
+     */
+    @Query(
+        """
+        SELECT COUNT(*) - 1 FROM message m
+        JOIN message anchor ON anchor.messageId = :messageId AND anchor.conversationId = :cid
+        WHERE m.conversationId = :cid
+          AND (
+            m.createdAtUnixMs > anchor.createdAtUnixMs
+            OR (m.createdAtUnixMs = anchor.createdAtUnixMs AND m.messageId >= anchor.messageId)
+          )
+        """,
+    )
+    suspend fun indexOf(cid: String, messageId: String): Int
+
+    /** The newest message id of a conversation; used to repoint the chat-list preview. */
+    @Query(
+        """
+        SELECT messageId FROM message WHERE conversationId = :cid
+        ORDER BY createdAtUnixMs DESC, messageId DESC LIMIT 1
+        """,
+    )
+    suspend fun latestMessageId(cid: String): String?
+
+    /** Stored attachment files of a conversation, so they can be erased with it. */
+    @Query("SELECT attachmentPath FROM message WHERE conversationId = :cid AND attachmentPath IS NOT NULL")
+    suspend fun attachmentPaths(cid: String): List<String>
+
+    /** Delete-for-me: removes the local copy only, nothing is sent to the peer. */
+    @Query("DELETE FROM message WHERE messageId = :messageId")
+    suspend fun deleteById(messageId: String)
+
+    @Query("DELETE FROM message WHERE conversationId = :cid")
+    suspend fun deleteByConversation(cid: String)
 }
 
 @Dao
@@ -113,9 +307,21 @@ interface OutboxDao {
     @Query("DELETE FROM outbox WHERE conversationId = :cid")
     suspend fun removeByConversation(cid: String)
 
+    @Query("SELECT * FROM outbox WHERE messageId = :messageId LIMIT 1")
+    suspend fun getByMessageId(messageId: String): OutboxEntity?
+
     /** Makes every queued item immediately due (used on connectivity recovery). */
     @Query("UPDATE outbox SET nextAttemptUnixMs = 0")
     suspend fun resetBackoff()
+
+    /**
+     * Makes one queued item due right now and forgets its failure history
+     * (manual "retry" on a message the user saw fail).
+     */
+    @Query(
+        "UPDATE outbox SET nextAttemptUnixMs = 0, attemptCount = 0, lastError = NULL WHERE messageId = :messageId",
+    )
+    suspend fun resetBackoffFor(messageId: String)
 
     @Update
     suspend fun update(item: OutboxEntity)

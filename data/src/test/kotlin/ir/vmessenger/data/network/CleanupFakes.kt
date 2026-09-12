@@ -12,6 +12,7 @@ import ir.vmessenger.core.database.entity.MailboxBlobEntity
 import ir.vmessenger.data.attachment.AttachmentFileStore
 import ir.vmessenger.data.repository.FakeContactDao
 import ir.vmessenger.data.repository.FakeConversationDao
+import ir.vmessenger.data.repository.FakeConversationDraftStore
 import ir.vmessenger.data.repository.FakeIdentityRepository
 import ir.vmessenger.data.repository.FakeLocationAccessDao
 import ir.vmessenger.data.repository.FakeMessageDao
@@ -141,6 +142,7 @@ class CleanupHarness(val contactDao: FakeContactDao = FakeContactDao()) {
     val messaging = FakeMessagingPort()
     val sessionCloser = FakeSessionCloser()
     val attachmentStore = FakeAttachmentFileStore()
+    val draftStore = FakeConversationDraftStore()
     val serviceControl = FakeLocationServiceControl()
 
     val locationSharing = LocationSharingCoordinator(
@@ -175,6 +177,7 @@ class CleanupHarness(val contactDao: FakeContactDao = FakeContactDao()) {
         endpointCacheDao = endpointCacheDao,
         mailboxDao = mailboxDao,
         contactRequestDao = contactRequestDao,
+        draftStore = draftStore,
         ioDispatcher = Dispatchers.Unconfined,
     )
 }
