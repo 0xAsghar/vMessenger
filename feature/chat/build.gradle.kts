@@ -12,6 +12,8 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
+    // ActiveConversationTracker: suppresses notifications for the open chat.
+    implementation(project(":core:notifications"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

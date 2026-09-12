@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.notifications.ActiveConversationTracker
 import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.repository.ConversationRepository
@@ -52,6 +53,21 @@ class ConversationViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(PROGRESS_STOP_TIMEOUT_MS),
             initialValue = emptyMap(),
         )
+
+    /**
+     * Called while the conversation is on screen: clears the unread count, marks
+     * the incoming messages read (which sends read receipts when the user allows
+     * them) and tells the notifier to stay quiet for this conversation.
+     */
+    fun onVisible() {
+        ActiveConversationTracker.activeConversationId = conversationId
+        viewModelScope.launch { conversationRepository.markConversationRead(conversationId) }
+    }
+
+    /** Called when the conversation leaves the screen; notifications resume. */
+    fun onHidden() {
+        ActiveConversationTracker.clear(conversationId)
+    }
 
     fun send(text: String) {
         val trimmed = text.trim()

@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.domain.model.AttachmentProgress
@@ -116,6 +117,14 @@ fun ConversationRoute(
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(0)
         }
+    }
+
+    // Marks the thread read (and sends read receipts) while it is on screen, and
+    // silences its notifications; re-runs on every new message so one arriving
+    // with the chat open is read immediately rather than on the next visit.
+    LifecycleResumeEffect(messages.lastOrNull()?.messageId) {
+        viewModel.onVisible()
+        onPauseOrDispose { viewModel.onHidden() }
     }
 
     VMessengerScaffold(
