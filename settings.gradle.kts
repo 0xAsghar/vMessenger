@@ -40,7 +40,6 @@ include(":core:datastore")
 include(":core:location")
 include(":core:notifications")
 include(":core:designsystem")
-include(":core:testing")
 
 include(":network:discovery")
 include(":network:dht")
