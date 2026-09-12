@@ -44,8 +44,14 @@ class UpdateViewModel @Inject constructor(
     private val updateRepository: UpdateRepository,
     observeStatus: ObserveUpdateStatusUseCase,
 ) : ViewModel() {
-    private val _state = MutableStateFlow<UpdateUiState>(UpdateUiState.Idle)
+    private val _state = MutableStateFlow<UpdateUiState>(UpdateUiState.Checking)
     val state: StateFlow<UpdateUiState> = _state.asStateFlow()
+
+    init {
+        // Opening the screen is itself a request to know. Not forced, so the daily throttle
+        // still applies and the answer usually comes from the stored outcome, not the network.
+        check(force = false)
+    }
 
     /** Formatted moment of the last successful check, for the "last checked" line. */
     val lastChecked: StateFlow<String?> = observeStatus()
@@ -53,12 +59,20 @@ class UpdateViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT_MS), null)
 
     private var downloadJob: Job? = null
+    private var checkJob: Job? = null
 
-    /** [force] is what the user's own button passes; the automatic check on entry does not. */
+    /**
+     * [force] is what the user's own button passes; the automatic check on entry does not.
+     *
+     * The guard is the in-flight job, not the visible state: the screen *starts* in
+     * [UpdateUiState.Checking], so gating on that would make the user's first tap on
+     * "check now" do nothing.
+     */
     fun check(force: Boolean) {
-        if (_state.value is UpdateUiState.Checking) return
+        if (checkJob?.isActive == true && !force) return
+        checkJob?.cancel()
         _state.value = UpdateUiState.Checking
-        viewModelScope.launch {
+        checkJob = viewModelScope.launch {
             _state.value = when (val result = checkForUpdate(force)) {
                 is AppResult.Success -> result.data.toUiState(lastChecked.value)
                 is AppResult.Error -> UpdateUiState.Error(result.error)
@@ -73,11 +87,15 @@ class UpdateViewModel @Inject constructor(
         }
     }
 
-    /** Cancels an in-flight download; the repository deletes the partial file. */
-    fun cancelDownload() {
+    /**
+     * Cancels an in-flight download; the repository deletes the partial file. The screen goes
+     * back to the offer, not to nothing — the update is still there, the user just said "not
+     * right now".
+     */
+    fun cancelDownload(update: AvailableUpdate) {
         downloadJob?.cancel()
         downloadJob = null
-        _state.value = UpdateUiState.Idle
+        _state.value = UpdateUiState.Available(update)
     }
 
     fun skip(update: AvailableUpdate) {

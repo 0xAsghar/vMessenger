@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.Contacts
@@ -42,8 +44,8 @@ import ir.vmessenger.feature.contacts.ContactsRoute
 import ir.vmessenger.feature.map.MapRoute
 import ir.vmessenger.feature.settings.SettingsRoute
 import ir.vmessenger.feature.settings.update.UpdateBanner
+import ir.vmessenger.feature.settings.update.UpdateBannerViewModel
 import ir.vmessenger.navigation.VmRoute
-
 private const val TAB_FADE_MS = 160
 
 private data class HomeTab(
@@ -77,6 +79,7 @@ fun HomeRoute(
     navigation: HomeNavigation = HomeNavigation(),
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
+    bannerViewModel: UpdateBannerViewModel = hiltViewModel(),
 ) {
     val navController = rememberNavController()
     val startedConversationId by viewModel.openConversationId.collectAsStateWithLifecycle()
@@ -108,13 +111,27 @@ fun HomeRoute(
                 .consumeWindowInsets(padding),
         ) {
             // Above the tabs, not inside one: an update is about the app, not about
-            // whichever screen the user happens to be on.
-            UpdateBanner(onOpen = navigation.onNavigateToUpdate)
+            // whichever screen the user happens to be on. It is therefore the topmost
+            // content, so it takes the status-bar inset — and the tabs below, whose own
+            // app bars would otherwise take it again, are told it is spent.
+            val updateVersion by bannerViewModel.availableVersion.collectAsStateWithLifecycle()
+            updateVersion?.let { version ->
+                UpdateBanner(
+                    version = version,
+                    onOpen = navigation.onNavigateToUpdate,
+                    onDismiss = bannerViewModel::dismiss,
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                )
+            }
             HomeTabNavHost(
                 navController = navController,
                 navigation = navigation,
                 onStartChat = viewModel::startChat,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .then(
+                        if (updateVersion == null) Modifier else Modifier.consumeWindowInsets(WindowInsets.statusBars),
+                    ),
             )
         }
     }

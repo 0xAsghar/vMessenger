@@ -44,10 +44,12 @@ import ir.vmessenger.feature.settings.R
 /**
  * In-app updates.
  *
- * The screen checks on entry without forcing (the throttle still applies) so opening it is
- * cheap, and the button forces. The install step goes through the system package installer;
- * if it refuses — which is what happens when the release is signed by a different key than
- * the installed build — the screen switches to offering the file instead of failing quietly.
+ * The ViewModel checks on entry without forcing (the throttle still applies), so opening
+ * the screen is cheap and usually answers from stored state; the button forces a call.
+ *
+ * The install step goes through the system package installer. If it refuses — which is what
+ * happens when the release is signed by a different key than the installed build — the screen
+ * switches to offering the file instead of failing quietly.
  */
 @Composable
 fun UpdateRoute(
@@ -102,7 +104,7 @@ private class UpdateActions(
     val onCheck: () -> Unit,
     val onDownload: (AvailableUpdate) -> Unit,
     val onSkip: (AvailableUpdate) -> Unit,
-    val onCancel: () -> Unit,
+    val onCancel: (AvailableUpdate) -> Unit,
     val onInstall: (String) -> Unit,
     val onSaveFile: () -> Unit,
 )
@@ -110,7 +112,7 @@ private class UpdateActions(
 @Composable
 private fun UpdateBody(state: UpdateUiState, actions: UpdateActions) {
     when (state) {
-        UpdateUiState.Idle, UpdateUiState.Checking -> Progress(stringResource(R.string.settings_update_checking))
+        UpdateUiState.Checking -> Progress(stringResource(R.string.settings_update_checking))
         is UpdateUiState.UpToDate -> UpToDate(state, actions)
         is UpdateUiState.Available -> Available(state.update, actions)
         is UpdateUiState.Downloading -> Downloading(state, actions)
@@ -178,7 +180,9 @@ private fun Downloading(state: UpdateUiState.Downloading, actions: UpdateActions
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    TextButton(onClick = actions.onCancel) { Text(text = stringResource(R.string.settings_update_cancel)) }
+    TextButton(onClick = { actions.onCancel(state.update) }) {
+        Text(text = stringResource(R.string.settings_update_cancel))
+    }
 }
 
 @Composable

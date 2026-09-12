@@ -49,6 +49,29 @@ class UpdateViewModelTest {
     )
 
     @Test
+    fun `opening the screen checks without forcing`() = runTest {
+        repository.checkResult = AppResult.Success(UpdateCheck.Available(FakeUpdateRepository.UPDATE))
+
+        val model = viewModel()
+        advanceUntilIdle()
+
+        assertIs<UpdateUiState.Available>(model.state.value)
+        assertEquals(0, repository.forcedChecks)
+    }
+
+    @Test
+    fun `a forced check is not swallowed by the one the screen runs on entry`() = runTest {
+        val model = viewModel()
+
+        // No advanceUntilIdle: the entry check is still in flight, exactly as it is when the
+        // user taps "check now" the instant the screen appears.
+        model.check(force = true)
+        advanceUntilIdle()
+
+        assertEquals(1, repository.forcedChecks)
+    }
+
+    @Test
     fun `a check with nothing newer reports up to date`() = runTest {
         val model = viewModel()
 
@@ -68,6 +91,18 @@ class UpdateViewModelTest {
         advanceUntilIdle()
 
         assertEquals(UpdateUiState.Error(AppError.UpdateRateLimited), model.state.value)
+    }
+
+    @Test
+    fun `cancelling a download goes back to the offer rather than to nothing`() = runTest {
+        repository.downloadEmissions = listOf(DownloadProgress.Downloading(1, 10))
+        val model = viewModel()
+        model.download(FakeUpdateRepository.UPDATE)
+        advanceUntilIdle()
+
+        model.cancelDownload(FakeUpdateRepository.UPDATE)
+
+        assertEquals(UpdateUiState.Available(FakeUpdateRepository.UPDATE), model.state.value)
     }
 
     @Test

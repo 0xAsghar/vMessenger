@@ -20,13 +20,17 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -41,7 +45,6 @@ import ir.vmessenger.core.designsystem.component.SettingsDivider
 import ir.vmessenger.core.designsystem.component.SettingsSection
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.core.designsystem.theme.UserHashTextStyle
-
 @Composable
 fun DebugRoute(
     onNavigateBack: () -> Unit = {},
@@ -78,7 +81,29 @@ fun DebugRoute(
                 onJoinAndPublish = viewModel::joinAndPublish,
                 onNavigateToLogs = onNavigateToLogs,
             )
+            DebugUpdateSection(baseUrl = state.updateBaseUrl, onBaseUrl = viewModel::setUpdateBaseUrl)
             DebugAdbSection(adbCommands = adbCommands)
+        }
+    }
+}
+
+/** Release-server override, so the updater can be exercised against a local fake. */
+@Composable
+private fun DebugUpdateSection(baseUrl: String?, onBaseUrl: (String) -> Unit) {
+    var draft by rememberSaveable(baseUrl) { mutableStateOf(baseUrl.orEmpty()) }
+    SettingsSection(title = "Update base URL") {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it },
+                singleLine = true,
+                label = { Text(text = "http://10.0.2.2:8765 (blank = GitHub)") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(onClick = { onBaseUrl(draft) }) { Text(text = "Apply") }
         }
     }
 }

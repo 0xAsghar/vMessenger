@@ -9,6 +9,7 @@ import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.common.network.P2PConfig
 import ir.vmessenger.core.datastore.P2PFlagSnapshot
+import ir.vmessenger.core.update.UpdateStore
 import ir.vmessenger.data.network.P2PConfigLoader
 import ir.vmessenger.domain.repository.DiscoveryRepository
 import ir.vmessenger.domain.usecase.discovery.JoinNetworkUseCase
@@ -17,6 +18,7 @@ import ir.vmessenger.network.messaging.RelayDirectory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -36,6 +38,8 @@ data class DebugUiState(
     val activeRelayCircuits: Int = 0,
     val relayBytesForwarded: Long = 0,
     val networkSnapshot: String? = null,
+    /** Where the updater looks for releases; null means the real GitHub API. */
+    val updateBaseUrl: String? = null,
 )
 
 data class P2PFlagsUiState(
@@ -56,6 +60,7 @@ class DebugViewModel @Inject constructor(
     private val publishNetworkEndpointsUseCase: PublishNetworkEndpointsUseCase,
     private val relayDirectory: RelayDirectory,
     private val p2pConfigLoader: P2PConfigLoader,
+    private val updateStore: UpdateStore,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(DebugUiState())
     val uiState: StateFlow<DebugUiState> = _uiState.asStateFlow()
@@ -63,7 +68,7 @@ class DebugViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             p2pConfigLoader.loadIntoConfig()
-            _uiState.update { it.copy(flags = currentFlags()) }
+            _uiState.update { it.copy(flags = currentFlags(), updateBaseUrl = updateStore.debugBaseUrl.first()) }
         }
         viewModelScope.launch {
             discoveryRepository.observeStatus().collect { status ->
@@ -130,6 +135,20 @@ class DebugViewModel @Inject constructor(
             p2pConfigLoader.resetToDefaults()
             _uiState.update { it.copy(flags = currentFlags()) }
             AppLogger.info("Debug", "p2p flags reset to defaults")
+        }
+    }
+
+    /**
+     * Points the updater at a local release server instead of GitHub. Debug builds only —
+     * `GitHubReleaseApi` refuses the override outright in a release build — and the whole
+     * reason it exists is so the update flow can be exercised without publishing anything.
+     * A blank value restores the real API.
+     */
+    fun setUpdateBaseUrl(url: String) {
+        val cleaned = url.trim().ifBlank { null }
+        viewModelScope.launch {
+            updateStore.setDebugBaseUrl(cleaned)
+            _uiState.update { it.copy(updateBaseUrl = cleaned) }
         }
     }
 

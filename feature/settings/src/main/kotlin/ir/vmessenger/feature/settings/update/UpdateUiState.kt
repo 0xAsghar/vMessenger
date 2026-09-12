@@ -15,8 +15,6 @@ import ir.vmessenger.domain.model.AvailableUpdate
  */
 @Immutable
 sealed interface UpdateUiState {
-    data object Idle : UpdateUiState
-
     data object Checking : UpdateUiState
 
     /** [lastCheckedLabel] is already formatted (Persian digits); null before the first check. */
