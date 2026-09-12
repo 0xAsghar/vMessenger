@@ -3,158 +3,94 @@ package ir.vmessenger.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavGraphBuilder
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import ir.vmessenger.feature.about.AboutRoute
-import ir.vmessenger.feature.debug.DebugRoute
-import ir.vmessenger.feature.debug.LogsRoute
 import ir.vmessenger.feature.identity.CreateIdentityRoute
-import ir.vmessenger.feature.identity.IdentityRoute
-import ir.vmessenger.feature.pairing.AddByHashRoute
-import ir.vmessenger.feature.pairing.MyQrRoute
-import ir.vmessenger.feature.pairing.QrScannerRoute
-import ir.vmessenger.feature.settings.NodeQrScannerRoute
-import ir.vmessenger.feature.settings.NodesRoute
-import ir.vmessenger.ui.home.HomeNavigation
-import ir.vmessenger.ui.home.HomeRoute
-import ir.vmessenger.ui.splash.SplashDestination
-import ir.vmessenger.ui.splash.SplashRoute
-import ir.vmessenger.ui.splash.SplashViewModel
-import kotlinx.coroutines.delay
 
+/**
+ * The outer graph: every destination except the four bottom-navigation tabs.
+ *
+ * [startRoute] is resolved before the first frame (see `MainViewModel`), so the
+ * host is never mounted on a placeholder destination and there is no in-app
+ * splash to navigate away from.
+ */
 @Composable
 fun VMessengerNavHost(
+    startRoute: VmRoute,
+    pendingConversationId: String?,
+    onPendingConversationHandled: () -> Unit,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
 ) {
+    PendingConversationEffect(
+        navController = navController,
+        startRoute = startRoute,
+        pendingConversationId = pendingConversationId,
+        onHandled = onPendingConversationHandled,
+    )
     NavHost(
         navController = navController,
-        startDestination = Routes.SPLASH,
+        startDestination = startRoute,
         modifier = modifier,
+        enterTransition = { sharedAxisEnter() },
+        exitTransition = { sharedAxisExit() },
+        popEnterTransition = { sharedAxisPopEnter() },
+        popExitTransition = { sharedAxisPopExit() },
     ) {
-        composable(Routes.SPLASH) {
-            SplashNavigationEffect(navController)
-        }
-        composable(Routes.CREATE_IDENTITY) {
+        composable<VmRoute.Onboarding> {
             CreateIdentityRoute(
                 onIdentityCreated = {
-                    navController.navigate(Routes.HOME) {
-                        popUpTo(Routes.CREATE_IDENTITY) { inclusive = true }
+                    navController.navigate(VmRoute.Home) {
+                        popUpTo<VmRoute.Onboarding> { inclusive = true }
                     }
                 },
             )
         }
-        composable(Routes.HOME) {
-            HomeRoute(
-                navigation = HomeNavigation(
-                    onMyQr = { navController.navigate(Routes.PAIRING_MY_QR) },
-                    onScanQr = { navController.navigate(Routes.PAIRING_SCAN) },
-                    onAddByHash = { navController.navigate(Routes.PAIRING_HASH) },
-                    onNavigateToDebug = { navController.navigate(Routes.DEBUG) },
-                    onNavigateToNodes = { navController.navigate(Routes.NODES) },
-                    onNavigateToAbout = { navController.navigate(Routes.ABOUT) },
-                    onNavigateToIdentity = { navController.navigate(Routes.IDENTITY) },
-                ),
-            )
-        }
-        composable(Routes.PAIRING_MY_QR) {
-            MyQrRoute(onNavigateBack = { navController.popBackStack() })
-        }
-        composable(Routes.PAIRING_SCAN) {
-            QrScannerRoute(
-                onDone = { navController.popBackStack() },
-                onNavigateBack = { navController.popBackStack() },
-            )
-        }
-        composable(Routes.PAIRING_HASH) {
-            AddByHashRoute(
-                onDone = { navController.popBackStack() },
-                onNavigateBack = { navController.popBackStack() },
-            )
-        }
-        composable(Routes.IDENTITY) {
-            IdentityRoute(onNavigateBack = { navController.popBackStack() })
-        }
-        debugRoutes(navController)
-        composable(Routes.ABOUT) {
-            AboutRoute(onNavigateBack = { navController.popBackStack() })
-        }
-    }
-}
-
-private fun NavGraphBuilder.debugRoutes(navController: NavHostController) {
-    composable(Routes.DEBUG) {
-        DeveloperToolsGate(onDenied = { navController.popBackStack() }) {
-            DebugRoute(
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToLogs = { navController.navigate(Routes.LOGS) },
-            )
-        }
-    }
-    composable(Routes.LOGS) {
-        DeveloperToolsGate(onDenied = { navController.popBackStack() }) {
-            LogsRoute(onNavigateBack = { navController.popBackStack() })
-        }
-    }
-    composable(Routes.NODES) {
-        NodesRoute(
-            onNavigateBack = { navController.popBackStack() },
-            onNavigateToScan = { navController.navigate(Routes.NODES_SCAN) },
-        )
-    }
-    composable(Routes.NODES_SCAN) {
-        NodeQrScannerRoute(
-            onDone = { navController.popBackStack() },
-            onNavigateBack = { navController.popBackStack() },
-        )
+        homeGraph(navController)
+        chatGraph(navController)
+        contactsGraph(navController)
+        pairingGraph(navController)
+        settingsGraph(navController)
+        developerToolsGraph(navController)
     }
 }
 
 /**
- * Renders [content] only while the developer tools are unlocked; otherwise pops
- * the destination, so a release build cannot reach Debug or Logs even through a
- * stale back stack entry after developer mode is switched off again.
+ * Consumes the conversation id a message notification put on the launch intent.
+ *
+ * It is applied exactly once, and only after [VmRoute.Home] has actually been on
+ * the stack — a tap that arrives while the app is still at onboarding must not
+ * push a conversation on top of it.
  */
 @Composable
-private fun DeveloperToolsGate(
-    onDenied: () -> Unit,
-    content: @Composable () -> Unit,
+private fun PendingConversationEffect(
+    navController: NavHostController,
+    startRoute: VmRoute,
+    pendingConversationId: String?,
+    onHandled: () -> Unit,
 ) {
-    val viewModel: DeveloperToolsViewModel = hiltViewModel()
-    val enabled by viewModel.developerToolsEnabled.collectAsStateWithLifecycle()
-    when (enabled) {
-        null -> Unit
-        true -> content()
-        false -> LaunchedEffect(Unit) { onDenied() }
+    val currentEntry by navController.currentBackStackEntryAsState()
+    var homeReached by rememberSaveable { mutableStateOf(startRoute == VmRoute.Home) }
+    LaunchedEffect(currentEntry) {
+        if (currentEntry?.destination?.hasRoute(VmRoute.Home::class) == true) {
+            homeReached = true
+        }
     }
-}
-
-@Composable
-private fun SplashNavigationEffect(navController: NavHostController) {
-    val viewModel: SplashViewModel = hiltViewModel()
-    val destination by viewModel.destination.collectAsStateWithLifecycle()
-    SplashRoute()
-    LaunchedEffect(destination) {
-        when (destination) {
-            SplashDestination.Loading -> Unit
-            SplashDestination.Home -> {
-                delay(800)
-                navController.navigate(Routes.HOME) {
-                    popUpTo(Routes.SPLASH) { inclusive = true }
-                }
+    LaunchedEffect(pendingConversationId, homeReached) {
+        if (pendingConversationId != null && homeReached) {
+            navController.navigate(VmRoute.Conversation(pendingConversationId)) {
+                launchSingleTop = true
+                popUpTo<VmRoute.Home>()
             }
-            SplashDestination.CreateIdentity -> {
-                delay(800)
-                navController.navigate(Routes.CREATE_IDENTITY) {
-                    popUpTo(Routes.SPLASH) { inclusive = true }
-                }
-            }
+            onHandled()
         }
     }
 }

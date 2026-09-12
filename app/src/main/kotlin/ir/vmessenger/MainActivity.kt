@@ -1,36 +1,22 @@
 package ir.vmessenger
 
-import android.Manifest
-import android.os.Build
+import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
-import ir.vmessenger.core.designsystem.theme.RtlLayout
-import ir.vmessenger.core.designsystem.theme.VMessengerTheme
-import ir.vmessenger.navigation.VMessengerNavHost
-import ir.vmessenger.ui.contact.ContactRequestOverlay
-import ir.vmessenger.ui.network.ClockWarningBanner
+import ir.vmessenger.core.notifications.MessageNotificationManager
+import ir.vmessenger.ui.VMessengerApp
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -38,55 +24,51 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        // The system splash stays up until the start destination is known, so the
+        // first composed frame is already the right screen — no in-app splash and
+        // no artificial delay.
+        splashScreen.setKeepOnScreenCondition { viewModel.startRoute.value == null }
         enableEdgeToEdge()
         // Secure by default: the flag is set before any content is drawn so the
         // first frame can never reach a screenshot, the recents thumbnail or a
         // screen recorder. It is cleared only if the user turned the setting off.
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         observeScreenSecurity()
+        handleDeepLink(intent)
 
         setContent {
             val darkThemePref by viewModel.darkTheme.collectAsStateWithLifecycle()
-            val darkTheme = when (val pref = darkThemePref) {
-                null -> isSystemInDarkTheme()
-                else -> pref
-            }
+            val startRoute by viewModel.startRoute.collectAsStateWithLifecycle()
+            val pendingConversationId by viewModel.pendingConversationId.collectAsStateWithLifecycle()
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val permissionLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestPermission(),
-                ) { }
-                LaunchedEffect(Unit) {
-                    val granted = ContextCompat.checkSelfPermission(
-                        this@MainActivity,
-                        Manifest.permission.POST_NOTIFICATIONS,
-                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                    if (!granted) {
-                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                }
-            }
-
-            RtlLayout {
-                VMessengerTheme(darkTheme = darkTheme) {
-                    // Root surface guarantees a themed background behind every
-                    // screen; bare-Column screens otherwise show the window
-                    // background, which may not match the in-app theme choice.
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background,
-                    ) {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            ContactRequestOverlay()
-                            VMessengerNavHost()
-                            ClockWarningBanner(modifier = Modifier.align(Alignment.TopCenter))
-                        }
-                    }
-                }
-            }
+            VMessengerApp(
+                darkTheme = darkThemePref ?: isSystemInDarkTheme(),
+                startRoute = startRoute,
+                pendingConversationId = pendingConversationId,
+                onPendingConversationHandled = viewModel::consumePendingConversation,
+            )
         }
+    }
+
+    /**
+     * `launchMode=singleTask` means a notification tap on a live process arrives
+     * here instead of `onCreate`; [setIntent] keeps `getIntent()` in step for
+     * anything that reads it later.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleDeepLink(intent)
+    }
+
+    private fun handleDeepLink(intent: Intent?) {
+        val conversationId = intent?.getStringExtra(MessageNotificationManager.EXTRA_CONVERSATION_ID)
+        // The intent outlives the activity, so the extra is consumed here: without
+        // this, every configuration change would reopen the same conversation.
+        intent?.removeExtra(MessageNotificationManager.EXTRA_CONVERSATION_ID)
+        viewModel.onDeepLink(conversationId)
     }
 
     private fun observeScreenSecurity() {

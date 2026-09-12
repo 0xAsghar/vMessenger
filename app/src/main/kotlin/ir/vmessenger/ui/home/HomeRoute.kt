@@ -1,5 +1,10 @@
 package ir.vmessenger.ui.home
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -22,100 +27,103 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavType
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import ir.vmessenger.R
 import ir.vmessenger.feature.chat.ChatRoute
-import ir.vmessenger.feature.chat.ConversationRoute
 import ir.vmessenger.feature.contacts.ContactsRoute
 import ir.vmessenger.feature.location.LocationRoute
 import ir.vmessenger.feature.settings.SettingsRoute
-import ir.vmessenger.navigation.Routes
+import ir.vmessenger.navigation.VmRoute
+
+private const val TAB_FADE_MS = 160
 
 private data class HomeTab(
-    val route: String,
+    val route: VmRoute,
     val labelRes: Int,
     val icon: @Composable () -> Unit,
 )
 
+private val HomeTabs = listOf(
+    HomeTab(VmRoute.ChatsTab, R.string.tab_chats) {
+        Icon(Icons.AutoMirrored.Outlined.Chat, contentDescription = null)
+    },
+    HomeTab(VmRoute.ContactsTab, R.string.tab_contacts) {
+        Icon(Icons.Outlined.Contacts, contentDescription = null)
+    },
+    HomeTab(VmRoute.MapTab, R.string.tab_location) {
+        Icon(Icons.Outlined.LocationOn, contentDescription = null)
+    },
+    HomeTab(VmRoute.SettingsTab, R.string.tab_settings) {
+        Icon(Icons.Outlined.Settings, contentDescription = null)
+    },
+)
+
+/**
+ * The tab shell: a bottom bar and an inner NavHost holding the four tabs, nothing
+ * else. Every full-screen destination is reached through [navigation], so the
+ * navigation bar can never be drawn over a conversation composer again.
+ */
 @Composable
 fun HomeRoute(
     navigation: HomeNavigation = HomeNavigation(),
+    modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
-    val tabs = listOf(
-        HomeTab(Routes.CHATS, R.string.tab_chats) {
-            Icon(Icons.AutoMirrored.Outlined.Chat, contentDescription = null)
-        },
-        HomeTab(Routes.CONTACTS, R.string.tab_contacts) {
-            Icon(Icons.Outlined.Contacts, contentDescription = null)
-        },
-        HomeTab(Routes.LOCATION, R.string.tab_location) {
-            Icon(Icons.Outlined.LocationOn, contentDescription = null)
-        },
-        HomeTab(Routes.SETTINGS, R.string.tab_settings) {
-            Icon(Icons.Outlined.Settings, contentDescription = null)
-        },
-    )
-
     val navController = rememberNavController()
-    val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route ?: Routes.CHATS
-    val openConversationId by viewModel.openConversationId.collectAsStateWithLifecycle()
+    val startedConversationId by viewModel.openConversationId.collectAsStateWithLifecycle()
 
-    LaunchedEffect(openConversationId) {
-        openConversationId?.let { conversationId ->
-            navController.navigate(Routes.conversation(conversationId)) {
-                launchSingleTop = true
-            }
+    // "Chat with this contact" resolves to a conversation id first; the outer
+    // graph then owns the destination.
+    LaunchedEffect(startedConversationId) {
+        startedConversationId?.let { conversationId ->
+            navigation.onOpenConversation(conversationId)
             viewModel.consumeOpenConversation()
         }
     }
 
     Scaffold(
+        modifier = modifier,
         containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = { HomeBottomBar(tabs, currentRoute, navController) },
+        // The shell itself pads nothing: the navigation bar consumes the bottom
+        // inset and each tab's top app bar consumes the status-bar inset, so the
+        // bars stay edge-to-edge and no inset is applied twice.
+        contentWindowInsets = WindowInsets(0),
+        bottomBar = { HomeBottomBar(navController) },
     ) { padding ->
         HomeTabNavHost(
             navController = navController,
             navigation = navigation,
-            chatNavigation = HomeChatNavigation(
-                onStartChat = viewModel::startChat,
-            ),
+            onStartChat = viewModel::startChat,
+            // consumeWindowInsets: the navigation-bar inset is already spent by the
+            // bottom bar, so a tab's own scaffold must not add it a second time.
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .consumeWindowInsets(padding),
         )
     }
 }
 
 @Composable
-private fun HomeBottomBar(
-    tabs: List<HomeTab>,
-    currentRoute: String,
-    navController: androidx.navigation.NavHostController,
-) {
+private fun HomeBottomBar(navController: NavHostController) {
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val destination = backStackEntry?.destination
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.background,
         tonalElevation = 0.dp,
     ) {
-        tabs.forEach { tab ->
+        HomeTabs.forEach { tab ->
             NavigationBarItem(
-                selected = currentRoute == tab.route,
-                onClick = {
-                    navController.navigate(tab.route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
+                // Before the inner graph is set there is no destination yet; the
+                // start tab is the honest answer for that one frame.
+                selected = destination?.hasRoute(tab.route::class) ?: (tab.route == VmRoute.ChatsTab),
+                onClick = { navController.navigateToTab(tab.route) },
                 icon = tab.icon,
                 label = { Text(text = stringResource(tab.labelRes)) },
                 colors = NavigationBarItemDefaults.colors(
@@ -130,45 +138,46 @@ private fun HomeBottomBar(
     }
 }
 
+/** Tab switching keeps one entry per tab and restores the tab's own state. */
+private fun NavHostController.navigateToTab(route: VmRoute) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
 @Composable
 private fun HomeTabNavHost(
-    navController: androidx.navigation.NavHostController,
+    navController: NavHostController,
     navigation: HomeNavigation,
-    chatNavigation: HomeChatNavigation,
+    onStartChat: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     NavHost(
         navController = navController,
-        startDestination = Routes.CHATS,
+        startDestination = VmRoute.ChatsTab,
         modifier = modifier,
+        // Tabs are siblings, not a hierarchy: they cross-fade instead of sliding.
+        enterTransition = { fadeIn(tween(TAB_FADE_MS)) },
+        exitTransition = { fadeOut(tween(TAB_FADE_MS)) },
+        popEnterTransition = { fadeIn(tween(TAB_FADE_MS)) },
+        popExitTransition = { fadeOut(tween(TAB_FADE_MS)) },
     ) {
-        composable(Routes.CHATS) {
-            ChatRoute(
-                onOpenConversation = { conversationId ->
-                    navController.navigate(Routes.conversation(conversationId)) {
-                        launchSingleTop = true
-                    }
-                },
-            )
+        composable<VmRoute.ChatsTab> {
+            ChatRoute(onOpenConversation = navigation.onOpenConversation)
         }
-        composable(
-            route = Routes.CONVERSATION,
-            arguments = listOf(
-                navArgument("conversationId") { type = NavType.StringType },
-            ),
-        ) {
-            ConversationRoute(onBack = { navController.popBackStack() })
-        }
-        composable(Routes.CONTACTS) {
+        composable<VmRoute.ContactsTab> {
             ContactsRoute(
                 onMyQr = navigation.onMyQr,
                 onScanQr = navigation.onScanQr,
                 onAddByHash = navigation.onAddByHash,
-                onStartChat = chatNavigation.onStartChat,
+                onStartChat = onStartChat,
             )
         }
-        composable(Routes.LOCATION) { LocationRoute() }
-        composable(Routes.SETTINGS) {
+        // Location sharing today; the full-screen map replaces this body in M4 P5.
+        composable<VmRoute.MapTab> { LocationRoute() }
+        composable<VmRoute.SettingsTab> {
             SettingsRoute(
                 onNavigateToDebug = navigation.onNavigateToDebug,
                 onNavigateToNodes = navigation.onNavigateToNodes,

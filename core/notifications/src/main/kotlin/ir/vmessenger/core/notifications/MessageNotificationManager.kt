@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import androidx.core.app.NotificationCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -22,6 +23,7 @@ import javax.inject.Singleton
 @Singleton
 class MessageNotificationManager @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val notificationTarget: NotificationTarget,
 ) {
     private val manager = context.getSystemService(NotificationManager::class.java)
 
@@ -47,6 +49,7 @@ class MessageNotificationManager @Inject constructor(
         val title = if (hideContent) APP_TITLE else senderName
         val text = if (hideContent) generic else preview
         val notification = baseBuilder()
+            .setContentIntent(conversationIntent(conversationId))
             .setContentTitle(title)
             .setContentText(text)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -80,6 +83,7 @@ class MessageNotificationManager @Inject constructor(
      */
     private fun publicVersion(hideContent: Boolean, generic: String): Notification =
         baseBuilder()
+            .setContentIntent(launchAppIntent())
             .setContentTitle(generic)
             .setVisibility(
                 if (hideContent) NotificationCompat.VISIBILITY_SECRET else NotificationCompat.VISIBILITY_PUBLIC,
@@ -90,8 +94,26 @@ class MessageNotificationManager @Inject constructor(
         NotificationCompat.Builder(context, CHANNEL_MESSAGES)
             .setSmallIcon(android.R.drawable.ic_dialog_email)
             .setAutoCancel(true)
-            .setContentIntent(launchAppIntent())
 
+    /**
+     * Opens [conversationId] rather than merely launching the app. The request code
+     * is per conversation so two notifications do not share (and overwrite) one
+     * PendingIntent, and CLEAR_TOP reuses the already running single-task activity,
+     * which then reports the extra through `onNewIntent`.
+     */
+    private fun conversationIntent(conversationId: String): PendingIntent {
+        val intent = Intent(context, notificationTarget.activityClass)
+            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra(EXTRA_CONVERSATION_ID, conversationId)
+        return PendingIntent.getActivity(
+            context,
+            conversationId.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    /** Content-free fallback for the lock screen: opens the app, names no conversation. */
     private fun launchAppIntent(): PendingIntent? {
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
             ?: return null
@@ -105,6 +127,9 @@ class MessageNotificationManager @Inject constructor(
 
     companion object {
         const val CHANNEL_MESSAGES = "messages"
+
+        /** Intent extra carrying the conversation a tapped notification should open. */
+        const val EXTRA_CONVERSATION_ID = "ir.vmessenger.extra.CONVERSATION_ID"
 
         /** Brand name, deliberately not a translatable resource. */
         private const val APP_TITLE = "vMessenger"

@@ -24,3 +24,10 @@
 # Room, Hilt, OkHttp/Okio, CameraX, ML Kit, DataStore and coroutines ship their
 # own consumer rules. NetworkPathTracker matches JDK exception class names
 # (java.security.cert.*) — platform classes are never renamed by R8.
+
+# Type-safe navigation: every VmRoute is matched by its kotlinx-serialization
+# serial name, and its generated serializer is only reached reflectively.
+# kotlinx-serialization ships consumer rules, but the route hierarchy is the one
+# place where losing a nested class would silently break navigation at runtime.
+-keep class ir.vmessenger.navigation.VmRoute { *; }
+-keep class ir.vmessenger.navigation.VmRoute$* { *; }
