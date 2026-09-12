@@ -3,21 +3,18 @@ package ir.vmessenger.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
-import ir.vmessenger.R
 import ir.vmessenger.feature.about.AboutRoute
 import ir.vmessenger.feature.debug.DebugRoute
 import ir.vmessenger.feature.debug.LogsRoute
 import ir.vmessenger.feature.identity.IdentityRoute
 import ir.vmessenger.feature.settings.NodeQrScannerRoute
 import ir.vmessenger.feature.settings.NodesRoute
-import ir.vmessenger.ui.placeholder.ComingSoonRoute
-
+import ir.vmessenger.feature.settings.update.UpdateRoute
 /** Everything reachable from the settings tab, as full screens outside the tab shell. */
 internal fun NavGraphBuilder.settingsGraph(navController: NavHostController) {
     composable<VmRoute.Identity> {
@@ -38,17 +35,8 @@ internal fun NavGraphBuilder.settingsGraph(navController: NavHostController) {
             onNavigateBack = { navController.popBackStack() },
         )
     }
-    composable<VmRoute.Backup> {
-        ComingSoonRoute(
-            title = stringResource(R.string.route_backup),
-            onNavigateBack = { navController.popBackStack() },
-        )
-    }
     composable<VmRoute.Update> {
-        ComingSoonRoute(
-            title = stringResource(R.string.route_update),
-            onNavigateBack = { navController.popBackStack() },
-        )
+        UpdateRoute(onBack = { navController.popBackStack() })
     }
 }
 

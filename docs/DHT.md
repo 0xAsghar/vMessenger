@@ -4,7 +4,7 @@ The DHT is vMessenger's decentralized routing layer. Its single job is to map an
 
 This document defines what the DHT stores (and never stores), the record format, the minimal MVP operation set, the key space, refresh/expiry semantics, anti-centralization rules, security, and the path to a full Kademlia implementation later.
 
-Related: discovery flow in [Discovery.md](Discovery.md); joining the DHT in [Bootstrap.md](Bootstrap.md); record signing in [Security.md](Security.md).
+Related: discovery flow in [Discovery.md](Discovery.md); joining the DHT is Section 4.1 below; record signing in [Security.md](Security.md); running a node of your own in [Deployment.md](Deployment.md).
 
 ---
 
@@ -91,19 +91,33 @@ flowchart TD
 
 ### 4.1 bootstrap
 
-Join the network by contacting one or more bootstrap nodes, learning initial routing contacts, and seeding the local routing table. Full flow in [Bootstrap.md](Bootstrap.md).
+A bootstrap node is an ordinary DHT node with a stable, reachable address that a joining device contacts to obtain its first routing contacts. It is not a message server, not an authentication server, not a contact or identity server, and it holds no authority over records: records are Ed25519-signed and every client verifies them itself (Section 7). Once a device has usable contacts, the bootstrap node's role is finished.
 
-Production bootstrap: `wss://relay.vmessenger.ir/dht` (WebSocket-secure through Arvan CDN + nginx TLS). Emulator dev may use raw TCP `10.0.2.2:46555` via `NetworkConfig.useDevBootstrap`.
+Bootstrap addresses reach the client through `BootstrapProvider` implementations, injected as a Hilt multibinding set and merged by [`BootstrapManager`](../network/bootstrap/src/main/kotlin/ir/vmessenger/network/bootstrap/BootstrapManager.kt), which sorts providers by descending `priority` and de-duplicates by address. Two providers exist:
+
+| Provider | Priority | Source |
+|---|---|---|
+| [`DatabaseBootstrapProvider`](../data/src/main/kotlin/ir/vmessenger/data/network/DatabaseBootstrapProvider.kt) | 200 | The enabled rows of the `bootstrap_node` table, healthiest first — built-in, user-added, imported and community nodes with their trust tier. Returns nothing while `P2PConfig.multiNodeEnabled` is off. |
+| [`BuiltInBootstrapProvider`](../network/bootstrap/src/main/kotlin/ir/vmessenger/network/bootstrap/BuiltInBootstrapProvider.kt) | 100 | A single shipped default, `NetworkConfig.effectiveBootstrapAddress()`, kept as a guaranteed fallback entry. |
+
+The design rule is that the app must never hard-depend on one operator: any sufficient set of nodes will do, and a user who adds their own node in **تنظیمات → نودهای شبکه** (a `vmnode:bootstrap:…` link or its QR) is a first-class source. What the current build actually ships is one built-in node, which is recorded as a limitation in [Security.md](Security.md) Section 10.
+
+`Dht.bootstrap(nodes)` in [`MinimalDht`](../network/dht/src/main/kotlin/ir/vmessenger/network/dht/MinimalDht.kt) sends a `Ping` to each candidate in turn, keeps the responders in `knownNodes`, and returns the responding subset so the caller can record per-node health and rotate away from unreachable nodes. Bootstrapping fails only when no candidate answers. Every address is gated by `NodeAddressPolicy` first: a release build dials `wss://` only, while `ws://` and bare `host:port` need a debug build and a local host.
+
+Production bootstrap: `wss://relay.vmessenger.ir/dht` (WebSocket-secure through Arvan CDN + nginx TLS). Emulator development may use raw TCP `10.0.2.2:46555` via `NetworkConfig.useDevBootstrap`. Operating a node of your own is covered end to end in [Deployment.md](Deployment.md).
+
+After a successful join the device keeps resolved records in a verified [`PeerEndpointCache`](../network/discovery/src/main/kotlin/ir/vmessenger/network/discovery/PeerEndpointCache.kt) and consults it before the network, so bootstrap availability affects the cold-join path rather than day-to-day messaging. A cached record never overrides a newer signed record.
 
 ### 4.2 publish (announce)
 
-- Compute the set of nodes closest to our identity hash (iterative node lookup over the XOR metric).
-- Send the signed `EndpointRecord` to those nodes with a `STORE`-style RPC; they validate and keep it until TTL.
+- Send the signed `EndpointRecord` to every reachable target with a `STORE` RPC; each target validates it and keeps it until TTL.
+- One unreachable or policy-rejected target never aborts the store at the others. The publish fails only when no target was reachable, or when every reachable target rejected the record.
+- Targets are the bootstrap addresses plus the nodes those returned. Closest-node selection over the XOR metric is the Kademlia design this leaves room for; `MinimalDht` does not implement it.
 
 ### 4.3 lookup (resolve)
 
-- Iteratively query progressively closer nodes for the target identity hash until a valid signed record is returned or the search is exhausted.
-- The client verifies signature, identity-hash match, TTL, and sequence before using the endpoints.
+- Ask each known target in turn for the identity hash until one returns a record; a failing target is skipped and only an all-fail run is an error. This is a flat sweep, not the iterative closest-node search of full Kademlia.
+- The client verifies signature, identity-hash match, TTL, and sequence before using the endpoints ([`EndpointRecordVerifier`](../network/dht/src/main/kotlin/ir/vmessenger/network/dht/EndpointRecordVerifier.kt)).
 
 ### 4.4 TTL (expiry)
 

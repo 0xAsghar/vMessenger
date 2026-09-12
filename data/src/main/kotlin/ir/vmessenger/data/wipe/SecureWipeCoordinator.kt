@@ -20,6 +20,7 @@ import ir.vmessenger.core.datastore.PrivacyPreferences
 import ir.vmessenger.core.datastore.SecurityPreferences
 import ir.vmessenger.core.datastore.ThemePreferences
 import ir.vmessenger.core.notifications.MessageNotificationManager
+import ir.vmessenger.core.update.UpdateStore
 import ir.vmessenger.data.attachment.AttachmentKeyProvider
 import ir.vmessenger.data.di.IoDispatcher
 import ir.vmessenger.data.network.LocationServiceControl
@@ -33,7 +34,6 @@ import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.system.exitProcess
-
 /**
  * Erases the account from this device: network down, database cleared/closed/
  * deleted, attachments, logs and caches removed, every DataStore emptied,
@@ -58,6 +58,7 @@ class SecureWipeCoordinator @Inject constructor(
     private val p2pPreferences: P2PPreferences,
     private val discoveryPreferences: DiscoveryPreferences,
     private val themePreferences: ThemePreferences,
+    private val updateStore: UpdateStore,
     private val draftPreferences: DraftPreferences,
     private val keyStoreKeyManager: KeyStoreKeyManager,
     private val selfIdentityCache: SelfIdentityCache,
@@ -118,6 +119,10 @@ class SecureWipeCoordinator @Inject constructor(
         p2pPreferences.clear()
         discoveryPreferences.clear()
         themePreferences.clear()
+        // The updater's store too: the last-checked stamp, the cached release and the version
+        // the user waved away all outlive a wipe otherwise, and they say when this device was
+        // last used and which build it was running.
+        updateStore.clear()
     }
 
     override fun resetInMemoryState() {

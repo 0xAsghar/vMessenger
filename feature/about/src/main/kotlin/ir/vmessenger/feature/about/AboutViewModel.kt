@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ir.vmessenger.core.common.AppBuildInfo
+import ir.vmessenger.core.common.network.ProtocolVersion
 import ir.vmessenger.core.datastore.PrivacyPreferences
+import ir.vmessenger.core.designsystem.format.VmTextFormat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,7 +31,12 @@ class AboutViewModel @Inject constructor(
     appBuildInfo: AppBuildInfo,
     private val privacyPreferences: PrivacyPreferences,
 ) : ViewModel() {
-    val versionName: String = appBuildInfo.versionName
+    /** `۱٫۰٫۰` and `۴۵` — the real running build, in Persian digits. */
+    val versionName: String = VmTextFormat.persianDigits(appBuildInfo.versionName)
+    val versionCode: String = VmTextFormat.persianDigits(appBuildInfo.versionCode.toString())
+
+    /** The wire major this build speaks; a peer on any other is refused outright. */
+    val protocolMajor: String = VmTextFormat.persianDigits(ProtocolVersion.MAJOR.toString())
 
     private val _developerModeStatus = MutableStateFlow<DeveloperModeStatus>(DeveloperModeStatus.Idle)
     val developerModeStatus: StateFlow<DeveloperModeStatus> = _developerModeStatus.asStateFlow()

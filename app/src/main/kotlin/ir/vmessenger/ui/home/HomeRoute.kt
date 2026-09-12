@@ -3,6 +3,7 @@ package ir.vmessenger.ui.home
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,6 +41,7 @@ import ir.vmessenger.feature.contacts.ContactsNavigation
 import ir.vmessenger.feature.contacts.ContactsRoute
 import ir.vmessenger.feature.map.MapRoute
 import ir.vmessenger.feature.settings.SettingsRoute
+import ir.vmessenger.feature.settings.update.UpdateBanner
 import ir.vmessenger.navigation.VmRoute
 
 private const val TAB_FADE_MS = 160
@@ -97,17 +99,24 @@ fun HomeRoute(
         contentWindowInsets = WindowInsets(0),
         bottomBar = { HomeBottomBar(navController) },
     ) { padding ->
-        HomeTabNavHost(
-            navController = navController,
-            navigation = navigation,
-            onStartChat = viewModel::startChat,
+        Column(
             // consumeWindowInsets: the navigation-bar inset is already spent by the
             // bottom bar, so a tab's own scaffold must not add it a second time.
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .consumeWindowInsets(padding),
-        )
+        ) {
+            // Above the tabs, not inside one: an update is about the app, not about
+            // whichever screen the user happens to be on.
+            UpdateBanner(onOpen = navigation.onNavigateToUpdate)
+            HomeTabNavHost(
+                navController = navController,
+                navigation = navigation,
+                onStartChat = viewModel::startChat,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 
@@ -190,6 +199,7 @@ private fun HomeTabNavHost(
                 onNavigateToAbout = navigation.onNavigateToAbout,
                 onNavigateToIdentity = navigation.onNavigateToIdentity,
                 onNavigateToBlockedContacts = navigation.onNavigateToBlockedContacts,
+                onNavigateToUpdate = navigation.onNavigateToUpdate,
             )
         }
     }

@@ -48,7 +48,8 @@ import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 
 // TODO(core:map): the plan's mini-map card ("2.6 Contact detail") is left out until the new
-// core:map module exists; feature:location is deliberately not a dependency of this module.
+// Location sharing is toggled here, but the map that renders it lives in :feature:map,
+// which is deliberately not a dependency of this module.
 
 /** The taps the detail screen can produce, bundled to keep the content signatures short. */
 @Immutable

@@ -1,0 +1,184 @@
+# Changelog
+
+All notable changes to vMessenger are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+This file starts at 1.0. Earlier releases exist only as the `v0.1.0` … `v0.5.1` tags and their
+GitHub Releases; they were never tracked here and are not reconstructed.
+
+Two version numbers move independently of this file and are stated where they matter: the **wire
+protocol major** (currently 2, [docs/Protocol.md](docs/Protocol.md)) and the **database schema
+version** (currently 18, [docs/Database.md](docs/Database.md)).
+
+## [Unreleased]
+
+The 1.0 line. It carries a breaking wire-protocol change: **a 0.x install must be uninstalled
+before a 1.x build is installed**, and identity and contacts do not survive that. See
+[README.md](README.md).
+
+### Added
+
+- **Group chat.** A group is created locally and delivered as N pairwise sends over the existing
+  1:1 secure sessions, one outbox row each, so one unreachable member never holds the rest back.
+  Membership is creator-authoritative and versioned: every structural change is a `GroupControl`
+  from the creator at exactly `local + 1` carrying the full member list, and a device that sees a
+  gap asks for a snapshot rather than guessing. The conversation screen names the group, renders
+  membership changes as centred system lines, colours each sender's name on the first message of a
+  run, and keeps a closed group's history while removing its composer.
+- **Voice messages.** Hold the mic to record, slide toward the field to cancel, drag up to lock.
+  Playback is a single shared player, so two voice messages cannot talk over each other, and it
+  auto-advances through the unplayed messages that follow. "Unplayed" is persisted on the message
+  rather than held in memory, and is set when playback starts. Duration and waveform travel in the
+  transfer header, so a voice bubble has its shape before the audio lands.
+- **Per-recipient delivery state.** A group message's single tick is an aggregate — it turns to
+  delivered only once every member has it. Long-pressing one of your own group messages opens an
+  info sheet with one row per member and the moment they received and read it.
+- **A design system in `:core:designsystem`.** Spacing, size, elevation and shape tokens replace the
+  dp literals each screen was inventing; the Material 3 light and dark schemes are complete,
+  including the `surfaceContainer` ladder and inverse roles that components had been falling back
+  to stock purple for; all fifteen type styles are defined in Vazirmatn. `VmDateFormat` and
+  `VmTextFormat` render Jalali dates, Persian digits, file sizes, durations and relative times.
+  Alongside them is a component catalogue — avatar, chat-list item, message bubble, reply quote,
+  delivery ticks, date separator, composer, attachment sheet, empty state, skeleton list and the
+  rest. Described in [docs/UI.md](docs/UI.md).
+- **Type-safe navigation.** String routes are replaced by a `@Serializable VmRoute` hierarchy split
+  into per-area graph files. Message notifications open the conversation they belong to instead of
+  a bare launcher intent. The system splash is held until the start destination is known, so the
+  first composed frame is the right screen.
+- **Screens that had no UI behind an existing data path.** Contact delete, block and rename were
+  reachable from no screen; a blocked contact was filtered out of the list and so could not be
+  unblocked; the safety-number screen could not record an out-of-band comparison. All three now
+  exist, along with contact detail as a real navigation destination, an in-app zoomable image
+  viewer that decodes from the decrypted stream, a chat list with search and long-press selection,
+  and a full-screen map.
+- **Replies and drafts.** `replyToMessageId` was in the schema and in the wire proto but was never
+  written or read; the outbox now sets it, the inbound collector stores it, and the quoted preview
+  resolves in the same query. Composer text is persisted per conversation and cleared on send.
+- **Identity and contacts backup.** A passphrase-protected `.vmb` bundle (Argon2id13 +
+  XChaCha20-Poly1305) with restore inside a single database transaction.
+- **An in-app updater** in `:core:update`: it queries GitHub Releases, selects the APK matching the
+  device's ABI, and verifies the download against the release's published checksums and signer
+  before handing it to the package installer. `REQUEST_INSTALL_PACKAGES` had been declared in the
+  manifest for this since the permission pass; it is now used.
+- **A canonical node installer.** `scripts/setup-node.sh` renders the nginx and systemd templates,
+  installs a versioned `distTar`, obtains and renews a Let's Encrypt certificate, and health-checks
+  the result. It is idempotent. See [docs/Deployment.md](docs/Deployment.md).
+- **Release engineering.** The release workflow gates on `detekt unitTests`, refuses to publish
+  without the release keystore, builds per-ABI plus a universal APK, verifies every signature with
+  `apksigner`, and attaches checksums, signing metadata, the node tarball and the R8 mapping.
+
+### Changed
+
+- **Wire protocol major 2.** The handshake, the AEAD associated data, every signed transcript and
+  the User Hash format (`vm1-` → `vm2-`) changed together. 0.x clients are rejected with a `CLOSE`
+  frame and no compatibility shim exists in the app. The node accepts v1 and v2 proofs and records
+  during the transition.
+- **Database schema 18.** `conversation.contactId` became nullable and gained `groupId`, so one row
+  shape serves a 1:1 thread and a group; `outbox` was re-keyed to
+  `(messageId, recipientIdentityHash)`, which makes a 1:1 message the N = 1 case of a group send
+  and keeps one delivery pipeline rather than two; `message_recipient` holds the per-member state
+  the aggregate tick is derived from. Three tables were recreated rather than altered because
+  SQLite cannot relax a `NOT NULL` column or change a primary key.
+- **The conversation was hoisted out of the bottom-tab `NavHost`.** It had rendered the four-tab
+  navigation bar underneath the message composer. The conversation now owns the whole window and
+  the composer is the only owner of the bottom and IME insets.
+- **Messages are windowed.** The conversation query had no `LIMIT`, so opening a chat loaded the
+  entire thread and rebuilt the whole list on every new message. It now returns a newest-first
+  window of 60 that grows on scroll, and far enough to reach a quoted message.
+- **The chat list is one query.** `observeChatList()` is a single join over conversation, contact
+  and last message, replacing the UI's combine of two flows.
+- **Error text moved to the UI.** `lastError` is a stable code (`peer_protocol_outdated`,
+  `peer_key_changed`, `endpoint_not_found`, …) rather than a Persian sentence built in the data
+  layer.
+- **Attachments go through the Photo Picker**, and images open in the in-app viewer rather than
+  being handed to an arbitrary gallery app.
+- **Endpoint records are re-announced.** `EndpointAnnouncer` republishes every TTL/2 (10 minutes)
+  and on connectivity recovery. Records expired after 20 minutes and nothing refreshed them, so the
+  production node showed `dhtRecords 0` against live clients.
+- **Group controls are acknowledged like messages**, so the outbox stops retrying a change that has
+  already landed.
+- **Group control authority is the session.** `MessageEnvelope.sender_identity_hash` is
+  peer-controlled and is verified nowhere; every authorization decision uses the identity the
+  secure session authenticated. The comments that claimed otherwise now say what the code does.
+- **The project is licensed GPL-3.0.**
+
+### Fixed
+
+- **A re-sent membership snapshot erased a group's whole chat.** `@Insert(REPLACE)` is
+  `INSERT OR REPLACE`, which deletes the row before re-inserting it; on `chat_group` that cascaded
+  through `conversation` to every message. `GroupDao` now separates `insert` (IGNORE) from
+  `update`, and the cascade is pinned by a test on a real SQLite engine, where a list-backed fake
+  could never have modelled it.
+- **A recording never ended.** Replacing the composer with a recording bar took the mic button out
+  of composition and with it the pointer loop holding the gesture, so the release was delivered to
+  nothing. The mic now keeps its position in the same row while the rest of the composer swaps out.
+- **A long press could not reach a voice bubble.** The waveform covers most of the bubble and its
+  tap detector consumed the gesture, so reply, delete and info were unreachable on a voice message.
+- **The first messages from a newly approved contact were dropped.** An inbound session resolved the
+  contact id once, at handshake time, so a peer that dialled in as a stranger kept its provisional
+  `stranger:<hash>` id after approval and every later frame was rejected by the inbound policy. The
+  id is now re-resolved while it is provisional and the session rebinds.
+- **Read receipts were never sent and unread counts only grew.** `markConversationRead` and
+  `ActiveConversationTracker` existed but nothing outside the tests called either, so a
+  notification also fired while its conversation was open on screen.
+- **Avatars were blank on one side.** The identicon computed its mirrored column and never drew it.
+- **A group sender's name never resolved**, because the join compared a full 64-character hash
+  against a 32-character routing key.
+- **A manual retry could re-queue a recipient already in flight**, resetting its backoff and receipt
+  wait.
+- **A draft outlived the contact it was addressed to**, and contact deletion materialised every
+  message in a thread to collect attachment paths.
+- **Contact detail lost its selection on rotation** and system back left the tab rather than closing
+  the detail, because it was `remember` state behind an early return.
+- **The cold start flashed a mismatched colour** and the splash slept 800 ms.
+- **The tab scaffold applied a doubled top inset.**
+
+### Removed
+
+- `:core:storage` — it never contained anything but a placeholder marker object. Encrypted blob
+  storage lives in `data` alongside the attachment pipeline.
+- `:core:testing`, which held a single `MainDispatcherRule` that no module declared as a dependency.
+- `feature:location`, replaced by the `core:map` / `feature:map` pair.
+- Every `*ModuleMarker` placeholder, the `PairingRoute` "coming soon" screen and its string, and a
+  duplicate `:core:common` declaration in `feature:pairing`.
+- The dead `session` table, which was meant to go in migration 16. Sessions are connection-scoped
+  and were never persisted.
+- The hand-rolled thumbnail decoder with its English "MB"/"KB" formatting inside an RTL Persian UI,
+  both in-app splash files, and two voice components scaffolded in `:core:designsystem` that the
+  feature versions superseded.
+- `scripts/cli-smoke-test.sh`, `docs/Bootstrap.md` (folded into [docs/DHT.md](docs/DHT.md) §4.1) and
+  the pre-1.0 `vmessenger-relay` deploy artifacts.
+
+### Security
+
+- **The v2 handshake closes an active-MITM hole.** The responder's old signature covered only step
+  one, so an attacker could swap the responder's DH keys and read everything. The responder now
+  signs a canonical, length-prefixed transcript covering its own ephemeral, static and identity keys
+  and its capabilities. Three DHs with low-order point rejection; the HKDF root is bound to the full
+  transcript; the AEAD associated data binds version, frame type, sender key and counter.
+- **The ratchet is bounded.** `MAX_SKIP` = 256 is enforced *before* any KDF, since a forged counter
+  could otherwise burn roughly two billion HMACs. The skipped-key store is bounded, used keys are
+  wiped, state commits only after a successful open, and wiped or closed sessions refuse further
+  frames.
+- **X25519 static keys are pinned.** A changed key is refused and recorded for re-verification
+  rather than silently trusted.
+- **Inbound authorization is a single policy.** Blocked contacts are rejected at the handshake, at
+  the dispatcher and at every content kind. A stranger may complete a handshake but only
+  `ContactRequest` and `ContactResponse` are accepted from one.
+- **Group membership is authorization, not metadata.** `group_id` is peer-controlled, so being an
+  approved contact is not enough to write into a group: it must exist locally, not be closed, and
+  the sender must be an active member — checked before a message is persisted and before a single
+  attachment chunk is staged. A receipt counts only if its sender is actually a recipient of the
+  message.
+- **Platform hardening.** Cleartext traffic is refused in release builds; `FLAG_SECURE` is applied
+  before the first frame, so the first frame can never reach a screenshot or the recents thumbnail;
+  notifications are `VISIBILITY_PRIVATE` with a content-free public version; Keystore blobs are
+  versioned and bind their alias as AAD, using StrongBox where the device supports it; debug and log
+  screens are unreachable in release unless developer mode is unlocked.
+- **The secure wipe actually wipes.** It previously cleared identity and keys only, leaving
+  messages, attachments, logs, the DataStore-held database passphrase and the Keystore key behind.
+- **The reference node was hardened**: connection and record limits, listener-proof freshness and
+  replay rejection, record expiry, and rejection counters on `/healthz?verbose=1`.
+
+[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v0.5.1...HEAD

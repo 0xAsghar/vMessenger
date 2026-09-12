@@ -26,12 +26,14 @@ import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -50,9 +52,12 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.datastore.ThemeMode
+import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.SettingsDivider
 import ir.vmessenger.core.designsystem.component.SettingsSection
+import ir.vmessenger.core.designsystem.component.UserHashText
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.theme.VmSizes
 
 @Suppress("LongParameterList") // one entry per destination the settings tab can reach
 private data class SettingsNavigation(
@@ -63,6 +68,7 @@ private data class SettingsNavigation(
     val onSecureWipe: () -> Unit,
     val onBackup: () -> Unit,
     val onBlockedContacts: () -> Unit,
+    val onUpdate: () -> Unit,
 )
 
 /** The privacy section's switch states, bundled so the composable stays short on parameters. */
@@ -81,6 +87,7 @@ fun SettingsRoute(
     onNavigateToAbout: () -> Unit = {},
     onNavigateToIdentity: () -> Unit = {},
     onNavigateToBlockedContacts: () -> Unit = {},
+    onNavigateToUpdate: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     var showWipeDialog by remember { mutableStateOf(false) }
@@ -102,6 +109,7 @@ fun SettingsRoute(
                 onAbout = onNavigateToAbout,
                 onIdentity = onNavigateToIdentity,
                 onBlockedContacts = onNavigateToBlockedContacts,
+                onUpdate = onNavigateToUpdate,
                 onSecureWipe = { showWipeDialog = true },
                 onBackup = {
                     viewModel.dismissBackupStatus()
@@ -150,6 +158,8 @@ private fun SettingsContent(
     val sendReadReceipts by viewModel.sendReadReceipts.collectAsStateWithLifecycle()
     val backupStatus by viewModel.backupExportStatus.collectAsStateWithLifecycle()
     val developerToolsVisible by viewModel.developerToolsVisible.collectAsStateWithLifecycle()
+    val profile by viewModel.profile.collectAsStateWithLifecycle()
+    val updateAvailable by viewModel.updateAvailable.collectAsStateWithLifecycle()
 
     Column(
         modifier = modifier
@@ -158,6 +168,7 @@ private fun SettingsContent(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
+        profile?.let { ProfileHeader(profile = it, onClick = navigation.onIdentity) }
         SettingsThemeSection(themeMode = themeMode, onThemeMode = viewModel::setThemeMode)
         SettingsPrivacySection(
             toggles = PrivacyToggles(
@@ -189,6 +200,7 @@ private fun SettingsContent(
                 )
             }
         }
+        SettingsUpdateSection(available = updateAvailable, onUpdate = navigation.onUpdate)
         SettingsIdentitySection(
             onIdentity = navigation.onIdentity,
             onAbout = navigation.onAbout,
@@ -393,6 +405,40 @@ private fun isIgnoringBatteryOptimizations(context: android.content.Context): Bo
 }
 
 @Composable
+private fun SettingsUpdateSection(available: Boolean, onUpdate: () -> Unit) {
+    SettingsSection(title = stringResource(R.string.settings_update_section)) {
+        SettingsActionRow(
+            label = stringResource(R.string.settings_update_row),
+            icon = Icons.Outlined.SystemUpdate,
+            onClick = onUpdate,
+            badge = available,
+        )
+    }
+}
+
+/**
+ * Who this device is. The user hash is the one thing they hand to other people, so it sits in
+ * the header rather than a screen deeper; tapping opens the identity screen with the QR.
+ */
+@Composable
+private fun ProfileHeader(profile: SettingsProfile, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Avatar(seed = profile.identityHash, name = profile.displayName, size = VmSizes.avatarLg)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(text = profile.displayName, style = MaterialTheme.typography.titleMedium)
+            UserHashText(text = profile.userHash, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
 private fun SettingsIdentitySection(
     onIdentity: () -> Unit,
     onAbout: () -> Unit,
@@ -449,6 +495,7 @@ private fun SettingsActionRow(
     icon: ImageVector,
     onClick: () -> Unit,
     destructive: Boolean = false,
+    badge: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -471,6 +518,24 @@ private fun SettingsActionRow(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
             color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.weight(1f),
+        )
+        if (badge) NewVersionBadge()
+    }
+}
+
+/** A word, not a dot: "new version" says what is waiting without the user having to open it. */
+@Composable
+private fun NewVersionBadge() {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Text(
+            text = stringResource(R.string.settings_update_badge),
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
         )
     }
 }

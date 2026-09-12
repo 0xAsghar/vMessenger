@@ -26,7 +26,7 @@ flowchart TD
     fPairing["feature:pairing"]
     fContacts["feature:contacts"]
     fChat["feature:chat"]
-    fLocation["feature:location"]
+    fMap["feature:map"]
     fSettings["feature:settings"]
     fDebug["feature:debug"]
     fAbout["feature:about"]
@@ -48,11 +48,12 @@ flowchart TD
     cCrypto["core:crypto"]
     cProto["core:proto"]
     cDb["core:database"]
-    cStore["core:storage"]
     cData2["core:datastore"]
     cLoc["core:location"]
+    cMap["core:map"]
     cNotif["core:notifications"]
     cDesign["core:designsystem"]
+    cUpdate["core:update"]
   end
 
   app --> featureLayer
@@ -63,11 +64,14 @@ flowchart TD
   data --> domain
   data --> networkLayer
   data --> cDb
-  data --> cStore
   data --> cData2
   data --> cLoc
-  fLocation --> data
-  fLocation --> cLoc
+  data --> cNotif
+  fMap --> data
+  fMap --> cMap
+  cMap --> cLoc
+  cMap --> cDesign
+  data --> cUpdate
   networkLayer --> cCrypto
   networkLayer --> cProto
   networkLayer --> cCommon
@@ -91,13 +95,14 @@ The project brief lists conceptual modules. Each maps to one or more Gradle modu
 | Discovery | `network:discovery` |
 | Transport | `network:transport` |
 | Messaging | `network:messaging` |
-| Location | `core:location` (service/sampling), `feature:location` (UI) |
-| Storage | `core:storage` |
+| Location | `core:location` (service/sampling), `core:map` (MapLibre rendering), `feature:map` (UI) |
+| Storage | `core:database` (structured data), `data` (encrypted attachment blobs) |
 | Database | `core:database` |
 | Networking | `network:discovery`, `network:dht`, `network:bootstrap`, `network:transport`, `network:messaging` |
 | Utilities | `core:common` |
 | Notifications | `core:notifications` |
 | Settings | `feature:settings`, `core:datastore` |
+| Updates | `core:update` (release lookup, verification, install), `feature:settings` (UI) |
 | Testing | test sources in every module; `./gradlew unitTests` aggregates them (see [Testing.md](Testing.md)) |
 
 Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pieces of "Networking" are first-class modules (`network:dht`, `network:bootstrap`).
@@ -112,13 +117,13 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 
 ### domain
 - Pure Kotlin. Entities, value objects, repository interfaces, use cases. No Android, no framework.
-- Key v0.2.0 additions: `ContactRelationshipStatus`, `ContactRequest`, `LocationAccessRepository`, `ContactRequestSender`, `UpdateDisplayNameUseCase`, `SendContactRequestUseCase`.
+- Use cases are grouped by area under `domain/usecase/` — `chat/`, `group/`, `update/` and the rest — so a feature's surface is visible from the package list.
 - Depends on: `core:common` only.
 
 ### data
 - Repository implementations; coordinates local stores and the networking facade; mappers between Protobuf, Room, and domain models.
 - Network coordinators: `NetworkCoordinator`, `IncomingMessageCollector`, `OutboxDispatcher`, `LocationSharingCoordinator`, `ContactRequestHandler`/`Service`/`Notifier`.
-- Depends on: `domain`, `network:*`, `core:database`, `core:storage`, `core:datastore`, `core:location`, `core:proto`, `core:common`.
+- Depends on: `domain`, `network:*`, `core:database`, `core:crypto`, `core:datastore`, `core:location`, `core:notifications`, `core:proto`, `core:common`.
 
 ### feature:identity
 - Create Identity (intro → display name → keygen → success) and identity settings (edit display name, share User Hash).
@@ -133,16 +138,17 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 - Depends on: `domain`, `core:designsystem`.
 
 ### feature:chat
-- Chats list and Conversation screens, message composer, status rendering.
+- The chat list (`ChatRoute`), the conversation (`ConversationRoute`/`ConversationHost` and its chrome, list, bubbles and per-recipient info sheet), the new-chat picker, and the in-app image viewer. Two sub-packages carry the newer work: `group/` (create a group, group info, member picker) and `voice/` (the composer mic button and its record-audio permission).
 - Depends on: `domain`, `core:designsystem`.
 
-### feature:location
-- Live Location management (`LocationRoute`, `LocationViewModel`), MapLibre map (`LocationMapView`), per-contact allow list, start/stop sharing.
-- Depends on: `domain`, `data` (for `LocationSharingCoordinator`), `core:designsystem`, `core:location`, MapLibre Android SDK.
+### feature:map
+- The full-screen map (`MapRoute`, `MapViewModel`, `MapUiState`), its controls and bottom sheets (`MapControls`, `MapSheet`, `SharePickerSheet`), the per-contact share picker, and runtime location-permission handling (`LocationPermissionController`).
+- Depends on: `domain`, `data` (for `LocationSharingCoordinator`), `core:designsystem`, `core:location`, `core:map`.
+- This is the only feature module that depends on `data`; the reason is recorded in [Architecture.md](Architecture.md) Section 6.
 
 ### feature:settings
-- Settings UI (appearance, privacy, network/bootstrap, identity), entry to Debug/About.
-- Depends on: `domain`, `core:designsystem`, `core:datastore`.
+- Settings UI (appearance, privacy, network nodes, identity, backup export), the blocked-contacts screen, the node QR scanner, the in-app update screen and its banner, and the entry points to Debug and About.
+- Depends on: `domain`, `core:designsystem`, `core:datastore`, `core:common`.
 
 ### feature:debug
 - Diagnostics UI (join status, routing table, connections, crypto self-test).
@@ -161,8 +167,8 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 - Depends on: `network:bootstrap`, `core:crypto`, `core:proto`, `core:common`.
 
 ### network:bootstrap
-- `BootstrapProvider` interface, built-in/community/user/self-hosted providers, `BootstrapManager`, join logic, peer cache.
-- Depends on: `core:crypto`, `core:proto`, `core:common`.
+- The `BootstrapProvider` contract, the `BootstrapNode` value type, `BuiltInBootstrapProvider` (the single shipped default) and `BootstrapManager`, which merges every provider by descending priority and de-duplicates by address. The database-backed provider that supplies user, imported and community nodes lives in `data` because it needs the node repository. See [DHT.md](DHT.md) Section 4.1.
+- Depends on: `core:common`.
 
 ### network:transport
 - `Transport`/`Connection` contracts, Internet (TCP) transport, framing, `TransportSelector`; future Bluetooth/Wi-Fi Direct/mesh transports as sibling modules or implementations.
@@ -188,9 +194,13 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 - Room database, entities, DAOs, type converters, SQLCipher `SupportFactory`, migrations. See [Database.md](Database.md).
 - Depends on: `core:common`, `core:crypto` (for the wrapped DB key).
 
-### core:storage
-- Encrypted file/blob storage (AEAD under Keystore-wrapped keys) for large/sensitive payloads.
-- Depends on: `core:common`, `core:crypto`.
+### core:map
+- The MapLibre wrapper the app renders through: `VmMapView` and `MapViewCache`, `MapController` and `MapCamera`, the marker layer and its bitmap generation (`MarkerLayer`, `MarkerBitmaps`, `MarkerCanvas`), the own-position puck (`MapPuck`), the style descriptor (`MapStyle`) and a `BusLocationEngine` that feeds MapLibre from `LocationUpdateBus`.
+- Depends on: `domain`, `core:common`, and — as `api` dependencies, since callers use their types — `core:designsystem`, `core:location` and the MapLibre Android SDK.
+
+### core:update
+- The in-app updater's non-UI half: `GitHubReleaseApi` (release lookup), `AssetSelector` (per-ABI APK choice), `SemVer`, `ChecksumFile` and `SigningInfoReader` (verifying the download against the release's published checksums and signer), `UpdateDownloader`, `UpdateInstaller` (hands the package installer a FileProvider content URI) and `UpdatePreferences`. The screen that drives it lives in `feature:settings`.
+- Depends on: `core:common`, OkHttp, kotlinx-serialization, DataStore. It is consumed by `data` (as an `api` dependency), which implements `domain`'s `UpdateRepository` over it, so `feature:settings` reaches the updater through use cases like every other feature.
 
 ### core:datastore
 - Jetpack DataStore for non-sensitive preferences; encrypted handling for sensitive flags.
@@ -221,15 +231,16 @@ A typical feature module follows a consistent internal structure:
 ```
 feature/chat/
   src/main/kotlin/ir/vmessenger/feature/chat/
-    ChatListScreen.kt
+    ChatRoute.kt              <- route composable (the screen's entry point)
     ChatListViewModel.kt
-    ConversationScreen.kt
+    ChatListUiState.kt        <- immutable UI state next to its view model
+    ConversationRoute.kt
     ConversationViewModel.kt
-    components/         <- screen-specific composables
-    model/             <- UI state + UI models
-    di/                <- Hilt module(s) for this feature
-  src/test/kotlin/...  <- ViewModel/unit tests
-  src/androidTest/...  <- Compose UI tests
+    ConversationUiState.kt
+    group/                    <- sub-feature package
+    voice/
+  src/main/res/values/strings.xml   <- this module's user-facing text
+  src/test/kotlin/...               <- ViewModel/unit tests
   build.gradle.kts
 ```
 
@@ -238,12 +249,12 @@ A typical core/network module:
 ```
 network/dht/
   src/main/kotlin/ir/vmessenger/network/dht/
-    Dht.kt              <- interface
-    KademliaDht.kt      <- implementation
-    RoutingTable.kt
-    rpc/                <- DhtNode client
+    MinimalDht.kt              <- the Dht interface, DhtRpcClient and the client implementation
+    DhtRpcSender.kt            <- the RPC seam the tests fake
+    EndpointRecordVerifier.kt  <- signature, hash, TTL and sequence checks
+    EmbeddedDhtService.kt      <- opt-in on-device node, with its routing table and policy
     di/
-  src/test/kotlin/...   <- simulated DHT + TTL/refresh tests
+  src/test/kotlin/...          <- simulated DHT + TTL/refresh tests
   build.gradle.kts
 ```
 
@@ -269,7 +280,7 @@ vMessenger/
   build.gradle.kts
   gradle/
     libs.versions.toml
-    version.properties          <- versionName / versionCode (currently 0.5.1 / 45)
+    version.properties          <- versionName / versionCode
   build-logic/                 <- convention plugins
   app/
     src/main/kotlin/ir/vmessenger/
@@ -284,14 +295,14 @@ vMessenger/
       network/                   <- coordinators, ContactRequest*, LocationSharingCoordinator
       di/
   feature/
-    identity/  pairing/  contacts/  chat/  location/  settings/  debug/  about/
+    identity/  pairing/  contacts/  chat/  map/  settings/  debug/  about/
   network/
     discovery/  dht/  bootstrap/  transport/  messaging/
   core/
-    common/  crypto/  proto/  database/  storage/  datastore/  location/  notifications/  designsystem/
+    common/  crypto/  proto/  database/  datastore/  location/  map/  notifications/  designsystem/  update/
   node/                        <- standalone JVM bootstrap/DHT + relay node (`:node` Gradle module)
   deploy/                      <- nginx + systemd templates for a node host
-  scripts/                     <- setup-node.sh, emulator-connect.sh, cli-smoke-test.sh, sign-node-record
+  scripts/                     <- setup-node.sh, emulator-connect.sh, p2p-terminal-check.sh, sign-node-record
   docs/                        <- this documentation set
   vMessenger-icon/             <- launcher icons and brand logos
   README.md
@@ -303,7 +314,7 @@ The tree above is implemented. New capabilities are added as vertical slices beh
 
 ## 8. How the structure protects the architecture
 
-- The compiler enforces the Dependency Rule: `domain` cannot import Android, `feature:*` cannot import `data`/`network` internals, and `network:*` cannot import UI.
+- The compiler enforces the Dependency Rule: `domain` cannot import Android, `network:*` cannot import UI, and a `feature:*` module can reach only what its `build.gradle.kts` declares. `feature:map` is the one module that declares `data`, for `LocationSharingCoordinator`; every other feature module goes through `domain` use cases.
 - New transports/discovery providers are new modules wired via Hilt multibinding - no edits to existing layers (see [Network.md](Network.md) Section 9).
 - Cryptography is quarantined in `core:crypto`, simplifying audit (see [Security.md](Security.md)).
-- Feature isolation keeps build times low and makes future features (groups, calls, files) additive.
+- Feature isolation keeps build times low and makes new features additive. Groups, voice messages and the map rebuild all landed without touching the networking or crypto contracts.

@@ -12,6 +12,7 @@ import java.util.Date
  * Persian calendar and Extended Arabic-Indic digits; [VmTextFormat] supplies the parts that
  * have no ICU equivalent (byte sizes, durations, relative ages) and is unit-tested directly.
  */
+@Suppress("TooManyFunctions") // one function per place a date or size is rendered; a catalogue, not a class
 object VmDateFormat {
 
     private const val TODAY = "امروز"
@@ -23,6 +24,8 @@ object VmDateFormat {
     private const val PATTERN_DAY_MONTH_YEAR = "d MMMM y"
     private const val PATTERN_SHORT_DATE = "d MMM"
     private const val PATTERN_SHORT_DATE_YEAR = "d MMM y"
+
+    private const val DAY_TIME_SEPARATOR = "، "
 
     private val persianLocale = ULocale("fa_IR@calendar=persian")
 
@@ -55,6 +58,10 @@ object VmDateFormat {
             else -> format(PATTERN_SHORT_DATE_YEAR, ms)
         }
     }
+
+    /** `۱۲ شهریور، ۱۴:۰۵` — a moment that is not today, spelled out; used for "last checked". */
+    fun dayAndTime(ms: Long, nowMs: Long = System.currentTimeMillis()): String =
+        "${daySeparator(ms, nowMs)}$DAY_TIME_SEPARATOR${format(PATTERN_TIME, ms)}"
 
     /** `۱٫۲ مگابایت` — see [VmTextFormat.fileSize]. */
     fun fileSize(bytes: Long): String = VmTextFormat.fileSize(bytes)

@@ -74,9 +74,6 @@ sealed interface VmRoute {
     data object About : VmRoute
 
     @Serializable
-    data object Backup : VmRoute
-
-    @Serializable
     data object Update : VmRoute
 
     @Serializable

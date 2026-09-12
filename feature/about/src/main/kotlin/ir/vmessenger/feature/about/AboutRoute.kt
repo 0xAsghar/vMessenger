@@ -46,14 +46,31 @@ fun AboutRoute(
             )
             Text(text = stringResource(R.string.feature_about_app_name), style = MaterialTheme.typography.headlineSmall)
             Text(
-                text = stringResource(R.string.feature_about_version, viewModel.versionName),
+                text = stringResource(
+                    R.string.feature_about_version,
+                    viewModel.versionName,
+                    viewModel.versionCode,
+                ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.clickable(onClick = viewModel::onVersionTapped),
+            )
+            Text(
+                text = stringResource(R.string.feature_about_protocol, viewModel.protocolMajor),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             DeveloperModeStatusText(status = developerModeStatus)
             Text(
                 text = stringResource(R.string.feature_about_description),
                 style = MaterialTheme.typography.bodyMedium,
+            )
+            LabelledBlock(
+                title = stringResource(R.string.feature_about_license_title),
+                body = stringResource(R.string.feature_about_license_body),
+            )
+            LabelledBlock(
+                title = stringResource(R.string.feature_about_source_title),
+                body = stringResource(R.string.feature_about_source_url),
             )
             Text(
                 text = stringResource(R.string.feature_about_docs_hint),
@@ -62,6 +79,17 @@ fun AboutRoute(
             )
         }
     }
+}
+
+/** A titled paragraph; the licence and the source link are both one of these. */
+@Composable
+private fun LabelledBlock(title: String, body: String) {
+    Text(text = title, style = MaterialTheme.typography.titleSmall)
+    Text(
+        text = body,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

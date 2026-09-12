@@ -35,6 +35,8 @@ object VmTextFormat {
     /** Beyond this age a timestamp is shown as a Jalali date instead of a relative phrase. */
     const val RELATIVE_WINDOW_DAYS = 7
 
+    private const val PERCENT_SCALE = 100
+    private const val PERCENT_SIGN = "٪"
     private const val SECONDS_PER_MINUTE = 60
     private const val MINUTES_PER_HOUR = 60
 
@@ -54,6 +56,12 @@ object VmTextFormat {
             safe >= BYTES_PER_KIB -> "${persianDigits((safe / BYTES_PER_KIB).toString())} $UNIT_KIB"
             else -> "${persianDigits(safe.toString())} $UNIT_BYTE"
         }
+    }
+
+    /** `۴۲٪` — a 0..1 fraction as a whole percentage, clamped; used by progress readouts. */
+    fun percent(fraction: Float): String {
+        val clamped = fraction.coerceIn(0f, 1f)
+        return persianDigits(((clamped * PERCENT_SCALE).toInt()).toString()) + PERCENT_SIGN
     }
 
     /** `۰:۴۲`, `۱۲:۰۵`, `۱:۰۲:۰۳`. Used for voice messages and video length. */

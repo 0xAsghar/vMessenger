@@ -2,7 +2,7 @@
 
 This document defines the overall software architecture of vMessenger: the requirements it must satisfy, the architectural style, the module decomposition, dependency rules, dependency injection, concurrency model, and the end-to-end data flows that tie everything together.
 
-Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Security.md](Security.md), [Discovery.md](Discovery.md), [DHT.md](DHT.md), [Bootstrap.md](Bootstrap.md), [Database.md](Database.md), [Testing.md](Testing.md), [Deployment.md](Deployment.md), [UI.md](UI.md), [FolderStructure.md](FolderStructure.md).
+Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Security.md](Security.md), [Discovery.md](Discovery.md), [DHT.md](DHT.md), [Database.md](Database.md), [Testing.md](Testing.md), [Deployment.md](Deployment.md), [UI.md](UI.md), [FolderStructure.md](FolderStructure.md).
 
 ---
 
@@ -36,7 +36,7 @@ Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Securi
 
 - Minimum SDK 26 (Android 8.0); target the latest stable SDK.
 - The app uses direct TCP when possible and falls back to an encrypted circuit relay (`relay.vmessenger.ir` or user-configured nodes). ICE/STUN hole punching is not implemented.
-- Bootstrap nodes are used only to join the DHT; the app becomes bootstrap-independent after joining (see [Bootstrap.md](Bootstrap.md)).
+- Bootstrap nodes are used only to join the DHT; after joining, the verified peer-endpoint cache carries day-to-day resolution (see [DHT.md](DHT.md) Section 4.1).
 
 ---
 
@@ -113,9 +113,9 @@ Each layer depends only on the interface of the layer beneath it, so any layer c
 
 Pure Kotlin, no Android or framework dependencies. Contains:
 
-- Entities and value objects: `Identity`, `Contact`, `ContactRequest`, `ContactRelationshipStatus`, `Conversation`, `Message`, `DeliveryStatus`, `EndpointRecord`, `LocationSample`, `SessionState`.
-- Repository interfaces: `ContactRepository`, `ContactRequestRepository`, `MessageRepository`, `IdentityRepository`, `DiscoveryRepository`, `LocationRepository`, `LocationAccessRepository`, `SettingsRepository`.
-- Use cases: small, single-responsibility classes that orchestrate repositories, for example `GenerateIdentityUseCase`, `UpdateDisplayNameUseCase`, `AddContactByQrUseCase`, `AddContactByHashUseCase`, `SendContactRequestUseCase`, `SendMessageUseCase`, `ObserveConversationUseCase`, `ResolveEndpointUseCase`.
+- Entities and value objects: `Identity`, `Contact`, `ContactRequest`, `ContactRelationshipStatus`, `Conversation`, `Message`, `DeliveryStatus`, `EndpointRecord`, `LocationSample`, `SessionState`, and the group model in `domain/model/Group.kt`.
+- Repository interfaces: `ContactRepository`, `ContactRequestRepository`, `MessageRepository`, `IdentityRepository`, `DiscoveryRepository`, `LocationRepository`, `LocationAccessRepository`, `SettingsRepository`, `GroupRepository`.
+- Use cases: small, single-responsibility classes that orchestrate repositories, for example `GenerateIdentityUseCase`, `UpdateDisplayNameUseCase`, `AddContactByQrUseCase`, `AddContactByHashUseCase`, `SendContactRequestUseCase`, `SendMessageUseCase`, `SendVoiceUseCase`, `ObserveConversationUseCase`, `ResolveEndpointUseCase`, and the group set under `domain/usecase/group/` (`CreateGroupUseCase`, `AddGroupMembersUseCase`, `RemoveGroupMemberUseCase`, `UpdateGroupNameUseCase`, `LeaveGroupUseCase`, `CloseGroupUseCase`, `ObserveGroupUseCase`, `ObserveGroupMembersUseCase`, `AddContactFromGroupMemberUseCase`).
 
 Use cases express application business rules and are independently unit-testable with fake repositories.
 
@@ -164,14 +164,20 @@ The project is a Gradle multi-module build. Full details and package layout are 
 
 ```mermaid
 flowchart TD
-  app["app"] --> features["feature modules"]
-  app --> network["network modules"]
+  app["app"] --> features["feature:identity, pairing, contacts,<br/>chat, map, settings, debug, about"]
+  app --> network["network:discovery, dht, bootstrap,<br/>transport, messaging"]
   app --> coredata["data"]
   features --> domain["domain"]
   features --> designsystem["core:designsystem"]
+  featmap["feature:map"] --> coremap["core:map"]
+  featmap --> coredata
+  coremap --> designsystem
+  coremap --> corelocation["core:location"]
   coredata --> domain
   coredata --> database["core:database"]
   coredata --> datastore["core:datastore"]
+  coredata --> corelocation
+  coredata --> notifications["core:notifications"]
   coredata --> network
   network --> crypto["core:crypto"]
   network --> proto["core:proto"]
@@ -179,14 +185,21 @@ flowchart TD
   database --> common
   crypto --> common
   domain --> common
+  node["node (JVM)"] --> proto
+  node --> common
 ```
+
+`feature:map` is the one feature module that depends on `data`, because live-location sharing is driven by `LocationSharingCoordinator` rather than by a use case. Map rendering itself is factored out into `core:map` (MapLibre wrapper, camera, marker layer, location puck), which `feature:map` and the chat location preview both consume.
+
+Three module changes are recent enough to note explicitly. `core:storage` has been removed — it never held anything but a placeholder, and encrypted blob storage lives in `data` alongside the attachment pipeline. `feature:location` was replaced by the `core:map` / `feature:map` pair. And `core:update` was added for the in-app updater: release lookup, asset selection, checksum and signer verification, download and install, consumed by the update screen in `feature:settings`.
 
 Key rules:
 
 - `domain` depends on nothing but `core:common` (pure Kotlin).
-- `feature:*` modules depend on `domain` and `core:designsystem`, never on `data` internals or `network` internals directly.
+- `feature:*` modules depend on `domain` and `core:designsystem`, and never on `network` internals directly; `feature:map` is the documented exception for its `data` dependency.
 - `data` is the only module that wires repositories to `network`, `database`, and `datastore`.
 - `network:*` modules depend on `core:crypto`, `core:proto`, and `core:common`, and never on `feature` or `presentation` code.
+- `node` is a JVM module that shares `core:proto` and `core:common` with the app so transcripts and framing cannot drift between the two.
 
 This guarantees the Dependency Rule and keeps build times and blast radius small.
 
@@ -303,7 +316,7 @@ If endpoint resolution or connection fails, the message remains in the offline/r
 2. Starting share calls `LocationSharingCoordinator.startSharingToGrantedContacts()`, which starts `LocationService` (FGS) and creates outgoing `location_share` rows per granted contact.
 3. The coordinator sends `CONTROL_TYPE_LOCATION_SHARE_START`, then encrypts each GPS sample (15s interval via `LocationUpdateBus`) as a `LocationPacket`.
 4. Inbound location/control frames update `location_share` and `location_sample` via `IncomingMessageCollector` → `LocationSharingCoordinator`.
-5. The Map UI (`LocationMapView`, MapLibre) shows markers only for **mutual** active shares (both sides have an outgoing share toward each other).
+5. The map screen (`MapRoute` in `:feature:map`, rendering through `VmMapView` in `:core:map`) draws one marker per active **incoming** share joined to a known contact, plus the device's own position as a location puck. Mutual visibility is the intended rule — a contact's position is meant to appear only while we also share to them — and is enforced in `LocationRepositoryImpl`, not in the map screen.
 6. Stopping share sends `CONTROL_TYPE_LOCATION_SHARE_STOP` plus a final `LocationPacket` with `is_final = true`, stops the FGS, and clears active shares.
 
 ---
@@ -330,7 +343,7 @@ If endpoint resolution or connection fails, the message remains in the offline/r
 ## 13. How this architecture absorbs future features
 
 - New transport (Bluetooth, Wi-Fi Direct, mesh): add a module implementing `Transport`, register it with a Hilt `@IntoSet` binding; the transport selector picks it automatically. No changes to Messaging or UI.
-- Groups: add group entities and a group session strategy in Messaging/Encryption; the conversation abstraction already separates 1:1 from rendering.
+- Groups: delivered without a new session type. A group message is fanned out pairwise over the existing 1:1 sessions and membership is creator-authoritative; see [Protocol.md](Protocol.md) and [Security.md](Security.md). The absorbed cost was schema and fan-out, not a second encryption strategy.
 - Calls (voice/video): add a real-time media module that reuses Identity, Discovery, and the handshake for signaling.
 - Plugin system: plugins register via multibinding into well-defined extension points (transports, discovery providers, message handlers).
 

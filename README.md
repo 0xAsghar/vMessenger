@@ -7,14 +7,26 @@ vMessenger is a privacy-first messenger where each Android device is a peer that
 | | |
 |---|---|
 | Bundle ID | `ir.vmessenger.android` |
-| Version | **0.5.1** (`versionCode` 45, `gradle/version.properties`) |
+| Version | `versionName` / `versionCode` in [`gradle/version.properties`](gradle/version.properties) |
 | Platform | Android 8.0+ (API 26), compile/target SDK 35 |
 | UI language | Persian (RTL), Material 3, light/dark |
 | Wire protocol | **major 2** — not interoperable with 0.x builds ([docs/Protocol.md](docs/Protocol.md) §15) |
-| Database | Room over SQLCipher, **schema 17** |
+| Database | Room over SQLCipher, **schema 18** ([docs/Database.md](docs/Database.md)) |
 | License | GPL-3.0 ([LICENSE](LICENSE)) |
 
-> **0.x installs must be uninstalled before installing a 2.x build.** Protocol major 2 is a deliberate clean break: the handshake, the AEAD associated data, every signed transcript and the User Hash format (`vm1-` → `vm2-`) all changed, and no compatibility shim exists in the app. Identity and contacts do not survive the reinstall.
+> ## Uninstall any 0.x build before installing 1.x
+>
+> This is not a recommendation. Protocol major 2 is a deliberate clean break: the handshake, the
+> AEAD associated data, every signed transcript and the User Hash format (`vm1-` → `vm2-`) all
+> changed together, and no compatibility shim exists in the app. A 0.x client is rejected with a
+> `CLOSE` frame rather than downgraded.
+>
+> **There is no migration path and none is planned.** Uninstall the 0.x app, then install 1.x.
+> Identity, contacts and message history do not survive that, and the backup bundle is no help
+> either — it was added after the last 0.x release, so no 0.x build could produce one. Anyone you
+> had paired with must re-pair with you once you both have 1.x.
+
+What changed in 1.0 is in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -62,33 +74,38 @@ Implemented and verified on two emulators (see [docs/Testing.md](docs/Testing.md
 - **Identity** — Ed25519 + X25519 static key pair, display name, `vm2-` User Hash with a full-prefix checksum.
 - **Pairing** — signed QR descriptor (transcript v2) for instant in-person adds; User Hash adds that require mutual approval, with deterministic request ids and a repeat-request cap.
 - **Messaging** — 1:1 end-to-end encrypted chat with replies, delivery and read receipts (batched), a persistent encrypted outbox with backoff and a 24-hour retry window.
+- **Groups** — client-side fan-out over the existing pairwise sessions, with creator-authoritative versioned membership, gap detection and snapshot recovery, system lines for membership changes, and a closed group that keeps its history. A group message's single tick is aggregated from per-recipient state; a long press opens a per-member delivered/read sheet.
+- **Voice messages** — hold to record, slide to cancel, drag to lock; one shared player that auto-advances through unplayed messages, with duration and waveform carried in the transfer header so the bubble has its shape before the audio lands.
 - **Attachments** — images, videos and files up to 25 MB, chunked at 128 KiB over a single session, with a plaintext SHA-256 the receiver verifies, and encrypted at rest in a `VMA1` container.
 - **Live location** — MapLibre map, per-contact allow list, mutual visibility, foreground service, encrypted location packets, retention limits.
 - **Discovery** — minimal DHT (bootstrap, store, find-value, TTL, re-announce), verified peer/endpoint cache, relay fallback.
 - **Multi-node network** — database-backed bootstrap and relay lists with health ranking and a trust tier (built-in / user / official / community); add, enable, share and import nodes with `vmnode:bootstrap:…` / `vmnode:relay:…` links or QR.
 - **Security** — MITM-resistant v2 handshake, per-contact X25519 key pinning, inbound authorization on every envelope kind, SQLCipher database, Keystore-wrapped keys (StrongBox where available), `FLAG_SECURE`, private lock-screen notifications, boot-restart of the network service, and a complete secure wipe. See [docs/Security.md](docs/Security.md).
 - **Backup** — passphrase-protected identity/contacts backup bundle (Argon2id13 + XChaCha20-Poly1305).
+- **In-app updates** — checks GitHub Releases, picks the APK matching the device ABI, verifies it against the release's published checksums and signer before handing it to the package installer.
 - **Reference node** — a JVM bootstrap/DHT + relay node anyone can run ([docs/Deployment.md](docs/Deployment.md)).
 
-Not implemented: groups, voice or video calls, voice messages, Bluetooth / Wi-Fi Direct / mesh transports, geofencing, location analytics, SOS mode, a plugin system.
+Not implemented: voice or video calls, Bluetooth / Wi-Fi Direct / mesh transports, geofencing, location analytics, SOS mode, a plugin system.
 
 ---
 
 ## Known limitations
 
-An honest list of what does **not** work or is not protected today. Cryptographic detail is in [docs/Security.md](docs/Security.md) §10.
+An honest list of what does **not** work or is not protected today.
 
 ### Security and privacy
 
-- **No post-compromise security.** The session uses a symmetric ratchet, not a Double Ratchet — there is no DH step. Forward secrecy holds only for earlier frames of a live session; an attacker who captures live session state can follow that session to its end.
-- **Metadata is visible to relay and DHT nodes.** A relay sees which identity hashes are online, their IPs, who dials whom, and circuit lifetimes and byte counts. A DHT node sees every published endpoint record and every lookup. There is no padding, no cover traffic and no blinded lookup.
-- **Mailbox (store-and-forward) delivery has no forward secrecy** — blobs are sealed to a long-term X25519 static key. The feature is off by default.
-- **Contact keys are trust-on-first-use.** There is no out-of-band fingerprint or safety-number comparison.
-- **No UI to accept a contact's key change.** `ContactRepository.acceptKeyChange` is implemented and unit-tested, but nothing calls it, so a contact who reinstalls becomes permanently unreachable until that screen exists.
+The cryptographic and metadata gaps are enumerated as **L1–L14 in [docs/Security.md](docs/Security.md) §10**, with the file and flag behind each one. That table is the authoritative list and is not duplicated here. The four that most change what a user should expect:
+
+- **No post-compromise security.** The session uses a symmetric ratchet, not a Double Ratchet — there is no DH step (L1).
+- **Metadata is visible to relay and DHT nodes** — who is online, from which IP, who dials whom, and every endpoint record and lookup. There is no padding, no cover traffic and no blinded lookup (L2).
+- **Contact keys are trust-on-first-use**, and a contact whose key changes stays unreachable because nothing calls `acceptKeyChange` (L4, L5).
+- **A group's membership is whatever its creator says it is.** There is no group key, no admin transfer and no member-side veto, and the fan-out pattern itself tells a relay which peers form a group (L12, L13).
+
+Two more, outside that table:
+
 - **The operator trust anchor is a placeholder.** `NetworkConfig.OPERATOR_ED25519_PUBLIC_KEY_HEX` is 64 zeros, so no `SignedNodeRecord` can ever be marked `OFFICIAL`. It must be set before release.
-- **The Keystore master key deliberately does not require device unlock**, so the foreground service can decrypt while the screen is locked. An attacker who compromises the running OS also gets the data.
-- **No initiator identity hiding and no deniability** — the initiator's identity key is sent in the clear in handshake step 3, and both sides sign the transcript.
-- `REQUEST_INSTALL_PACKAGES` is declared in the manifest for an in-app updater that is not implemented.
+- **The in-app updater trusts GitHub as a distribution channel.** It verifies the download against the release's published checksums and signer, but the release metadata itself is fetched over TLS from GitHub rather than being signed by the project.
 
 ### Networking
 
@@ -103,9 +120,10 @@ An honest list of what does **not** work or is not protected today. Cryptographi
 ### Platform
 
 - **After a secure wipe the app does not come back to the foreground.** Android's background-activity-start restriction blocks the `AlarmManager` relaunch; the data is destroyed and the service restarts, but the user must tap the launcher icon.
-- **The `session` table is dead weight.** It is still in schema 17 but nothing reads or writes it — sessions are connection-scoped and never persisted.
-- **Room schemas 3, 4, 5 and 11 were never committed versions**, so the exported schema history has gaps. The migration chain itself is continuous.
-- **Feature flags gate unproven code paths, not absent ones.** Turning on peer exchange, embedded DHT, relay-peer mode, UDP attempts, store-and-forward or relay demotion in the debug screen enables code that the default build does not exercise.
+- **Room schemas 3, 4, 5 and 11 were never committed versions**, so the exported schema history has gaps. The migration chain itself is continuous and is replayed 1 → 18 on a real SQLite engine in a JVM test.
+- **Feature flags gate unproven code paths, not absent ones** (L14). Turning on peer exchange, embedded DHT, relay-peer mode, UDP attempts, store-and-forward or relay demotion in the debug screen enables code that the default build does not exercise.
+- **Map pin rendering has never been visually verified**, because `screencap` returns a black image on the software-GPU emulator MapLibre renders on. See [docs/UI.md](docs/UI.md) §8.
+- **There are no Compose UI tests and no accessibility audit.** The presentation layer is covered by ViewModel unit tests only.
 
 ---
 
@@ -113,7 +131,7 @@ An honest list of what does **not** work or is not protected today. Cryptographi
 
 - Kotlin, Clean Architecture + MVVM, Jetpack Compose + Material 3 (Persian / RTL)
 - Hilt, Coroutines + Flow
-- Room over SQLCipher (schema 17), DataStore for preferences
+- Room over SQLCipher (schema 18), DataStore for preferences
 - Protocol Buffers (proto3) for every wire format
 - libsodium (Lazysodium): Ed25519, X25519, ChaCha20-Poly1305-IETF, XChaCha20-Poly1305 secretstream, `crypto_box_seal`, Argon2id13, HKDF-SHA256; Android Keystore (AES-256-GCM, StrongBox where available) for key wrapping
 - MapLibre for the map; Ktor for the reference node
@@ -129,13 +147,13 @@ An honest list of what does **not** work or is not protected today. Cryptographi
 | [docs/Protocol.md](docs/Protocol.md) | framing, version negotiation, the v2 handshake, the ratchet, receipts, attachments, relay control, DHT RPC |
 | [docs/Security.md](docs/Security.md) | threat model, handshake guarantees, key pinning, inbound authorization, encryption at rest, secure wipe, known limitations |
 | [docs/Discovery.md](docs/Discovery.md) | the Discovery layer, QR and User Hash pairing, DHT resolution |
-| [docs/DHT.md](docs/DHT.md) | the minimal DHT design, signed routing records, TTL and refresh |
-| [docs/Bootstrap.md](docs/Bootstrap.md) | the `BootstrapProvider` interface and operating bootstrap nodes |
-| [docs/Database.md](docs/Database.md) | schema 17: entities, enums, indices, DAOs, the 1→17 migration chain |
+| [docs/DHT.md](docs/DHT.md) | the minimal DHT design, joining it, signed routing records, TTL and refresh |
+| [docs/Database.md](docs/Database.md) | schema 18: entities, enums, indices, DAOs, the 1→18 migration chain |
 | [docs/Testing.md](docs/Testing.md) | unit tests, node tests, the two-emulator procedure, the M3 scenario matrix, release verification |
 | [docs/Deployment.md](docs/Deployment.md) | operator runbook for running a relay/DHT node |
-| [docs/UI.md](docs/UI.md) | Persian RTL design system and screen specifications |
+| [docs/UI.md](docs/UI.md) | the design system, component catalogue, navigation, screens and the RTL/Persian rules |
 | [docs/FolderStructure.md](docs/FolderStructure.md) | the Gradle multi-module layout |
+| [CHANGELOG.md](CHANGELOG.md) | what each release changed |
 
 ---
 
@@ -145,14 +163,14 @@ An honest list of what does **not** work or is not protected today. Cryptographi
 vMessenger/
   app/                 <- Android application (Hilt, navigation, lifecycle service)
   build-logic/         <- Gradle convention plugins
-  core/                <- common, crypto, proto, database, storage, datastore, location, notifications, designsystem
+  core/                <- common, crypto, proto, database, datastore, location, map, notifications, designsystem
   data/                <- repository implementations, network coordinators, attachment + wipe + backup
   domain/              <- pure Kotlin domain layer
-  feature/             <- Compose feature modules
+  feature/             <- identity, pairing, contacts, chat, map, settings, debug, about
   network/             <- discovery, dht, bootstrap, transport, messaging
   node/                <- standalone JVM bootstrap/DHT + relay node
   deploy/              <- nginx and systemd templates for a production node host
-  scripts/             <- setup-node.sh, emulator-connect.sh, cli-smoke-test.sh, sign-node-record
+  scripts/             <- setup-node.sh, emulator-connect.sh, p2p-terminal-check.sh, sign-node-record
   docs/                <- this documentation set
   vMessenger-icon/     <- launcher icons and brand logos
 ```
@@ -176,9 +194,14 @@ Requirements: JDK 21 (Gradle toolchain; CI uses Temurin 21), Android SDK 35 with
 Updating `gradle/version.properties` on `main` runs a build-only check. Publishing requires a matching tag:
 
 ```bash
-git tag v0.5.1        # must equal versionName in gradle/version.properties
-git push origin v0.5.1
+git tag v1.0.0        # must equal versionName in gradle/version.properties
+git push origin v1.0.0
 ```
+
+The version is a single source of truth: `gradle/version.properties` still carries the previous
+`versionName`, and cutting 1.0 means bumping both fields there, moving the `## [Unreleased]` section
+of [CHANGELOG.md](CHANGELOG.md) under a dated `## [1.0.0]` heading, and setting
+`NetworkConfig.OPERATOR_ED25519_PUBLIC_KEY_HEX` to the real operator key.
 
 The [Release APK](.github/workflows/release-apk.yml) workflow gates on `detekt unitTests`, refuses to publish without the release keystore, builds per-ABI (`armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64`) plus a universal APK, verifies every signature with `apksigner` (failing on a debug certificate or mismatched signers), and attaches the APKs, `SHA256SUMS.txt`, `SIGNING.txt`, the node tarball and the R8 mapping to the GitHub Release.
 

@@ -14,12 +14,8 @@
     <string name="clock_warning_dismiss">بستن</string>
 
     <!-- Destinations whose screens land in a later milestone (M5/M6). -->
-    <string name="coming_soon_title">به‌زودی</string>
-    <string name="coming_soon_body">این بخش در نسخه‌های بعدی افزوده می‌شود.</string>
     <string name="route_new_chat">گفتگوی جدید</string>
     <string name="route_image_viewer">تصویر</string>
     <string name="route_contact_detail">مخاطب</string>
-    <string name="route_backup">پشتیبان‌گیری</string>
-    <string name="route_update">به‌روزرسانی</string>
     <string name="route_blocked_contacts">مخاطبین مسدودشده</string>
 </resources>

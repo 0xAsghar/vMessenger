@@ -2,7 +2,7 @@
 
 This document specifies the Discovery layer: how an identity becomes reachable and how a peer's current network endpoints are found. Discovery is deliberately modular and completely independent from Messaging - Messaging asks Discovery "where is identity X right now?" and never cares how the answer was obtained.
 
-Related: the DHT that backs Internet discovery is in [DHT.md](DHT.md); joining the DHT is in [Bootstrap.md](Bootstrap.md); the cryptography of pairing and signed records is in [Security.md](Security.md); wire formats are in [Protocol.md](Protocol.md).
+Related: the DHT that backs Internet discovery, and how a device joins it, are in [DHT.md](DHT.md); the cryptography of pairing and signed records is in [Security.md](Security.md); wire formats are in [Protocol.md](Protocol.md).
 
 ---
 

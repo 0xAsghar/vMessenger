@@ -22,7 +22,6 @@ import ir.vmessenger.domain.repository.ConversationRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -212,15 +211,18 @@ class ConversationRepositoryImpl @Inject constructor(
     override suspend fun saveDraft(conversationId: String, text: String) = writer.saveDraft(conversationId, text)
 
     /**
-     * A group transfer runs once per member, so progress is the union of the
-     * per-contact trackers of everyone the message is going to.
+     * A group transfer runs once per member, so progress is the union of the per-contact
+     * trackers of everyone the message is going to.
+     *
+     * It must emit even when there is nobody to track. The conversation screen `combine`s this
+     * with everything else it renders, and a flow that never emits holds the whole screen at
+     * its initial state — which is how a group whose last other member left came out blank,
+     * with no title, no messages and no error.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeAttachmentProgress(conversationId: String): Flow<Map<String, AttachmentProgress>> =
         flow { emit(progressContacts(conversationId)) }
-            .flatMapLatest { contactIds ->
-                if (contactIds.isEmpty()) emptyFlow() else transferTracker.forContacts(contactIds)
-            }
+            .flatMapLatest { contactIds -> transferTracker.forContacts(contactIds) }
 
     private suspend fun progressContacts(conversationId: String): Set<String> {
         val conversation = conversationDao.getById(conversationId)
