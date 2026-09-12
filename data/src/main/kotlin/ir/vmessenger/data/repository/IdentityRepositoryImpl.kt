@@ -78,12 +78,7 @@ class IdentityRepositoryImpl @Inject constructor(
         require(trimmed.length in DISPLAY_NAME_MIN..DISPLAY_NAME_MAX) {
             "نام باید بین $DISPLAY_NAME_MIN تا $DISPLAY_NAME_MAX کاراکتر باشد"
         }
-        require(cryptoEngine.ed25519PublicFromPrivate(ed25519Private).contentEquals(ed25519Public)) {
-            "کلید عمومی هویت با کلید خصوصی آن مطابقت ندارد"
-        }
-        require(cryptoEngine.x25519PublicFromPrivate(x25519StaticPrivate).contentEquals(x25519StaticPublic)) {
-            "کلید عمومی X25519 با کلید خصوصی آن مطابقت ندارد"
-        }
+        validateImportedKeys(ed25519Public, ed25519Private, x25519StaticPublic, x25519StaticPrivate)
         val identityHash = UserHashEncoder.identityHashFromPublicKey(ed25519Public)
         val now = System.currentTimeMillis()
         // Wrap before touching the database so a Keystore failure leaves no half-installed identity.
@@ -140,6 +135,33 @@ class IdentityRepositoryImpl @Inject constructor(
         keyMaterialDao.deleteAll()
     }
 
+    /**
+     * Rejects a backup whose key pairs do not belong together. The pub-from-priv check alone is tautological
+     * for a 64-byte ed25519 secret key (its public half is simply bytes 32..64), so a real sign/verify round
+     * trip over fresh random bytes proves the seed half actually produces that public key.
+     */
+    private fun validateImportedKeys(
+        ed25519Public: ByteArray,
+        ed25519Private: ByteArray,
+        x25519StaticPublic: ByteArray,
+        x25519StaticPrivate: ByteArray,
+    ) {
+        require(ed25519Public.size == ED25519_PUBLIC_BYTES && ed25519Private.size == ED25519_PRIVATE_BYTES) {
+            "اندازهٔ کلید هویت نامعتبر است"
+        }
+        require(cryptoEngine.ed25519PublicFromPrivate(ed25519Private).contentEquals(ed25519Public)) {
+            "کلید عمومی هویت با کلید خصوصی آن مطابقت ندارد"
+        }
+        val probe = cryptoEngine.randomBytes(SELF_TEST_PROBE_BYTES)
+        val signature = runCatching { cryptoEngine.signEd25519(probe, ed25519Private) }.getOrNull()
+        require(signature != null && cryptoEngine.verifyEd25519(probe, signature, ed25519Public)) {
+            "کلید هویت آزمون امضا را نگذراند"
+        }
+        require(cryptoEngine.x25519PublicFromPrivate(x25519StaticPrivate).contentEquals(x25519StaticPublic)) {
+            "کلید عمومی X25519 با کلید خصوصی آن مطابقت ندارد"
+        }
+    }
+
     /** Keystore-wraps both private keys; the plaintext inputs are left untouched for the caller to zeroize. */
     private fun wrapKeyMaterial(
         ed25519Private: ByteArray,
@@ -158,12 +180,16 @@ class IdentityRepositoryImpl @Inject constructor(
         ),
     )
 
+    /**
+     * Re-encodes the stored user hash whenever the encoder's canonical form changes (0.x `vm1-` strings
+     * become `vm2-` on first read); the identity hash itself is the source of truth and never changes.
+     */
     private suspend fun migrateUserHashIfNeeded(entity: IdentityEntity): IdentityEntity {
         val fixed = UserHashEncoder.encode(entity.identityHash)
         if (fixed == entity.userHash) return entity
         val updated = entity.copy(userHash = fixed)
         identityDao.insertIdentity(updated)
-        AppLogger.info("Identity", "migrated userHash to decodable format")
+        AppLogger.info("Identity", "migrated userHash to current encoding (vm2)")
         return updated
     }
 
@@ -181,5 +207,8 @@ class IdentityRepositoryImpl @Inject constructor(
         private const val ALIAS_X25519 = "identity-x25519-static"
         const val DISPLAY_NAME_MIN = 2
         const val DISPLAY_NAME_MAX = 32
+        private const val ED25519_PUBLIC_BYTES = 32
+        private const val ED25519_PRIVATE_BYTES = 64
+        private const val SELF_TEST_PROBE_BYTES = 32
     }
 }

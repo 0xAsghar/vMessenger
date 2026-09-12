@@ -1,6 +1,7 @@
 package ir.vmessenger.data.network
 
 import com.google.protobuf.ByteString
+import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.proto.app.v1.ContactRequest
@@ -8,24 +9,30 @@ import ir.vmessenger.core.proto.app.v1.ContactResponse
 import ir.vmessenger.core.proto.app.v1.ContactResponseType
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import ir.vmessenger.domain.model.Contact
+import ir.vmessenger.domain.model.Identity
+import ir.vmessenger.domain.repository.ContactRequestSender
 import ir.vmessenger.domain.repository.IdentityRepository
-import ir.vmessenger.network.messaging.MessagingService
 import ir.vmessenger.network.messaging.PeerIdentity
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
-import ir.vmessenger.domain.model.Identity
-import ir.vmessenger.domain.repository.ContactRequestSender
 
 @Singleton
 class ContactRequestService @Inject constructor(
     private val identityRepository: IdentityRepository,
-    private val messagingService: MessagingService,
+    private val selfIdentityCache: SelfIdentityCache,
+    private val messagingService: MessagingPort,
+    private val retryBudget: ContactRequestRetryBudget,
 ) : ContactRequestSender {
+    /** The user's own (re)send: also gives the automatic retry worker a fresh budget for this contact. */
     override suspend fun sendRequest(contact: Contact): AppResult<Unit> {
-        val identity = identityRepository.getIdentity()
-            ?: return AppResult.Error(ir.vmessenger.core.common.AppError.NotFound("هویت یافت نشد"))
-        val self = selfPeer(identity)
+        retryBudget.reset(contact.id)
+        return deliverRequest(contact)
+    }
+
+    /** One request send without touching the retry budget (used by the retry worker itself). */
+    suspend fun deliverRequest(contact: Contact): AppResult<Unit> {
+        val (identity, self) = selfOrNull() ?: return identityMissing()
         val peer = PeerIdentity(
             identityHash = contact.identityHash,
             ed25519PublicKey = contact.ed25519PublicKey,
@@ -63,15 +70,29 @@ class ContactRequestService @Inject constructor(
         peer: PeerIdentity,
         requestId: String,
         accepted: Boolean,
-    ): AppResult<Unit> {
-        val identity = identityRepository.getIdentity()
-            ?: return AppResult.Error(ir.vmessenger.core.common.AppError.NotFound("هویت یافت نشد"))
-        val self = selfPeer(identity)
-        val type = if (accepted) {
+    ): AppResult<Unit> = sendResponse(
+        contactId = contactId,
+        peer = peer,
+        requestId = requestId,
+        type = if (accepted) {
             ContactResponseType.CONTACT_RESPONSE_ACCEPT
         } else {
             ContactResponseType.CONTACT_RESPONSE_REJECT
-        }
+        },
+    )
+
+    /**
+     * Sends one contact response of [type]. `REVOKE` tells a peer we deleted
+     * them; its request id is the deterministic id of *their* request to us so
+     * the receiver can validate it like any other response.
+     */
+    suspend fun sendResponse(
+        contactId: String,
+        peer: PeerIdentity,
+        requestId: String,
+        type: ContactResponseType,
+    ): AppResult<Unit> {
+        val (identity, self) = selfOrNull() ?: return identityMissing()
         val envelope = MessageEnvelope.newBuilder()
             .setMessageId(ByteString.copyFromUtf8("contact-resp-$requestId"))
             .setSenderIdentityHash(ByteString.copyFrom(identity.identityHash))
@@ -89,18 +110,24 @@ class ContactRequestService @Inject constructor(
         return messagingService.send(contactId, self, peer, envelope)
     }
 
-    private suspend fun selfPeer(identity: Identity): PeerIdentity = PeerIdentity(
-        identityHash = identity.identityHash,
-        ed25519PublicKey = identity.ed25519PublicKey,
-        x25519StaticPublicKey = identity.x25519StaticPublicKey,
-        ed25519PrivateKey = identityRepository.getEd25519PrivateKey(),
-        x25519StaticPrivateKey = identityRepository.getX25519StaticPrivateKey(),
-    )
+    /** Our display identity plus the cached key material, or null while either is missing. */
+    private suspend fun selfOrNull(): Pair<Identity, PeerIdentity>? =
+        identityRepository.getIdentity()?.let { identity ->
+            selfIdentityCache.get()?.let { self -> identity to self }
+        }
+
+    private fun identityMissing(): AppResult<Unit> = AppResult.Error(AppError.NotFound(IDENTITY_MISSING_MESSAGE))
 
     companion object {
         private const val X25519_KEY_SIZE = 32
         private const val REQUEST_ID_HEX_CHARS = 32
+        private const val IDENTITY_MISSING_MESSAGE = "هویت یافت نشد"
 
+        /**
+         * Request id derived from the (requester, target) identity hashes, so
+         * retries upsert one row on the receiver and a response can be checked
+         * against the request we actually sent.
+         */
         fun deterministicRequestId(requesterHash: ByteArray, targetHash: ByteArray): String {
             val digest = MessageDigest.getInstance("SHA-256")
                 .digest(requesterHash + targetHash)

@@ -17,19 +17,41 @@ private val Context.securityDataStore: DataStore<Preferences> by preferencesData
 )
 
 private val WRAPPED_DB_PASSPHRASE_KEY = stringPreferencesKey("wrapped_db_passphrase")
+private val WRAPPED_ATTACHMENT_KEY = stringPreferencesKey("wrapped_attachment_key")
+private val DHT_NODE_ID_KEY = stringPreferencesKey("dht_node_id")
 
 @Singleton
 class SecurityPreferences @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    suspend fun getWrappedDbPassphrase(): ByteArray? {
-        val encoded = context.securityDataStore.data.first()[WRAPPED_DB_PASSPHRASE_KEY] ?: return null
+    private val dhtNodeIdStorage = object : DhtNodeIdStorage {
+        override suspend fun read(): String? = context.securityDataStore.data.first()[DHT_NODE_ID_KEY]
+
+        override suspend fun write(encoded: String) {
+            context.securityDataStore.edit { it[DHT_NODE_ID_KEY] = encoded }
+        }
+    }
+
+    /** Per-device random 32-byte DHT node id, generated once and persisted (see [DhtNodeId]). */
+    suspend fun getOrCreateDhtNodeId(): ByteArray = DhtNodeId.getOrCreate(dhtNodeIdStorage)
+
+    suspend fun getWrappedDbPassphrase(): ByteArray? = getWrapped(WRAPPED_DB_PASSPHRASE_KEY)
+
+    suspend fun setWrappedDbPassphrase(wrapped: ByteArray) = setWrapped(WRAPPED_DB_PASSPHRASE_KEY, wrapped)
+
+    /** Keystore-wrapped 32-byte master key for attachments at rest (never the DB passphrase). */
+    suspend fun getWrappedAttachmentKey(): ByteArray? = getWrapped(WRAPPED_ATTACHMENT_KEY)
+
+    suspend fun setWrappedAttachmentKey(wrapped: ByteArray) = setWrapped(WRAPPED_ATTACHMENT_KEY, wrapped)
+
+    private suspend fun getWrapped(key: Preferences.Key<String>): ByteArray? {
+        val encoded = context.securityDataStore.data.first()[key] ?: return null
         return Base64.decode(encoded, Base64.NO_WRAP)
     }
 
-    suspend fun setWrappedDbPassphrase(wrapped: ByteArray) {
+    private suspend fun setWrapped(key: Preferences.Key<String>, wrapped: ByteArray) {
         context.securityDataStore.edit { preferences ->
-            preferences[WRAPPED_DB_PASSPHRASE_KEY] = Base64.encodeToString(wrapped, Base64.NO_WRAP)
+            preferences[key] = Base64.encodeToString(wrapped, Base64.NO_WRAP)
         }
     }
 

@@ -13,4 +13,5 @@
     <string name="feature_chat_status_failed">ناموفق</string>
     <string name="feature_chat_attach">پیوست</string>
     <string name="feature_chat_attachment_open_failed">برنامه‌ای برای باز کردن این فایل یافت نشد</string>
+    <string name="feature_chat_attachment_receiving">در حال دریافت پیوست…</string>
 </resources>

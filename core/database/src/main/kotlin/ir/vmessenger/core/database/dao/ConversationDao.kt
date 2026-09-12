@@ -52,6 +52,9 @@ interface ConversationDao {
 
     @Query("SELECT * FROM conversation WHERE contactId = :contactId LIMIT 1")
     suspend fun getByContactId(contactId: String): ConversationEntity?
+
+    @Query("UPDATE conversation SET unreadCount = 0 WHERE id = :id")
+    suspend fun resetUnread(id: String)
 }
 
 @Dao
@@ -76,6 +79,23 @@ interface MessageDao {
 
     @Query("SELECT * FROM message WHERE messageId = :id LIMIT 1")
     suspend fun getById(id: String): MessageEntity?
+
+    /** The message only if it belongs to [cid]; inbound dedup is scoped per conversation. */
+    @Query("SELECT * FROM message WHERE messageId = :id AND conversationId = :cid LIMIT 1")
+    suspend fun getByIdInConversation(id: String, cid: String): MessageEntity?
+
+    @Query(
+        "SELECT messageId FROM message WHERE conversationId = :cid AND direction = 'INCOMING' AND status != 'READ'",
+    )
+    suspend fun selectUnreadIncomingIds(cid: String): List<String>
+
+    @Query(
+        """
+        UPDATE message SET status = 'READ', readAtUnixMs = :ts
+        WHERE conversationId = :cid AND direction = 'INCOMING' AND status != 'READ'
+        """,
+    )
+    suspend fun markIncomingRead(cid: String, ts: Long)
 }
 
 @Dao
@@ -88,6 +108,10 @@ interface OutboxDao {
 
     @Query("DELETE FROM outbox WHERE messageId = :messageId")
     suspend fun remove(messageId: String)
+
+    /** Drops every queued item of a conversation (contact deleted). */
+    @Query("DELETE FROM outbox WHERE conversationId = :cid")
+    suspend fun removeByConversation(cid: String)
 
     /** Makes every queued item immediately due (used on connectivity recovery). */
     @Query("UPDATE outbox SET nextAttemptUnixMs = 0")

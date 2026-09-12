@@ -6,6 +6,7 @@ import ir.vmessenger.domain.model.ContactRelationshipStatus
 import ir.vmessenger.domain.model.ContactRequest
 import kotlinx.coroutines.flow.Flow
 
+@Suppress("TooManyFunctions") // the contact aggregate's full contract; use cases wrap one method each
 interface ContactRepository {
     fun observeContacts(): Flow<List<Contact>>
     suspend fun getContact(id: String): Contact?
@@ -23,6 +24,14 @@ interface ContactRepository {
     suspend fun updateContactAlias(id: String, alias: String)
     suspend fun blockContact(id: String, blocked: Boolean)
     suspend fun deleteContact(id: String)
+
+    /**
+     * Accepts a contact's changed X25519 static key: the pending key becomes the pinned key, the
+     * pending record is cleared and `verified` is reset so the user re-checks the safety number.
+     * Fails with [ir.vmessenger.core.common.AppError.NotFound] when there is no such contact or
+     * no key change is pending.
+     */
+    suspend fun acceptKeyChange(id: String): AppResult<Unit>
 }
 
 interface ContactRequestRepository {

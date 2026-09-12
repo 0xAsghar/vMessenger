@@ -15,15 +15,9 @@ interface RelayNodeDao {
     @Query("SELECT * FROM relay_node ORDER BY priority DESC, failCount ASC")
     fun observeAll(): Flow<List<RelayNodeEntity>>
 
-    /**
-     * Enabled relays ordered healthiest-first: fewest recent failures, then most
-     * recent success, then highest priority.
-     */
-    @Query(
-        "SELECT * FROM relay_node WHERE enabled = 1 " +
-            "ORDER BY failCount ASC, lastOkUnixMs DESC, priority DESC",
-    )
-    suspend fun getEnabledOrdered(): List<RelayNodeEntity>
+    /** Enabled relays, unordered: ranking is done by `NodeRanking` in the repository. */
+    @Query("SELECT * FROM relay_node WHERE enabled = 1")
+    suspend fun getEnabled(): List<RelayNodeEntity>
 
     @Query("SELECT * FROM relay_node")
     suspend fun getAll(): List<RelayNodeEntity>

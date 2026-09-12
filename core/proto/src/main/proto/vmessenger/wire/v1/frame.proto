@@ -6,13 +6,33 @@ option java_package = "ir.vmessenger.core.proto.wire.v1";
 option java_multiple_files = true;
 
 message Frame {
+  // Protocol major. Must equal 2 on every frame (handshake and secure alike);
+  // any other value is answered with a CLOSE{VERSION_MISMATCH} and the
+  // connection is dropped.
   uint32 version = 1;
   FrameType type = 2;
   bytes body = 3;
-  // Ratchet counter of the sealed body, so the receiver selects the right
-  // message key by the actual counter instead of assuming strict, gap-free
-  // ordering. 0 = unset (legacy sender); receiver then falls back to recvCounter+1.
+  // Ratchet counter of the sealed body (>= 1). It is also bound into the AEAD
+  // associated data, so a tampered counter fails authentication. 0 is invalid.
   uint64 counter = 4;
+}
+
+// Body of a FRAME_TYPE_CLOSE frame. Sent unencrypted (it may precede any
+// session key) and never trusted for anything but logging and error mapping.
+message Close {
+  // CloseCode value.
+  uint32 code = 1;
+  string message = 2;
+  // Protocol major the sender speaks, so the peer can explain a mismatch.
+  uint32 supported_major = 3;
+}
+
+enum CloseCode {
+  CLOSE_CODE_UNSPECIFIED = 0;
+  CLOSE_CODE_VERSION_MISMATCH = 1;
+  CLOSE_CODE_AUTH_FAILED = 2;
+  CLOSE_CODE_SESSION_EXPIRED = 3;
+  CLOSE_CODE_REJECTED = 4;
 }
 
 enum FrameType {

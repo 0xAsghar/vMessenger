@@ -1,5 +1,6 @@
 package ir.vmessenger.data.repository
 
+import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
@@ -11,7 +12,9 @@ import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
 import ir.vmessenger.data.attachment.AttachmentStore
+import ir.vmessenger.data.attachment.AttachmentTransferTracker
 import ir.vmessenger.data.network.OutboxDispatcher
+import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.domain.model.AttachmentType
 import ir.vmessenger.domain.model.ChatAttachment
 import ir.vmessenger.domain.model.ChatMessage
@@ -19,9 +22,14 @@ import ir.vmessenger.domain.model.Conversation
 import ir.vmessenger.domain.model.DeliveryStatus
 import ir.vmessenger.domain.model.MessageDirection
 import ir.vmessenger.domain.repository.ConversationRepository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import java.io.InputStream
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -29,6 +37,8 @@ import ir.vmessenger.core.database.entity.DeliveryStatus as DbDeliveryStatus
 import ir.vmessenger.core.database.entity.MessageDirection as DbMessageDirection
 
 @Singleton
+// One collaborator per concern (DAOs, dispatcher, attachment store + tracker); one method per contract entry.
+@Suppress("LongParameterList", "TooManyFunctions")
 class ConversationRepositoryImpl @Inject constructor(
     private val conversationDao: ConversationDao,
     private val messageDao: MessageDao,
@@ -36,6 +46,7 @@ class ConversationRepositoryImpl @Inject constructor(
     private val contactDao: ContactDao,
     private val outboxDispatcher: OutboxDispatcher,
     private val attachmentStore: AttachmentStore,
+    private val transferTracker: AttachmentTransferTracker,
 ) : ConversationRepository {
 
     override fun observeConversations(): Flow<List<Conversation>> =
@@ -146,6 +157,8 @@ class ConversationRepositoryImpl @Inject constructor(
                     attachmentMimeType = copied.mimeType,
                     attachmentSizeBytes = copied.sizeBytes,
                     attachmentPath = copied.file.absolutePath,
+                    attachmentSha256 = copied.sha256,
+                    attachmentEncrypted = true,
                 ),
             )
             outboxDao.enqueue(
@@ -168,11 +181,37 @@ class ConversationRepositoryImpl @Inject constructor(
             onSuccess = { AppResult.Success(it) },
             onFailure = {
                 AppLogger.warn("Messaging", "attachment queue failed: ${it.message}")
-                AppResult.Error(ir.vmessenger.core.common.AppError.Validation(it.message ?: "پیوست ناموفق"))
+                AppResult.Error(AppError.Validation(it.message ?: "پیوست ناموفق"))
             },
         )
 
     override suspend fun markConversationRead(conversationId: String) = Unit
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun observeAttachmentProgress(conversationId: String): Flow<Map<String, AttachmentProgress>> =
+        flow { emit(conversationDao.getById(conversationId)?.contactId) }
+            .flatMapLatest { contactId -> contactId?.let(transferTracker::forContact) ?: emptyFlow() }
+
+    override suspend fun openAttachment(messageId: String): InputStream? {
+        val path = messageDao.getById(messageId)?.attachmentPath ?: return null
+        return runCatching { attachmentStore.openDecrypted(path) }
+            .onFailure { AppLogger.warn("Messaging", "attachment open failed messageId=$messageId: ${it.message}") }
+            .getOrNull()
+    }
+
+    override suspend fun exportAttachmentForViewing(messageId: String): AppResult<String> {
+        val message = messageDao.getById(messageId)
+        val path = message?.attachmentPath
+            ?: return AppResult.Error(AppError.NotFound("attachment $messageId"))
+        return runCatching { attachmentStore.exportForViewing(path, message.attachmentName.orEmpty()) }
+            .fold(
+                onSuccess = { AppResult.Success(it.absolutePath) },
+                onFailure = {
+                    AppLogger.warn("Messaging", "attachment export failed messageId=$messageId: ${it.message}")
+                    AppResult.Error(AppError.Validation(ATTACHMENT_UNAVAILABLE_MESSAGE))
+                },
+            )
+    }
 
     private fun MessageEntity.toDomain() = ChatMessage(
         messageId = messageId,
@@ -208,5 +247,9 @@ class ConversationRepositoryImpl @Inject constructor(
             sizeBytes = attachmentSizeBytes ?: 0L,
             localPath = attachmentPath,
         )
+    }
+
+    private companion object {
+        const val ATTACHMENT_UNAVAILABLE_MESSAGE = "پیوست در دسترس نیست"
     }
 }

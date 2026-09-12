@@ -20,8 +20,16 @@ interface MailboxDao {
     @Query("SELECT COUNT(*) FROM mailbox_blob WHERE expiresAtUnixMs > :now")
     suspend fun countActive(now: Long): Int
 
+    /** Blobs an authenticated peer stored here since [since]; backs the per-sender quota. */
+    @Query("SELECT COUNT(*) FROM mailbox_blob WHERE senderIdentityHash = :sender AND createdAtUnixMs >= :since")
+    suspend fun countBySenderSince(sender: ByteArray, since: Long): Int
+
     @Query("DELETE FROM mailbox_blob WHERE blobId = :blobId")
     suspend fun delete(blobId: String)
+
+    /** Drops everything addressed to [hash] (contact deletion). */
+    @Query("DELETE FROM mailbox_blob WHERE recipientIdentityHash = :hash")
+    suspend fun deleteForRecipient(hash: ByteArray)
 
     @Query("DELETE FROM mailbox_blob WHERE expiresAtUnixMs <= :now")
     suspend fun purgeExpired(now: Long)

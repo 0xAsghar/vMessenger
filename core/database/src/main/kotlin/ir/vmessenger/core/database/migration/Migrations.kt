@@ -316,3 +316,36 @@ val MIGRATION_14_15 = object : Migration(14, 15) {
         db.execSQL("ALTER TABLE outbox ADD COLUMN receiptWaitCount INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+/**
+ * Protocol v2 schema (version 16). Statements are appended here by the v2 batches:
+ * - static-key pinning: `contact.pendingX25519StaticPublic`, `contact.keyChangedAtUnixMs`
+ * - mailbox per-sender quota: `mailbox_blob.senderIdentityHash`
+ * - attachments: `message.attachmentSha256`, `message.attachmentEncrypted`, index `(conversationId, direction, status)`
+ * - node trust: `relay_node`/`bootstrap_node` `trust` + `learnedFromHash`; peer-learned nodes are disabled
+ */
+val MIGRATION_15_16 = object : Migration(15, 16) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_15_16_STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/** Exposed so a plain-SQLite test can replay the migration without Room. */
+val MIGRATION_15_16_STATEMENTS: List<String> = listOf(
+    "ALTER TABLE contact ADD COLUMN pendingX25519StaticPublic BLOB",
+    "ALTER TABLE contact ADD COLUMN keyChangedAtUnixMs INTEGER",
+    "ALTER TABLE mailbox_blob ADD COLUMN senderIdentityHash BLOB",
+    "ALTER TABLE message ADD COLUMN attachmentSha256 BLOB",
+    "ALTER TABLE message ADD COLUMN attachmentEncrypted INTEGER NOT NULL DEFAULT 0",
+    "CREATE INDEX IF NOT EXISTS index_message_conv_dir_status ON message(conversationId, direction, status)",
+    "ALTER TABLE relay_node ADD COLUMN trust TEXT NOT NULL DEFAULT 'COMMUNITY'",
+    "ALTER TABLE relay_node ADD COLUMN learnedFromHash BLOB",
+    "ALTER TABLE bootstrap_node ADD COLUMN trust TEXT NOT NULL DEFAULT 'COMMUNITY'",
+    "ALTER TABLE bootstrap_node ADD COLUMN learnedFromHash BLOB",
+    "UPDATE relay_node SET trust='BUILT_IN' WHERE source='BUILT_IN'",
+    "UPDATE relay_node SET trust='USER' WHERE source='USER'",
+    "UPDATE bootstrap_node SET trust='BUILT_IN' WHERE source='BUILT_IN'",
+    "UPDATE bootstrap_node SET trust='USER' WHERE source='USER'",
+    "UPDATE relay_node SET enabled=0 WHERE source IN ('PEER_EXCHANGE','CACHED_DHT')",
+    "UPDATE bootstrap_node SET enabled=0 WHERE source IN ('PEER_EXCHANGE','CACHED_DHT')",
+)

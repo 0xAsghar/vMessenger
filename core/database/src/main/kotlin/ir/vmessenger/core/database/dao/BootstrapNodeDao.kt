@@ -18,18 +18,9 @@ interface BootstrapNodeDao {
     @Query("SELECT * FROM bootstrap_node ORDER BY priority DESC, failCount ASC")
     fun observeAll(): Flow<List<BootstrapNodeEntity>>
 
+    /** Enabled nodes, unordered: ranking is done by `NodeRanking` in the repository. */
     @Query("SELECT * FROM bootstrap_node WHERE enabled = 1")
     suspend fun getEnabled(): List<BootstrapNodeEntity>
-
-    /**
-     * Enabled nodes ordered so the healthiest are tried first: fewest recent
-     * failures, then most recent success, then highest priority.
-     */
-    @Query(
-        "SELECT * FROM bootstrap_node WHERE enabled = 1 " +
-            "ORDER BY failCount ASC, lastOkUnixMs DESC, priority DESC",
-    )
-    suspend fun getEnabledOrdered(): List<BootstrapNodeEntity>
 
     @Query("SELECT * FROM bootstrap_node")
     suspend fun getAll(): List<BootstrapNodeEntity>

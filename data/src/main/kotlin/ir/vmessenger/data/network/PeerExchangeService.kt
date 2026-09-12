@@ -6,10 +6,9 @@ import ir.vmessenger.core.common.network.P2PConfig
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import ir.vmessenger.core.proto.app.v1.NetworkNodeList
 import ir.vmessenger.core.proto.app.v1.NodeRole
-import ir.vmessenger.core.proto.wire.v1.Frame
-import ir.vmessenger.core.proto.wire.v1.FrameType
 import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.network.messaging.ActiveSecureSession
+import ir.vmessenger.network.messaging.IncomingEnvelope
 import ir.vmessenger.network.messaging.PeerIdentity
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,13 +43,7 @@ class PeerExchangeService @Inject constructor(
             )
             .build()
         runCatching {
-            val sealed = session.seal(envelope.toByteArray())
-            val frame = Frame.newBuilder()
-                .setVersion(1)
-                .setType(FrameType.FRAME_TYPE_SECURE)
-                .setBody(ByteString.copyFrom(sealed))
-                .build()
-            session.writeFrame(frame.toByteArray())
+            session.writeSealed(envelope)
             AppLogger.info(
                 "PeerExchange",
                 "sent ${bootstrap.size} bootstrap + ${relay.size} relay + ${signed.size} signed",
@@ -60,18 +53,29 @@ class PeerExchangeService @Inject constructor(
         }
     }
 
-    suspend fun ingestFromEnvelope(envelope: MessageEnvelope) {
-        if (!envelope.hasNetworkNodes()) return
+    /**
+     * Ingests node hints from an authenticated session. The collector has already
+     * checked that the sender is an approved contact ([InboundPolicy]); here the
+     * feature flag gates it again and the attribution is the handshake peer, never
+     * the peer-claimed `sender_identity_hash`. Envelopes without a live session
+     * (mailbox delivery) carry no authenticated peer and are ignored.
+     */
+    suspend fun ingestFromEnvelope(incoming: IncomingEnvelope) {
+        val envelope = incoming.envelope
+        val learnedFrom = incoming.session?.peer?.identityHash
+        if (!P2PConfig.peerExchangeEnabled || !envelope.hasNetworkNodes() || learnedFrom == null) return
         val nodes = envelope.networkNodes
         if (nodes.signedRecordsCount > 0) {
             networkNodeRepository.importSignedNodeRecords(
                 nodes.signedRecordsList,
                 signedNodeRecordVerifier,
+                learnedFromHash = learnedFrom,
             )
         }
         networkNodeRepository.importExchangedNodes(
             bootstrapAddresses = nodes.bootstrapAddressesList,
             relayAddresses = nodes.relayAddressesList,
+            learnedFromHash = learnedFrom,
         )
         AppLogger.info(
             "PeerExchange",

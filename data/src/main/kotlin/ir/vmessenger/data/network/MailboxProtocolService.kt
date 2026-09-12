@@ -1,9 +1,13 @@
 package ir.vmessenger.data.network
 
 import com.google.protobuf.ByteString
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.P2PConfig
+import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.MailboxDao
+import ir.vmessenger.core.database.entity.ContactEntity
+import ir.vmessenger.core.database.entity.MailboxBlobEntity
 import ir.vmessenger.core.proto.app.v1.MailboxBlob
 import ir.vmessenger.core.proto.app.v1.MailboxDelete
 import ir.vmessenger.core.proto.app.v1.MailboxDeleteAck
@@ -13,20 +17,23 @@ import ir.vmessenger.core.proto.app.v1.MailboxListRequest
 import ir.vmessenger.core.proto.app.v1.MailboxListResponse
 import ir.vmessenger.core.proto.app.v1.MailboxPut
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
-import ir.vmessenger.core.proto.wire.v1.Frame
-import ir.vmessenger.core.proto.wire.v1.FrameType
+import ir.vmessenger.data.network.MailboxService.Companion.toProto
 import ir.vmessenger.network.messaging.ActiveSecureSession
 import ir.vmessenger.network.messaging.PeerIdentity
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Explicit mailbox protocol (Phase 8 / rc29).
+ * Explicit mailbox protocol (Phase 8 / rc29). Every request is authorised
+ * against the authenticated session peer: List/Fetch/Delete only ever touch
+ * blobs addressed to that peer, and Put is accepted only from approved contacts.
  */
 @Singleton
+@Suppress("TooManyFunctions") // one request builder + one handler per mailbox verb
 class MailboxProtocolService @Inject constructor(
     private val mailboxDao: MailboxDao,
     private val mailboxService: MailboxService,
+    private val contactDao: ContactDao,
 ) {
     suspend fun requestFetch(session: ActiveSecureSession, blobId: String) {
         if (!P2PConfig.storeAndForwardEnabled) return
@@ -34,23 +41,18 @@ class MailboxProtocolService @Inject constructor(
             .setMessageId(ByteString.copyFromUtf8("mailbox-fetch-$blobId"))
             .setSentAtUnixMs(System.currentTimeMillis())
             .setCounter(1)
-            .setMailboxFetch(
-                ir.vmessenger.core.proto.app.v1.MailboxFetchRequest.newBuilder()
-                    .setBlobId(ByteString.copyFromUtf8(blobId)),
-            )
+            .setMailboxFetch(MailboxFetchRequest.newBuilder().setBlobId(ByteString.copyFromUtf8(blobId)))
             .build()
         sendEnvelope(session, envelope)
     }
 
-    suspend fun sendDeleteAck(session: ActiveSecureSession, blobId: String) {
+    /** Asks the mailbox peer to drop a blob we have delivered locally. */
+    suspend fun requestDelete(session: ActiveSecureSession, blobId: String) {
         val envelope = MessageEnvelope.newBuilder()
             .setMessageId(ByteString.copyFromUtf8("mailbox-del-$blobId"))
             .setSentAtUnixMs(System.currentTimeMillis())
             .setCounter(1)
-            .setMailboxDelete(
-                MailboxDelete.newBuilder()
-                    .setBlobId(ByteString.copyFromUtf8(blobId)),
-            )
+            .setMailboxDelete(MailboxDelete.newBuilder().setBlobId(ByteString.copyFromUtf8(blobId)))
             .build()
         sendEnvelope(session, envelope)
     }
@@ -60,18 +62,26 @@ class MailboxProtocolService @Inject constructor(
     }
 
     suspend fun handleIncoming(envelope: MessageEnvelope, session: ActiveSecureSession?): MessageEnvelope? {
-        if (!P2PConfig.storeAndForwardEnabled) return null
-        val reply = when {
-            envelope.hasMailboxPut() -> handlePut(envelope)
-            envelope.hasMailboxList() -> handleList(envelope)
-            envelope.hasMailboxFetch() -> handleFetch(envelope)
-            envelope.hasMailboxDelete() -> handleDelete(envelope)
-            else -> null
-        }
+        val reply = process(envelope, session?.peer)
         if (reply != null && session != null) {
             sendReply(session, reply)
         }
         return reply
+    }
+
+    /**
+     * Ownership-checked core of [handleIncoming]; [peer] is the authenticated
+     * session peer. Unauthenticated requests (no session) are ignored.
+     */
+    suspend fun process(envelope: MessageEnvelope, peer: PeerIdentity?): MessageEnvelope? {
+        if (!P2PConfig.storeAndForwardEnabled || peer == null) return null
+        return when {
+            envelope.hasMailboxPut() -> handlePut(envelope, peer)
+            envelope.hasMailboxList() -> handleList(envelope, peer)
+            envelope.hasMailboxFetch() -> handleFetch(envelope, peer)
+            envelope.hasMailboxDelete() -> handleDelete(envelope, peer)
+            else -> null
+        }
     }
 
     suspend fun requestList(session: ActiveSecureSession, self: PeerIdentity, recipientHash: ByteArray) {
@@ -82,8 +92,7 @@ class MailboxProtocolService @Inject constructor(
             .setSentAtUnixMs(System.currentTimeMillis())
             .setCounter(1)
             .setMailboxList(
-                MailboxListRequest.newBuilder()
-                    .setRecipientIdentityHash(ByteString.copyFrom(recipientHash)),
+                MailboxListRequest.newBuilder().setRecipientIdentityHash(ByteString.copyFrom(recipientHash)),
             )
             .build()
         sendEnvelope(session, envelope)
@@ -101,45 +110,51 @@ class MailboxProtocolService @Inject constructor(
         sendEnvelope(session, envelope)
     }
 
-    private suspend fun handlePut(envelope: MessageEnvelope): MessageEnvelope? {
-        val blob = envelope.mailboxPut.blob
-        if (blob.sealedPayload.size() > MAX_BLOB_BYTES) return null
-        mailboxService.storeIncoming(blob)
+    private suspend fun handlePut(envelope: MessageEnvelope, peer: PeerIdentity): MessageEnvelope? {
+        mailboxService.storeForSender(envelope.mailboxPut.blob, resolveContact(peer))
         return null
     }
 
-    private suspend fun handleList(envelope: MessageEnvelope): MessageEnvelope {
-        val hash = envelope.mailboxList.recipientIdentityHash.toByteArray()
+    private suspend fun handleList(envelope: MessageEnvelope, peer: PeerIdentity): MessageEnvelope {
+        val requested = envelope.mailboxList.recipientIdentityHash.toByteArray()
         val now = System.currentTimeMillis()
-        val ids = mailboxDao.forRecipient(hash, now).map { ByteString.copyFromUtf8(it.blobId) }
+        val ids = if (IdentityHashMatcher.matches(peer.identityHash, requested)) {
+            mailboxDao.forRecipient(requested, now).map { ByteString.copyFromUtf8(it.blobId) }
+        } else {
+            AppLogger.warn("MailboxProtocol", "list denied: peer asked for another recipient")
+            emptyList()
+        }
         return MessageEnvelope.newBuilder()
-            .setMessageId(ByteString.copyFromUtf8("mailbox-list-resp-${System.currentTimeMillis()}"))
+            .setMessageId(ByteString.copyFromUtf8("mailbox-list-resp-$now"))
             .setSentAtUnixMs(now)
             .setCounter(1)
             .setMailboxListResponse(MailboxListResponse.newBuilder().addAllBlobIds(ids))
             .build()
     }
 
-    private suspend fun handleFetch(envelope: MessageEnvelope): MessageEnvelope? {
+    private suspend fun handleFetch(envelope: MessageEnvelope, peer: PeerIdentity): MessageEnvelope? {
         val blobId = envelope.mailboxFetch.blobId.toStringUtf8()
-        val entry = mailboxDao.getById(blobId) ?: return null
-        val blob = MailboxBlob.newBuilder()
-            .setBlobId(ByteString.copyFromUtf8(entry.blobId))
-            .setRecipientIdentityHash(ByteString.copyFrom(entry.recipientIdentityHash))
-            .setSealedPayload(ByteString.copyFrom(entry.sealedPayload))
-            .setExpiresAtUnixMs(entry.expiresAtUnixMs)
-            .build()
+        val entry = ownedBy(peer, blobId)
+        if (entry == null) {
+            AppLogger.warn("MailboxProtocol", "fetch denied blob=$blobId")
+            return null
+        }
         return MessageEnvelope.newBuilder()
             .setMessageId(ByteString.copyFromUtf8("mailbox-fetch-resp-$blobId"))
             .setSentAtUnixMs(System.currentTimeMillis())
             .setCounter(1)
-            .setMailboxFetchResponse(MailboxFetchResponse.newBuilder().setBlob(blob))
+            .setMailboxFetchResponse(MailboxFetchResponse.newBuilder().setBlob(entry.toProto()))
             .build()
     }
 
-    private suspend fun handleDelete(envelope: MessageEnvelope): MessageEnvelope {
+    private suspend fun handleDelete(envelope: MessageEnvelope, peer: PeerIdentity): MessageEnvelope {
         val blobId = envelope.mailboxDelete.blobId.toStringUtf8()
-        mailboxDao.delete(blobId)
+        val entry = ownedBy(peer, blobId)
+        if (entry != null) {
+            mailboxDao.delete(blobId)
+        } else {
+            AppLogger.warn("MailboxProtocol", "delete denied blob=$blobId")
+        }
         return MessageEnvelope.newBuilder()
             .setMessageId(ByteString.copyFromUtf8("mailbox-del-ack-$blobId"))
             .setSentAtUnixMs(System.currentTimeMillis())
@@ -147,27 +162,27 @@ class MailboxProtocolService @Inject constructor(
             .setMailboxDeleteAck(
                 MailboxDeleteAck.newBuilder()
                     .setBlobId(envelope.mailboxDelete.blobId)
-                    .setAccepted(true),
+                    .setAccepted(entry != null),
             )
             .build()
     }
 
+    /** The stored blob only if it is addressed to [peer]; null otherwise (denied or unknown). */
+    private suspend fun ownedBy(peer: PeerIdentity, blobId: String): MailboxBlobEntity? =
+        mailboxDao.getById(blobId)?.takeIf { IdentityHashMatcher.matches(peer.identityHash, it.recipientIdentityHash) }
+
+    private suspend fun resolveContact(peer: PeerIdentity): ContactEntity? =
+        contactDao.getByIdentityHash(peer.identityHash) ?: contactDao.getByEd25519Public(peer.ed25519PublicKey)
+
     private suspend fun sendEnvelope(session: ActiveSecureSession, envelope: MessageEnvelope) {
         runCatching {
-            val sealed = session.seal(envelope.toByteArray())
-            val frame = Frame.newBuilder()
-                .setVersion(1)
-                .setType(FrameType.FRAME_TYPE_SECURE)
-                .setBody(ByteString.copyFrom(sealed))
-                .build()
-            session.writeFrame(frame.toByteArray())
+            session.writeSealed(envelope)
         }.onFailure {
             AppLogger.warn("MailboxProtocol", "send failed: ${it.message}")
         }
     }
 
     companion object {
-        const val MAX_BLOB_BYTES = 256 * 1024
-        const val MAX_BLOBS_PER_RECIPIENT = 50
+        const val MAX_BLOB_BYTES = MailboxService.MAX_BLOB_BYTES
     }
 }

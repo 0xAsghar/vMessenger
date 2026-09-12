@@ -5,8 +5,6 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
 import ir.vmessenger.core.common.network.NetworkConfig
-import ir.vmessenger.core.database.dao.EndpointCacheDao
-import ir.vmessenger.core.proto.dht.v1.EndpointRecord
 import ir.vmessenger.data.network.NetworkNodeRepository
 import ir.vmessenger.domain.model.DiscoveryStatus
 import ir.vmessenger.domain.repository.DiscoveryRepository
@@ -14,25 +12,25 @@ import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.network.bootstrap.BootstrapManager
 import ir.vmessenger.network.bootstrap.BootstrapNode
 import ir.vmessenger.network.dht.Dht
-import ir.vmessenger.network.dht.toEndpoints
 import ir.vmessenger.network.discovery.DhtDiscoveryProvider
 import ir.vmessenger.network.discovery.DiscoveryIdentity
-import ir.vmessenger.network.discovery.DiscoveryManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Suppress("LongParameterList")
+/**
+ * Joins the DHT and publishes this device's endpoints. Peer resolution lives in
+ * `EndpointResolveService` (cache-first, verified, routing-hash keyed); the old
+ * unverified `resolveEndpoints` path keyed on the raw hash was removed.
+ */
 @Singleton
 class DiscoveryRepositoryImpl @Inject constructor(
     private val bootstrapManager: BootstrapManager,
     private val dht: Dht,
-    private val discoveryManager: DiscoveryManager,
     private val dhtDiscoveryProvider: DhtDiscoveryProvider,
     private val identityRepository: IdentityRepository,
-    private val endpointCacheDao: EndpointCacheDao,
     private val networkNodeRepository: NetworkNodeRepository,
 ) : DiscoveryRepository {
     private val _status = MutableStateFlow(
@@ -120,19 +118,6 @@ class DiscoveryRepositoryImpl @Inject constructor(
             }
         }
         return result
-    }
-
-    override suspend fun resolveEndpoints(identityHash: ByteArray): AppResult<List<Endpoint>> {
-        val cached = endpointCacheDao.get(identityHash)
-        val now = System.currentTimeMillis()
-        if (cached != null && cached.expiresAtUnixMs > now) {
-            val record = EndpointRecord.parseFrom(cached.endpointsProto)
-            return AppResult.Success(record.toEndpoints())
-        }
-        return when (val result = discoveryManager.resolve(identityHash)) {
-            is AppResult.Success -> result
-            is AppResult.Error -> result
-        }
     }
 
     override suspend fun getPublishedEndpoint(): String? = _status.value.publishedEndpoint

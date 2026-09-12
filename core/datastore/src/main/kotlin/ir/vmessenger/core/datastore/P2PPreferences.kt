@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import ir.vmessenger.core.common.network.P2PConfig
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,15 +16,19 @@ private val Context.p2pDataStore: DataStore<Preferences> by preferencesDataStore
     name = "vmessenger_p2p",
 )
 
+/**
+ * Persisted P2P flags. Defaults mirror [P2PConfig] (the process-wide runtime
+ * copy) and [P2PPreferences.P2P_DEFAULT_MULTI_NODE] & co.; all three must agree.
+ */
 data class P2PFlagSnapshot(
-    val multiNodeEnabled: Boolean = true,
-    val peerCacheEnabled: Boolean = true,
-    val peerExchangeEnabled: Boolean = true,
-    val dhtParticipationEnabled: Boolean = true,
-    val relayPeerModeEnabled: Boolean = false,
-    val natTraversalEnabled: Boolean = true,
-    val storeAndForwardEnabled: Boolean = true,
-    val reduceDefaultRelayEnabled: Boolean = true,
+    val multiNodeEnabled: Boolean = P2PPreferences.P2P_DEFAULT_MULTI_NODE,
+    val peerCacheEnabled: Boolean = P2PPreferences.P2P_DEFAULT_PEER_CACHE,
+    val peerExchangeEnabled: Boolean = P2PPreferences.P2P_DEFAULT_PEER_EXCHANGE,
+    val dhtParticipationEnabled: Boolean = P2PPreferences.P2P_DEFAULT_DHT,
+    val relayPeerModeEnabled: Boolean = P2PPreferences.P2P_DEFAULT_RELAY_PEER,
+    val natTraversalEnabled: Boolean = P2PPreferences.P2P_DEFAULT_NAT,
+    val storeAndForwardEnabled: Boolean = P2PPreferences.P2P_DEFAULT_STORE_FORWARD,
+    val reduceDefaultRelayEnabled: Boolean = P2PPreferences.P2P_DEFAULT_REDUCE_RELAY,
 )
 
 @Singleton
@@ -62,14 +67,15 @@ class P2PPreferences @Inject constructor(
     }
 
     companion object {
-        const val P2P_DEFAULT_MULTI_NODE = true
-        const val P2P_DEFAULT_PEER_CACHE = true
-        const val P2P_DEFAULT_PEER_EXCHANGE = true
-        const val P2P_DEFAULT_DHT = true
-        const val P2P_DEFAULT_RELAY_PEER = false
-        const val P2P_DEFAULT_NAT = true
-        const val P2P_DEFAULT_STORE_FORWARD = true
-        const val P2P_DEFAULT_REDUCE_RELAY = true
+        // 1.0 defaults: multi-node + peer cache on, every other experimental path off.
+        const val P2P_DEFAULT_MULTI_NODE = P2PConfig.DEFAULT_MULTI_NODE
+        const val P2P_DEFAULT_PEER_CACHE = P2PConfig.DEFAULT_PEER_CACHE
+        const val P2P_DEFAULT_PEER_EXCHANGE = P2PConfig.DEFAULT_PEER_EXCHANGE
+        const val P2P_DEFAULT_DHT = P2PConfig.DEFAULT_DHT_PARTICIPATION
+        const val P2P_DEFAULT_RELAY_PEER = P2PConfig.DEFAULT_RELAY_PEER_MODE
+        const val P2P_DEFAULT_NAT = P2PConfig.DEFAULT_NAT_TRAVERSAL
+        const val P2P_DEFAULT_STORE_FORWARD = P2PConfig.DEFAULT_STORE_AND_FORWARD
+        const val P2P_DEFAULT_REDUCE_RELAY = P2PConfig.DEFAULT_REDUCE_DEFAULT_RELAY
 
         private val KEY_MULTI_NODE = booleanPreferencesKey("multi_node")
         private val KEY_PEER_CACHE = booleanPreferencesKey("peer_cache")

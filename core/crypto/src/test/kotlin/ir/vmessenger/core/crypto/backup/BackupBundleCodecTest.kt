@@ -156,11 +156,39 @@ class BackupBundleCodecTest {
         }
     }
 
+    /**
+     * Bytes produced once by the v1 codec (opslimit 2, memlimit 16 MiB) and committed verbatim: every future
+     * codec version must still open a v1 bundle, or backups made today become unreadable after an update.
+     */
+    @Test
+    fun decodesCommittedV1Fixture() {
+        val bundle = hex(V1_FIXTURE_HEX)
+        val expectedSize = BackupBundleCodec.HEADER_SIZE + V1_FIXTURE_PAYLOAD.length + BackupBundleCodec.TAG_SIZE
+        assertEquals(expectedSize, bundle.size)
+        val info = codec.inspect(bundle)
+        assertEquals(1, info.version)
+        assertEquals(2, info.kdfOps)
+        assertEquals(16L * 1024 * 1024, info.kdfMemBytes)
+        assertArrayEquals(V1_FIXTURE_PAYLOAD.toByteArray(), codec.decode(bundle, V1_FIXTURE_PASSPHRASE.toCharArray()))
+        assertThrows(BackupBundleException.AuthenticationFailed::class.java) {
+            codec.decode(bundle, "fixture-passphrase-2025".toCharArray())
+        }
+    }
+
     private fun fastEncode(bytes: ByteArray): ByteArray =
         codec.encode(bytes, passphrase, opsLimit = FAST_OPS, memLimitBytes = FAST_MEM)
+
+    private fun hex(value: String): ByteArray =
+        ByteArray(value.length / 2) { i -> value.substring(2 * i, 2 * i + 2).toInt(16).toByte() }
 
     private companion object {
         const val FAST_OPS = 1
         const val FAST_MEM = 8L * 1024 * 1024
+        const val V1_FIXTURE_PASSPHRASE = "fixture-passphrase-2026"
+        const val V1_FIXTURE_PAYLOAD = "vMessenger backup fixture v1: identity+contacts payload stand-in"
+        const val V1_FIXTURE_HEX =
+            "564d4231010100000002010000004a1a9c7bff615e7a844c3f19bfacf933964f490f0be4b8dc7c4a92eb16111f9b832a" +
+                "a53379e847810d23cf9e8809b54305e4f6a1b3f1975bc446b74545d026abc020592a183b8e8639ce9be7637b6eaeaf37" +
+                "341fc6b9f5d1b78b7d7e394b42b21df9afac22b039bb9b95d0677d27045b843e4cc9a5122d29"
     }
 }

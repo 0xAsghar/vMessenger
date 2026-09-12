@@ -3,30 +3,42 @@ package ir.vmessenger.core.common.encoding
 import java.security.MessageDigest
 
 private const val CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-private const val PREFIX = "vm1"
-private const val PREFIX_UPPER = "VM1"
+private const val PREFIX = "vm2"
+private const val PREFIX_UPPER = "VM2"
 private const val GROUP_SIZE = 5
 private const val PREFIX_BYTES = 16
+private const val CHECKSUM_BYTES = 2
+private const val PAYLOAD_BYTES = PREFIX_BYTES + CHECKSUM_BYTES
+
+/** 18 payload bytes = 144 bits -> 29 base32 symbols (the last one carries 4 data bits + 1 zero pad bit). */
+private const val ENCODED_LENGTH = 29
+private const val CHECKSUM_TAG = "vmessenger-userhash-v2"
 private val UNICODE_DASHES = Regex("[\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2212]")
 private val INVISIBLE_CHARS = Regex("[\\u200B-\\u200D\\uFEFF]")
 
+/**
+ * Human-shareable identity hash, format v2: `vm2-` + Crockford base32 of
+ * `prefix16 || SHA256("vmessenger-userhash-v2" || prefix16)[0..2)`, grouped `5-5-5-5-5-4`.
+ *
+ * The checksum covers every prefix byte (v1 only XOR-ed the last two), and only the `vm2-` prefix is
+ * accepted: a `vm1-` string decodes to null with reason `missing_prefix`.
+ */
 object UserHashEncoder {
     fun identityHashFromPublicKey(publicKey: ByteArray): ByteArray =
         MessageDigest.getInstance("SHA-256").digest(publicKey)
 
     fun encode(identityHash: ByteArray): String {
+        require(identityHash.size >= PREFIX_BYTES) { "identity hash shorter than $PREFIX_BYTES bytes" }
         val prefix = identityHash.copyOf(PREFIX_BYTES)
-        val checksum = checksumOf(prefix)
-        val payload = prefix + byteArrayOf(checksum.toByte())
-        val encoded = encodeCrockford(payload)
-        return formatGrouped("$PREFIX-$encoded")
+        val encoded = encodeCrockford(prefix + checksumOf(prefix))
+        return "$PREFIX-" + encoded.chunked(GROUP_SIZE).joinToString("-")
     }
 
-    fun decode(userHash: String): ByteArray? {
-        val normalized = normalizeInput(userHash)
-        val bytes = if (normalized.length >= GROUP_SIZE) decodeCrockford(normalized) else null
-        return bytes?.let(::decodePayload)
-    }
+    fun decode(userHash: String): ByteArray? =
+        normalizedBody(userHash)
+            ?.takeIf { it.length == ENCODED_LENGTH }
+            ?.let(::decodeCrockford)
+            ?.let(::decodePayload)
 
     fun isValid(userHash: String): Boolean = decode(userHash) != null
 
@@ -35,55 +47,43 @@ object UserHashEncoder {
 }
 
 private fun decodePayload(bytes: ByteArray): ByteArray? {
-    if (bytes.size < PREFIX_BYTES + 1) return null
-    val payload = bytes.copyOfRange(0, PREFIX_BYTES + 1)
-    val prefix = payload.copyOf(PREFIX_BYTES)
-    return if (payload[PREFIX_BYTES].toInt() and 0xFF == checksumOf(prefix)) prefix else null
+    if (bytes.size < PAYLOAD_BYTES) return null
+    val prefix = bytes.copyOf(PREFIX_BYTES)
+    val checksum = bytes.copyOfRange(PREFIX_BYTES, PAYLOAD_BYTES)
+    return if (checksum.contentEquals(checksumOf(prefix))) prefix else null
 }
 
-private fun checksumOf(prefix: ByteArray): Int =
-    prefix.takeLast(2).fold(0) { acc, b -> acc xor (b.toInt() and 0xFF) }
+private fun checksumOf(prefix: ByteArray): ByteArray =
+    MessageDigest.getInstance("SHA-256")
+        .digest(CHECKSUM_TAG.toByteArray(Charsets.UTF_8) + prefix)
+        .copyOf(CHECKSUM_BYTES)
 
-private fun normalizeInput(userHash: String): String =
+private fun normalizeChars(userHash: String): String =
     userHash.trim().uppercase()
         .replace(UNICODE_DASHES, "-")
         .replace(INVISIBLE_CHARS, "")
-        .removePrefix("$PREFIX_UPPER-")
-        .replace("-", "")
 
-private fun formatGrouped(value: String): String {
-    val body = value.substringAfter('-')
-    val groups = body.chunked(GROUP_SIZE).joinToString("-")
-    return "$PREFIX-$groups"
+/** Base32 body without prefix and dashes, or null when the `vm2-` prefix is missing. */
+private fun normalizedBody(userHash: String): String? {
+    val normalized = normalizeChars(userHash)
+    if (!normalized.startsWith("$PREFIX_UPPER-")) return null
+    return normalized.removePrefix("$PREFIX_UPPER-").replace("-", "")
 }
 
 private fun failureReasonForTrimmed(trimmed: String): String = when {
     trimmed.isEmpty() -> "empty"
-    !trimmed.uppercase().startsWith("$PREFIX_UPPER-") -> "missing_prefix"
-    else -> failureReasonForBody(trimmed)
+    else -> normalizedBody(trimmed)?.let(::failureReasonForBody) ?: "missing_prefix"
 }
 
-private fun failureReasonForBody(trimmed: String): String {
-    val normalized = normalizeInput(trimmed)
-    return when {
-        normalized.length < GROUP_SIZE -> "too_short(len=${normalized.length})"
-        else -> failureReasonForCrockford(normalized)
-    }
+private fun failureReasonForBody(body: String): String = when {
+    body.length < ENCODED_LENGTH -> "too_short(len=${body.length})"
+    body.length > ENCODED_LENGTH -> "too_long(len=${body.length})"
+    else -> failureReasonForCrockford(body)
 }
 
-private fun failureReasonForCrockford(normalized: String): String {
-    val bytes = decodeCrockford(normalized)
-    return when {
-        bytes == null -> "invalid_character"
-        bytes.size < PREFIX_BYTES + 1 -> "decoded_too_short(bytes=${bytes.size})"
-        else -> checksumFailureReason(bytes)
-    }
-}
-
-private fun checksumFailureReason(bytes: ByteArray): String {
-    val payload = bytes.copyOfRange(0, PREFIX_BYTES + 1)
-    val prefix = payload.copyOf(PREFIX_BYTES)
-    return if (payload[PREFIX_BYTES].toInt() and 0xFF == checksumOf(prefix)) "ok" else "checksum_mismatch"
+private fun failureReasonForCrockford(body: String): String {
+    val bytes = decodeCrockford(body) ?: return "invalid_character"
+    return if (decodePayload(bytes) != null) "ok" else "checksum_mismatch"
 }
 
 private fun encodeCrockford(data: ByteArray): String {
@@ -120,5 +120,7 @@ private fun decodeCrockford(value: String): ByteArray? {
             out.add(((buffer shr bits) and 0xFF).toByte())
         }
     }
-    return out.toByteArray()
+    // Canonical form only: leftover pad bits must be zero, otherwise two strings map to one payload.
+    val padMask = (1L shl bits) - 1
+    return if (buffer and padMask == 0L) out.toByteArray() else null
 }

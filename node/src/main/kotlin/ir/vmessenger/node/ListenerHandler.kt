@@ -12,10 +12,11 @@ import kotlin.math.abs
 import io.ktor.server.websocket.DefaultWebSocketServerSession as WsSession
 
 /**
- * LISTENER hellos: proves the socket belongs to the identity it claims (v1
- * transcript, see [RelayProof]), rejects stale or replayed proofs, enforces the
- * global and per-address listener caps, then parks the socket in
- * [RelayNodeState.listeners] until it closes.
+ * LISTENER hellos: proves the socket belongs to the identity it claims (v2 or,
+ * during the transition, the 0.x transcript — selected by `proof_version`, see
+ * [RelayProof]), rejects stale or replayed proofs, enforces the global and
+ * per-address listener caps, then parks the socket in [RelayNodeState.listeners]
+ * until it closes.
  */
 class ListenerHandler(private val state: RelayNodeState) {
     private val log = LoggerFactory.getLogger(ListenerHandler::class.java)
@@ -99,7 +100,13 @@ class ListenerHandler(private val state: RelayNodeState) {
     }
 
     private fun verifyProof(hello: RelayHello, identityPub: ByteArray): Boolean {
-        val transcript = RelayProof.buildListenerProofTranscript(hello.listenerId.toByteArray(), hello.ts)
+        val listenerId = hello.listenerId.toByteArray()
+        val transcript = when (hello.proofVersion) {
+            RelayProof.PROOF_VERSION_V2 -> RelayProof.buildListenerProofTranscript(listenerId, identityPub, hello.ts)
+            PROOF_VERSION_LEGACY_UNSET, PROOF_VERSION_LEGACY ->
+                RelayProof.buildLegacyListenerProofTranscript(listenerId, hello.ts)
+            else -> return false
+        }
         return state.sodium.cryptoSignVerifyDetached(
             hello.proof.toByteArray(),
             transcript,
@@ -115,5 +122,9 @@ class ListenerHandler(private val state: RelayNodeState) {
 
     private companion object {
         const val HASH_SIZE = 32
+
+        /** 0.x apps never set `proof_version`; 1 is reserved for the same transcript if a client labels it. */
+        const val PROOF_VERSION_LEGACY_UNSET = 0
+        const val PROOF_VERSION_LEGACY = 1
     }
 }

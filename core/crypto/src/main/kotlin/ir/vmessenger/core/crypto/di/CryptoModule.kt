@@ -9,6 +9,8 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import ir.vmessenger.core.crypto.CryptoEngine
 import ir.vmessenger.core.crypto.LazysodiumCryptoEngine
+import ir.vmessenger.core.crypto.stream.LazysodiumSecretStream
+import ir.vmessenger.core.crypto.stream.SecretStreamCipher
 import javax.inject.Singleton
 
 @Module
@@ -22,4 +24,9 @@ object CryptoModule {
     @Singleton
     fun provideCryptoEngine(lazySodium: LazySodium): CryptoEngine =
         LazysodiumCryptoEngine(lazySodium)
+
+    @Provides
+    @Singleton
+    fun provideSecretStreamCipher(lazySodium: LazySodium): SecretStreamCipher =
+        LazysodiumSecretStream(lazySodium)
 }

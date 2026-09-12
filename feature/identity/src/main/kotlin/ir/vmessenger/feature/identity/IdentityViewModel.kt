@@ -226,7 +226,8 @@ private fun AppError.toInspectFailure(): RestoreFailure = when (this) {
 private fun AppError.toRestoreFailure(): RestoreFailure = when (this) {
     is AppError.Security, is AppError.Crypto -> RestoreFailure.WrongPassphrase
     is AppError.Validation -> RestoreFailure.Rejected(message)
-    is AppError.NotFound, is AppError.Network, is AppError.Unknown -> RestoreFailure.Unknown
+    is AppError.NotFound, is AppError.Network, is AppError.Unknown, is AppError.ProtocolVersion ->
+        RestoreFailure.Unknown
 }
 
 sealed class IdentityUiState {

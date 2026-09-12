@@ -49,6 +49,10 @@ data class BootstrapNodeEntity(
     val priority: Int = DEFAULT_NODE_PRIORITY,
     val lastFailUnixMs: Long? = null,
     val failCount: Int = 0,
+    /** [ir.vmessenger.core.common.network.NodeTrust] name; community nodes are stored disabled. */
+    val trust: String = DEFAULT_NODE_TRUST,
+    /** Identity hash of the peer that told us about this node (peer exchange), if any. */
+    val learnedFromHash: ByteArray? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -61,7 +65,9 @@ data class BootstrapNodeEntity(
             lastOkUnixMs == other.lastOkUnixMs &&
             priority == other.priority &&
             lastFailUnixMs == other.lastFailUnixMs &&
-            failCount == other.failCount
+            failCount == other.failCount &&
+            trust == other.trust &&
+            learnedFromHash.contentEqualsOrNull(other.learnedFromHash)
     }
 
     override fun hashCode(): Int {
@@ -73,6 +79,8 @@ data class BootstrapNodeEntity(
         result = 31 * result + priority
         result = 31 * result + (lastFailUnixMs?.hashCode() ?: 0)
         result = 31 * result + failCount
+        result = 31 * result + trust.hashCode()
+        result = 31 * result + (learnedFromHash?.contentHashCode() ?: 0)
         return result
     }
 
@@ -102,6 +110,10 @@ data class RelayNodeEntity(
     val priority: Int = DEFAULT_NODE_PRIORITY,
     val lastFailUnixMs: Long? = null,
     val failCount: Int = 0,
+    /** [ir.vmessenger.core.common.network.NodeTrust] name; community nodes are stored disabled. */
+    val trust: String = DEFAULT_NODE_TRUST,
+    /** Identity hash of the peer that told us about this node (peer exchange), if any. */
+    val learnedFromHash: ByteArray? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -114,7 +126,9 @@ data class RelayNodeEntity(
             lastOkUnixMs == other.lastOkUnixMs &&
             priority == other.priority &&
             lastFailUnixMs == other.lastFailUnixMs &&
-            failCount == other.failCount
+            failCount == other.failCount &&
+            trust == other.trust &&
+            learnedFromHash.contentEqualsOrNull(other.learnedFromHash)
     }
 
     override fun hashCode(): Int {
@@ -126,6 +140,8 @@ data class RelayNodeEntity(
         result = 31 * result + priority
         result = 31 * result + (lastFailUnixMs?.hashCode() ?: 0)
         result = 31 * result + failCount
+        result = 31 * result + trust.hashCode()
+        result = 31 * result + (learnedFromHash?.contentHashCode() ?: 0)
         return result
     }
 
@@ -138,3 +154,6 @@ data class RelayNodeEntity(
 }
 
 const val DEFAULT_NODE_PRIORITY = 100
+
+/** Matches `NodeTrust.COMMUNITY` and the migration-16 column default. */
+const val DEFAULT_NODE_TRUST = "COMMUNITY"

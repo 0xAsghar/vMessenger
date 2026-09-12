@@ -19,17 +19,34 @@ data class Contact(
     val relationshipStatus: ContactRelationshipStatus,
     val createdAtUnixMs: Long,
     val lastSeenUnixMs: Long?,
+    /**
+     * A different X25519 static key this contact presented after [x25519StaticPublicKey] was pinned.
+     * Handshakes are refused while it is set; the user must re-verify and accept the change.
+     */
+    val pendingX25519StaticPublicKey: ByteArray? = null,
+    val keyChangedAtUnixMs: Long? = null,
 ) {
     val isApproved: Boolean get() = relationshipStatus == ContactRelationshipStatus.APPROVED
+
+    /** True while the contact's static key changed and the user has not accepted the new key yet. */
+    val keyChangePending: Boolean get() = pendingX25519StaticPublicKey != null
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
         other as Contact
-        return id == other.id &&
-            identityHash.contentEquals(other.identityHash) &&
+        return sameKeys(other) && sameProfile(other)
+    }
+
+    private fun sameKeys(other: Contact): Boolean =
+        identityHash.contentEquals(other.identityHash) &&
             ed25519PublicKey.contentEquals(other.ed25519PublicKey) &&
             x25519StaticPublicKey.contentEqualsOrNull(other.x25519StaticPublicKey) &&
+            pendingX25519StaticPublicKey.contentEqualsOrNull(other.pendingX25519StaticPublicKey) &&
+            keyChangedAtUnixMs == other.keyChangedAtUnixMs
+
+    private fun sameProfile(other: Contact): Boolean =
+        id == other.id &&
             userHash == other.userHash &&
             displayName == other.displayName &&
             verified == other.verified &&
@@ -37,7 +54,6 @@ data class Contact(
             relationshipStatus == other.relationshipStatus &&
             createdAtUnixMs == other.createdAtUnixMs &&
             lastSeenUnixMs == other.lastSeenUnixMs
-    }
 
     override fun hashCode(): Int {
         var result = id.hashCode()
@@ -51,6 +67,8 @@ data class Contact(
         result = 31 * result + relationshipStatus.hashCode()
         result = 31 * result + createdAtUnixMs.hashCode()
         result = 31 * result + (lastSeenUnixMs?.hashCode() ?: 0)
+        result = 31 * result + (pendingX25519StaticPublicKey?.contentHashCode() ?: 0)
+        result = 31 * result + (keyChangedAtUnixMs?.hashCode() ?: 0)
         return result
     }
 

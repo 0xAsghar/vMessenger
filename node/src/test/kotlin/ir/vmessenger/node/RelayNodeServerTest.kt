@@ -45,8 +45,21 @@ class RelayNodeServerTest {
         return Identity(pub, secret)
     }
 
-    private fun listenerHello(id: Identity, ts: Long = System.currentTimeMillis()): ByteArray {
-        val transcript = RelayProof.buildListenerProofTranscript(id.hash, ts)
+    /**
+     * [proofVersion] 2 signs the v2 transcript (what 1.0 apps send); 0 signs the 0.x transcript and leaves
+     * the field unset like a 0.x app; [labelVersion] overrides the advertised version without re-signing.
+     */
+    private fun listenerHello(
+        id: Identity,
+        ts: Long = System.currentTimeMillis(),
+        proofVersion: Int = RelayProof.PROOF_VERSION_V2,
+        labelVersion: Int = proofVersion,
+    ): ByteArray {
+        val transcript = if (proofVersion == RelayProof.PROOF_VERSION_V2) {
+            RelayProof.buildListenerProofTranscript(id.hash, id.pub, ts)
+        } else {
+            RelayProof.buildLegacyListenerProofTranscript(id.hash, ts)
+        }
         val proof = ByteArray(64)
         check(sodium.cryptoSignDetached(proof, transcript, transcript.size.toLong(), id.secret))
         return RelayHello.newBuilder()
@@ -55,6 +68,7 @@ class RelayNodeServerTest {
             .setIdentityPub(ByteString.copyFrom(id.pub))
             .setProof(ByteString.copyFrom(proof))
             .setTs(ts)
+            .setProofVersion(labelVersion)
             .build()
             .toByteArray()
     }
@@ -120,6 +134,64 @@ class RelayNodeServerTest {
             }
             awaitUntil { state.listeners.isEmpty() }
             assertEquals(0, state.stats.listeners.get())
+        }
+    }
+
+    @Test
+    fun `legacy v1 listener proof still registers during the transition`() {
+        val state = newState()
+        relayTest(state) { client ->
+            client.webSocket("/relay") {
+                sendBytes(listenerHello(identity(), proofVersion = 0))
+                awaitUntil { state.listeners.size == 1 }
+            }
+            client.webSocket("/relay") {
+                sendBytes(listenerHello(identity(), proofVersion = 0, labelVersion = 1))
+                awaitUntil { state.listeners.size == 1 }
+            }
+            awaitUntil { state.listeners.isEmpty() }
+            assertEquals(0, state.stats.rejectedInvalidHello.get())
+        }
+    }
+
+    @Test
+    fun `proof signed over the wrong transcript version is rejected`() {
+        val state = newState()
+        relayTest(state) { client ->
+            // v1-signed bytes labelled as v2, and v2-signed bytes labelled as legacy.
+            client.webSocket("/relay") {
+                sendBytes(listenerHello(identity(), proofVersion = 0, labelVersion = 2))
+                assertEquals("Invalid listener proof", expectError())
+            }
+            client.webSocket("/relay") {
+                sendBytes(listenerHello(identity(), proofVersion = 2, labelVersion = 0))
+                assertEquals("Invalid listener proof", expectError())
+            }
+            client.webSocket("/relay") {
+                sendBytes(listenerHello(identity(), proofVersion = 2, labelVersion = 3))
+                assertEquals("Invalid listener proof", expectError())
+            }
+            assertEquals(3, state.stats.rejectedInvalidHello.get())
+            assertTrue(state.listeners.isEmpty())
+        }
+    }
+
+    @Test
+    fun `v2 proof from another identity key is rejected`() {
+        val state = newState()
+        val id = identity()
+        val impostor = identity()
+        relayTest(state) { client ->
+            client.webSocket("/relay") {
+                // Correct listener_id/identity_pub pair, but the proof was made with someone else's key.
+                val hello = RelayHello.parseFrom(listenerHello(impostor)).toBuilder()
+                    .setListenerId(ByteString.copyFrom(id.hash))
+                    .setIdentityPub(ByteString.copyFrom(id.pub))
+                    .build()
+                sendBytes(hello.toByteArray())
+                assertEquals("Invalid listener proof", expectError())
+            }
+            assertTrue(state.listeners.isEmpty())
         }
     }
 
@@ -244,8 +316,11 @@ class RelayNodeServerTest {
                 assertEquals(1, state.stats.rejectedInvalidHello.get())
                 // The original dialer is still the one registered for "dup"...
                 assertEquals(1, state.pendingDialers.size)
-                assertEquals(1, listener.pending.get())
-                // ...and hanging up releases everything it held.
+                // ...and the rejected dialer's slot is released once its handler
+                // unwinds — that happens after the error frame reaches the client,
+                // so poll instead of asserting the counter immediately.
+                awaitUntil { listener.pending.get() == 1 }
+                // Hanging up the original dialer releases everything it held.
                 release.complete(Unit)
                 first.join()
                 awaitUntil { state.pendingDialers.isEmpty() && listener.pending.get() == 0 }

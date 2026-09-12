@@ -3,6 +3,7 @@ package ir.vmessenger.network.transport
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
 import ir.vmessenger.core.common.network.NetworkConfig
+import ir.vmessenger.core.common.network.NodeAddressPolicy
 import ir.vmessenger.core.common.network.RelayDns
 import ir.vmessenger.core.common.network.TransportIds
 import ir.vmessenger.core.common.network.WebSocketFrameClient
@@ -12,6 +13,7 @@ import ir.vmessenger.core.proto.relay.v1.RelayHello
 import ir.vmessenger.core.proto.relay.v1.RelayRole
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,7 +34,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 @Singleton
-class RelayTransport @Inject constructor() : Transport {
+open class RelayTransport @Inject constructor() : Transport {
     override val id = TransportIds.RELAY
     override val capabilities = TransportCapabilities(reliable = true, ordered = true, mtu = 65_535)
 
@@ -40,9 +42,9 @@ class RelayTransport @Inject constructor() : Transport {
         const val DIAL_TIMEOUT_MS = 15_000L
     }
 
+    /** Relay endpoints must satisfy [NodeAddressPolicy] (release: `wss://` with a host only). */
     override fun canReach(endpoint: Endpoint): Boolean =
-        endpoint.transport == TransportIds.RELAY &&
-            (endpoint.address.startsWith("ws://") || endpoint.address.startsWith("wss://"))
+        endpoint.transport == TransportIds.RELAY && NodeAddressPolicy.current.isRelayAllowed(endpoint.address)
 
     override suspend fun connect(endpoint: Endpoint): Result<Connection> =
         Result.failure(IllegalStateException("Use connect(endpoint, relayTargetId) for RELAY transport"))
@@ -63,7 +65,7 @@ class RelayTransport @Inject constructor() : Transport {
             }
         }
 
-    suspend fun openRelayCircuit(
+    open suspend fun openRelayCircuit(
         url: String,
         hello: RelayHello,
         awaitReady: Boolean,
@@ -133,7 +135,13 @@ class RelayTransport @Inject constructor() : Transport {
                 }
                 val payload = bytes.toByteArray()
                 if (awaitReady) {
-                    val event = RelayEvent.parseFrom(payload)
+                    val event = runCatching { RelayEvent.parseFrom(payload) }.getOrElse { parseError ->
+                        webSocket.close(1002, "malformed relay event")
+                        if (cont.isActive) {
+                            cont.resumeWithException(IllegalStateException("malformed relay event", parseError))
+                        }
+                        return
+                    }
                     when (event.type) {
                         RelayEventType.RELAY_EVENT_TYPE_READY -> {
                             val connection = RelayConnection(remote, webSocket, dataMode = true)
@@ -196,6 +204,12 @@ class RelayTransport @Inject constructor() : Transport {
         throw UnsupportedOperationException("Relay inbound uses RelayListener")
 }
 
+/**
+ * One relay circuit over a WebSocket. Inbound frames are buffered in a bounded
+ * channel: the relay pushes faster than a stalled consumer drains, and rather
+ * than growing the heap or silently dropping ciphertext (which would desync the
+ * ratchet anyway) an overflow fails the connection so the peer re-handshakes.
+ */
 class RelayConnection(
     override val remote: Endpoint,
     private val webSocket: WebSocket,
@@ -203,7 +217,7 @@ class RelayConnection(
 ) : Connection {
     private val _state = MutableStateFlow(ConnectionState.OPEN)
     override val state: StateFlow<ConnectionState> = _state
-    private val incoming = Channel<ByteArray>(Channel.UNLIMITED)
+    private val incoming = Channel<ByteArray>(INCOMING_BUFFER)
     private var acceptsData = dataMode
 
     internal fun dispatchMessage(bytes: ByteString) {
@@ -212,7 +226,7 @@ class RelayConnection(
             when (event?.type) {
                 RelayEventType.RELAY_EVENT_TYPE_READY -> acceptsData = true
                 RelayEventType.RELAY_EVENT_TYPE_INCOMING -> Unit
-                RelayEventType.RELAY_EVENT_TYPE_ERROR -> _state.value = ConnectionState.FAILED
+                RelayEventType.RELAY_EVENT_TYPE_ERROR -> markFailed()
                 else -> enqueueFrame(bytes)
             }
             return
@@ -221,35 +235,72 @@ class RelayConnection(
     }
 
     private fun enqueueFrame(bytes: ByteString) {
-        incoming.trySend(bytes.toByteArray()).let { result ->
-            if (!result.isSuccess) {
-                AppLogger.warn("Relay", "dropped inbound frame (${bytes.size} bytes)")
+        if (_state.value != ConnectionState.OPEN) return
+        val result = incoming.trySend(bytes.toByteArray())
+        if (result.isSuccess) return
+        AppLogger.warn("Relay", "inbound buffer overflow ($INCOMING_BUFFER frames); failing connection")
+        markFailed()
+        webSocket.close(1008, "receiver too slow")
+    }
+
+    internal fun markClosed() {
+        if (_state.value == ConnectionState.OPEN) _state.value = ConnectionState.CLOSED
+        incoming.close()
+    }
+
+    internal fun markFailed() {
+        if (_state.value == ConnectionState.OPEN) _state.value = ConnectionState.FAILED
+        incoming.close()
+    }
+
+    /**
+     * OkHttp queues outbound frames in memory and, once the queue passes 16 MiB,
+     * `send` returns false and closes the socket. A batch streamed faster than
+     * the relay uplink (any large attachment) would hit that at the same index
+     * on every retry, so writes wait for the queue to drain below
+     * [WRITE_HIGH_WATER] first, bounded by [WRITE_TIMEOUT_MS]; a refused send
+     * fails the connection so the caller re-handshakes instead of retrying it.
+     */
+    override suspend fun write(frame: ByteArray): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            awaitQueueRoom(frame.size)
+            check(_state.value == ConnectionState.OPEN) { "Connection closed" }
+            val sent = webSocket.send(frame.toByteString())
+            if (!sent) {
+                markFailed()
+                error("WebSocket send refused")
             }
         }
     }
 
-    internal fun markClosed() {
-        _state.value = ConnectionState.CLOSED
-    }
-
-    internal fun markFailed() {
-        _state.value = ConnectionState.FAILED
-    }
-
-    override suspend fun write(frame: ByteArray): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+    private suspend fun awaitQueueRoom(frameSize: Int) {
+        val deadline = System.currentTimeMillis() + WRITE_TIMEOUT_MS
+        while (webSocket.queueSize() + frameSize > WRITE_HIGH_WATER) {
             check(_state.value == ConnectionState.OPEN) { "Connection closed" }
-            val sent = webSocket.send(frame.toByteString())
-            check(sent) { "WebSocket send failed" }
+            if (System.currentTimeMillis() >= deadline) {
+                markFailed()
+                webSocket.close(1001, "send queue stalled")
+                error("WebSocket send queue stalled for ${WRITE_TIMEOUT_MS}ms")
+            }
+            delay(QUEUE_POLL_MS)
         }
     }
 
     override fun read() = incoming.receiveAsFlow()
 
     override suspend fun close() {
-        if (_state.value == ConnectionState.CLOSED) return
+        if (_state.value != ConnectionState.OPEN) return
         _state.value = ConnectionState.CLOSED
         incoming.close()
         webSocket.close(1000, "closed")
+    }
+
+    companion object {
+        const val INCOMING_BUFFER = 256
+
+        /** Outbound bytes OkHttp may hold before a write waits for the uplink. */
+        const val WRITE_HIGH_WATER = 1L * 1024 * 1024
+        const val WRITE_TIMEOUT_MS = 30_000L
+        private const val QUEUE_POLL_MS = 10L
     }
 }

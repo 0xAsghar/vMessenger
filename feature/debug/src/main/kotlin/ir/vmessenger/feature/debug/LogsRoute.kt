@@ -107,7 +107,9 @@ fun LogsRoute(
 }
 
 private fun shareLogFile(context: android.content.Context, text: String) {
-    val file = File(context.cacheDir, "vmessenger-export-${System.currentTimeMillis()}.log")
+    // Only cacheDir/log-export is exposed through the FileProvider (see app/res/xml/file_paths.xml).
+    val exportDir = File(context.cacheDir, "log-export").apply { mkdirs() }
+    val file = File(exportDir, "vmessenger-export-${System.currentTimeMillis()}.log")
     file.writeText(text)
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     val intent = Intent(Intent.ACTION_SEND).apply {

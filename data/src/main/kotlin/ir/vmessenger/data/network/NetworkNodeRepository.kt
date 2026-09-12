@@ -4,11 +4,17 @@ import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NetworkConfig
+import ir.vmessenger.core.common.network.NodeAddressPolicy
+import ir.vmessenger.core.common.network.NodeAddressRejection
+import ir.vmessenger.core.common.network.NodeRankKey
+import ir.vmessenger.core.common.network.NodeRanking
+import ir.vmessenger.core.common.network.NodeTrust
 import ir.vmessenger.core.database.dao.BootstrapNodeDao
 import ir.vmessenger.core.database.dao.RelayNodeDao
 import ir.vmessenger.core.database.entity.BootstrapNodeEntity
-import ir.vmessenger.core.database.entity.DEFAULT_NODE_PRIORITY
 import ir.vmessenger.core.database.entity.RelayNodeEntity
+import ir.vmessenger.core.proto.app.v1.NodeRole
+import ir.vmessenger.core.proto.app.v1.SignedNodeRecord
 import ir.vmessenger.domain.model.NetworkNode
 import ir.vmessenger.domain.model.NetworkNodeRole
 import ir.vmessenger.domain.network.NodeLinkCodec
@@ -25,23 +31,41 @@ import javax.inject.Singleton
  * about. Replaces the single hardcoded relay/bootstrap dependency with a
  * health-ranked, user-extensible list (docs/P2P-Phases.md Phase 1 & 2).
  *
+ * Trust rules (Milestone 3d):
+ * - built-in and user-added nodes are enabled; nodes learned from peers or the
+ *   DHT are stored as [NodeTrust.COMMUNITY], **disabled**, priority 80, until the
+ *   user enables them in the Nodes screen;
+ * - a `SignedNodeRecord` signed by the operator key is [NodeTrust.OFFICIAL] and
+ *   enabled with priority 100;
+ * - every stored address passes [NodeAddressPolicy] (release: `wss://` only);
+ * - ordering is [NodeRanking] over the unordered DAO result, so the built-in
+ *   relay is displaced only by a user relay or after three consecutive failures.
+ *
  * Records are never trusted with plaintext; this layer only manages *where* to
  * reach the network. Endpoint records returned by any node are still
  * signature-verified elsewhere.
  */
 @Singleton
-class NetworkNodeRepository @Inject constructor(
+@Suppress("TooManyFunctions") // node CRUD + import + ranking surface behind one repository
+class NetworkNodeRepository(
     private val bootstrapNodeDao: BootstrapNodeDao,
     private val relayNodeDao: RelayNodeDao,
+    private val addressPolicy: () -> NodeAddressPolicy,
 ) : NodeManagementRepository {
+    @Inject
+    constructor(
+        bootstrapNodeDao: BootstrapNodeDao,
+        relayNodeDao: RelayNodeDao,
+    ) : this(bootstrapNodeDao, relayNodeDao, { NodeAddressPolicy.current })
+
     /** Ensures the built-in defaults exist so there is always a working fallback. */
     suspend fun seedDefaults() {
-        seedBootstrapNode(NetworkConfig.DEFAULT_DHT_URL, SOURCE_BUILT_IN, priority = DEFAULT_NODE_PRIORITY)
-        seedRelayNode(NetworkConfig.DEFAULT_RELAY_URL, SOURCE_BUILT_IN, priority = DEFAULT_NODE_PRIORITY)
+        seedBootstrapNode(NetworkConfig.DEFAULT_DHT_URL, SOURCE_BUILT_IN, NodeTrust.BUILT_IN)
+        seedRelayNode(NetworkConfig.DEFAULT_RELAY_URL, SOURCE_BUILT_IN, NodeTrust.BUILT_IN)
     }
 
     suspend fun enabledBootstrapNodes(): List<BootstrapNode> =
-        bootstrapNodeDao.getEnabledOrdered().map { entity ->
+        rankedEnabledBootstrap().map { entity ->
             BootstrapNode(
                 address = entity.address,
                 publicKey = entity.publicKey,
@@ -49,8 +73,8 @@ class NetworkNodeRepository @Inject constructor(
             )
         }
 
-    suspend fun enabledRelayUrls(): List<String> =
-        relayNodeDao.getEnabledOrdered().map { it.address }
+    /** Enabled relay URLs, best candidate first (see [NodeRanking]). */
+    suspend fun enabledRelayUrls(): List<String> = rankedEnabledRelays().map { it.address }
 
     suspend fun recordBootstrapResult(address: String, ok: Boolean) {
         val now = System.currentTimeMillis()
@@ -62,43 +86,60 @@ class NetworkNodeRepository @Inject constructor(
         if (ok) relayNodeDao.markOk(address, now) else relayNodeDao.markFail(address, now)
     }
 
-    /** Phase 3: persist DHT nodes learned from the network for faster rejoin. */
-    suspend fun importLearnedBootstrapAddresses(addresses: Set<String>, source: String) {
+    /**
+     * Phase 3: persist DHT nodes learned from the network for faster rejoin. Always
+     * stored as community nodes (disabled) after passing the address policy.
+     */
+    suspend fun importLearnedBootstrapAddresses(
+        addresses: Set<String>,
+        source: String,
+        learnedFromHash: ByteArray? = null,
+    ) {
         addresses.forEach { address ->
-            if (isValidBootstrapAddress(address)) {
-                seedBootstrapNode(address, source, priority = CACHED_NODE_PRIORITY)
+            if (addressPolicy().isBootstrapAllowed(address)) {
+                seedBootstrapNode(address, source, NodeTrust.COMMUNITY, learnedFromHash)
             }
         }
     }
 
-    /** Phase 4: ingest network-node hints from a connected peer. */
+    /** Phase 4: ingest network-node hints from a connected peer (community, disabled). */
     suspend fun importExchangedNodes(
         bootstrapAddresses: List<String>,
         relayAddresses: List<String>,
+        learnedFromHash: ByteArray? = null,
     ) {
         importLearnedBootstrapAddresses(
             bootstrapAddresses.take(MAX_EXCHANGE).toSet(),
             SOURCE_PEER_EXCHANGE,
+            learnedFromHash,
         )
         relayAddresses.take(MAX_EXCHANGE).forEach { address ->
-            if (address.startsWith("ws://") || address.startsWith("wss://")) {
-                seedRelayNode(address, SOURCE_PEER_EXCHANGE, priority = CACHED_NODE_PRIORITY)
+            if (addressPolicy().isRelayAllowed(address)) {
+                seedRelayNode(address, SOURCE_PEER_EXCHANGE, NodeTrust.COMMUNITY, learnedFromHash)
             }
         }
     }
 
+    /**
+     * Imports signed records: operator-signed ones become [NodeTrust.OFFICIAL] and
+     * enabled; every other valid record is a disabled community node.
+     */
     suspend fun importSignedNodeRecords(
-        records: List<ir.vmessenger.core.proto.app.v1.SignedNodeRecord>,
+        records: List<SignedNodeRecord>,
         verifier: SignedNodeRecordVerifier,
+        learnedFromHash: ByteArray? = null,
     ) {
         val now = System.currentTimeMillis()
         for (record in records.take(MAX_EXCHANGE)) {
-            if (!verifier.verify(record, now)) continue
+            val trust = verifier.verify(record, now) ?: continue
+            val policy = addressPolicy()
             when (record.role) {
-                ir.vmessenger.core.proto.app.v1.NodeRole.NODE_ROLE_BOOTSTRAP ->
-                    seedBootstrapNode(record.address, SOURCE_PEER_EXCHANGE, priority = CACHED_NODE_PRIORITY)
-                ir.vmessenger.core.proto.app.v1.NodeRole.NODE_ROLE_RELAY ->
-                    seedRelayNode(record.address, SOURCE_PEER_EXCHANGE, priority = CACHED_NODE_PRIORITY)
+                NodeRole.NODE_ROLE_BOOTSTRAP -> if (policy.isBootstrapAllowed(record.address)) {
+                    seedBootstrapNode(record.address, SOURCE_PEER_EXCHANGE, trust, learnedFromHash)
+                }
+                NodeRole.NODE_ROLE_RELAY -> if (policy.isRelayAllowed(record.address)) {
+                    seedRelayNode(record.address, SOURCE_PEER_EXCHANGE, trust, learnedFromHash)
+                }
                 else -> Unit
             }
         }
@@ -111,11 +152,11 @@ class NetworkNodeRepository @Inject constructor(
     }
 
     suspend fun healthyNodesForExchange(max: Int = MAX_EXCHANGE): Pair<List<String>, List<String>> {
-        val bootstrap = bootstrapNodeDao.getEnabledOrdered()
+        val bootstrap = rankedEnabledBootstrap()
             .filter { it.failCount < MAX_FAIL_FOR_EXCHANGE }
             .take(max)
             .map { it.address }
-        val relay = relayNodeDao.getEnabledOrdered()
+        val relay = rankedEnabledRelays()
             .filter { it.failCount < MAX_FAIL_FOR_EXCHANGE }
             .take(max)
             .map { it.address }
@@ -123,12 +164,12 @@ class NetworkNodeRepository @Inject constructor(
     }
 
     suspend fun addBootstrapNode(address: String, source: String = SOURCE_USER) {
-        seedBootstrapNode(address, source, priority = USER_NODE_PRIORITY)
+        seedBootstrapNode(address, source, NodeTrust.USER)
         AppLogger.info("Nodes", "added bootstrap node $address")
     }
 
     suspend fun addRelayNode(address: String, source: String = SOURCE_USER) {
-        seedRelayNode(address, source, priority = USER_NODE_PRIORITY)
+        seedRelayNode(address, source, NodeTrust.USER)
         AppLogger.info("Nodes", "added relay node $address")
     }
 
@@ -157,8 +198,11 @@ class NetworkNodeRepository @Inject constructor(
         val link = NodeLinkCodec.decode(input)
         val role = link?.role ?: fallbackRole
         val address = (link?.address ?: input).trim()
-        val validationError = validateAddress(address, role)
-        if (validationError != null) return AppResult.Error(AppError.Validation(validationError))
+        val rejection = when (role) {
+            NetworkNodeRole.RELAY -> addressPolicy().checkRelay(address)
+            NetworkNodeRole.BOOTSTRAP -> addressPolicy().checkBootstrap(address)
+        }
+        if (rejection != null) return AppResult.Error(AppError.Validation(rejectionMessage(rejection, role)))
         when (role) {
             NetworkNodeRole.BOOTSTRAP -> addBootstrapNode(address)
             NetworkNodeRole.RELAY -> addRelayNode(address)
@@ -171,6 +215,7 @@ class NetworkNodeRepository @Inject constructor(
             lastOkUnixMs = null,
             lastFailUnixMs = null,
             failCount = 0,
+            trust = NodeTrust.USER,
         )
         return AppResult.Success(node)
     }
@@ -202,17 +247,26 @@ class NetworkNodeRepository @Inject constructor(
     override fun exportLink(node: NetworkNode): String =
         NodeLinkCodec.encode(node.role, node.address)
 
-    private fun validateAddress(address: String, role: NetworkNodeRole): String? = when {
-        address.isBlank() -> "آدرس نود خالی است"
-        role == NetworkNodeRole.RELAY && !address.startsWith("ws://") && !address.startsWith("wss://") ->
-            "آدرس رله باید با ws:// یا wss:// شروع شود"
-        role == NetworkNodeRole.BOOTSTRAP && !isValidBootstrapAddress(address) ->
-            "آدرس بوت‌استرپ باید ws://، wss:// یا host:port باشد"
-        else -> null
-    }
+    private suspend fun rankedEnabledBootstrap(): List<BootstrapNodeEntity> =
+        NodeRanking.rank(bootstrapNodeDao.getEnabled()) { it.rankKey() }
 
-    private fun isValidBootstrapAddress(address: String): Boolean =
-        address.startsWith("ws://") || address.startsWith("wss://") || hostPortPattern.matches(address)
+    private suspend fun rankedEnabledRelays(): List<RelayNodeEntity> =
+        NodeRanking.rank(relayNodeDao.getEnabled()) { it.rankKey() }
+
+    private fun BootstrapNodeEntity.rankKey() = NodeRankKey(priority, failCount, lastOkUnixMs)
+
+    private fun RelayNodeEntity.rankKey() = NodeRankKey(priority, failCount, lastOkUnixMs)
+
+    private fun rejectionMessage(rejection: NodeAddressRejection, role: NetworkNodeRole): String =
+        when (rejection) {
+            NodeAddressRejection.BLANK -> "آدرس نود خالی است"
+            NodeAddressRejection.MALFORMED -> when (role) {
+                NetworkNodeRole.RELAY -> "آدرس رله باید با wss:// شروع شود و نام میزبان داشته باشد"
+                NetworkNodeRole.BOOTSTRAP -> "آدرس بوت‌استرپ باید با wss:// شروع شود و نام میزبان داشته باشد"
+            }
+            NodeAddressRejection.INSECURE_NOT_LOCAL ->
+                "اتصال ناامن (ws:// یا host:port) فقط در نسخهٔ توسعه و برای نودهای محلی مجاز است"
+        }
 
     private fun BootstrapNodeEntity.toNetworkNode(role: NetworkNodeRole) = NetworkNode(
         address = address,
@@ -222,6 +276,7 @@ class NetworkNodeRepository @Inject constructor(
         lastOkUnixMs = lastOkUnixMs,
         lastFailUnixMs = lastFailUnixMs,
         failCount = failCount,
+        trust = NodeTrust.fromName(trust),
     )
 
     private fun RelayNodeEntity.toNetworkNode(role: NetworkNodeRole) = NetworkNode(
@@ -232,45 +287,97 @@ class NetworkNodeRepository @Inject constructor(
         lastOkUnixMs = lastOkUnixMs,
         lastFailUnixMs = lastFailUnixMs,
         failCount = failCount,
+        trust = NodeTrust.fromName(trust),
     )
 
-    private suspend fun seedBootstrapNode(address: String, source: String, priority: Int) {
-        if (bootstrapNodeDao.getByAddress(address) != null) return
+    /**
+     * Inserts a new row, or upgrades an existing community row when the operator
+     * (OFFICIAL) or the user (USER) vouches for it; anything else already present
+     * is left untouched (a peer can never re-enable or re-rank a node the user
+     * turned off). Community inserts are capped per table so a peer cannot grow
+     * the node list without bound.
+     */
+    private suspend fun seedBootstrapNode(
+        address: String,
+        source: String,
+        trust: NodeTrust,
+        learnedFromHash: ByteArray? = null,
+    ) {
+        val existing = bootstrapNodeDao.getByAddress(address)
+        if (existing != null && !upgrades(existing.trust, trust)) return
+        if (existing == null && communityTableFull(trust, bootstrapNodeDao.getAll().count { it.isCommunity() })) return
         bootstrapNodeDao.upsert(
             BootstrapNodeEntity(
                 address = address,
-                publicKey = null,
-                source = source,
-                enabled = true,
-                lastOkUnixMs = null,
-                priority = priority,
+                publicKey = existing?.publicKey,
+                source = sourceFor(existing?.source, source, trust),
+                enabled = NodeRanking.autoEnabled(trust) || existing?.enabled == true,
+                lastOkUnixMs = existing?.lastOkUnixMs,
+                priority = NodeRanking.defaultPriority(trust),
+                lastFailUnixMs = existing?.lastFailUnixMs,
+                failCount = existing?.failCount ?: 0,
+                trust = trust.name,
+                learnedFromHash = learnedFromHash ?: existing?.learnedFromHash,
             ),
         )
     }
 
-    private suspend fun seedRelayNode(address: String, source: String, priority: Int) {
-        if (relayNodeDao.getByAddress(address) != null) return
+    private suspend fun seedRelayNode(
+        address: String,
+        source: String,
+        trust: NodeTrust,
+        learnedFromHash: ByteArray? = null,
+    ) {
+        val existing = relayNodeDao.getByAddress(address)
+        if (existing != null && !upgrades(existing.trust, trust)) return
+        if (existing == null && communityTableFull(trust, relayNodeDao.getAll().count { it.isCommunity() })) return
         relayNodeDao.upsert(
             RelayNodeEntity(
                 address = address,
-                publicKey = null,
-                source = source,
-                enabled = true,
-                lastOkUnixMs = null,
-                priority = priority,
+                publicKey = existing?.publicKey,
+                source = sourceFor(existing?.source, source, trust),
+                enabled = NodeRanking.autoEnabled(trust) || existing?.enabled == true,
+                lastOkUnixMs = existing?.lastOkUnixMs,
+                priority = NodeRanking.defaultPriority(trust),
+                lastFailUnixMs = existing?.lastFailUnixMs,
+                failCount = existing?.failCount ?: 0,
+                trust = trust.name,
+                learnedFromHash = learnedFromHash ?: existing?.learnedFromHash,
             ),
         )
     }
+
+    /**
+     * Only a community row can be upgraded, and only by an explicit user add or an
+     * operator signature; BUILT_IN/USER/OFFICIAL rows never change trust here.
+     */
+    private fun upgrades(existingTrust: String, incoming: NodeTrust): Boolean =
+        NodeTrust.fromName(existingTrust) == NodeTrust.COMMUNITY &&
+            (incoming == NodeTrust.OFFICIAL || incoming == NodeTrust.USER)
+
+    /** A user add re-attributes the row; an operator promotion keeps where we learned it. */
+    private fun sourceFor(existingSource: String?, source: String, trust: NodeTrust): String =
+        if (existingSource == null || trust == NodeTrust.USER) source else existingSource
+
+    private fun communityTableFull(trust: NodeTrust, communityRows: Int): Boolean {
+        val full = trust == NodeTrust.COMMUNITY && communityRows >= MAX_COMMUNITY_ROWS
+        if (full) AppLogger.debug("Nodes", "community node table full ($communityRows); ignoring new hint")
+        return full
+    }
+
+    private fun BootstrapNodeEntity.isCommunity() = NodeTrust.fromName(trust) == NodeTrust.COMMUNITY
+
+    private fun RelayNodeEntity.isCommunity() = NodeTrust.fromName(trust) == NodeTrust.COMMUNITY
 
     companion object {
         const val SOURCE_BUILT_IN = "BUILT_IN"
         const val SOURCE_USER = "USER"
         const val SOURCE_PEER_EXCHANGE = "PEER_EXCHANGE"
         const val SOURCE_CACHED_DHT = "CACHED_DHT"
-        private const val USER_NODE_PRIORITY = 150
-        private const val CACHED_NODE_PRIORITY = 120
         private const val MAX_EXCHANGE = 20
         private const val MAX_FAIL_FOR_EXCHANGE = 5
-        private val hostPortPattern = Regex("""^[A-Za-z0-9.\-]+:\d{1,5}$""")
+
+        /** Upper bound on peer/DHT-learned (community) rows per table, whatever the number of peers. */
+        const val MAX_COMMUNITY_ROWS = 50
     }
 }

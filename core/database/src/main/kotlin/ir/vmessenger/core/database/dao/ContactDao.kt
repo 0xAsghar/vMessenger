@@ -9,6 +9,7 @@ import ir.vmessenger.core.database.entity.ContactEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
+@Suppress("TooManyFunctions") // one query per contact access path; splitting the DAO would scatter the table
 interface ContactDao {
     @Query("SELECT * FROM contact WHERE blocked = 0 ORDER BY displayName COLLATE NOCASE ASC")
     fun observeContacts(): Flow<List<ContactEntity>>
@@ -28,6 +29,13 @@ interface ContactDao {
     /** Marks that we just received something from this contact (stops re-requesting). */
     @Query("UPDATE contact SET lastSeenUnixMs = :ts WHERE id = :id")
     suspend fun touchLastSeen(id: String, ts: Long)
+
+    /**
+     * Records a static key the peer presented that differs from the pinned one. The handshake
+     * that observed it was rejected; the key stays pending until the user accepts the change.
+     */
+    @Query("UPDATE contact SET pendingX25519StaticPublic = :staticPub, keyChangedAtUnixMs = :ts WHERE id = :id")
+    suspend fun recordPendingKeyChange(id: String, staticPub: ByteArray, ts: Long)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(entity: ContactEntity)

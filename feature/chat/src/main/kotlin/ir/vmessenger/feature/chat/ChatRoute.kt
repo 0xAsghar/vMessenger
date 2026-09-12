@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -40,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.model.DeliveryStatus
 import ir.vmessenger.domain.model.MessageDirection
@@ -97,6 +100,10 @@ fun ConversationRoute(
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val contactName by viewModel.contactName.collectAsStateWithLifecycle()
+    val attachmentProgress by viewModel.attachmentProgress.collectAsStateWithLifecycle()
+    val attachmentActions = remember(viewModel) {
+        AttachmentActions(loadThumbnail = viewModel::loadThumbnail, open = viewModel::openAttachment)
+    }
     var draft by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val pickAttachment = rememberLauncherForActivityResult(
@@ -104,10 +111,6 @@ fun ConversationRoute(
     ) { uri ->
         uri?.let { viewModel.sendAttachment(it.toString()) }
     }
-
-    // reverseLayout anchors content to the bottom (messenger convention): with
-    // the list reversed, index 0 is the newest message at the very bottom.
-    val reversedMessages = remember(messages) { messages.asReversed() }
 
     LaunchedEffect(messages.lastOrNull()?.messageId) {
         if (messages.isNotEmpty()) {
@@ -130,17 +133,95 @@ fun ConversationRoute(
             )
         },
     ) { padding ->
-        LazyColumn(
-            state = listState,
-            reverseLayout = true,
+        MessageList(
+            messages = messages,
+            attachmentProgress = attachmentProgress,
+            attachmentActions = attachmentActions,
+            listState = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Bottom),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun MessageList(
+    messages: List<ChatMessage>,
+    attachmentProgress: Map<String, AttachmentProgress>,
+    attachmentActions: AttachmentActions,
+    listState: LazyListState,
+    modifier: Modifier = Modifier,
+) {
+    // reverseLayout anchors content to the bottom (messenger convention): with
+    // the list reversed, index 0 is the newest message at the very bottom.
+    val reversedMessages = remember(messages) { messages.asReversed() }
+    val incomingTransfers = remember(messages, attachmentProgress) {
+        pendingIncomingTransfers(messages, attachmentProgress)
+    }
+    LazyColumn(
+        state = listState,
+        reverseLayout = true,
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Bottom),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+    ) {
+        items(incomingTransfers, key = { (id, _) -> "incoming-$id" }) { (_, progress) ->
+            IncomingTransferBubble(progress = progress)
+        }
+        items(reversedMessages, key = { it.messageId }) { message ->
+            MessageBubble(
+                message = message,
+                progress = attachmentProgress[message.messageId],
+                attachmentActions = attachmentActions,
+            )
+        }
+    }
+}
+
+/**
+ * An incoming attachment has no message row until every chunk arrived, so its
+ * progress is shown on a placeholder bubble; newest first, like the message list.
+ */
+private fun pendingIncomingTransfers(
+    messages: List<ChatMessage>,
+    attachmentProgress: Map<String, AttachmentProgress>,
+): List<Pair<String, AttachmentProgress>> =
+    attachmentProgress.entries
+        .filter { (id, progress) ->
+            progress.direction == MessageDirection.INCOMING && messages.none { it.messageId == id }
+        }
+        .map { it.key to it.value }
+        .asReversed()
+
+/** Placeholder for an attachment still being received: incoming-styled bubble with the transfer's progress. */
+@Composable
+private fun IncomingTransferBubble(progress: AttachmentProgress) {
+    val style = bubbleStyle(isOutgoing = false)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        contentAlignment = style.alignment,
+    ) {
+        Surface(
+            modifier = Modifier.widthIn(max = 280.dp),
+            shape = style.shape,
+            color = style.bubbleColor,
         ) {
-            items(reversedMessages, key = { it.messageId }) { message ->
-                MessageBubble(message = message)
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Text(
+                    text = stringResource(R.string.feature_chat_attachment_receiving),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = style.contentColor,
+                )
+                LinearProgressIndicator(
+                    progress = { progress.fraction },
+                    modifier = Modifier
+                        .widthIn(min = 200.dp)
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                )
             }
         }
     }
@@ -223,7 +304,11 @@ private fun bubbleStyle(isOutgoing: Boolean): BubbleStyle = if (isOutgoing) {
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessage) {
+private fun MessageBubble(
+    message: ChatMessage,
+    progress: AttachmentProgress?,
+    attachmentActions: AttachmentActions,
+) {
     val isOutgoing = message.direction == MessageDirection.OUTGOING
     val style = bubbleStyle(isOutgoing)
     val contentColor = style.contentColor
@@ -242,7 +327,13 @@ private fun MessageBubble(message: ChatMessage) {
         ) {
             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 message.attachment?.let { attachment ->
-                    AttachmentContent(attachment = attachment, contentColor = contentColor)
+                    AttachmentContent(
+                        messageId = message.messageId,
+                        attachment = attachment,
+                        progress = progress,
+                        contentColor = contentColor,
+                        actions = attachmentActions,
+                    )
                 }
                 if (message.text.isNotBlank()) {
                     Text(

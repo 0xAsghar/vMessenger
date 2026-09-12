@@ -29,6 +29,18 @@ interface LocationShareDao {
 
     @Update
     suspend fun update(entity: LocationShareEntity)
+
+    /** Removes every share (both directions) with [contactId]; samples cascade. */
+    @Query("DELETE FROM location_share WHERE contactId = :contactId")
+    suspend fun deleteByContact(contactId: String)
+
+    /** Every share id, active or not (retention walks them all). */
+    @Query("SELECT shareId FROM location_share")
+    suspend fun allShareIds(): List<String>
+
+    /** Removes shares that ended before [ts]; their samples cascade. */
+    @Query("DELETE FROM location_share WHERE active = 0 AND endedAtUnixMs IS NOT NULL AND endedAtUnixMs < :ts")
+    suspend fun deleteEndedBefore(ts: Long)
 }
 
 @Dao
@@ -50,4 +62,16 @@ interface LocationSampleDao {
         "SELECT * FROM location_sample WHERE id IN (SELECT MAX(id) FROM location_sample GROUP BY shareId)",
     )
     fun observeLatestPerShare(): Flow<List<LocationSampleEntity>>
+
+    /** Drops every sample older than [cutoff] (retention window). */
+    @Query("DELETE FROM location_sample WHERE sampledAtUnixMs < :cutoff")
+    suspend fun purgeOlderThan(cutoff: Long)
+
+    /** Keeps only the newest [keep] samples of [shareId]. */
+    @Query(
+        "DELETE FROM location_sample WHERE shareId = :shareId AND id NOT IN (" +
+            "SELECT id FROM location_sample WHERE shareId = :shareId " +
+            "ORDER BY sampledAtUnixMs DESC, id DESC LIMIT :keep)",
+    )
+    suspend fun deleteExcessForShare(shareId: String, keep: Int)
 }

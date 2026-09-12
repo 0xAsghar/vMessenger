@@ -6,9 +6,10 @@ import android.os.Build
 import dagger.hilt.android.HiltAndroidApp
 import ir.vmessenger.app.network.NetworkLifecycleService
 import ir.vmessenger.core.common.logging.AppLogger
+import ir.vmessenger.core.common.network.NodeAddressPolicy
 import ir.vmessenger.core.database.DatabaseKeyProvider
-import org.maplibre.android.MapLibre
 import kotlinx.coroutines.runBlocking
+import org.maplibre.android.MapLibre
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -20,6 +21,8 @@ class VMessengerApplication : Application() {
     override fun onCreate() {
         System.loadLibrary("sqlcipher")
         super.onCreate()
+        // Debug builds may store/dial ws:// or host:port nodes on local hosts (emulator, LAN); release: wss:// only.
+        NodeAddressPolicy.current = NodeAddressPolicy(allowInsecureLocal = BuildConfig.DEBUG)
         MapLibre.getInstance(this)
         fileLogSink = FileLogSink(this)
         AppLogger.addSink(fileLogSink)

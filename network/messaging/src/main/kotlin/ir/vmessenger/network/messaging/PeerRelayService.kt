@@ -3,6 +3,7 @@ package ir.vmessenger.network.messaging
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.common.network.P2PConfig
+import ir.vmessenger.core.common.network.ProtocolVersion
 import ir.vmessenger.core.common.network.RelayPeerPolicy
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import ir.vmessenger.core.proto.app.v1.RelayClose
@@ -116,7 +117,7 @@ class PeerRelayService @Inject constructor() {
             )
             .build()
         return Frame.newBuilder()
-            .setVersion(1)
+            .setVersion(ProtocolVersion.MAJOR)
             .setType(FrameType.FRAME_TYPE_SECURE)
             .setBody(com.google.protobuf.ByteString.copyFrom(envelope.toByteArray()))
             .build()

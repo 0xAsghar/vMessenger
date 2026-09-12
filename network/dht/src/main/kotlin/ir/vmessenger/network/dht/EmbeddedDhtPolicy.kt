@@ -15,14 +15,11 @@ import javax.inject.Singleton
 @Singleton
 class EmbeddedDhtPolicy @Inject constructor(
     @ApplicationContext private val context: Context,
-) {
-    fun shouldParticipate(): Boolean {
-        if (!P2PConfig.dhtParticipationEnabled) return false
-        if (isLowBattery()) return false
-        return isOnWifi() || isCharging()
-    }
+) : DhtParticipationPolicy {
+    override fun shouldParticipate(): Boolean =
+        P2PConfig.dhtParticipationEnabled && !isLowBattery() && (isOnWifi() || isCharging())
 
-    fun shouldAdvertise(host: String): Boolean =
+    override fun shouldAdvertise(host: String): Boolean =
         shouldParticipate() && host != "0.0.0.0" && host.isNotBlank()
 
     private fun isLowBattery(): Boolean {

@@ -2,26 +2,29 @@ package ir.vmessenger.data.repository
 
 import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.crypto.pairing.PairingDescriptorCodec
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.entity.ContactEntity
-import ir.vmessenger.core.database.entity.ContactRelationshipStatus as EntityRelationshipStatus
 import ir.vmessenger.core.proto.wire.v1.PairingDescriptor
+import ir.vmessenger.data.network.ContactCleanupCoordinator
 import ir.vmessenger.domain.model.Contact
-import ir.vmessenger.domain.model.ContactRelationshipStatus as DomainRelationshipStatus
 import ir.vmessenger.domain.repository.ContactRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import ir.vmessenger.core.database.entity.ContactRelationshipStatus as EntityRelationshipStatus
+import ir.vmessenger.domain.model.ContactRelationshipStatus as DomainRelationshipStatus
 
 @Singleton
 class ContactRepositoryImpl @Inject constructor(
     private val contactDao: ContactDao,
     private val pairingDescriptorCodec: PairingDescriptorCodec,
+    private val cleanupCoordinator: ContactCleanupCoordinator,
 ) : ContactRepository {
 
     override fun observeContacts(): Flow<List<Contact>> =
@@ -99,14 +102,8 @@ class ContactRepositoryImpl @Inject constructor(
         userHash: String,
         displayName: String,
     ): AppResult<Contact> = runCatching {
-        contactDao.getByIdentityHash(identityHash)?.let { existing ->
-            val updated = existing.copy(
-                ed25519Public = ed25519Public,
-                x25519StaticPublic = x25519StaticPublic,
-                userHash = userHash,
-                displayName = displayName.ifBlank { userHash },
-                relationshipStatus = EntityRelationshipStatus.APPROVED,
-            )
+        contactDao.findByIdentityHash(identityHash)?.let { existing ->
+            val updated = approveExisting(existing, identityHash, ed25519Public, x25519StaticPublic, displayName)
             contactDao.update(updated)
             return@runCatching updated.toDomain()
         }
@@ -130,6 +127,45 @@ class ContactRepositoryImpl @Inject constructor(
         onFailure = { AppResult.Error(AppError.Validation(it.message ?: "افزودن مخاطب ناموفق بود")) },
     )
 
+    /**
+     * Approves a contact we already hold. The request only proves *who* asked, so
+     * it may fill in what we do not know yet (placeholder identity key, unpinned
+     * static key, the default hash-as-name) but never replaces a pinned key or an
+     * alias the user typed, and the shown user hash is re-derived from the
+     * authenticated identity rather than taken from the payload.
+     */
+    private fun approveExisting(
+        existing: ContactEntity,
+        identityHash: ByteArray,
+        ed25519Public: ByteArray,
+        x25519StaticPublic: ByteArray?,
+        displayName: String,
+    ): ContactEntity {
+        val learnIdentity = IdentityHashMatcher.isPlaceholderPublicKey(existing.ed25519Public) &&
+            !IdentityHashMatcher.isPlaceholderPublicKey(ed25519Public)
+        val learnStatic = !existing.hasPinnedStaticKey() &&
+            x25519StaticPublic != null &&
+            !IdentityHashMatcher.isPlaceholderPublicKey(x25519StaticPublic)
+        val newUserHash = UserHashEncoder.encode(if (learnIdentity) identityHash else existing.identityHash)
+        // Only replace default names (the raw hash used at add time); never a user alias.
+        val hasCustomAlias = existing.displayName.isNotBlank() &&
+            existing.displayName != existing.userHash &&
+            existing.displayName != newUserHash
+        val newDisplayName = when {
+            hasCustomAlias -> existing.displayName
+            displayName.isNotBlank() -> displayName
+            else -> newUserHash
+        }
+        return existing.copy(
+            identityHash = if (learnIdentity) identityHash else existing.identityHash,
+            ed25519Public = if (learnIdentity) ed25519Public else existing.ed25519Public,
+            x25519StaticPublic = if (learnStatic) x25519StaticPublic else existing.x25519StaticPublic,
+            userHash = newUserHash,
+            displayName = newDisplayName,
+            relationshipStatus = EntityRelationshipStatus.APPROVED,
+        )
+    }
+
     override suspend fun updateRelationshipStatus(id: String, status: DomainRelationshipStatus) {
         val contact = contactDao.getById(id) ?: return
         contactDao.update(contact.copy(relationshipStatus = status.toEntity()))
@@ -140,13 +176,55 @@ class ContactRepositoryImpl @Inject constructor(
         contactDao.update(contact.copy(displayName = alias))
     }
 
+    /**
+     * Blocking also tears down live sessions and stops location sharing with the
+     * contact; queued outbox rows stay (the dispatcher skips blocked contacts).
+     */
     override suspend fun blockContact(id: String, blocked: Boolean) {
         val contact = contactDao.getById(id) ?: return
         contactDao.update(contact.copy(blocked = blocked))
+        if (blocked) cleanupCoordinator.onBlocked(id)
     }
 
-    override suspend fun deleteContact(id: String) {
-        contactDao.deleteById(id)
+    /** Full cleanup contract; see [ContactCleanupCoordinator]. */
+    override suspend fun deleteContact(id: String) = cleanupCoordinator.deleteContact(id)
+
+    override suspend fun acceptKeyChange(id: String): AppResult<Unit> {
+        val contact = contactDao.getById(id)
+        val pending = contact?.pendingX25519StaticPublic
+        if (contact == null || pending == null) {
+            val message = if (contact == null) "مخاطب یافت نشد" else "تغییر کلیدی برای این مخاطب در انتظار نیست"
+            return AppResult.Error(AppError.NotFound(message))
+        }
+        contactDao.update(
+            contact.copy(
+                x25519StaticPublic = pending,
+                pendingX25519StaticPublic = null,
+                keyChangedAtUnixMs = null,
+                verified = false,
+            ),
+        )
+        AppLogger.info("Contact", "accepted key change contact=$id")
+        return AppResult.Success(Unit)
+    }
+
+    /**
+     * One-off pass (run from `NetworkCoordinator.start`) that re-encodes every contact's user hash in the
+     * current canonical form (`vm2-`), so contacts added under 0.x keep a valid, decodable string after an
+     * in-place dev upgrade. Hash-only contacts carry a 16-byte prefix padded with zeros, which the encoder
+     * accepts. Returns the number of rows rewritten.
+     */
+    suspend fun normalizeUserHashes(): Int {
+        var updated = 0
+        contactDao.getAll().forEach { contact ->
+            val canonical = UserHashEncoder.encode(contact.identityHash)
+            if (canonical != contact.userHash) {
+                contactDao.update(contact.copy(userHash = canonical))
+                updated++
+            }
+        }
+        if (updated > 0) AppLogger.info("Contact", "normalized $updated contact user hash(es) to vm2")
+        return updated
     }
 
     private fun ContactEntity.toDomain() = Contact(
@@ -161,6 +239,8 @@ class ContactRepositoryImpl @Inject constructor(
         relationshipStatus = relationshipStatus.toDomain(),
         createdAtUnixMs = createdAtUnixMs,
         lastSeenUnixMs = lastSeenUnixMs,
+        pendingX25519StaticPublicKey = pendingX25519StaticPublic,
+        keyChangedAtUnixMs = keyChangedAtUnixMs,
     )
 
     private fun EntityRelationshipStatus.toDomain(): DomainRelationshipStatus = when (this) {

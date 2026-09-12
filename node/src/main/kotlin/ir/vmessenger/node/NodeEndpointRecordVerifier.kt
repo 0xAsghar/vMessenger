@@ -2,20 +2,26 @@ package ir.vmessenger.node
 
 import com.goterl.lazysodium.LazySodiumJava
 import com.goterl.lazysodium.SodiumJava
+import ir.vmessenger.core.common.network.EndpointRecordTranscript
 import ir.vmessenger.core.proto.dht.v1.EndpointRecord
 import java.security.MessageDigest
 
+/**
+ * Verifies publisher signatures on stored records. Accepts `transcript_version` 2 (the v2
+ * domain-separated transcript every 1.0 app signs) and 0 (the 0.x transcript) so devices on either
+ * side of the upgrade keep publishing during the transition; anything else is rejected.
+ */
 class NodeEndpointRecordVerifier {
     private val sodium = LazySodiumJava(SodiumJava())
 
     @Suppress("ReturnCount")
     fun verify(record: EndpointRecord, nowMs: Long = System.currentTimeMillis()): Boolean {
-        if (record.identityHash.size() != 32 || record.identityPub.size() != 32) return false
+        if (record.identityHash.size() != HASH_SIZE || record.identityPub.size() != HASH_SIZE) return false
         val identityPub = record.identityPub.toByteArray()
         val computedHash = MessageDigest.getInstance("SHA-256").digest(identityPub)
         if (!computedHash.contentEquals(record.identityHash.toByteArray())) return false
         if (nowMs >= record.publishedAtUnixMs + record.ttlMs) return false
-        val transcript = buildTranscript(record)
+        val transcript = buildTranscript(record) ?: return false
         return sodium.cryptoSignVerifyDetached(
             record.signature.toByteArray(),
             transcript,
@@ -25,22 +31,31 @@ class NodeEndpointRecordVerifier {
     }
 
     companion object {
-        /**
-         * Bytes the publisher signs: identity hash || identity pub || sorted
-         * `transport\taddress` lines || published_at || ttl || sequence (decimal).
-         * Must stay byte-identical to the app's EndpointRecord signing transcript.
-         */
-        fun buildTranscript(record: EndpointRecord): ByteArray {
-            val endpointsBytes = record.endpointsList
-                .sortedBy { it.transport + it.address }
-                .joinToString("\n") { "${it.transport}\t${it.address}" }
-                .toByteArray(Charsets.UTF_8)
-            return record.identityHash.toByteArray() +
-                record.identityPub.toByteArray() +
-                endpointsBytes +
-                record.publishedAtUnixMs.toString().toByteArray(Charsets.UTF_8) +
-                record.ttlMs.toString().toByteArray(Charsets.UTF_8) +
-                record.sequence.toString().toByteArray(Charsets.UTF_8)
+        const val HASH_SIZE = 32
+        const val TRANSCRIPT_VERSION_LEGACY = 0
+
+        /** Signed bytes for the record's `transcript_version`, or null when that version is not supported. */
+        fun buildTranscript(record: EndpointRecord): ByteArray? {
+            val entries = record.endpointsList.map { EndpointRecordTranscript.Entry(it.transport, it.address) }
+            return when (record.transcriptVersion) {
+                EndpointRecordTranscript.TRANSCRIPT_VERSION_V2 -> EndpointRecordTranscript.buildV2(
+                    identityHash = record.identityHash.toByteArray(),
+                    identityPub = record.identityPub.toByteArray(),
+                    endpoints = entries,
+                    publishedAtUnixMs = record.publishedAtUnixMs,
+                    ttlMs = record.ttlMs,
+                    sequence = record.sequence,
+                )
+                TRANSCRIPT_VERSION_LEGACY -> EndpointRecordTranscript.buildLegacy(
+                    identityHash = record.identityHash.toByteArray(),
+                    identityPub = record.identityPub.toByteArray(),
+                    endpoints = entries,
+                    publishedAtUnixMs = record.publishedAtUnixMs,
+                    ttlMs = record.ttlMs,
+                    sequence = record.sequence,
+                )
+                else -> null
+            }
         }
     }
 }

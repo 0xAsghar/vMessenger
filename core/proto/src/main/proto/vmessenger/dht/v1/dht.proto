@@ -18,6 +18,9 @@ message EndpointRecord {
   int64 ttl_ms = 5;
   uint64 sequence = 6;
   bytes signature = 7;
+  // 2 = domain-separated, length-prefixed transcript ("vmessenger-endpoint-record-v2").
+  // 0 (unset) = 0.x transcript; only the relay node still accepts it during the transition.
+  uint32 transcript_version = 8;
 }
 
 message DhtNodeInfo {

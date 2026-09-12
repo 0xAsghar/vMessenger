@@ -17,15 +17,21 @@ import ir.vmessenger.core.proto.dht.v1.FindValueResponse
 import ir.vmessenger.core.proto.dht.v1.PingResponse
 import ir.vmessenger.core.proto.dht.v1.StoreRequest
 import ir.vmessenger.core.proto.dht.v1.StoreResponse
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.net.ServerSocket
+import java.net.Socket
 import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
@@ -33,111 +39,122 @@ import javax.inject.Singleton
 
 /**
  * Durable bounded DHT record store with routing table (Phase 5 / rc27).
+ *
+ * The local node id comes from [DhtNodeIdProvider] (per-device random, persisted)
+ * and is resolved lazily on first use; every DAO access is a plain suspend call
+ * so request handling never blocks a thread with `runBlocking`.
  */
 @Singleton
 class EmbeddedDhtRecordStore @Inject constructor(
     private val verifier: EndpointRecordVerifier,
     private val dhtRecordDao: DhtRecordDao,
-    private val rpcClient: DhtRpcClient,
+    private val rpcClient: DhtRpcSender,
+    private val nodeIdProvider: DhtNodeIdProvider,
+    private val storeRateLimiter: StoreRateLimiter,
 ) {
-    private val nodeId = MessageDigest.getInstance("SHA-256").digest("vmessenger-android-dht".toByteArray())
-    private val routingTable = EmbeddedDhtRoutingTable(nodeId)
+    private class Routing(val nodeId: ByteArray) {
+        val table = EmbeddedDhtRoutingTable(nodeId)
+    }
+
+    private val routingLock = Mutex()
+
+    @Volatile
+    private var routing: Routing? = null
     private val servedLookups = AtomicLong(0)
     private val rejectedRecords = AtomicLong(0)
-    private val replicateScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val replicateScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO +
+            CoroutineExceptionHandler { _, e -> AppLogger.warn(TAG, "replication failed: ${e.message}") },
+    )
 
-    fun handle(request: DhtRpcRequest, advertisedAddress: String): DhtRpcResponse {
+    /**
+     * Serves one RPC. [source] identifies the requesting client (its IP) and is
+     * used only for the per-source STORE rate limit.
+     */
+    suspend fun handle(request: DhtRpcRequest, advertisedAddress: String, source: String): DhtRpcResponse {
         val builder = DhtRpcResponse.newBuilder()
+        val routing = routing()
         when {
             request.hasPing() -> builder.setPing(
-                PingResponse.newBuilder().setNodeId(ByteString.copyFrom(nodeId)),
+                PingResponse.newBuilder().setNodeId(ByteString.copyFrom(routing.nodeId)),
             )
             request.hasFindNode() -> {
-                val closest = routingTable.findClosest(request.findNode.targetKey.toByteArray())
-                val nodes = if (closest.isEmpty()) listOf(selfNode(advertisedAddress)) else closest
+                val closest = routing.table.findClosest(request.findNode.targetKey.toByteArray())
+                val nodes = closest.ifEmpty { listOf(selfNode(routing, advertisedAddress)) }
                 builder.setFindNode(FindNodeResponse.newBuilder().addAllNodes(nodes))
             }
             request.hasStore() -> {
-                val record = request.store.record
-                val accepted = acceptStore(record, advertisedAddress)
+                val accepted = storeRateLimiter.allow(source) && acceptStore(request.store.record, advertisedAddress)
+                if (!accepted) rejectedRecords.incrementAndGet()
                 builder.setStore(StoreResponse.newBuilder().setAccepted(accepted))
             }
             request.hasFindValue() -> {
                 servedLookups.incrementAndGet()
                 val keyBytes = request.findValue.key.toByteArray()
                 val record = findRecord(keyBytes)
+                val response = FindValueResponse.newBuilder()
                 if (record != null && !isExpired(record)) {
-                    builder.setFindValue(
-                        FindValueResponse.newBuilder()
-                            .setFound(true)
-                            .setRecord(record),
-                    )
+                    response.setFound(true).setRecord(record)
                 } else {
-                    val closest = routingTable.findClosest(keyBytes)
-                    builder.setFindValue(
-                        FindValueResponse.newBuilder()
-                            .setFound(false)
-                            .addAllNodes(
-                                if (closest.isEmpty()) listOf(selfNode(advertisedAddress)) else closest,
-                            ),
-                    )
+                    val closest = routing.table.findClosest(keyBytes)
+                    val nodes = closest.ifEmpty { listOf(selfNode(routing, advertisedAddress)) }
+                    response.setFound(false).addAllNodes(nodes)
                 }
+                builder.setFindValue(response)
             }
         }
         updateCounters()
         return builder.build()
     }
 
-    fun insertKnownNode(address: String) {
+    suspend fun insertKnownNode(address: String) {
         val info = DhtNodeInfo.newBuilder()
             .setNodeId(ByteString.copyFrom(MessageDigest.getInstance("SHA-256").digest(address.toByteArray())))
             .setAddress(address)
             .build()
-        routingTable.insert(info)
+        routing().table.insert(info)
     }
 
-    private fun selfNode(address: String): DhtNodeInfo =
+    suspend fun storedCount(): Int = dhtRecordDao.count()
+
+    private suspend fun routing(): Routing =
+        routing ?: routingLock.withLock {
+            routing ?: Routing(nodeIdProvider.nodeId().copyOf()).also { routing = it }
+        }
+
+    private fun selfNode(routing: Routing, address: String): DhtNodeInfo =
         DhtNodeInfo.newBuilder()
-            .setNodeId(ByteString.copyFrom(nodeId))
+            .setNodeId(ByteString.copyFrom(routing.nodeId))
             .setAddress(address)
             .build()
 
-    private fun acceptStore(record: EndpointRecord, advertisedAddress: String): Boolean {
-        if (!verifier.verify(record)) {
-            rejectedRecords.incrementAndGet()
-            return false
-        }
+    /** Verifies, persists and replicates [record]; false when unverifiable or not newer than the stored one. */
+    private suspend fun acceptStore(record: EndpointRecord, advertisedAddress: String): Boolean {
+        if (!verifier.verify(record)) return false
         val key = recordKey(record)
-        val existing = runBlocking { dhtRecordDao.active(System.currentTimeMillis()) }
-            .firstOrNull { it.recordKey == key }
-        val accepted = existing == null || record.sequence > existing.sequence
-        if (accepted) {
-            runBlocking {
-                dhtRecordDao.upsert(
-                    DhtRecordEntity(
-                        recordKey = key,
-                        recordProto = record.toByteArray(),
-                        sequence = record.sequence,
-                        expiresAtUnixMs = record.publishedAtUnixMs + record.ttlMs,
-                        storedAtUnixMs = System.currentTimeMillis(),
-                    ),
-                )
-                enforceLimits()
-                replicateStore(record, advertisedAddress)
-            }
-        } else {
-            rejectedRecords.incrementAndGet()
+        val existing = dhtRecordDao.active(System.currentTimeMillis()).firstOrNull { it.recordKey == key }
+        val newer = existing == null || record.sequence > existing.sequence
+        if (newer) {
+            dhtRecordDao.upsert(
+                DhtRecordEntity(
+                    recordKey = key,
+                    recordProto = record.toByteArray(),
+                    sequence = record.sequence,
+                    expiresAtUnixMs = record.publishedAtUnixMs + record.ttlMs,
+                    storedAtUnixMs = System.currentTimeMillis(),
+                ),
+            )
+            enforceLimits()
+            replicateStore(record, advertisedAddress)
         }
-        updateCounters()
-        return accepted
+        return newer
     }
 
-    private fun findRecord(keyBytes: ByteArray): EndpointRecord? {
+    private suspend fun findRecord(keyBytes: ByteArray): EndpointRecord? {
         // Routing-prefix key so partial (User Hash derived) lookups match too.
         val key = IdentityHashMatcher.routingKeyHex(keyBytes)
-        val entity = runBlocking { dhtRecordDao.active(System.currentTimeMillis()) }
-            .firstOrNull { it.recordKey == key }
-        return entity?.let { EndpointRecord.parseFrom(it.recordProto) }
+        val entity = dhtRecordDao.active(System.currentTimeMillis()).firstOrNull { it.recordKey == key }
+        return entity?.let { runCatching { EndpointRecord.parseFrom(it.recordProto) }.getOrNull() }
     }
 
     private fun recordKey(record: EndpointRecord): String =
@@ -157,17 +174,16 @@ class EmbeddedDhtRecordStore @Inject constructor(
         }
     }
 
-    private fun updateCounters() {
-        val count = runBlocking { dhtRecordDao.count() }
+    private suspend fun updateCounters() {
         NetworkPathTracker.setDhtCounters(
-            stored = count,
+            stored = dhtRecordDao.count(),
             servedLookups = servedLookups.get(),
             rejected = rejectedRecords.get(),
         )
     }
 
-    private fun replicateStore(record: EndpointRecord, advertisedAddress: String) {
-        val peers = routingTable.findClosest(record.identityHash.toByteArray(), REPLICATION_FACTOR)
+    private suspend fun replicateStore(record: EndpointRecord, advertisedAddress: String) {
+        val peers = routing().table.findClosest(record.identityHash.toByteArray(), REPLICATION_FACTOR)
             .filter { it.address != advertisedAddress }
             .take(REPLICATION_FACTOR)
         for (peer in peers) {
@@ -180,15 +196,14 @@ class EmbeddedDhtRecordStore @Inject constructor(
                             .build(),
                     )
                 }.onFailure {
-                    AppLogger.warn("EmbeddedDht", "replicate to ${peer.address} failed: ${it.message}")
+                    AppLogger.warn(TAG, "replicate to ${peer.address} failed: ${it.message}")
                 }
             }
         }
     }
 
-    fun storedCount(): Int = runBlocking { dhtRecordDao.count() }
-
     companion object {
+        private const val TAG = "EmbeddedDht"
         const val MAX_RECORDS = 500
         private const val REPLICATION_FACTOR = 2
     }
@@ -196,26 +211,53 @@ class EmbeddedDhtRecordStore @Inject constructor(
 
 /**
  * TCP DHT RPC listener so online Android clients can store and return signed
- * endpoint records (docs/P2P-Phases.md Phase 5).
+ * endpoint records (docs/P2P-Phases.md Phase 5). Off by default (`P2PConfig`);
+ * when on, at most [MAX_CONCURRENT_CLIENTS] clients are served at once, each
+ * with a [CLIENT_TIMEOUT_MS] socket timeout, and [stop] closes the listener.
  */
 @Singleton
 class EmbeddedDhtService @Inject constructor(
     private val recordStore: EmbeddedDhtRecordStore,
-    private val dhtPolicy: EmbeddedDhtPolicy,
+    private val dhtPolicy: DhtParticipationPolicy,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO +
+            CoroutineExceptionHandler { _, e -> AppLogger.error(TAG, "unhandled: ${e.message}") },
+    )
+    private val clientPermits = Semaphore(MAX_CONCURRENT_CLIENTS)
+
     @Volatile
     private var running = false
+
+    @Volatile
+    private var server: ServerSocket? = null
+
+    val isRunning: Boolean
+        get() = running
+
+    /** Local port of the bound listener while running, else null. */
+    fun listeningPort(): Int? = server?.takeIf { !it.isClosed }?.localPort
+
+    /** Closes the listener (which ends the accept loop) and drops every client handler. */
+    fun stop() {
+        if (!running) return
+        running = false
+        server?.let { runCatching { it.close() } }
+        server = null
+        scope.coroutineContext.cancelChildren()
+        NetworkPathTracker.setDhtParticipating(false)
+        AppLogger.info(TAG, "stopped")
+    }
 
     fun start(dhtPort: Int, advertisedHost: String) {
         if (!P2PConfig.dhtParticipationEnabled || running) return
         if (!dhtPolicy.shouldParticipate()) {
-            AppLogger.info("EmbeddedDht", "skipped: policy/battery/network gate")
+            AppLogger.info(TAG, "skipped: policy/battery/network gate")
             NetworkPathTracker.setDhtParticipating(false)
             return
         }
         if (!dhtPolicy.shouldAdvertise(advertisedHost)) {
-            AppLogger.info("EmbeddedDht", "skipped: host not advertisable ($advertisedHost)")
+            AppLogger.info(TAG, "skipped: host not advertisable ($advertisedHost)")
             NetworkPathTracker.setDhtParticipating(false)
             return
         }
@@ -223,41 +265,70 @@ class EmbeddedDhtService @Inject constructor(
         val advertised = "$advertisedHost:$dhtPort"
         NetworkPathTracker.setDhtParticipating(true)
         scope.launch {
-            AppLogger.info("EmbeddedDht", "listening on $advertised")
+            AppLogger.info(TAG, "listening on $advertised")
+            var bound: ServerSocket? = null
             runCatching {
-                ServerSocket(dhtPort).use { server ->
-                    while (isActive) {
-                        val socket = server.accept()
-                        launch {
-                            handleClient(socket, advertised)
-                        }
-                    }
+                ServerSocket(dhtPort).use { listener ->
+                    bound = listener
+                    server = listener
+                    acceptLoop(listener, advertised)
                 }
             }.onFailure {
-                AppLogger.error("EmbeddedDht", "server stopped: ${it.message}")
-                running = false
-                NetworkPathTracker.setDhtParticipating(false)
+                // A listener closed by stop() (no longer the current one) is the normal end;
+                // a bind failure or an error on the current listener is a real failure.
+                val current = bound == null || server === bound
+                if (running && current) {
+                    AppLogger.error(TAG, "server stopped: ${it.message}")
+                    running = false
+                    NetworkPathTracker.setDhtParticipating(false)
+                }
+            }
+        }
+    }
+
+    private suspend fun acceptLoop(listener: ServerSocket, advertised: String) = coroutineScope {
+        while (isActive) {
+            val socket = listener.accept()
+            if (!clientPermits.tryAcquire()) {
+                AppLogger.warn(TAG, "client limit reached; dropping ${socket.inetAddress?.hostAddress}")
+                runCatching { socket.close() }
+                continue
+            }
+            launch {
+                try {
+                    handleClient(socket, advertised)
+                } finally {
+                    clientPermits.release()
+                }
             }
         }
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private fun handleClient(socket: java.net.Socket, advertised: String) {
+    private suspend fun handleClient(socket: Socket, advertised: String) {
         try {
             socket.use { s ->
+                s.soTimeout = CLIENT_TIMEOUT_MS
+                val source = s.inetAddress?.hostAddress ?: "unknown"
                 val input = BufferedInputStream(s.getInputStream())
                 val output = BufferedOutputStream(s.getOutputStream())
-                val frame = LengthPrefixedFrames.readFrame(input) ?: return
+                val frame = LengthPrefixedFrames.readFrame(input, MAX_REQUEST_SIZE) ?: return
                 val request = DhtRpcRequest.parseFrom(frame)
-                val response = recordStore.handle(request, advertised)
+                val response = recordStore.handle(request, advertised, source)
                 LengthPrefixedFrames.writeFrame(output, response.toByteArray())
             }
         } catch (e: Exception) {
-            AppLogger.warn("EmbeddedDht", "client error: ${e.message}")
+            AppLogger.warn(TAG, "client error: ${e.message}")
         }
     }
 
     companion object {
+        private const val TAG = "EmbeddedDht"
         const val PORT_OFFSET = 1000
+        const val MAX_CONCURRENT_CLIENTS = 8
+        const val CLIENT_TIMEOUT_MS = 5_000
+
+        /** Upper bound for one RPC request frame; a signed endpoint record is far smaller. */
+        const val MAX_REQUEST_SIZE = 64 * 1024
     }
 }

@@ -1,21 +1,39 @@
 package ir.vmessenger.data.network
 
+import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.DeliveryStatus
+import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageDirection
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.proto.app.v1.AttachmentInfo
 import ir.vmessenger.core.proto.app.v1.AttachmentKind
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
+import ir.vmessenger.data.attachment.AttachmentIncomingStore
 import ir.vmessenger.data.attachment.AttachmentStore
+import ir.vmessenger.data.attachment.AttachmentTransferTracker
+import ir.vmessenger.data.attachment.IncomingStaging
+import ir.vmessenger.data.di.IoDispatcher
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
+import java.util.BitSet
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import ir.vmessenger.domain.model.MessageDirection as DomainDirection
 
 /** A fully received attachment ready for notification + delivery receipt. */
 data class CompletedAttachment(
@@ -25,107 +43,181 @@ data class CompletedAttachment(
 )
 
 /**
- * Reassembles incoming attachment transfers (header + ordered chunks) into
- * app-private files and materializes the chat message on completion. A
- * repeated header for the same transfer resets partial state, so sender-side
- * retries are safe.
+ * Reassembles incoming attachment transfers (header + chunks in any order) into
+ * encrypted app-private files and materializes the chat message on completion.
+ * Chunks go into the store's sealed staging ([IncomingStaging]: every chunk is
+ * encrypted at rest on its own, so a partial transfer is never plaintext on
+ * disk); a [BitSet] tracks which indices arrived (duplicates are ignored) and
+ * the transfer completes when every bit is set, the byte count matches and the
+ * header's SHA-256 verifies over the decrypted stream. A repeated header for
+ * the same transfer resets partial state, so sender-side retries are safe.
+ * Caps: [MAX_PER_CONTACT] pending transfers per contact, [MAX_GLOBAL] overall;
+ * idle transfers are pruned by a timer started from [start].
  */
 @Singleton
+@Suppress("TooManyFunctions") // admission, chunk IO, verification, persistence and pruning of one transfer type
 class AttachmentReceiver @Inject constructor(
-    private val attachmentStore: AttachmentStore,
+    private val store: AttachmentIncomingStore,
     private val conversationDao: ConversationDao,
     private val messageDao: MessageDao,
+    private val tracker: AttachmentTransferTracker,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
-    @Suppress("LongParameterList")
+    /** Injectable clock so the prune timer is testable. */
+    var clock: () -> Long = System::currentTimeMillis
+
     private class Pending(
         val contactId: String,
         val messageId: String,
         val info: AttachmentInfo,
-        val file: File,
-        val output: FileOutputStream,
-        var nextIndex: Int = 0,
-        var receivedBytes: Long = 0,
-        val startedAtUnixMs: Long = System.currentTimeMillis(),
-    )
+        val staging: IncomingStaging,
+        startedAt: Long,
+    ) {
+        val mutex = Mutex()
+        val received = BitSet(info.chunkCount)
+        var receivedBytes = 0L
+        var lastActivityAt = startedAt
+        var closed = false
+    }
 
-    private val pending = mutableMapOf<String, Pending>()
-    private val lock = Any()
+    private val pending = ConcurrentHashMap<String, Pending>()
+    private val registry = Mutex()
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher + loggingExceptionHandler("Attachment"))
+    private var pruneJob: Job? = null
 
-    @Suppress("ReturnCount")
+    /** Starts the periodic prune of transfers that stopped receiving chunks. */
+    fun start() {
+        if (pruneJob?.isActive == true) return
+        pruneJob = scope.launch {
+            while (isActive) {
+                delay(PRUNE_INTERVAL_MS)
+                pruneStale(clock())
+            }
+        }
+    }
+
+    fun stop() {
+        pruneJob?.cancel()
+        pruneJob = null
+    }
+
+    /** Number of transfers currently being assembled (diagnostics/tests). */
+    fun pendingCount(): Int = pending.size
+
+    /** Returns true when the transfer was already delivered and only needs a fresh receipt. */
+    @Suppress("ReturnCount") // duplicate, rejected header, cap reached: each is a distinct early exit
     suspend fun handleInfo(contactId: String, envelope: MessageEnvelope): Boolean {
         val info = envelope.attachmentInfo
         val messageId = envelope.messageId.toStringUtf8()
         val key = transferKey(info.transferId.toByteArray())
-        if (messageDao.getById(messageId) != null) {
-            // Already delivered previously; ask the caller to re-send the receipt.
+        if (messageId.isNotBlank() && messageDao.getById(messageId) != null) {
             AppLogger.info("Attachment", "duplicate transfer for delivered messageId=$messageId")
             return true
         }
-        if (!isAcceptable(info)) {
+        if (messageId.isBlank() || !isAcceptable(info)) {
             AppLogger.warn(
                 "Attachment",
                 "rejected transfer size=${info.totalSize} chunks=${info.chunkCount} from contact=$contactId",
             )
             return false
         }
-        val fileName = info.fileName.ifBlank { "attachment" }
-        val target = attachmentStore.newIncomingFile(fileName)
-        synchronized(lock) {
-            prune()
-            pending.remove(key)?.closeQuietly()
-            pending[key] = Pending(
-                contactId = contactId,
-                messageId = messageId,
-                info = info,
-                file = target,
-                output = FileOutputStream(target),
-            )
+        val replaced = registry.withLock {
+            val existing = pending[key]
+            if (existing == null && !admits(contactId)) return false
+            existing?.let { discard(it) }
+            val staging = store.newIncomingStaging(info.totalSize, info.chunkCount, AttachmentSender.CHUNK_BYTES)
+            val transfer = Pending(contactId, messageId, info, staging, clock())
+            pending[key] = transfer
+            existing != null
         }
+        tracker.update(messageId, contactId, 0L, info.totalSize, DomainDirection.INCOMING)
         AppLogger.info(
             "Attachment",
-            "transfer started messageId=$messageId size=${info.totalSize} chunks=${info.chunkCount}",
+            (if (replaced) "header reset partial transfer" else "transfer started") +
+                " messageId=$messageId size=${info.totalSize} chunks=${info.chunkCount}",
         )
         return false
     }
 
-    @Suppress("ReturnCount")
+    /** Returns the completed attachment when this chunk finished the transfer. */
     suspend fun handleChunk(contactId: String, envelope: MessageEnvelope): CompletedAttachment? {
         val chunk = envelope.attachmentChunk
         val key = transferKey(chunk.transferId.toByteArray())
-        val transfer: Pending
-        val complete: Boolean
-        synchronized(lock) {
-            transfer = pending[key] ?: return null
-            if (transfer.contactId != contactId || chunk.index != transfer.nextIndex) {
-                AppLogger.warn(
-                    "Attachment",
-                    "out-of-order chunk ${chunk.index} (expected ${transfer.nextIndex}); dropping transfer",
-                )
-                pending.remove(key)?.closeQuietly()
-                return null
-            }
-            val data = chunk.data.toByteArray()
-            transfer.receivedBytes += data.size
-            if (transfer.receivedBytes > transfer.info.totalSize) {
-                AppLogger.warn("Attachment", "transfer exceeded declared size; dropping")
-                pending.remove(key)?.closeQuietly()
-                return null
-            }
-            transfer.output.write(data)
-            transfer.nextIndex++
-            complete = transfer.nextIndex >= transfer.info.chunkCount
-            if (complete) {
-                transfer.output.close()
-                pending.remove(key)
-            }
+        // A chunk from anyone but the transfer's sender is dropped without touching its state.
+        val transfer = pending[key]?.takeIf { it.contactId == contactId } ?: return null
+        val outcome = transfer.mutex.withLock {
+            if (transfer.closed) ChunkOutcome.CLOSED else write(transfer, chunk.index, chunk.data.toByteArray())
         }
-        if (!complete) return null
-        return materialize(transfer)
+        return when (outcome) {
+            ChunkOutcome.COMPLETE -> complete(key, transfer)
+            ChunkOutcome.INVALID -> {
+                AppLogger.warn("Attachment", "invalid chunk ${chunk.index} for ${transfer.messageId}; transfer dropped")
+                remove(key, transfer)
+                null
+            }
+            ChunkOutcome.STORED, ChunkOutcome.DUPLICATE, ChunkOutcome.CLOSED -> null
+        }
     }
 
-    private suspend fun materialize(transfer: Pending): CompletedAttachment? {
+    private enum class ChunkOutcome { STORED, DUPLICATE, COMPLETE, INVALID, CLOSED }
+
+    private suspend fun write(transfer: Pending, index: Int, data: ByteArray): ChunkOutcome {
         val info = transfer.info
-        val now = System.currentTimeMillis()
+        val expected = if (index in 0 until info.chunkCount) {
+            AttachmentSender.chunkSize(info.totalSize, info.chunkCount, index)
+        } else {
+            -1
+        }
+        return when {
+            expected < 0 || data.size != expected -> ChunkOutcome.INVALID
+            transfer.received.get(index) -> ChunkOutcome.DUPLICATE
+            else -> store(transfer, index, data)
+        }
+    }
+
+    private suspend fun store(transfer: Pending, index: Int, data: ByteArray): ChunkOutcome {
+        val info = transfer.info
+        transfer.staging.writeChunk(index, data)
+        transfer.received.set(index)
+        transfer.receivedBytes += data.size
+        transfer.lastActivityAt = clock()
+        tracker.update(
+            transfer.messageId,
+            transfer.contactId,
+            transfer.receivedBytes,
+            info.totalSize,
+            DomainDirection.INCOMING,
+        )
+        val allBits = transfer.received.cardinality() == info.chunkCount
+        return if (allBits && transfer.receivedBytes == info.totalSize) ChunkOutcome.COMPLETE else ChunkOutcome.STORED
+    }
+
+    /** Has the store verify the digest and encrypt the staged chunks into place, then persists the message. */
+    private suspend fun complete(key: String, transfer: Pending): CompletedAttachment? {
+        transfer.mutex.withLock { transfer.closed = true }
+        val imported = runCatching {
+            store.importStaged(transfer.staging, transfer.info.fileName, transfer.info.sha256.toByteArray())
+        }
+        val stored = imported.getOrNull()
+        if (stored == null) {
+            val reason = imported.exceptionOrNull()?.message ?: "sha256 mismatch"
+            AppLogger.warn("Attachment", "transfer discarded messageId=${transfer.messageId}: $reason")
+            remove(key, transfer)
+            return null
+        }
+        pending.remove(key, transfer)
+        tracker.remove(transfer.messageId)
+        AppLogger.info(
+            "Attachment",
+            "transfer complete messageId=${transfer.messageId} bytes=${transfer.receivedBytes} sha256 ok",
+        )
+        return materialize(transfer, stored)
+    }
+
+    private suspend fun materialize(transfer: Pending, stored: File): CompletedAttachment {
+        val info = transfer.info
+        val now = clock()
+        val fileName = info.fileName.ifBlank { stored.name }
         val conversationId = conversationDao.getByContactId(transfer.contactId)?.id
             ?: UUID.randomUUID().toString().also { id ->
                 conversationDao.upsert(
@@ -152,10 +244,12 @@ class AttachmentReceiver @Inject constructor(
                 sentAtUnixMs = null,
                 deliveredAtUnixMs = now,
                 readAtUnixMs = null,
-                attachmentName = info.fileName.ifBlank { transfer.file.name },
+                attachmentName = fileName,
                 attachmentMimeType = info.mimeType,
                 attachmentSizeBytes = transfer.receivedBytes,
-                attachmentPath = transfer.file.absolutePath,
+                attachmentPath = stored.absolutePath,
+                attachmentSha256 = info.sha256.toByteArray(),
+                attachmentEncrypted = true,
             ),
         )
         conversationDao.getById(conversationId)?.let { conv ->
@@ -167,45 +261,58 @@ class AttachmentReceiver @Inject constructor(
                 ),
             )
         }
-        AppLogger.info(
-            "Attachment",
-            "transfer complete messageId=${transfer.messageId} bytes=${transfer.receivedBytes}",
-        )
-        return CompletedAttachment(
-            contactId = transfer.contactId,
-            messageId = transfer.messageId,
-            fileName = info.fileName.ifBlank { transfer.file.name },
-        )
+        return CompletedAttachment(transfer.contactId, transfer.messageId, fileName)
     }
 
-    private fun isAcceptable(info: AttachmentInfo): Boolean {
-        val maxChunks = (AttachmentStore.MAX_ATTACHMENT_BYTES / AttachmentSender.CHUNK_BYTES + 1).toInt()
-        return info.totalSize in 1..AttachmentStore.MAX_ATTACHMENT_BYTES &&
-            info.chunkCount in 1..maxChunks
-    }
-
-    private fun prune() {
-        val cutoff = System.currentTimeMillis() - STALE_TRANSFER_MS
-        val stale = pending.filterValues { it.startedAtUnixMs < cutoff }.keys.toList()
-        for (key in stale) {
-            pending.remove(key)?.closeQuietly()
+    /** Drops transfers that received nothing for [STALE_TRANSFER_MS]. */
+    suspend fun pruneStale(now: Long) {
+        val stale = pending.filterValues { now - it.lastActivityAt >= STALE_TRANSFER_MS }
+        for ((key, transfer) in stale) {
+            AppLogger.info("Attachment", "pruned stale transfer messageId=${transfer.messageId}")
+            remove(key, transfer)
         }
     }
 
-    private fun Pending.closeQuietly() {
-        runCatching { output.close() }
-        runCatching { file.delete() }
+    private fun admits(contactId: String): Boolean {
+        val perContact = pending.values.count { it.contactId == contactId }
+        val ok = perContact < MAX_PER_CONTACT && pending.size < MAX_GLOBAL
+        if (!ok) {
+            AppLogger.warn("Attachment", "transfer cap reached contact=$contactId pending=$perContact/${pending.size}")
+        }
+        return ok
+    }
+
+    private suspend fun remove(key: String, transfer: Pending) {
+        if (pending.remove(key, transfer)) discard(transfer)
+    }
+
+    private suspend fun discard(transfer: Pending) {
+        transfer.mutex.withLock { transfer.closed = true }
+        withContext(ioDispatcher) { runCatching { transfer.staging.discard() } }
+        tracker.remove(transfer.messageId)
+    }
+
+    private fun isAcceptable(info: AttachmentInfo): Boolean {
+        val chunkBytes = AttachmentSender.CHUNK_BYTES
+        val expectedChunks = ((info.totalSize + chunkBytes - 1) / chunkBytes).toInt()
+        return info.totalSize in 1..AttachmentStore.MAX_ATTACHMENT_BYTES &&
+            info.chunkCount == expectedChunks &&
+            info.sha256.size() == SHA256_BYTES
     }
 
     private fun transferKey(id: ByteArray): String = id.joinToString("") { "%02x".format(it) }
 
     private fun AttachmentKind.toContentType() = when (this) {
-        AttachmentKind.ATTACHMENT_KIND_IMAGE -> ir.vmessenger.core.database.entity.MessageContentType.IMAGE
-        AttachmentKind.ATTACHMENT_KIND_VIDEO -> ir.vmessenger.core.database.entity.MessageContentType.VIDEO
-        else -> ir.vmessenger.core.database.entity.MessageContentType.FILE
+        AttachmentKind.ATTACHMENT_KIND_IMAGE -> MessageContentType.IMAGE
+        AttachmentKind.ATTACHMENT_KIND_VIDEO -> MessageContentType.VIDEO
+        else -> MessageContentType.FILE
     }
 
     companion object {
-        private const val STALE_TRANSFER_MS = 10 * 60_000L
+        const val MAX_PER_CONTACT = 2
+        const val MAX_GLOBAL = 8
+        const val PRUNE_INTERVAL_MS = 60_000L
+        const val STALE_TRANSFER_MS = 10 * 60_000L
+        private const val SHA256_BYTES = 32
     }
 }

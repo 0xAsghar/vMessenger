@@ -31,4 +31,7 @@ interface ContactRequestDao {
 
     @Query("DELETE FROM contact_request WHERE requestId = :requestId")
     suspend fun deleteById(requestId: String)
+
+    @Query("DELETE FROM contact_request WHERE requesterIdentityHash = :hash")
+    suspend fun deleteByRequesterHash(hash: ByteArray)
 }

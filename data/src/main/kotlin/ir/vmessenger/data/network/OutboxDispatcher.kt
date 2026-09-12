@@ -15,16 +15,20 @@ import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import ir.vmessenger.data.di.IoDispatcher
-import ir.vmessenger.domain.model.Identity
-import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.network.messaging.MessagingService
 import ir.vmessenger.network.messaging.PeerIdentity
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import javax.inject.Inject
@@ -47,7 +51,7 @@ class OutboxDispatcher @Inject constructor(
     private val conversationDao: ConversationDao,
     private val contactDao: ContactDao,
     private val outboxDao: OutboxDao,
-    private val identityRepository: IdentityRepository,
+    private val selfIdentityCache: SelfIdentityCache,
     private val messagingService: MessagingService,
     private val mailboxService: MailboxService,
     private val attachmentSender: AttachmentSender,
@@ -55,6 +59,7 @@ class OutboxDispatcher @Inject constructor(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
+    private val parallelism = Semaphore(MAX_PARALLEL_CONVERSATIONS)
 
     @Volatile
     private var started = false
@@ -89,19 +94,36 @@ class OutboxDispatcher @Inject constructor(
         }
     }
 
+    /** Stops the drain loop (coordinator stop); queued rows stay in the outbox until the next [start]. */
+    fun stop() {
+        started = false
+        scope.coroutineContext.cancelChildren()
+    }
+
+    /**
+     * Due rows are processed per conversation: order is kept within a
+     * conversation, but conversations run concurrently (bounded by
+     * [MAX_PARALLEL_CONVERSATIONS]) so a contact that takes the full dial
+     * timeout never holds back a message to a reachable one.
+     */
     private suspend fun drainOnce() {
         val now = System.currentTimeMillis()
         val due = outboxDao.due(now)
         if (due.isEmpty()) return
-        val identity = identityRepository.getIdentity() ?: return
-        val self = selfPeer(identity)
-        for (item in due) {
-            processItem(item, identity, self)
+        val self = selfIdentityCache.get() ?: return
+        coroutineScope {
+            due.groupBy { it.conversationId }.values.map { group ->
+                async {
+                    parallelism.withPermit {
+                        for (item in group) processItem(item, self)
+                    }
+                }
+            }.awaitAll()
         }
     }
 
     @Suppress("ReturnCount")
-    private suspend fun processItem(item: OutboxEntity, identity: Identity, self: PeerIdentity) {
+    private suspend fun processItem(item: OutboxEntity, self: PeerIdentity) {
         val message = messageDao.getById(item.messageId)
         if (message == null) {
             outboxDao.remove(item.messageId)
@@ -117,6 +139,11 @@ class OutboxDispatcher @Inject constructor(
             backoff(item, "contact missing")
             return
         }
+        // Never send to a blocked contact; the row stays queued so unblocking resumes delivery.
+        if (contact.blocked) {
+            backoff(item, "contact blocked")
+            return
+        }
         if (contact.relationshipStatus != ir.vmessenger.core.database.entity.ContactRelationshipStatus.APPROVED) {
             backoff(item, "contact not approved")
             return
@@ -129,14 +156,13 @@ class OutboxDispatcher @Inject constructor(
         if (message.isAttachment()) {
             processAttachment(item, message, self, peer, conversation.contactId)
         } else {
-            sendChatMessage(item, message, identity, self, peer, conversation.contactId)
+            sendChatMessage(item, message, self, peer, conversation.contactId)
         }
     }
 
     private suspend fun sendChatMessage(
         item: OutboxEntity,
         message: MessageEntity,
-        identity: Identity,
         self: PeerIdentity,
         peer: PeerIdentity,
         contactId: String,
@@ -150,7 +176,7 @@ class OutboxDispatcher @Inject constructor(
             AppLogger.info("Outbox", "receipt wait exhausted messageId=${message.messageId}, left as sent")
             return
         }
-        val envelope = buildEnvelope(message, identity)
+        val envelope = buildEnvelope(message, self)
         // A receipt-wait re-send forces a fresh session: if the reused session had
         // silently died the message would otherwise vanish without another receipt.
         val result = messagingService.send(contactId, self, peer, envelope, forceReconnect = awaitingReceipt)
@@ -217,20 +243,23 @@ class OutboxDispatcher @Inject constructor(
         createdAtUnixMs: Long = 0L,
     ) {
         val attempt = item.attemptCount + 1
-        // With store-and-forward on, hand the message to a mailbox peer once the
-        // direct-retry budget is spent instead of holding it in the outbox.
-        val canMailbox = P2PConfig.storeAndForwardEnabled && peer != null && envelope != null
-        if (attempt >= MAX_ATTEMPTS && canMailbox) {
-            mailboxService.enqueueForRecipient(peer!!.identityHash, envelope!!.toByteArray())
+        // With store-and-forward on, park a sealed copy in the mailbox once the
+        // direct-retry budget is spent. The row stays QUEUED (never marked SENT
+        // on a handoff) and direct delivery keeps being retried until a receipt
+        // removes it or the retry window expires. Skipped when the peer's static
+        // key is unknown, since there is nothing to seal to.
+        val handedOff = attempt == MAX_ATTEMPTS &&
+            P2PConfig.storeAndForwardEnabled &&
+            peer != null &&
+            envelope != null &&
+            mailboxService.enqueueForRecipient(peer, envelope)
+        if (handedOff) {
             NetworkPathTracker.record(NetworkPath.STORE_AND_FORWARD, "outbox-${item.messageId}")
-            messageDao.markSent(item.messageId, DeliveryStatus.SENT, System.currentTimeMillis())
-            outboxDao.remove(item.messageId)
-            AppLogger.info("Outbox", "queued to mailbox messageId=${item.messageId}")
-            return
+            AppLogger.info("Outbox", "sealed copy parked in mailbox messageId=${item.messageId}; still retrying direct")
         }
-        // Otherwise keep retrying (capped backoff) so a message to a temporarily
-        // offline peer still delivers when they return; only give up after a long
-        // window instead of dropping it after a handful of minutes.
+        // Keep retrying (capped backoff) so a message to a temporarily offline
+        // peer still delivers when they return; only give up after a long window
+        // instead of dropping it after a handful of minutes.
         val expired = createdAtUnixMs > 0 && System.currentTimeMillis() - createdAtUnixMs >= RETRY_WINDOW_MS
         if (expired) {
             messageDao.updateStatus(item.messageId, DeliveryStatus.FAILED)
@@ -243,16 +272,16 @@ class OutboxDispatcher @Inject constructor(
             item.copy(
                 attemptCount = attempt,
                 nextAttemptUnixMs = System.currentTimeMillis() + backoffMs,
-                lastError = error,
+                lastError = if (handedOff) MAILBOX_HANDOFF_ERROR else error,
             ),
         )
         AppLogger.info("Outbox", "retry messageId=${item.messageId} attempt=$attempt in ${backoffMs}ms: $error")
     }
 
-    private fun buildEnvelope(message: MessageEntity, identity: Identity): MessageEnvelope =
+    private fun buildEnvelope(message: MessageEntity, self: PeerIdentity): MessageEnvelope =
         MessageEnvelope.newBuilder()
             .setMessageId(ByteString.copyFromUtf8(message.messageId))
-            .setSenderIdentityHash(ByteString.copyFrom(identity.identityHash))
+            .setSenderIdentityHash(ByteString.copyFrom(self.identityHash))
             .setSentAtUnixMs(message.createdAtUnixMs)
             .setCounter(1)
             .setChat(ProtoChatMessage.newBuilder().setText(message.body.orEmpty()))
@@ -266,16 +295,9 @@ class OutboxDispatcher @Inject constructor(
         else -> false
     }
 
-    private suspend fun selfPeer(identity: Identity): PeerIdentity = PeerIdentity(
-        identityHash = identity.identityHash,
-        ed25519PublicKey = identity.ed25519PublicKey,
-        x25519StaticPublicKey = identity.x25519StaticPublicKey,
-        ed25519PrivateKey = identityRepository.getEd25519PrivateKey(),
-        x25519StaticPrivateKey = identityRepository.getX25519StaticPrivateKey(),
-    )
-
     companion object {
         private const val POLL_INTERVAL_MS = 5_000L
+        private const val MAX_PARALLEL_CONVERSATIONS = 8
         private const val BASE_BACKOFF_MS = 2_000L
         private const val MAX_BACKOFF_MS = 60_000L
         private const val MAX_SHIFT = 5
@@ -283,6 +305,9 @@ class OutboxDispatcher @Inject constructor(
         private const val X25519_KEY_SIZE = 32
         private const val RECEIPT_WAIT_MS = 15_000L
         private const val MAX_RECEIPT_WAITS = 4
+
+        /** Outbox `lastError` shown while a sealed copy waits in the mailbox and direct retries continue. */
+        const val MAILBOX_HANDOFF_ERROR = "در صندوق نگهداری شد"
 
         // Keep retrying an undelivered message this long (capped backoff) so it
         // arrives when a temporarily-offline peer returns, before giving up.

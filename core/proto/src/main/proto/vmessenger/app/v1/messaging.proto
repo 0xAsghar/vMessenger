@@ -49,6 +49,9 @@ message AttachmentInfo {
   int32 chunk_count = 5;
   AttachmentKind kind = 6;
   string caption = 7;
+  // SHA-256 of the plaintext file; the receiver verifies it once every chunk
+  // arrived and discards the transfer on mismatch. Required (32 bytes) in v2.
+  bytes sha256 = 8;
 }
 
 message AttachmentChunk {
@@ -79,6 +82,8 @@ message SignedNodeRecord {
   repeated string capabilities = 4;
   int64 expires_at_unix_ms = 5;
   bytes signature = 6;
+  // 2 = domain-separated, length-prefixed transcript ("vmessenger-node-record-v2"); anything else is rejected.
+  uint32 transcript_version = 7;
 }
 
 enum NodeRole {
@@ -107,12 +112,30 @@ message RelayClose {
   string reason = 2;
 }
 
-/** Phase 8: encrypted offline delivery blob (plaintext never stored on mailbox peers). */
+/**
+ * Phase 8: encrypted offline delivery blob (plaintext never stored on mailbox peers).
+ * `sealed_payload` is `crypto_box_seal(MailboxInner, recipient x25519 static key)`;
+ * `blob_id` is content-addressed (`hex(SHA256(sealed_payload))[0..32)`) and any
+ * sender-chosen id is ignored by the storing peer. `seal_version` is 2 for this
+ * layout. Limitation: no forward secrecy for mailbox-delivered messages.
+ */
 message MailboxBlob {
   bytes blob_id = 1;
   bytes recipient_identity_hash = 2;
   bytes sealed_payload = 3;
   int64 expires_at_unix_ms = 4;
+  uint32 seal_version = 5;
+}
+
+/**
+ * Plaintext of a sealed mailbox blob. `signature` is Ed25519 by the sender's
+ * identity key over `"vmessenger-mailbox-v2" || lp(recipient_identity_hash) || SHA256(envelope)`,
+ * binding the inner envelope to its intended recipient.
+ */
+message MailboxInner {
+  bytes sender_identity_pub = 1;
+  bytes envelope = 2;
+  bytes signature = 3;
 }
 
 message MailboxPut {
@@ -153,6 +176,9 @@ message Receipt {
   bytes ref_message_id = 1;
   ReceiptType type = 2;
   int64 at_unix_ms = 3;
+  // Additional message ids acknowledged by this receipt (batched READ). Each is
+  // validated like ref_message_id: it must be an outgoing message to the sender.
+  repeated bytes ref_message_ids = 4;
 }
 
 enum ReceiptType {
@@ -217,4 +243,6 @@ enum ContactResponseType {
   CONTACT_RESPONSE_UNSPECIFIED = 0;
   CONTACT_RESPONSE_ACCEPT = 1;
   CONTACT_RESPONSE_REJECT = 2;
+  // The peer deleted us; the receiver marks the contact REJECTED.
+  CONTACT_RESPONSE_REVOKE = 3;
 }

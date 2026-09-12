@@ -6,10 +6,12 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import ir.vmessenger.data.discovery.DataStorePublishSequenceStore
+import ir.vmessenger.data.discovery.SecurityPreferencesDhtNodeIdProvider
 import ir.vmessenger.data.network.DatabaseBootstrapProvider
 import ir.vmessenger.data.network.PeerEndpointCacheImpl
 import ir.vmessenger.data.network.RelayDirectoryImpl
 import ir.vmessenger.network.bootstrap.BootstrapProvider
+import ir.vmessenger.network.dht.DhtNodeIdProvider
 import ir.vmessenger.network.discovery.PeerEndpointCache
 import ir.vmessenger.network.discovery.PublishSequenceStore
 import ir.vmessenger.network.messaging.RelayDirectory
@@ -29,6 +31,10 @@ abstract class DiscoveryDataModule {
     @Binds
     @Singleton
     abstract fun bindRelayDirectory(impl: RelayDirectoryImpl): RelayDirectory
+
+    @Binds
+    @Singleton
+    abstract fun bindDhtNodeIdProvider(impl: SecurityPreferencesDhtNodeIdProvider): DhtNodeIdProvider
 
     @Binds
     @Singleton

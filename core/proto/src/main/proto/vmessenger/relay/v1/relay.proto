@@ -20,6 +20,9 @@ message RelayHello {
   bytes identity_pub = 5;
   bytes proof = 6;
   int64 ts = 7;
+  // 2 = proof over "vmessenger-relay-listener-v2" || lp(listener_id) || lp(identity_pub) || u64be(ts).
+  // 0/1 = 0.x transcript; the relay node keeps accepting it during the transition.
+  uint32 proof_version = 8;
 }
 
 enum RelayEventType {

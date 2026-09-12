@@ -3,6 +3,7 @@ package ir.vmessenger.data.repository
 import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.encoding.UserHashEncoder
+import ir.vmessenger.core.common.network.NodeTrust
 import ir.vmessenger.core.crypto.CryptoEngine
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
@@ -13,6 +14,7 @@ import ir.vmessenger.core.database.entity.ContactEntity
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.LocationAccessEntity
+import ir.vmessenger.core.database.entity.MessageDirection
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.data.backup.TransactionRunner
 import ir.vmessenger.domain.model.Identity
@@ -106,6 +108,12 @@ class FakeContactDao : ContactDao {
 
     override suspend fun touchLastSeen(id: String, ts: Long) = Unit
 
+    override suspend fun recordPendingKeyChange(id: String, staticPub: ByteArray, ts: Long) {
+        contacts.replaceAll {
+            if (it.id == id) it.copy(pendingX25519StaticPublic = staticPub, keyChangedAtUnixMs = ts) else it
+        }
+    }
+
     override suspend fun insert(entity: ContactEntity) {
         check(contacts.none { it.id == entity.id || it.identityHash.contentEquals(entity.identityHash) }) {
             "constraint violation for contact ${entity.id}"
@@ -147,6 +155,10 @@ class FakeConversationDao : ConversationDao {
 
     override suspend fun getByContactId(contactId: String): ConversationEntity? =
         conversations.firstOrNull { it.contactId == contactId }
+
+    override suspend fun resetUnread(id: String) {
+        conversations.replaceAll { if (it.id == id) it.copy(unreadCount = 0) else it }
+    }
 }
 
 class FakeMessageDao : MessageDao {
@@ -160,15 +172,42 @@ class FakeMessageDao : MessageDao {
     override fun observeConversation(cid: String): Flow<List<MessageEntity>> =
         flowOf(messages.filter { it.conversationId == cid }.sortedBy { it.createdAtUnixMs })
 
-    override suspend fun markDelivered(id: String, status: DeliveryStatus, ts: Long) = Unit
+    override suspend fun markDelivered(id: String, status: DeliveryStatus, ts: Long) =
+        replace(id) { it.copy(status = status, deliveredAtUnixMs = ts) }
 
-    override suspend fun markRead(id: String, status: DeliveryStatus, ts: Long) = Unit
+    override suspend fun markRead(id: String, status: DeliveryStatus, ts: Long) =
+        replace(id) { it.copy(status = status, readAtUnixMs = ts) }
 
-    override suspend fun markSent(id: String, status: DeliveryStatus, ts: Long) = Unit
+    override suspend fun markSent(id: String, status: DeliveryStatus, ts: Long) =
+        replace(id) { it.copy(status = status, sentAtUnixMs = ts) }
 
-    override suspend fun updateStatus(id: String, status: DeliveryStatus) = Unit
+    override suspend fun updateStatus(id: String, status: DeliveryStatus) =
+        replace(id) { it.copy(status = status) }
 
     override suspend fun getById(id: String): MessageEntity? = messages.firstOrNull { it.messageId == id }
+
+    override suspend fun getByIdInConversation(id: String, cid: String): MessageEntity? =
+        messages.firstOrNull { it.messageId == id && it.conversationId == cid }
+
+    override suspend fun selectUnreadIncomingIds(cid: String): List<String> =
+        messages.filter { it.conversationId == cid && it.isUnreadIncoming() }.map { it.messageId }
+
+    override suspend fun markIncomingRead(cid: String, ts: Long) {
+        messages.replaceAll {
+            if (it.conversationId == cid && it.isUnreadIncoming()) {
+                it.copy(status = DeliveryStatus.READ, readAtUnixMs = ts)
+            } else {
+                it
+            }
+        }
+    }
+
+    private fun MessageEntity.isUnreadIncoming(): Boolean =
+        direction == MessageDirection.INCOMING && status != DeliveryStatus.READ
+
+    private fun replace(id: String, transform: (MessageEntity) -> MessageEntity) {
+        messages.replaceAll { if (it.messageId == id) transform(it) else it }
+    }
 }
 
 class FakeLocationAccessDao : LocationAccessDao {
@@ -207,6 +246,7 @@ class FakeNodeRepository : NodeManagementRepository {
             lastOkUnixMs = null,
             lastFailUnixMs = null,
             failCount = 0,
+            trust = NodeTrust.USER,
         )
         if (nodes.none { it.address == input && it.role == fallbackRole }) nodes += node
         return AppResult.Success(node)

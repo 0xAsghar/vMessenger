@@ -3,6 +3,7 @@ package ir.vmessenger.node
 import com.google.protobuf.ByteString
 import com.goterl.lazysodium.LazySodiumJava
 import com.goterl.lazysodium.SodiumJava
+import ir.vmessenger.core.common.network.EndpointRecordTranscript
 import ir.vmessenger.core.proto.dht.v1.DhtRpcRequest
 import ir.vmessenger.core.proto.dht.v1.Endpoint
 import ir.vmessenger.core.proto.dht.v1.EndpointRecord
@@ -59,12 +60,15 @@ class DhtRequestHandlerTest {
         stats = counters,
     )
 
+    /** [transcriptVersion] 2 = what 1.0 apps publish; 0 = a 0.x app's record (field unset). */
+    @Suppress("LongParameterList")
     private fun signedRecord(
         id: Identity,
         sequence: Long = 1,
         publishedAt: Long = now,
         ttlMs: Long = 60_000,
         address: String = "wss://relay.example/relay",
+        transcriptVersion: Int = EndpointRecordTranscript.TRANSCRIPT_VERSION_V2,
     ): EndpointRecord {
         val unsigned = EndpointRecord.newBuilder()
             .setIdentityHash(ByteString.copyFrom(id.hash))
@@ -73,8 +77,9 @@ class DhtRequestHandlerTest {
             .setPublishedAtUnixMs(publishedAt)
             .setTtlMs(ttlMs)
             .setSequence(sequence)
+            .setTranscriptVersion(transcriptVersion)
             .build()
-        val transcript = NodeEndpointRecordVerifier.buildTranscript(unsigned)
+        val transcript = checkNotNull(NodeEndpointRecordVerifier.buildTranscript(unsigned))
         val signature = ByteArray(64)
         check(sodium.cryptoSignDetached(signature, transcript, transcript.size.toLong(), id.secret))
         return unsigned.toBuilder().setSignature(ByteString.copyFrom(signature)).build()
@@ -110,6 +115,40 @@ class DhtRequestHandlerTest {
 
         assertFalse(h.store(record))
         assertEquals(listOf(DhtRequestHandler.REASON_INVALID), counters.rejected)
+    }
+
+    @Test
+    fun `store accepts a legacy v1 transcript record during the transition`() {
+        val h = handler()
+        val record = signedRecord(identity(), transcriptVersion = 0)
+        assertEquals(0, record.transcriptVersion)
+
+        assertTrue(h.store(record))
+        assertEquals(1, h.recordCount())
+    }
+
+    @Test
+    fun `store rejects a record whose transcript version does not match its signature`() {
+        val h = handler()
+        val v2 = signedRecord(identity())
+        val legacy = signedRecord(identity(), transcriptVersion = 0)
+
+        assertFalse(h.store(v2.toBuilder().setTranscriptVersion(0).build()))
+        assertFalse(h.store(legacy.toBuilder().setTranscriptVersion(2).build()))
+        assertFalse(h.store(v2.toBuilder().setTranscriptVersion(1).build()))
+        assertFalse(h.store(v2.toBuilder().setTranscriptVersion(3).build()))
+        assertEquals(List(4) { DhtRequestHandler.REASON_INVALID }, counters.rejected)
+        assertEquals(0, h.recordCount())
+    }
+
+    @Test
+    fun `v2 transcript is the shared domain-separated encoding`() {
+        val record = signedRecord(identity())
+        val transcript = checkNotNull(NodeEndpointRecordVerifier.buildTranscript(record))
+        val tag = "vmessenger-endpoint-record-v2".toByteArray()
+        assertArrayEquals(tag, transcript.copyOf(tag.size))
+        val endpointBytes = (4 + "relay".length) + (4 + "wss://relay.example/relay".length)
+        assertEquals(tag.size + (4 + 32) + (4 + 32) + 4 + endpointBytes + 8 + 8 + 8, transcript.size)
     }
 
     @Test

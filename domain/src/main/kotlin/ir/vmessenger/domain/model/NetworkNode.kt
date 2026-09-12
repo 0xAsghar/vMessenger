@@ -1,5 +1,7 @@
 package ir.vmessenger.domain.model
 
+import ir.vmessenger.core.common.network.NodeTrust
+
 enum class NetworkNodeRole {
     /** A bootstrap/DHT node used for discovery. */
     BOOTSTRAP,
@@ -21,8 +23,15 @@ data class NetworkNode(
     val lastOkUnixMs: Long?,
     val lastFailUnixMs: Long?,
     val failCount: Int,
+    /**
+     * Trust level. [NodeTrust.COMMUNITY] nodes (peer exchange / DHT) are imported disabled;
+     * the Nodes screen shows them as "community (disabled)" with an enable toggle.
+     */
+    val trust: NodeTrust,
 ) {
     val builtIn: Boolean get() = source == SOURCE_BUILT_IN
+
+    val community: Boolean get() = trust == NodeTrust.COMMUNITY
 
     companion object {
         const val SOURCE_BUILT_IN = "BUILT_IN"

@@ -36,7 +36,11 @@ data class ConversationEntity(
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("conversationId"), Index(value = ["messageId"], unique = true)],
+    indices = [
+        Index("conversationId"),
+        Index(value = ["messageId"], unique = true),
+        Index(value = ["conversationId", "direction", "status"], name = "index_message_conv_dir_status"),
+    ],
 )
 data class MessageEntity(
     @PrimaryKey val messageId: String,
@@ -55,7 +59,45 @@ data class MessageEntity(
     val attachmentMimeType: String? = null,
     val attachmentSizeBytes: Long? = null,
     val attachmentPath: String? = null,
-)
+    /** SHA-256 of the plaintext file (sent in the transfer header, verified on receipt). */
+    val attachmentSha256: ByteArray? = null,
+    /** True when the file at [attachmentPath] is in the encrypted `VMA1` container format. */
+    val attachmentEncrypted: Boolean = false,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as MessageEntity
+        return scalarFields() == other.scalarFields() &&
+            (attachmentSha256 ?: EMPTY).contentEquals(other.attachmentSha256 ?: EMPTY)
+    }
+
+    override fun hashCode(): Int = 31 * scalarFields().hashCode() + (attachmentSha256?.contentHashCode() ?: 0)
+
+    /** Every field except the byte array, so equality/hash stay in step with the data-class semantics. */
+    private fun scalarFields(): List<Any?> = listOf(
+        messageId,
+        conversationId,
+        direction,
+        contentType,
+        body,
+        replyToMessageId,
+        status,
+        createdAtUnixMs,
+        sentAtUnixMs,
+        deliveredAtUnixMs,
+        readAtUnixMs,
+        attachmentName,
+        attachmentMimeType,
+        attachmentSizeBytes,
+        attachmentPath,
+        attachmentEncrypted,
+    )
+
+    private companion object {
+        val EMPTY = ByteArray(0)
+    }
+}
 
 @Entity(
     tableName = "outbox",
