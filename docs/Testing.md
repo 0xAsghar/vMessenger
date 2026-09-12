@@ -30,16 +30,26 @@ Detekt is applied to every subproject from the root build with a shared config (
 |---|---|
 | `:core:common` | `Canonical` encodings, `EndpointRecordTranscript`, `RelayProof`, `UserHashEncoder`, `IdentityHashMatcher`, `NodeRanking`, `NodeAddressPolicy`, `KeyedMutex`, `NetworkPathTracker` |
 | `:core:crypto` | `LazysodiumCryptoEngine`, `WrappedKeyBlob`, `PairingDescriptorCodec`, `BackupBundleCodec` |
-| `:core:database` | `DatabaseKeyProvider` (passphrase caching/concurrency, without the Android Keystore) |
+| `:core:database` | `DatabaseKeyProvider` (passphrase caching/concurrency, without the Android Keystore); `MigrationTest` |
 | `:core:datastore`, `:core:designsystem` | preference defaults, design tokens |
 | `:network:messaging` | `HandshakeTranscriptTest`, `SecureChannelFactoryTest`, `SymmetricRatchetTest`, `MessagingServiceFrameGuardTest`, `MessagingServiceKeyChangeTest`, `MessagingServiceConcurrencyTest`, `MessagingServiceProvisionalContactTest`, `FrameParserFuzzTest`, `RelayHelloProofInteropTest`, `RelayListenerTest`, `PeerRelayServiceTest`, `EndpointOrderingTest` |
 | `:network:dht`, `:network:discovery`, `:network:transport` | record verification, embedded-DHT routing, endpoint resolution, transport selection |
-| `:data` | inbound policy and collector, receipts, attachments, contact requests, mailbox seal/protocol, outbox error codes, relay selection vs. published endpoint, signature domain separation, backup, wipe plan |
+| `:data` | inbound policy and collector, receipts, attachments, contact requests, mailbox seal/protocol, outbox error codes, relay selection vs. published endpoint, signature domain separation, backup, wipe plan, group control authority, per-recipient delivery and its aggregate |
 | `:domain` | use cases |
 | `:feature:identity` | ViewModel |
 | `:node` | see §2 |
 
 There are **no** `androidTest` (instrumented) sources in the repository; everything runs on the JVM.
+
+### Migrations are replayed on a real SQLite engine
+
+`core/database/src/test/.../migration/MigrationTest.kt` runs **every** migration 1 → 18 against an in-memory SQLite through `sqlite-jdbc`, then asserts the results of the newest step: the re-keyed `outbox`, the dropped `session` table, the now-nullable `conversation.contactId`, the unique-per-group constraint and the new `message` columns.
+
+It needs no emulator and no Room. `JdbcSupportDatabase` builds a `SupportSQLiteDatabase` as a `java.lang.reflect.Proxy` that implements exactly one method — `execSQL` — and fails loudly on anything else; that is all a `Migration` ever calls, and it keeps the helper to a few lines instead of stubbing a ~50-method interface.
+
+This exists because Room does not type-check migration SQL. Before this test, a typo or an invalid `ALTER` was only discovered when a user's app failed to open its database. Migration 17 → 18 recreates three tables and re-keys a queue, so that risk was no longer acceptable.
+
+**When you change an entity, add the migration and extend this test in the same commit.** Room will regenerate `schemas/<version>.json` on build; copy the generated `createSql` into the migration so the two cannot drift.
 
 ### Running a subset
 
