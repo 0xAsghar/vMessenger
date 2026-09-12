@@ -20,12 +20,16 @@ class LocationService : Service(), LocationListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                LocationUpdateBus.setServiceRunning(false)
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
             }
         }
         startForeground(NOTIFICATION_ID, buildNotification())
+        // Tells DeviceLocationProvider to stand down: while this service runs it is the only
+        // location listener in the process.
+        LocationUpdateBus.setServiceRunning(true)
         val manager = getSystemService(LOCATION_SERVICE) as LocationManager
         try {
             // Emit the last known fix right away so sharing starts with a position
@@ -78,6 +82,7 @@ class LocationService : Service(), LocationListener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        LocationUpdateBus.setServiceRunning(false)
         val manager = getSystemService(LOCATION_SERVICE) as LocationManager
         manager.removeUpdates(this)
         super.onDestroy()

@@ -30,6 +30,9 @@ class ContactRepositoryImpl @Inject constructor(
     override fun observeContacts(): Flow<List<Contact>> =
         contactDao.observeContacts().map { entities -> entities.map { it.toDomain() } }
 
+    override fun observeBlockedContacts(): Flow<List<Contact>> =
+        contactDao.observeBlocked().map { entities -> entities.map { it.toDomain() } }
+
     override suspend fun getContact(id: String): Contact? =
         contactDao.getById(id)?.toDomain()
 
@@ -188,6 +191,12 @@ class ContactRepositoryImpl @Inject constructor(
 
     /** Full cleanup contract; see [ContactCleanupCoordinator]. */
     override suspend fun deleteContact(id: String) = cleanupCoordinator.deleteContact(id)
+
+    override suspend fun setVerified(id: String, verified: Boolean): AppResult<Unit> {
+        val contact = contactDao.getById(id) ?: return AppResult.Error(AppError.ContactNotFound)
+        contactDao.update(contact.copy(verified = verified))
+        return AppResult.Success(Unit)
+    }
 
     override suspend fun acceptKeyChange(id: String): AppResult<Unit> {
         val contact = contactDao.getById(id)

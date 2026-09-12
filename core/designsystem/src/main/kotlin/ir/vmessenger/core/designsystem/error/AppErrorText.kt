@@ -24,6 +24,7 @@ private val ERROR_TEXT: Map<KClass<out AppError>, Int> = mapOf(
     AppError.ContactAddFailed::class to R.string.vm_error_contact_add_failed,
     AppError.NoContactSelected::class to R.string.vm_error_no_contact_selected,
     AppError.RequestNotFound::class to R.string.vm_error_request_not_found,
+    AppError.ContactNotFound::class to R.string.vm_error_contact_not_found,
     AppError.NoNetwork::class to R.string.vm_error_no_network,
     AppError.SendFailed::class to R.string.vm_error_send_failed,
     AppError.PermissionDenied::class to R.string.vm_error_permission_denied,

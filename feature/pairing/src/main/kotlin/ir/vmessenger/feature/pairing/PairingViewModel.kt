@@ -3,6 +3,7 @@ package ir.vmessenger.feature.pairing
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.common.logging.AppLogger
@@ -59,7 +60,9 @@ sealed class AddContactUiState {
     data object Idle : AddContactUiState()
     data object Saving : AddContactUiState()
     data object Success : AddContactUiState()
-    data class Error(val message: String) : AddContactUiState()
+
+    /** Carries the code, not a sentence: the Persian text comes from `AppError.toUiText()`. */
+    data class Error(val error: AppError) : AddContactUiState()
 }
 
 @HiltViewModel
@@ -78,14 +81,14 @@ class AddByHashViewModel @Inject constructor(
                 "addByHash rejected reason=$reason len=${trimmed.length} " +
                     "prefix=${trimmed.take(12)}",
             )
-            _uiState.value = AddContactUiState.Error("شناسه کاربری نامعتبر است")
+            _uiState.value = AddContactUiState.Error(AppError.InvalidUserHash)
             return
         }
         viewModelScope.launch {
             _uiState.value = AddContactUiState.Saving
             when (val result = addByHash(trimmed)) {
                 is AppResult.Success -> _uiState.value = AddContactUiState.Success
-                is AppResult.Error -> _uiState.value = AddContactUiState.Error(result.error.message)
+                is AppResult.Error -> _uiState.value = AddContactUiState.Error(result.error)
             }
         }
     }
@@ -102,14 +105,14 @@ class QrScanViewModel @Inject constructor(
     fun onQrScanned(payload: String) {
         val descriptorBytes = pairingRepository.decodeDescriptor(payload.trim())
             ?: run {
-                _uiState.value = AddContactUiState.Error("QR نامعتبر است")
+                _uiState.value = AddContactUiState.Error(AppError.InvalidQr)
                 return
             }
         viewModelScope.launch {
             _uiState.value = AddContactUiState.Saving
             when (val result = addByQr(descriptorBytes)) {
                 is AppResult.Success -> _uiState.value = AddContactUiState.Success
-                is AppResult.Error -> _uiState.value = AddContactUiState.Error(result.error.message)
+                is AppResult.Error -> _uiState.value = AddContactUiState.Error(result.error)
             }
         }
     }

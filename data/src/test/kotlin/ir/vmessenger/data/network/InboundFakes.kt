@@ -152,6 +152,8 @@ class FakeOutboxDao : OutboxDao {
 class FakeContactRepository(private val contactDao: ir.vmessenger.core.database.dao.ContactDao) : ContactRepository {
     override fun observeContacts(): Flow<List<Contact>> = flowOf(emptyList())
 
+    override fun observeBlockedContacts(): Flow<List<Contact>> = flowOf(emptyList())
+
     override suspend fun getContact(id: String): Contact? = contactDao.getById(id)?.toDomain()
 
     override suspend fun getContactByIdentityHash(identityHash: ByteArray): Contact? =
@@ -183,6 +185,12 @@ class FakeContactRepository(private val contactDao: ir.vmessenger.core.database.
     override suspend fun deleteContact(id: String) = contactDao.deleteById(id)
 
     override suspend fun acceptKeyChange(id: String): AppResult<Unit> = AppResult.Success(Unit)
+
+    override suspend fun setVerified(id: String, verified: Boolean): AppResult<Unit> {
+        val contact = contactDao.getById(id) ?: return AppResult.Error(AppError.ContactNotFound)
+        contactDao.update(contact.copy(verified = verified))
+        return AppResult.Success(Unit)
+    }
 
     private fun ContactEntity.toDomain() = Contact(
         id = id,

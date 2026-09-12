@@ -14,6 +14,10 @@ interface ContactDao {
     @Query("SELECT * FROM contact WHERE blocked = 0 ORDER BY displayName COLLATE NOCASE ASC")
     fun observeContacts(): Flow<List<ContactEntity>>
 
+    /** The rows [observeContacts] hides, for the "blocked contacts" screen that undoes a block. */
+    @Query("SELECT * FROM contact WHERE blocked = 1 ORDER BY displayName COLLATE NOCASE ASC")
+    fun observeBlocked(): Flow<List<ContactEntity>>
+
     @Query("SELECT * FROM contact WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): ContactEntity?
 

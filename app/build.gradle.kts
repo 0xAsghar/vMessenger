@@ -84,7 +84,7 @@ dependencies {
     implementation(project(":feature:pairing"))
     implementation(project(":feature:contacts"))
     implementation(project(":feature:chat"))
-    implementation(project(":feature:location"))
+    implementation(project(":feature:map"))
     implementation(project(":feature:settings"))
     implementation(project(":feature:debug"))
     implementation(project(":feature:about"))

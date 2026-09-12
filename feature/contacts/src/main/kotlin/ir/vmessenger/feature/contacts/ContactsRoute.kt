@@ -1,346 +1,212 @@
 package ir.vmessenger.feature.contacts
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import ir.vmessenger.core.designsystem.component.Avatar
-import ir.vmessenger.core.designsystem.component.SafetyNumberDisplay
-import ir.vmessenger.core.designsystem.component.UserHashText
+import ir.vmessenger.core.designsystem.component.EmptyState
+import ir.vmessenger.core.designsystem.component.EmptyStateAction
+import ir.vmessenger.core.designsystem.component.SkeletonList
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
-import ir.vmessenger.domain.model.ContactRelationshipStatus
-import ir.vmessenger.domain.model.ContactRequest
-import ir.vmessenger.domain.model.LocationSample
-import ir.vmessenger.feature.location.LocationMapView
+import ir.vmessenger.core.designsystem.component.VmSearchBar
+import ir.vmessenger.core.designsystem.component.VmSnackbarHost
+import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
+import ir.vmessenger.core.designsystem.theme.VmSpacing
 
+/**
+ * The contacts tab: pending requests, then the contacts themselves.
+ *
+ * Opening a contact navigates to `ContactDetail` in the outer graph rather than swapping a
+ * remembered id here, so the system back button closes the detail instead of leaving the tab.
+ */
 @Composable
 fun ContactsRoute(
-    onMyQr: () -> Unit,
-    onScanQr: () -> Unit,
-    onAddByHash: () -> Unit,
-    onStartChat: (String) -> Unit,
+    navigation: ContactsNavigation,
     viewModel: ContactsViewModel = hiltViewModel(),
 ) {
-    val items by viewModel.items.collectAsStateWithLifecycle()
-    val requests by viewModel.pendingRequests.collectAsStateWithLifecycle()
-    val localPublicKey by viewModel.localPublicKey.collectAsStateWithLifecycle()
-    var selectedContactId by remember { mutableStateOf<String?>(null) }
-    val selected = selectedContactId?.let { id -> items.find { it.contact.id == id } }
-
-    if (selected != null) {
-        ContactDetailRoute(
-            item = selected,
-            localPublicKey = localPublicKey,
-            onBack = { selectedContactId = null },
-            onResend = { viewModel.resendRequest(selected.contact.id) },
-            onStartChat = {
-                onStartChat(selected.contact.id)
-                selectedContactId = null
-            },
-        )
-        return
-    }
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHost = rememberVmSnackbar()
+    UiMessageSnackbarEffect(messages = viewModel.messages, hostState = snackbarHost)
+    BackHandler(enabled = state.searchActive) { viewModel.onSearchActiveChange(false) }
 
     VMessengerScaffold(
         title = stringResource(R.string.contacts_title),
-        actions = {
-            IconButton(onClick = onMyQr) {
-                Icon(Icons.Outlined.QrCode2, contentDescription = stringResource(R.string.contacts_my_qr))
+        titleContent = if (state.searchActive) {
+            {
+                VmSearchBar(
+                    query = state.query,
+                    onQueryChange = viewModel::onQueryChange,
+                    onClose = { viewModel.onSearchActiveChange(false) },
+                    placeholder = stringResource(R.string.contacts_search_placeholder),
+                )
             }
-            IconButton(onClick = onScanQr) {
-                Icon(Icons.Outlined.QrCodeScanner, contentDescription = stringResource(R.string.contacts_scan_qr))
+        } else {
+            null
+        },
+        actions = {
+            if (!state.searchActive) {
+                ContactsTopBarActions(
+                    onSearch = { viewModel.onSearchActiveChange(true) },
+                    onMyQr = navigation.onMyQr,
+                    onScanQr = navigation.onScanQr,
+                )
             }
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = onAddByHash,
-                icon = { Icon(Icons.Default.PersonAdd, contentDescription = null) },
-                text = { Text(stringResource(R.string.contacts_add)) },
+                onClick = navigation.onAddByHash,
+                icon = { Icon(imageVector = Icons.Default.PersonAdd, contentDescription = null) },
+                text = { Text(text = stringResource(R.string.contacts_add)) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
             )
         },
+        snackbarHost = { VmSnackbarHost(snackbarHost) },
     ) { padding ->
-        ContactsListContent(
-            items = items,
-            requests = requests,
+        ContactsBody(
+            state = state,
             padding = padding,
-            onContactClick = { selectedContactId = it },
-            requestActions = RequestActions(
-                onApprove = viewModel::approveRequest,
-                onReject = viewModel::rejectRequest,
+            callbacks = ContactsListCallbacks(
+                onOpenContact = navigation.onOpenContact,
+                onLongPressContact = viewModel::onSheetFor,
+                onApproveRequest = viewModel::onApproveRequest,
+                onRejectRequest = viewModel::onRejectRequest,
             ),
+            navigation = navigation,
         )
     }
+
+    ContactsOverlays(state = state, viewModel = viewModel, onStartChat = navigation.onStartChat)
 }
 
-private data class RequestActions(
-    val onApprove: (ContactRequest) -> Unit,
-    val onReject: (ContactRequest) -> Unit,
-)
-
+/** The long-press sheet and whichever confirmation it opened; both are driven by the state. */
 @Composable
-private fun ContactsListContent(
-    items: List<ContactListItem>,
-    requests: List<ContactRequest>,
-    padding: PaddingValues,
-    onContactClick: (String) -> Unit,
-    requestActions: RequestActions,
+private fun ContactsOverlays(
+    state: ContactsUiState,
+    viewModel: ContactsViewModel,
+    onStartChat: (String) -> Unit,
 ) {
-    if (items.isEmpty() && requests.isEmpty()) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(text = stringResource(R.string.contacts_empty))
-            Text(
-                text = stringResource(R.string.contacts_empty_hint),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-        return
+    val sheetFor = state.sheetFor
+    if (sheetFor != null) {
+        ContactActionsSheet(
+            contact = sheetFor,
+            onAction = { action ->
+                if (action == ContactSheetAction.CHAT) onStartChat(sheetFor.id)
+                viewModel.onSheetAction(sheetFor.id, action)
+            },
+            onDismiss = { viewModel.onSheetFor(null) },
+        )
     }
-    LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
-        if (requests.isNotEmpty()) {
-            item(key = "requests_header") {
-                Text(
-                    text = stringResource(R.string.contacts_requests_title),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
-                )
-            }
-            items(requests, key = { "req_${it.requestId}" }) { request ->
-                RequestRow(
-                    request = request,
-                    onApprove = { requestActions.onApprove(request) },
-                    onReject = { requestActions.onReject(request) },
-                )
-            }
-        }
-        items(items, key = { it.contact.id }) { item ->
-            ContactRow(item = item, onClick = { onContactClick(item.contact.id) })
-        }
-    }
+    ContactDialogHost(
+        dialog = state.dialog,
+        callbacks = ContactDialogCallbacks(
+            onConfirm = viewModel::confirmPendingAction,
+            onRename = viewModel::confirmRename,
+            onDismiss = viewModel::dismissDialog,
+        ),
+    )
 }
 
 @Composable
-private fun RequestRow(request: ContactRequest, onApprove: () -> Unit, onReject: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Avatar(seed = request.requesterIdentityHash, name = request.requesterDisplayName)
-        Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
-            Text(text = request.requesterDisplayName, style = MaterialTheme.typography.titleMedium)
-            UserHashText(
-                text = request.requesterUserHash,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Start,
-            )
-        }
-        TextButton(onClick = onApprove) { Text(stringResource(R.string.contacts_request_approve)) }
-        TextButton(onClick = onReject) {
-            Text(stringResource(R.string.contacts_request_reject), color = MaterialTheme.colorScheme.error)
-        }
-    }
-}
-
-@Composable
-private fun ContactRow(item: ContactListItem, onClick: () -> Unit) {
-    val contact = item.contact
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Avatar(seed = contact.identityHash, name = contact.displayName)
-        Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
-            Text(text = contact.displayName, style = MaterialTheme.typography.titleMedium)
-            UserHashText(
-                text = contact.userHash,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Start,
-            )
-        }
-        if (item.sharedLocation != null) {
-            LocationBadge(distanceMeters = item.distanceMeters)
-        }
-        if (contact.relationshipStatus != ContactRelationshipStatus.APPROVED) {
-            AssistChip(
-                onClick = onClick,
-                label = { Text(text = relationshipStatusLabel(contact.relationshipStatus)) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun LocationBadge(distanceMeters: Double?) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
+private fun RowScope.ContactsTopBarActions(
+    onSearch: () -> Unit,
+    onMyQr: () -> Unit,
+    onScanQr: () -> Unit,
+) {
+    IconButton(onClick = onSearch) {
         Icon(
-            imageVector = Icons.Outlined.LocationOn,
-            contentDescription = stringResource(R.string.contacts_location_shared),
-            tint = MaterialTheme.colorScheme.primary,
+            imageVector = Icons.Outlined.Search,
+            contentDescription = stringResource(R.string.contacts_search),
         )
-        distanceMeters?.let {
-            Text(
-                text = formatDistance(it),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 2.dp),
-            )
-        }
+    }
+    IconButton(onClick = onMyQr) {
+        Icon(
+            imageVector = Icons.Outlined.QrCode2,
+            contentDescription = stringResource(R.string.contacts_my_qr),
+        )
+    }
+    IconButton(onClick = onScanQr) {
+        Icon(
+            imageVector = Icons.Outlined.QrCodeScanner,
+            contentDescription = stringResource(R.string.contacts_scan_qr),
+        )
     }
 }
 
 @Composable
-private fun ContactDetailRoute(
-    item: ContactListItem,
-    localPublicKey: ByteArray?,
-    onBack: () -> Unit,
-    onResend: () -> Unit,
-    onStartChat: () -> Unit,
+private fun ContactsBody(
+    state: ContactsUiState,
+    padding: PaddingValues,
+    callbacks: ContactsListCallbacks,
+    navigation: ContactsNavigation,
 ) {
-    val contact = item.contact
-    VMessengerScaffold(
-        title = contact.displayName,
-        onNavigateBack = onBack,
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Avatar(seed = contact.identityHash, name = contact.displayName, size = 56.dp)
-                Column(modifier = Modifier.padding(start = 16.dp)) {
-                    Text(text = contact.displayName, style = MaterialTheme.typography.titleLarge)
-                    UserHashText(
-                        text = contact.userHash,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Start,
-                    )
-                }
-            }
-            item.sharedLocation?.let { sample ->
-                ContactLocationSection(sample = sample, distanceMeters = item.distanceMeters)
-            }
-            if (localPublicKey != null && contact.ed25519PublicKey.any { it != 0.toByte() }) {
-                SafetyNumberDisplay(
-                    localPublicKey = localPublicKey,
-                    remotePublicKey = contact.ed25519PublicKey,
-                    modifier = Modifier.padding(top = 24.dp),
-                )
-            }
-            Button(
-                onClick = onStartChat,
-                modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
-                enabled = !contact.blocked && contact.isApproved,
-            ) {
-                Text(text = stringResource(R.string.contacts_start_chat))
-            }
-            if (contact.relationshipStatus == ContactRelationshipStatus.PENDING_OUT) {
-                OutlinedButton(
-                    onClick = onResend,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                ) {
-                    Text(text = stringResource(R.string.contacts_resend_request))
-                }
-            }
-            if (!contact.isApproved) {
-                Text(
-                    text = relationshipStatusLabel(contact.relationshipStatus),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ContactLocationSection(sample: LocationSample, distanceMeters: Double?) {
-    Column(modifier = Modifier.padding(top = 24.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Outlined.LocationOn,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                text = stringResource(R.string.contacts_location_title),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 8.dp).weight(1f),
-            )
-            distanceMeters?.let {
-                Text(
-                    text = formatDistance(it),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-        LocationMapView(
-            samples = mapOf(sample.shareId to sample),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp)
-                .padding(top = 8.dp)
-                .clip(RoundedCornerShape(16.dp)),
+    val modifier = Modifier
+        .fillMaxSize()
+        .padding(padding)
+    when {
+        state.loading -> SkeletonList(modifier = modifier)
+        state.isEmpty -> ContactsEmpty(
+            onScanQr = navigation.onScanQr,
+            onAddByHash = navigation.onAddByHash,
+            modifier = modifier,
         )
+        state.noSearchResults -> EmptyState(
+            icon = Icons.Outlined.Search,
+            title = stringResource(R.string.contacts_search_empty_title),
+            body = stringResource(R.string.contacts_search_empty_body),
+            modifier = modifier,
+        )
+        else -> ContactsList(state = state, callbacks = callbacks, modifier = modifier)
     }
 }
 
+/** Both ways in are offered: scanning the other device's QR, or typing their user hash. */
 @Composable
-private fun formatDistance(meters: Double): String =
-    if (meters >= METERS_PER_KM) {
-        stringResource(R.string.contacts_distance_km, meters / METERS_PER_KM)
-    } else {
-        stringResource(R.string.contacts_distance_meters, meters.toInt())
+private fun ContactsEmpty(
+    onScanQr: () -> Unit,
+    onAddByHash: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        EmptyState(
+            icon = Icons.Outlined.Contacts,
+            title = stringResource(R.string.contacts_empty_title),
+            body = stringResource(R.string.contacts_empty_body),
+            action = EmptyStateAction(
+                label = stringResource(R.string.contacts_empty_scan),
+                onClick = onScanQr,
+            ),
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(
+            onClick = onAddByHash,
+            modifier = Modifier.padding(bottom = VmSpacing.xxl),
+        ) {
+            Text(text = stringResource(R.string.contacts_empty_add_by_hash))
+        }
     }
-
-@Composable
-private fun relationshipStatusLabel(status: ContactRelationshipStatus): String = when (status) {
-    ContactRelationshipStatus.PENDING_OUT -> stringResource(R.string.contacts_status_pending_out)
-    ContactRelationshipStatus.PENDING_IN -> stringResource(R.string.contacts_status_pending_in)
-    ContactRelationshipStatus.REJECTED -> stringResource(R.string.contacts_status_rejected)
-    ContactRelationshipStatus.APPROVED -> ""
 }
-
-private const val METERS_PER_KM = 1000.0

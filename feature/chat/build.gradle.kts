@@ -19,4 +19,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.hilt.navigation.compose)
+    // Declared even though :core:designsystem exposes it: this module builds its own
+    // Coil requests (the attachment fetcher), so the dependency is direct, not borrowed.
+    implementation(libs.coil.compose)
+    implementation(libs.kotlinx.collections.immutable)
 }

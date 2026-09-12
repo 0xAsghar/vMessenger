@@ -10,6 +10,7 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -102,25 +103,45 @@ fun QrScannerScreen(
     }
 }
 
+/**
+ * Dimmed frame around the live preview: the scrim tells the eye where to aim, and the hint sits
+ * on its own pill so it stays readable over whatever the camera happens to see.
+ */
 @Composable
 private fun QrScanFrameOverlay(hint: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = SCRIM_ALPHA)),
+        contentAlignment = Alignment.Center,
+    ) {
         Surface(
-            modifier = Modifier.size(260.dp),
-            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.size(ViewfinderSize),
+            shape = RoundedCornerShape(ViewfinderCorner),
             color = Color.Transparent,
-            border = BorderStroke(2.dp, MaterialTheme.colorScheme.onBackground.copy(alpha = 0.85f)),
+            border = BorderStroke(3.dp, Color.White),
         ) {}
-        Text(
-            text = hint,
+        Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
+                .padding(bottom = 40.dp),
+            shape = RoundedCornerShape(ViewfinderCorner),
+            color = Color.Black.copy(alpha = HINT_SCRIM_ALPHA),
+        ) {
+            Text(
+                text = hint,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White,
+            )
+        }
     }
 }
+
+private val ViewfinderSize = 260.dp
+private val ViewfinderCorner = 24.dp
+private const val SCRIM_ALPHA = 0.35f
+private const val HINT_SCRIM_ALPHA = 0.6f
 
 @Composable
 internal fun QrCameraPreview(

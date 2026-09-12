@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_map_title">نقشه</string>
+
+    <string name="feature_map_pill_off">اشتراک‌گذاری موقعیت خاموش است</string>
+    <string name="feature_map_pill_sharing">در حال اشتراک با %1$s مخاطب</string>
+    <string name="feature_map_pill_watchers">%1$s مخاطب با شما به اشتراک می‌گذارند</string>
+
+    <string name="feature_map_action_my_location">موقعیت من</string>
+    <string name="feature_map_action_fit_all">نمایش همه</string>
+
+    <string name="feature_map_share_switch">اشتراک‌گذاری موقعیت من</string>
+    <string name="feature_map_share_targets">برای: %1$s</string>
+    <string name="feature_map_share_nobody">هنوز مخاطبی انتخاب نشده است</string>
+    <string name="feature_map_pick_contacts">انتخاب مخاطبین</string>
+    <string name="feature_map_picker_title">چه کسی موقعیت من را ببیند؟</string>
+    <string name="feature_map_picker_empty">مخاطب تأییدشده‌ای ندارید</string>
+    <string name="feature_map_close">بستن</string>
+
+    <string name="feature_map_watchers_title">در حال اشتراک با شما</string>
+    <string name="feature_map_watchers_empty">هنوز کسی موقعیتش را با شما به اشتراک نگذاشته است</string>
+
+    <string name="feature_map_permission_title">دسترسی مکان</string>
+    <string name="feature_map_permission_rationale">برای دیدن فاصله و اشتراک‌گذاری، دسترسی مکان لازم است</string>
+    <string name="feature_map_permission_grant">اجازه دسترسی</string>
+    <string name="feature_map_permission_settings">باز کردن تنظیمات</string>
+    <string name="feature_map_permission_denied_forever">دسترسی مکان رد شده است؛ آن را از تنظیمات برنامه فعال کنید</string>
+
+    <string name="feature_map_tiles_error">نقشه بارگذاری نشد — اتصال اینترنت را بررسی کنید</string>
+    <string name="feature_map_retry">تلاش دوباره</string>
+
+    <string name="feature_map_select_contact_first">ابتدا حداقل یک مخاطب را انتخاب کنید</string>
+
+    <string name="feature_map_distance_m">%1$s متر</string>
+    <string name="feature_map_distance_km">%1$s کیلومتر</string>
+</resources>

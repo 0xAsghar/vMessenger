@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.BatteryAlert
 import androidx.compose.material.icons.outlined.BatteryFull
+import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.DoneAll
@@ -53,6 +54,7 @@ import ir.vmessenger.core.designsystem.component.SettingsDivider
 import ir.vmessenger.core.designsystem.component.SettingsSection
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 
+@Suppress("LongParameterList") // one entry per destination the settings tab can reach
 private data class SettingsNavigation(
     val onDebug: () -> Unit,
     val onNodes: () -> Unit,
@@ -60,6 +62,7 @@ private data class SettingsNavigation(
     val onIdentity: () -> Unit,
     val onSecureWipe: () -> Unit,
     val onBackup: () -> Unit,
+    val onBlockedContacts: () -> Unit,
 )
 
 /** The privacy section's switch states, bundled so the composable stays short on parameters. */
@@ -70,11 +73,14 @@ private data class PrivacyToggles(
 )
 
 @Composable
+// Navigation callbacks only; they are forwarded one-for-one to rows and never combined.
+@Suppress("LongParameterList")
 fun SettingsRoute(
     onNavigateToDebug: () -> Unit = {},
     onNavigateToNodes: () -> Unit = {},
     onNavigateToAbout: () -> Unit = {},
     onNavigateToIdentity: () -> Unit = {},
+    onNavigateToBlockedContacts: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     var showWipeDialog by remember { mutableStateOf(false) }
@@ -95,6 +101,7 @@ fun SettingsRoute(
                 onNodes = onNavigateToNodes,
                 onAbout = onNavigateToAbout,
                 onIdentity = onNavigateToIdentity,
+                onBlockedContacts = onNavigateToBlockedContacts,
                 onSecureWipe = { showWipeDialog = true },
                 onBackup = {
                     viewModel.dismissBackupStatus()
@@ -161,6 +168,7 @@ private fun SettingsContent(
             onScreenSecurity = viewModel::setScreenSecurity,
             onHideNotifications = viewModel::setHideNotificationContent,
             onSendReadReceipts = viewModel::setSendReadReceipts,
+            onBlockedContacts = navigation.onBlockedContacts,
             onSecureWipe = navigation.onSecureWipe,
         )
         SettingsSection(title = stringResource(R.string.settings_network_section)) {
@@ -296,11 +304,13 @@ private fun SettingsThemeSection(
 }
 
 @Composable
+@Suppress("LongParameterList") // one callback per row of the privacy section
 private fun SettingsPrivacySection(
     toggles: PrivacyToggles,
     onScreenSecurity: (Boolean) -> Unit,
     onHideNotifications: (Boolean) -> Unit,
     onSendReadReceipts: (Boolean) -> Unit,
+    onBlockedContacts: () -> Unit,
     onSecureWipe: () -> Unit,
 ) {
     SettingsSection(title = stringResource(R.string.settings_privacy_section)) {
@@ -323,6 +333,12 @@ private fun SettingsPrivacySection(
             icon = Icons.Outlined.DoneAll,
             checked = toggles.sendReadReceipts,
             onCheckedChange = onSendReadReceipts,
+        )
+        SettingsDivider()
+        SettingsActionRow(
+            label = stringResource(R.string.settings_blocked_contacts),
+            icon = Icons.Outlined.Block,
+            onClick = onBlockedContacts,
         )
         SettingsDivider()
         SettingsActionRow(

@@ -1,21 +1,79 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="contacts_title">مخاطبین</string>
-    <string name="contacts_empty">هنوز مخاطبی ندارید</string>
-    <string name="contacts_empty_hint">با QR یا شناسه کاربری مخاطب اضافه کنید</string>
+    <string name="contacts_search">جستجو</string>
+    <string name="contacts_search_placeholder">نام یا شناسهٔ کاربری</string>
+    <string name="contacts_search_empty_title">مخاطبی پیدا نشد</string>
+    <string name="contacts_search_empty_body">عبارت دیگری را امتحان کنید یا مخاطب تازه‌ای اضافه کنید.</string>
+    <string name="contacts_empty_title">هنوز مخاطبی ندارید</string>
+    <string name="contacts_empty_body">برای شروع، QR دستگاه مقابل را اسکن کنید یا شناسهٔ کاربری او را وارد کنید.</string>
+    <string name="contacts_empty_scan">اسکن QR</string>
+    <string name="contacts_empty_add_by_hash">افزودن با شناسهٔ کاربری</string>
     <string name="contacts_add">افزودن مخاطب</string>
     <string name="contacts_my_qr">QR من</string>
     <string name="contacts_scan_qr">اسکن QR</string>
+    <string name="contacts_section_contacts">مخاطبین</string>
     <string name="contacts_start_chat">شروع گفتگو</string>
+    <string name="contacts_cancel">انصراف</string>
+
+    <string name="contacts_status_approved">تأیید شده</string>
     <string name="contacts_status_pending_out">در انتظار تأیید</string>
     <string name="contacts_status_pending_in">درخواست دریافتی</string>
     <string name="contacts_status_rejected">رد شده</string>
-    <string name="contacts_requests_title">درخواست‌های مخاطبی</string>
+    <string name="contacts_status_blocked">مسدود</string>
+
+    <string name="contacts_requests_title">درخواست‌ها (%1$s)</string>
     <string name="contacts_request_approve">تأیید</string>
     <string name="contacts_request_reject">رد</string>
+    <string name="contacts_request_reject_title">رد درخواست؟</string>
+    <string name="contacts_request_reject_body">درخواست «%1$s» رد می‌شود، او از این موضوع باخبر می‌شود و به فهرست مخاطبین شما اضافه نمی‌شود. می‌تواند دوباره درخواست بدهد، اما پس از چند بار رد، درخواست‌هایش دیگر به شما نشان داده نمی‌شود.</string>
+    <string name="contacts_request_reject_confirm">رد درخواست</string>
+    <string name="contacts_request_approved">مخاطب تأیید شد</string>
+    <string name="contacts_request_rejected">درخواست رد شد</string>
     <string name="contacts_resend_request">ارسال مجدد درخواست</string>
-    <string name="contacts_location_shared">موقعیت به اشتراک گذاشته شده</string>
-    <string name="contacts_location_title">موقعیت زندهٔ مخاطب</string>
-    <string name="contacts_distance_meters">%1$d متر</string>
-    <string name="contacts_distance_km">%1$.1f کیلومتر</string>
+    <string name="contacts_request_resent">درخواست دوباره ارسال شد</string>
+
+    <string name="contacts_key_change_pending">کلید امنیتی این مخاطب تغییر کرده است</string>
+    <string name="contacts_key_change_accepted">کلید جدید تأیید شد</string>
+    <string name="contacts_location_shared">موقعیت خود را با شما به اشتراک گذاشته است</string>
+    <string name="contacts_distance_meters">%1$s متر</string>
+    <string name="contacts_distance_km">%1$s کیلومتر</string>
+
+    <string name="contacts_sheet_chat">چت</string>
+    <string name="contacts_sheet_rename">تغییر نام</string>
+    <string name="contacts_sheet_block">مسدود کردن</string>
+    <string name="contacts_sheet_unblock">رفع مسدودیت</string>
+    <string name="contacts_sheet_delete">حذف</string>
+
+    <string name="contacts_rename_title">تغییر نام مخاطب</string>
+    <string name="contacts_rename_label">نام نمایشی</string>
+    <string name="contacts_rename_hint">این نام فقط روی دستگاه شما ذخیره می‌شود و در همهٔ بخش‌های برنامه نمایش داده می‌شود.</string>
+    <string name="contacts_rename_save">ذخیره</string>
+    <string name="contacts_renamed">نام مخاطب تغییر کرد</string>
+
+    <string name="contacts_block_title">«%1$s» مسدود شود؟</string>
+    <string name="contacts_block_body">پیام‌ها و موقعیت این مخاطب دریافت نمی‌شود و پیام‌های شما هم تا زمان رفع مسدودیت برای او فرستاده نمی‌شود. گفتگو و پیام‌های قبلی حذف نمی‌شوند و هر زمان می‌توانید از «تنظیمات ← حریم خصوصی ← مخاطبین مسدود» مسدودیت را بردارید.</string>
+    <string name="contacts_block_confirm">مسدود کردن</string>
+    <string name="contacts_blocked_done">مخاطب مسدود شد</string>
+    <string name="contacts_unblock_title">رفع مسدودیت «%1$s»؟</string>
+    <string name="contacts_unblock_body">پیام‌ها و موقعیت این مخاطب دوباره دریافت می‌شود و او به فهرست مخاطبین برمی‌گردد.</string>
+    <string name="contacts_unblock_confirm">رفع مسدودیت</string>
+    <string name="contacts_unblocked_done">مسدودیت برداشته شد</string>
+
+    <string name="contacts_delete_title">حذف مخاطب</string>
+    <string name="contacts_delete_body">«%1$s» به همراه گفتگو، پیام‌ها، پیوست‌ها و اشتراک‌گذاری موقعیت برای همیشه حذف می‌شود. این کار قابل بازگشت نیست و در صورت امکان به این مخاطب اطلاع داده می‌شود که دیگر مخاطب شما نیست.</string>
+    <string name="contacts_delete_confirm">حذف</string>
+    <string name="contacts_deleted">مخاطب حذف شد</string>
+
+    <string name="contact_detail_title">مخاطب</string>
+    <string name="contact_detail_avatar">تصویر نمادین %1$s</string>
+    <string name="contact_detail_privacy_section">حریم خصوصی</string>
+    <string name="contact_detail_location_access">اجازهٔ دیدن موقعیت من</string>
+    <string name="contact_detail_location_access_body">وقتی روشن باشد، این مخاطب موقعیت زندهٔ شما را می‌بیند.</string>
+    <string name="contact_detail_manage_section">مدیریت مخاطب</string>
+    <string name="contact_detail_delete">حذف مخاطب</string>
+    <string name="contacts_marked_verified">به‌عنوان تأییدشده علامت خورد</string>
+    <string name="contacts_unmarked_verified">علامت تأیید برداشته شد</string>
+    <string name="contact_detail_verified">تأیید شده</string>
+    <string name="contact_detail_verified_body">اگر شمارهٔ امنیتی را از راه دیگری (تماس یا حضوری) با مخاطب مقایسه کرده‌اید، این گزینه را روشن کنید.</string>
 </resources>

@@ -13,10 +13,11 @@ dependencies {
     implementation(project(":data"))
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
-    implementation(project(":feature:location"))
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.compose.material3)
+    implementation(libs.kotlinx.collections.immutable)
+    testImplementation(libs.junit)
 }

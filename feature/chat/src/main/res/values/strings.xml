@@ -1,17 +1,75 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Chats tab -->
     <string name="feature_chat_title">گفتگوها</string>
-    <string name="feature_chat_empty">گفتگویی وجود ندارد. ابتدا یک مخاطب اضافه کنید.</string>
+    <string name="feature_chat_search">جستجو در گفتگوها</string>
+    <string name="feature_chat_search_open">جستجو</string>
+    <string name="feature_chat_new">گفتگوی جدید</string>
+    <string name="feature_chat_empty_title">هنوز گفتگویی ندارید</string>
+    <string name="feature_chat_empty_body">برای شروع، یکی از مخاطبان تأییدشده را انتخاب کنید.</string>
+    <string name="feature_chat_no_results_title">نتیجه‌ای یافت نشد</string>
+    <string name="feature_chat_no_results_body">عبارت دیگری را امتحان کنید.</string>
+
+    <!-- Chat list selection mode -->
+    <string name="feature_chat_selection_count">%1$s انتخاب‌شده</string>
+    <string name="feature_chat_mute">بی‌صدا کردن</string>
+    <string name="feature_chat_unmute">باصدا کردن</string>
+    <string name="feature_chat_delete">حذف گفتگو</string>
+    <string name="feature_chat_delete_title">حذف گفتگو</string>
+    <string name="feature_chat_delete_body">پیام‌ها و پیوست‌های این گفتگو از این دستگاه پاک می‌شود. این کار برگشت‌پذیر نیست.</string>
+    <string name="feature_chat_delete_confirm">حذف</string>
+    <string name="feature_chat_deleted">گفتگو حذف شد</string>
+
+    <!-- Preview kinds -->
+    <string name="feature_chat_preview_image">📷 عکس</string>
+    <string name="feature_chat_preview_video">🎬 ویدیو</string>
+    <string name="feature_chat_preview_file">📎 %1$s</string>
+    <string name="feature_chat_preview_location">📍 موقعیت مکانی</string>
+    <string name="feature_chat_preview_empty">پیامی وجود ندارد</string>
+
+    <!-- New chat picker -->
+    <string name="feature_chat_new_title">گفتگوی جدید</string>
+    <string name="feature_chat_new_group">گروه جدید</string>
+    <string name="feature_chat_new_search">جستجوی مخاطب</string>
+    <string name="feature_chat_new_empty_title">مخاطبی ندارید</string>
+    <string name="feature_chat_new_empty_body">ابتدا با اسکن کد QR یا شناسهٔ کاربری مخاطبی اضافه کنید.</string>
+    <string name="feature_chat_status_pending_out">در انتظار تأیید</string>
+    <string name="feature_chat_status_pending_in">درخواست دریافت‌شده</string>
+    <string name="feature_chat_status_rejected">رد شده</string>
+    <string name="feature_chat_status_blocked">مسدود</string>
+
+    <!-- Conversation -->
     <string name="feature_chat_conversation">گفتگو</string>
-    <string name="feature_chat_back">بازگشت</string>
-    <string name="feature_chat_hint">پیام…</string>
-    <string name="feature_chat_send">ارسال</string>
-    <string name="feature_chat_status_queued">در صف</string>
-    <string name="feature_chat_status_sent">ارسال شد</string>
-    <string name="feature_chat_status_delivered">تحویل شد</string>
-    <string name="feature_chat_status_read">خوانده شد</string>
-    <string name="feature_chat_status_failed">ناموفق</string>
-    <string name="feature_chat_attach">پیوست</string>
+    <string name="feature_chat_subtitle_verified">تأیید شده</string>
+    <string name="feature_chat_subtitle_key_changed">کلید امنیتی تغییر کرده است</string>
+    <string name="feature_chat_subtitle_blocked">مسدود شده</string>
+    <string name="feature_chat_open_contact">مشاهدهٔ مخاطب</string>
+    <string name="feature_chat_blocked_banner">این مخاطب مسدود است؛ تا رفع مسدودی نمی‌توانید پیام بفرستید.</string>
+    <string name="feature_chat_jump_to_bottom">رفتن به آخرین پیام</string>
+    <string name="feature_chat_conversation_empty_title">گفتگو را شروع کنید</string>
+    <string name="feature_chat_conversation_empty_body">پیام‌های شما به‌صورت سرتاسری رمزنگاری می‌شود.</string>
+    <string name="feature_chat_reply">پاسخ</string>
+    <string name="feature_chat_copy">کپی متن</string>
+    <string name="feature_chat_copied">متن کپی شد</string>
+    <string name="feature_chat_delete_message">حذف برای من</string>
+    <string name="feature_chat_reply_self">شما</string>
+    <string name="feature_chat_retry">تلاش دوباره</string>
+    <string name="feature_chat_receiving">در حال دریافت پیوست…</string>
     <string name="feature_chat_attachment_open_failed">برنامه‌ای برای باز کردن این فایل یافت نشد</string>
-    <string name="feature_chat_attachment_receiving">در حال دریافت پیوست…</string>
+
+    <!-- Send failures (mapped from the outbox error codes) -->
+    <string name="feature_chat_error_peer_protocol_outdated">نسخهٔ برنامهٔ مخاطب قدیمی است و باید به‌روزرسانی شود</string>
+    <string name="feature_chat_error_peer_key_changed">کلید امنیتی مخاطب تغییر کرده است؛ ابتدا آن را تأیید کنید</string>
+    <string name="feature_chat_error_endpoint_not_found">مخاطب در دسترس نیست</string>
+    <string name="feature_chat_error_network_unavailable">اتصال شبکه در دسترس نیست</string>
+    <string name="feature_chat_error_send_failed">ارسال پیام انجام نشد</string>
+    <string name="feature_chat_error_mailbox_handoff">پیام به صندوق امانی سپرده شد</string>
+    <string name="feature_chat_error_contact_missing">مخاطب این گفتگو یافت نشد</string>
+    <string name="feature_chat_error_contact_blocked">این مخاطب مسدود است</string>
+    <string name="feature_chat_error_contact_not_approved">این مخاطب هنوز درخواست شما را تأیید نکرده است</string>
+
+    <!-- Image viewer -->
+    <string name="feature_chat_image_viewer">نمایش تصویر</string>
+    <string name="feature_chat_image_close">بستن</string>
+    <string name="feature_chat_image_failed">تصویر باز نشد</string>
 </resources>

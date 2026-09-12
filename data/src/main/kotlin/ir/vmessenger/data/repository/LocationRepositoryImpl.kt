@@ -27,13 +27,15 @@ class LocationRepositoryImpl @Inject constructor(
     override fun observeActiveShares(): Flow<List<String>> =
         locationShareDao.observeActive().map { shares -> shares.map { it.shareId } }
 
+    /** [ActiveLocationShare.contactName] is shown to the user, so it resolves the display name. */
     override fun observeActiveShareDetails(): Flow<List<ActiveLocationShare>> =
         locationShareDao.observeActive().map { shares ->
             shares.map { share ->
                 ActiveLocationShare(
                     shareId = share.shareId,
                     contactId = share.contactId,
-                    contactName = share.contactId,
+                    // Previously the raw contact UUID, which is meaningless on screen.
+                    contactName = contactDao.getById(share.contactId)?.displayName ?: share.contactId,
                     outgoing = share.direction == MessageDirection.OUTGOING,
                 )
             }

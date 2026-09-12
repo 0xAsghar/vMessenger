@@ -99,6 +99,8 @@ class FakeContactDao : ContactDao {
 
     override fun observeContacts(): Flow<List<ContactEntity>> = flowOf(contacts.filter { !it.blocked })
 
+    override fun observeBlocked(): Flow<List<ContactEntity>> = flowOf(contacts.filter { it.blocked })
+
     override suspend fun getById(id: String): ContactEntity? = contacts.firstOrNull { it.id == id }
 
     override suspend fun getByIdentityHash(identityHash: ByteArray): ContactEntity? =

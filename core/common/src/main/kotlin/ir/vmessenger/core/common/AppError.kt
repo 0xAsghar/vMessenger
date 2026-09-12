@@ -24,6 +24,7 @@ sealed class AppError(open val message: String) {
     data object ContactAddFailed : AppError("adding the contact failed")
     data object NoContactSelected : AppError("no contact selected")
     data object RequestNotFound : AppError("contact request no longer exists")
+    data object ContactNotFound : AppError("contact no longer exists")
 
     // Messaging ---------------------------------------------------------------
     data object NoNetwork : AppError("no usable network path")

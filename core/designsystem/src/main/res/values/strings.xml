@@ -83,6 +83,7 @@
     <string name="vm_error_contact_add_failed">افزودن مخاطب انجام نشد</string>
     <string name="vm_error_no_contact_selected">هیچ مخاطبی انتخاب نشده است</string>
     <string name="vm_error_request_not_found">این درخواست دیگر در دسترس نیست</string>
+    <string name="vm_error_contact_not_found">این مخاطب دیگر در دسترس نیست</string>
     <string name="vm_error_no_network">اتصال شبکه در دسترس نیست</string>
     <string name="vm_error_send_failed">ارسال پیام انجام نشد</string>
     <string name="vm_error_permission_denied">دسترسی لازم داده نشده است</string>

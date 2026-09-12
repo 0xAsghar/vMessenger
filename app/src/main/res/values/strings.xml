@@ -3,7 +3,7 @@
     <string name="app_name">vMessenger</string>
     <string name="tab_chats">گفتگوها</string>
     <string name="tab_contacts">مخاطبین</string>
-    <string name="tab_location">موقعیت</string>
+    <string name="tab_map">نقشه</string>
     <string name="tab_settings">تنظیمات</string>
     <string name="contact_request_title">درخواست مخاطب</string>
     <string name="contact_request_body">%1$s با شناسه %2$s شما را به مخاطبین اضافه کرده است. آیا این فرد را به مخاطبین خود اضافه می‌کنید؟</string>

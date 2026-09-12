@@ -6,6 +6,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import ir.vmessenger.R
 import ir.vmessenger.feature.chat.ConversationRoute
+import ir.vmessenger.feature.chat.ImageViewerRoute
+import ir.vmessenger.feature.chat.NewChatRoute
 import ir.vmessenger.ui.placeholder.ComingSoonRoute
 
 /**
@@ -18,12 +20,27 @@ import ir.vmessenger.ui.placeholder.ComingSoonRoute
  */
 internal fun NavGraphBuilder.chatGraph(navController: NavHostController) {
     composable<VmRoute.Conversation> {
-        ConversationRoute(onBack = { navController.popBackStack() })
+        ConversationRoute(
+            onBack = { navController.popBackStack() },
+            onOpenContact = { contactId ->
+                navController.navigate(VmRoute.ContactDetail(contactId)) { launchSingleTop = true }
+            },
+            onOpenImage = { messageId ->
+                navController.navigate(VmRoute.ImageViewer(messageId)) { launchSingleTop = true }
+            },
+        )
     }
     composable<VmRoute.NewChat> {
-        ComingSoonRoute(
-            title = stringResource(R.string.route_new_chat),
-            onNavigateBack = { navController.popBackStack() },
+        NewChatRoute(
+            onBack = { navController.popBackStack() },
+            onNewGroup = { navController.navigate(VmRoute.NewGroup) },
+            // The picker is a step on the way to the chat, not a place to come back to.
+            onOpenConversation = { conversationId ->
+                navController.navigate(VmRoute.Conversation(conversationId)) {
+                    popUpTo<VmRoute.NewChat> { inclusive = true }
+                    launchSingleTop = true
+                }
+            },
         )
     }
     composable<VmRoute.NewGroup> {
@@ -45,11 +62,8 @@ internal fun NavGraphBuilder.chatGraph(navController: NavHostController) {
         )
     }
     composable<VmRoute.ImageViewer> {
-        // Full-bleed by contract: no scaffold insets, controls pad themselves.
-        ComingSoonRoute(
-            title = stringResource(R.string.route_image_viewer),
-            onNavigateBack = { navController.popBackStack() },
-            fullBleed = true,
-        )
+        // Full-bleed by contract: the viewer draws behind the system bars and pads its
+        // own close button with safeDrawingPadding().
+        ImageViewerRoute(onBack = { navController.popBackStack() })
     }
 }

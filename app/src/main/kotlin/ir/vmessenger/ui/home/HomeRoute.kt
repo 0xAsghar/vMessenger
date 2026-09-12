@@ -36,8 +36,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ir.vmessenger.R
 import ir.vmessenger.feature.chat.ChatRoute
+import ir.vmessenger.feature.contacts.ContactsNavigation
 import ir.vmessenger.feature.contacts.ContactsRoute
-import ir.vmessenger.feature.location.LocationRoute
+import ir.vmessenger.feature.map.MapRoute
 import ir.vmessenger.feature.settings.SettingsRoute
 import ir.vmessenger.navigation.VmRoute
 
@@ -56,7 +57,7 @@ private val HomeTabs = listOf(
     HomeTab(VmRoute.ContactsTab, R.string.tab_contacts) {
         Icon(Icons.Outlined.Contacts, contentDescription = null)
     },
-    HomeTab(VmRoute.MapTab, R.string.tab_location) {
+    HomeTab(VmRoute.MapTab, R.string.tab_map) {
         Icon(Icons.Outlined.LocationOn, contentDescription = null)
     },
     HomeTab(VmRoute.SettingsTab, R.string.tab_settings) {
@@ -165,24 +166,30 @@ private fun HomeTabNavHost(
         popExitTransition = { fadeOut(tween(TAB_FADE_MS)) },
     ) {
         composable<VmRoute.ChatsTab> {
-            ChatRoute(onOpenConversation = navigation.onOpenConversation)
+            ChatRoute(
+                onOpenConversation = navigation.onOpenConversation,
+                onNewChat = navigation.onNewChat,
+            )
         }
         composable<VmRoute.ContactsTab> {
             ContactsRoute(
-                onMyQr = navigation.onMyQr,
-                onScanQr = navigation.onScanQr,
-                onAddByHash = navigation.onAddByHash,
-                onStartChat = onStartChat,
+                navigation = ContactsNavigation(
+                    onMyQr = navigation.onMyQr,
+                    onScanQr = navigation.onScanQr,
+                    onAddByHash = navigation.onAddByHash,
+                    onOpenContact = navigation.onOpenContact,
+                    onStartChat = onStartChat,
+                ),
             )
         }
-        // Location sharing today; the full-screen map replaces this body in M4 P5.
-        composable<VmRoute.MapTab> { LocationRoute() }
+        composable<VmRoute.MapTab> { MapRoute() }
         composable<VmRoute.SettingsTab> {
             SettingsRoute(
                 onNavigateToDebug = navigation.onNavigateToDebug,
                 onNavigateToNodes = navigation.onNavigateToNodes,
                 onNavigateToAbout = navigation.onNavigateToAbout,
                 onNavigateToIdentity = navigation.onNavigateToIdentity,
+                onNavigateToBlockedContacts = navigation.onNavigateToBlockedContacts,
             )
         }
     }

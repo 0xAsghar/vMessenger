@@ -14,6 +14,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.designsystem.error.toUiText
 
 @Composable
 fun QrScannerRoute(
@@ -44,7 +45,7 @@ private fun ContactQrScannerOverlay(
         when (uiState) {
             is AddContactUiState.Error -> {
                 Text(
-                    text = uiState.message,
+                    text = uiState.error.toUiText(),
                     modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
                     color = MaterialTheme.colorScheme.error,
                 )

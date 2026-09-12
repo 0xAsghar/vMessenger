@@ -79,4 +79,13 @@
     <string name="settings_backup_in_progress">در حال ساخت فایل پشتیبان…</string>
     <string name="settings_backup_saved">فایل پشتیبان ذخیره شد</string>
     <string name="settings_backup_write_failed">ذخیرهٔ فایل پشتیبان ناموفق بود</string>
+    <string name="settings_blocked_contacts">مخاطبین مسدود</string>
+
+    <string name="blocked_contacts_title">مخاطبین مسدود</string>
+    <string name="blocked_contacts_empty_title">مخاطب مسدودی ندارید</string>
+    <string name="blocked_contacts_empty_body">هر مخاطبی که مسدود کنید اینجا فهرست می‌شود و می‌توانید مسدودیت او را بردارید.</string>
+    <string name="blocked_contacts_unblock">رفع مسدودیت</string>
+    <string name="blocked_contacts_unblock_title">رفع مسدودیت «%1$s»؟</string>
+    <string name="blocked_contacts_unblock_body">پیام‌ها و موقعیت این مخاطب دوباره دریافت می‌شود و او به فهرست مخاطبین برمی‌گردد.</string>
+    <string name="blocked_contacts_unblocked">مسدودیت «%1$s» برداشته شد</string>
 </resources>

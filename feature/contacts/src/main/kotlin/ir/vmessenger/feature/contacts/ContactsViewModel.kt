@@ -1,109 +1,134 @@
 package ir.vmessenger.feature.contacts
 
-import android.location.Location
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
+import ir.vmessenger.core.designsystem.component.UiMessage
 import ir.vmessenger.data.location.MyLocationSource
-import ir.vmessenger.data.network.ContactRequestHandler
-import ir.vmessenger.domain.model.Contact
-import ir.vmessenger.domain.model.ContactRequest
-import ir.vmessenger.domain.model.LocationSample
 import ir.vmessenger.domain.repository.ContactRequestRepository
 import ir.vmessenger.domain.repository.LocationRepository
-import ir.vmessenger.domain.usecase.contact.BlockContactUseCase
-import ir.vmessenger.domain.usecase.contact.DeleteContactUseCase
 import ir.vmessenger.domain.usecase.contact.ObserveContactsUseCase
-import ir.vmessenger.domain.usecase.contact.SendContactRequestUseCase
-import ir.vmessenger.domain.usecase.contact.UpdateContactAliasUseCase
-import ir.vmessenger.domain.usecase.identity.GetIdentityUseCase
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** A contact plus, when they are sharing their location with us, its position and distance. */
-data class ContactListItem(
-    val contact: Contact,
-    val sharedLocation: LocationSample? = null,
-    val distanceMeters: Double? = null,
-)
+private const val SUBSCRIPTION_TIMEOUT_MS = 5_000L
 
+/**
+ * The contacts tab.
+ *
+ * Everything the user can change — the search query, which row opened the sheet, which
+ * confirmation is pending — lives in one control flow that is combined with the database, so a
+ * rotation loses none of it and the composables stay stateless.
+ */
 @HiltViewModel
-@Suppress("LongParameterList")
 class ContactsViewModel @Inject constructor(
     observeContacts: ObserveContactsUseCase,
-    contactRequestRepository: ContactRequestRepository,
     locationRepository: LocationRepository,
     myLocationSource: MyLocationSource,
-    private val contactRequestHandler: ContactRequestHandler,
-    private val sendContactRequest: SendContactRequestUseCase,
-    private val deleteContact: DeleteContactUseCase,
-    private val blockContact: BlockContactUseCase,
-    private val updateAlias: UpdateContactAliasUseCase,
-    private val getIdentity: GetIdentityUseCase,
-    private val contactRepository: ir.vmessenger.domain.repository.ContactRepository,
+    private val contactRequests: ContactRequestRepository,
+    private val actions: ContactActions,
+    messageBus: ContactMessageBus,
 ) : ViewModel() {
-    val items: StateFlow<List<ContactListItem>> = combine(
+
+    private val control = MutableStateFlow(ContactsControl())
+    private val localMessages = Channel<UiMessage>(Channel.BUFFERED)
+
+    /** Snackbars from this screen, plus the one a deletion left behind when the detail popped. */
+    val messages: Flow<UiMessage> = merge(localMessages.receiveAsFlow(), messageBus.messages)
+
+    private val contactRows = combine(
         observeContacts(),
         locationRepository.observeIncomingLocations(),
         myLocationSource.observe(),
     ) { contacts, incoming, myLocation ->
-        contacts.map { contact ->
-            val shared = incoming[contact.id]
-            ContactListItem(
-                contact = contact,
-                sharedLocation = shared,
-                distanceMeters = distanceOrNull(myLocation, shared),
-            )
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        contacts.map { contact -> contact.toRow(incoming[contact.id], myLocation) }.sortedByPersianName()
+    }
 
-    // Hide requests from peers we already approved (a stale PENDING row can
-    // linger if the relationship completed through another path, e.g. a mutual
-    // add). Such requests are auto-accepted on arrival anyway.
-    val pendingRequests: StateFlow<List<ContactRequest>> = combine(
-        contactRequestRepository.observePendingRequests(),
+    // A pending row can linger after the relationship completed through another path (a mutual
+    // add); such requests are auto-accepted on arrival, so showing them again would be a lie.
+    private val requestRows = combine(
+        contactRequests.observePendingRequests(),
         observeContacts(),
     ) { requests, contacts ->
-        val approvedHashes = contacts.filter { it.isApproved }.map { it.identityHash }
-        requests.filterNot { request ->
-            approvedHashes.any { IdentityHashMatcher.matches(it, request.requesterIdentityHash) }
+        val approved = contacts.filter { it.isApproved }.map { it.identityHash }
+        requests
+            .filterNot { request ->
+                approved.any { IdentityHashMatcher.matches(it, request.requesterIdentityHash) }
+            }
+            .map { it.toRow() }
+    }
+
+    val uiState: StateFlow<ContactsUiState> = combine(
+        contactRows,
+        requestRows,
+        control,
+    ) { rows, requests, state ->
+        buildContactsState(rows, requests, state)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT_MS), ContactsUiState())
+
+    fun onQueryChange(query: String) = control.update { it.copy(query = query) }
+
+    fun onSearchActiveChange(active: Boolean) =
+        control.update { it.copy(searchActive = active, query = if (active) it.query else "") }
+
+    /** Opens the long-press sheet for a contact, or closes it when given null. */
+    fun onSheetFor(contactId: String?) = control.update { it.copy(sheetContactId = contactId) }
+
+    /** Every sheet entry except "chat" opens a confirmation; the caller navigates for "chat". */
+    fun onSheetAction(contactId: String, action: ContactSheetAction) {
+        val pending = when (action) {
+            ContactSheetAction.CHAT -> null
+            ContactSheetAction.RENAME -> PendingContactAction.Rename(contactId)
+            ContactSheetAction.BLOCK -> PendingContactAction.Block(contactId)
+            ContactSheetAction.UNBLOCK -> PendingContactAction.Unblock(contactId)
+            ContactSheetAction.DELETE -> PendingContactAction.Delete(contactId)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        control.update { it.copy(sheetContactId = null, pending = pending) }
+    }
 
-    private val _localPublicKey = MutableStateFlow<ByteArray?>(null)
-    val localPublicKey: StateFlow<ByteArray?> = _localPublicKey.asStateFlow()
+    fun onApproveRequest(requestId: String) = viewModelScope.launch {
+        contactRequests.getRequest(requestId)?.let { emit(actions.approveRequest(it)) }
+    }
 
-    init {
+    /** Rejecting is destructive enough to confirm: the peer is told and has to ask again. */
+    fun onRejectRequest(requestId: String) =
+        control.update { it.copy(pending = PendingContactAction.RejectRequest(requestId)) }
+
+    fun dismissDialog() = control.update { it.copy(pending = null) }
+
+    fun confirmRename(alias: String) {
+        val pending = control.value.pending as? PendingContactAction.Rename ?: return
+        control.update { it.copy(pending = null) }
+        viewModelScope.launch { emit(actions.rename(pending.targetId, alias)) }
+    }
+
+    fun confirmPendingAction() {
+        val pending = control.value.pending ?: return
+        control.update { it.copy(pending = null) }
         viewModelScope.launch {
-            _localPublicKey.value = getIdentity()?.ed25519PublicKey
+            when (pending) {
+                is PendingContactAction.Delete -> emit(actions.delete(pending.targetId))
+                is PendingContactAction.Block -> emit(actions.setBlocked(pending.targetId, blocked = true))
+                is PendingContactAction.Unblock -> emit(actions.setBlocked(pending.targetId, blocked = false))
+                is PendingContactAction.RejectRequest ->
+                    contactRequests.getRequest(pending.targetId)?.let { emit(actions.rejectRequest(it)) }
+                is PendingContactAction.Rename -> Unit
+            }
         }
     }
 
-    fun approveRequest(request: ContactRequest) =
-        viewModelScope.launch { contactRequestHandler.approveRequest(request) }
-
-    fun rejectRequest(request: ContactRequest) =
-        viewModelScope.launch { contactRequestHandler.rejectRequest(request) }
-
-    fun resendRequest(contactId: String) = viewModelScope.launch {
-        contactRepository.getContact(contactId)?.let { sendContactRequest(it) }
-    }
-
-    fun delete(id: String) = viewModelScope.launch { deleteContact(id) }
-    fun block(id: String, blocked: Boolean) = viewModelScope.launch { blockContact(id, blocked) }
-    fun rename(id: String, alias: String) = viewModelScope.launch { updateAlias(id, alias) }
-
-    private fun distanceOrNull(mine: ir.vmessenger.data.location.LatLng?, theirs: LocationSample?): Double? {
-        if (mine == null || theirs == null) return null
-        val result = FloatArray(1)
-        Location.distanceBetween(mine.latitude, mine.longitude, theirs.latitude, theirs.longitude, result)
-        return result[0].toDouble()
+    private suspend fun emit(message: UiMessage) {
+        localMessages.send(message)
     }
 }
