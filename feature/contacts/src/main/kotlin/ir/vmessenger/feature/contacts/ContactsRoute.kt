@@ -38,7 +38,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import ir.vmessenger.core.designsystem.component.Identicon
+import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.SafetyNumberDisplay
 import ir.vmessenger.core.designsystem.component.UserHashText
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
@@ -169,7 +169,7 @@ private fun RequestRow(request: ContactRequest, onApprove: () -> Unit, onReject:
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Identicon(seed = request.requesterIdentityHash)
+        Avatar(seed = request.requesterIdentityHash, name = request.requesterDisplayName)
         Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
             Text(text = request.requesterDisplayName, style = MaterialTheme.typography.titleMedium)
             UserHashText(
@@ -194,7 +194,7 @@ private fun ContactRow(item: ContactListItem, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Identicon(seed = contact.identityHash)
+        Avatar(seed = contact.identityHash, name = contact.displayName)
         Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
             Text(text = contact.displayName, style = MaterialTheme.typography.titleMedium)
             UserHashText(
@@ -248,7 +248,7 @@ private fun ContactDetailRoute(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Identicon(seed = contact.identityHash, size = 56.dp)
+                Avatar(seed = contact.identityHash, name = contact.displayName, size = 56.dp)
                 Column(modifier = Modifier.padding(start = 16.dp)) {
                     Text(text = contact.displayName, style = MaterialTheme.typography.titleLarge)
                     UserHashText(

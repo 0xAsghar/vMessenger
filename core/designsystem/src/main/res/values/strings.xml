@@ -7,4 +7,93 @@
     <string name="nav_back">بازگشت</string>
     <string name="vmessenger_logo">لوگوی وی‌مسنجر</string>
     <string name="user_hash_label">شناسه کاربری</string>
+    <string name="vm_safety_number_title">شماره امنیتی</string>
+
+    <!-- Generic actions -->
+    <string name="vm_cancel">انصراف</string>
+    <string name="vm_close">بستن</string>
+    <string name="vm_retry">تلاش دوباره</string>
+
+    <!-- Chat list -->
+    <string name="vm_chat_muted">بی‌صدا</string>
+    <string name="vm_chat_unread_count">%1$s پیام خوانده‌نشده</string>
+
+    <!-- Delivery ticks -->
+    <string name="vm_tick_queued">در انتظار ارسال</string>
+    <string name="vm_tick_sent">ارسال شد</string>
+    <string name="vm_tick_delivered">تحویل شد</string>
+    <string name="vm_tick_read">خوانده شد</string>
+    <string name="vm_tick_failed">ارسال نشد</string>
+
+    <!-- Message bubbles -->
+    <string name="vm_bubble_edited">ویرایش‌شده</string>
+    <string name="vm_bubble_image">تصویر</string>
+    <string name="vm_bubble_video">ویدیو</string>
+    <string name="vm_bubble_video_play">پخش ویدیو</string>
+    <string name="vm_bubble_file">فایل</string>
+    <string name="vm_bubble_reply_to">پاسخ به %1$s</string>
+    <string name="vm_voice_play">پخش پیام صوتی</string>
+    <string name="vm_voice_pause">توقف پخش</string>
+    <string name="vm_voice_speed">سرعت پخش %1$s برابر</string>
+    <string name="vm_voice_waveform">نوار پیشرفت پیام صوتی</string>
+
+    <!-- Composer -->
+    <string name="vm_composer_placeholder">پیام</string>
+    <string name="vm_composer_attach">پیوست</string>
+    <string name="vm_composer_send">ارسال</string>
+    <string name="vm_composer_record">ضبط پیام صوتی</string>
+    <string name="vm_composer_clear_reply">لغو پاسخ</string>
+
+    <!-- Recording -->
+    <string name="vm_recording_slide_to_cancel">برای لغو بکشید</string>
+    <string name="vm_recording_cancel">لغو ضبط</string>
+    <string name="vm_recording_send">ارسال پیام صوتی</string>
+    <string name="vm_recording_indicator">در حال ضبط</string>
+
+    <!-- Attachment sheet -->
+    <string name="vm_attach_title">افزودن پیوست</string>
+    <string name="vm_attach_photo">تصویر</string>
+    <string name="vm_attach_video">ویدیو</string>
+    <string name="vm_attach_file">فایل</string>
+
+    <!-- Search -->
+    <string name="vm_search_placeholder">جستجو</string>
+    <string name="vm_search_clear">پاک کردن جستجو</string>
+    <string name="vm_search_close">بستن جستجو</string>
+
+    <!-- Key change -->
+    <string name="vm_key_change_title">کلید امنیتی «%1$s» تغییر کرده است</string>
+    <string name="vm_key_change_body">پیش از ادامهٔ گفتگو شماره امنیتی را دوباره بررسی کنید.</string>
+    <string name="vm_key_change_verify">بررسی شماره امنیتی</string>
+    <string name="vm_key_change_dismiss">بعداً</string>
+
+    <!-- Settings rows -->
+    <string name="vm_settings_open">باز کردن</string>
+
+    <!-- Errors -->
+    <string name="vm_error_unknown">خطای ناشناخته‌ای رخ داد</string>
+    <string name="vm_error_crypto">عملیات رمزنگاری ناموفق بود</string>
+    <string name="vm_error_network">ارتباط با شبکه برقرار نشد</string>
+    <string name="vm_error_validation">اطلاعات واردشده معتبر نیست</string>
+    <string name="vm_error_not_found">مورد خواسته‌شده پیدا نشد</string>
+    <string name="vm_error_security">بررسی امنیتی ناموفق بود</string>
+    <string name="vm_error_protocol_version">نسخهٔ پروتکل مخاطب (%1$s) پشتیبانی نمی‌شود؛ یکی از دو برنامه باید به‌روزرسانی شود</string>
+    <string name="vm_error_invalid_qr">این کد QR متعلق به وی‌مسنجر نیست</string>
+    <string name="vm_error_invalid_user_hash">شناسهٔ کاربری معتبر نیست</string>
+    <string name="vm_error_contact_add_failed">افزودن مخاطب انجام نشد</string>
+    <string name="vm_error_no_contact_selected">هیچ مخاطبی انتخاب نشده است</string>
+    <string name="vm_error_request_not_found">این درخواست دیگر در دسترس نیست</string>
+    <string name="vm_error_no_network">اتصال شبکه در دسترس نیست</string>
+    <string name="vm_error_send_failed">ارسال پیام انجام نشد</string>
+    <string name="vm_error_permission_denied">دسترسی لازم داده نشده است</string>
+    <string name="vm_error_attachment_too_large">حجم فایل بیشتر از %1$s مگابایت است</string>
+    <string name="vm_error_attachment_failed">انتقال پیوست ناموفق بود</string>
+    <string name="vm_error_group_full">گروه بیش از %1$s عضو نمی‌پذیرد</string>
+    <string name="vm_error_not_group_member">شما عضو این گروه نیستید</string>
+    <string name="vm_error_group_closed">این گروه بسته شده است</string>
+    <string name="vm_error_no_reachable_members">هیچ عضو قابل‌دسترسی در گروه نیست</string>
+    <string name="vm_error_update_rate_limited">تعداد درخواست‌ها زیاد است؛ کمی بعد دوباره تلاش کنید</string>
+    <string name="vm_error_update_checksum_mismatch">فایل دریافت‌شده سالم نیست</string>
+    <string name="vm_error_update_signature_mismatch">امضای نسخهٔ جدید با نسخهٔ نصب‌شده یکسان نیست</string>
+    <string name="vm_error_update_no_asset">برای این دستگاه فایل نصبی منتشر نشده است</string>
 </resources>

@@ -1,0 +1,196 @@
+package ir.vmessenger.core.designsystem.component
+
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.R
+import ir.vmessenger.core.designsystem.theme.VmElevation
+import ir.vmessenger.core.designsystem.theme.VmSizes
+import ir.vmessenger.core.designsystem.theme.VmSpacing
+
+private val FieldMaxHeight = 160.dp
+
+/**
+ * Bottom bar of a conversation: attach button, growing text field and a send/mic button that
+ * morphs with the draft. Window insets are handled here, so callers pass it straight to
+ * `Scaffold(bottomBar = ...)`.
+ *
+ * The mic callbacks report the raw press gesture only; the recording state machine (hold, lock,
+ * slide-to-cancel) lives in the chat feature.
+ */
+@Suppress("LongParameterList") // Compose slot API: one callback per independent composer action.
+@Composable
+fun Composer(
+    state: ComposerState,
+    onTextChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onAttach: () -> Unit,
+    modifier: Modifier = Modifier,
+    replyTo: ReplyPreview? = null,
+    onClearReply: () -> Unit = {},
+    onMicPressStart: () -> Unit = {},
+    onMicMove: (Offset) -> Unit = {},
+    onMicRelease: () -> Unit = {},
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = VmElevation.bar,
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .imePadding(),
+    ) {
+        Column(modifier = Modifier.padding(VmSpacing.sm)) {
+            ReplyStrip(replyTo = replyTo, onClearReply = onClearReply)
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(VmSpacing.xs),
+            ) {
+                IconButton(onClick = onAttach, enabled = state.enabled) {
+                    Icon(
+                        imageVector = Icons.Outlined.AttachFile,
+                        contentDescription = stringResource(R.string.vm_composer_attach),
+                    )
+                }
+                ComposerField(
+                    state = state,
+                    onTextChange = onTextChange,
+                    modifier = Modifier.weight(1f),
+                )
+                if (state.canSend) {
+                    SendButton(onSend)
+                } else {
+                    MicButton(
+                        enabled = state.enabled,
+                        onPressStart = onMicPressStart,
+                        onMove = onMicMove,
+                        onRelease = onMicRelease,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComposerField(
+    state: ComposerState,
+    onTextChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TextField(
+        value = state.text,
+        onValueChange = onTextChange,
+        enabled = state.enabled && !state.recording,
+        placeholder = { Text(text = stringResource(R.string.vm_composer_placeholder)) },
+        textStyle = MaterialTheme.typography.bodyLarge,
+        maxLines = 6,
+        shape = MaterialTheme.shapes.large,
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent,
+        ),
+        modifier = modifier.heightIn(max = FieldMaxHeight),
+    )
+}
+
+@Composable
+private fun ReplyStrip(replyTo: ReplyPreview?, onClearReply: () -> Unit) {
+    if (replyTo == null) return
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = VmSpacing.xs),
+    ) {
+        ReplyQuote(
+            senderName = replyTo.senderName,
+            preview = replyTo.preview,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = onClearReply) {
+            Icon(
+                imageVector = Icons.Outlined.Close,
+                contentDescription = stringResource(R.string.vm_composer_clear_reply),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SendButton(onSend: () -> Unit) {
+    IconButton(onClick = onSend, modifier = Modifier.size(VmSizes.touchTarget)) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.Send,
+            contentDescription = stringResource(R.string.vm_composer_send),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+@Composable
+private fun MicButton(
+    enabled: Boolean,
+    onPressStart: () -> Unit,
+    onMove: (Offset) -> Unit,
+    onRelease: () -> Unit,
+) {
+    val gestures = Modifier.pointerInput(enabled) {
+        if (!enabled) return@pointerInput
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            onPressStart()
+            var pointerUp = false
+            while (!pointerUp) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == down.id }
+                if (change == null || !change.pressed) {
+                    pointerUp = true
+                } else {
+                    onMove(change.position - down.position)
+                }
+            }
+            onRelease()
+        }
+    }
+    Icon(
+        imageVector = Icons.Filled.Mic,
+        contentDescription = stringResource(R.string.vm_composer_record),
+        tint = MaterialTheme.colorScheme.primary,
+        modifier = gestures
+            .size(VmSizes.touchTarget)
+            .padding(VmSpacing.md),
+    )
+}

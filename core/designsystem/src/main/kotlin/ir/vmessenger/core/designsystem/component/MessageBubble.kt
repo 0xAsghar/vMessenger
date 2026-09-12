@@ -1,0 +1,87 @@
+package ir.vmessenger.core.designsystem.component
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.res.stringResource
+import ir.vmessenger.core.designsystem.R
+import ir.vmessenger.core.designsystem.theme.VmShapes
+import ir.vmessenger.core.designsystem.theme.VmSizes
+import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTextStyles
+
+/**
+ * The chrome around one message: side, shape, colours and the 78% width cap. The payload is a
+ * `*BubbleContent` composable, and the trailing line is [BubbleMeta].
+ */
+@Composable
+fun MessageBubble(
+    direction: BubbleDirection,
+    modifier: Modifier = Modifier,
+    shape: Shape = if (direction == BubbleDirection.Outgoing) VmShapes.bubbleOutgoing else VmShapes.bubbleIncoming,
+    colors: MessageBubbleColors = MessageBubbleDefaults.colors(direction),
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val alignment = if (direction == BubbleDirection.Outgoing) Alignment.CenterEnd else Alignment.CenterStart
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = VmSpacing.sm, vertical = VmSpacing.xxs),
+        contentAlignment = alignment,
+    ) {
+        Surface(
+            shape = shape,
+            color = colors.container,
+            contentColor = colors.content,
+            modifier = Modifier.widthIn(max = maxWidth * VmSizes.bubbleMaxWidthFraction),
+        ) {
+            Column(
+                modifier = Modifier.padding(VmSpacing.sm),
+                content = content,
+            )
+        }
+    }
+}
+
+/** Trailing `۱۴:۰۵ ✓✓` line of a bubble. */
+@Composable
+fun BubbleMeta(
+    time: String,
+    modifier: Modifier = Modifier,
+    ticks: DeliveryTicksState? = null,
+    edited: Boolean = false,
+) {
+    Row(
+        modifier = modifier.padding(top = VmSpacing.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VmSpacing.xs),
+    ) {
+        if (edited) {
+            Text(
+                text = stringResource(R.string.vm_bubble_edited),
+                style = VmTextStyles.bubbleTime,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = time,
+            style = VmTextStyles.bubbleTime,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (ticks != null) {
+            DeliveryTicks(state = ticks)
+        }
+    }
+}

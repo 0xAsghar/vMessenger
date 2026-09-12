@@ -8,10 +8,12 @@ android {
 }
 
 dependencies {
-    implementation(project(":core:common"))
+    api(project(":core:common"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.zxing.core)
+    api(libs.coil.compose)
+    api(libs.kotlinx.collections.immutable)
     testImplementation(libs.junit)
 }

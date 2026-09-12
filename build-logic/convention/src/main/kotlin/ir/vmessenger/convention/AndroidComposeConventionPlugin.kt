@@ -6,6 +6,7 @@ import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.dependencies
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 class AndroidComposeConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) {
@@ -25,6 +26,16 @@ class AndroidComposeConventionPlugin : Plugin<Project> {
                         compose = true
                     }
                 }
+            }
+
+            // Material 3 still marks staples we rely on (TopAppBar scroll behaviour,
+            // ScaffoldDefaults, ModalBottomSheet) experimental. Opting in once here
+            // keeps a @file:OptIn off every screen that touches them.
+            tasks.withType(KotlinCompile::class.java).configureEach {
+                compilerOptions.freeCompilerArgs.addAll(
+                    "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+                    "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+                )
             }
 
             dependencies {

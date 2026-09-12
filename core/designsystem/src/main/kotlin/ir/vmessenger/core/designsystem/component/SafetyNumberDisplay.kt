@@ -8,7 +8,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.R
 import ir.vmessenger.core.designsystem.theme.UserHashTextStyle
 import java.security.MessageDigest
 
@@ -22,7 +24,7 @@ fun SafetyNumberDisplay(
         safetyFingerprint(localPublicKey, remotePublicKey)
     }
     Column(modifier = modifier.fillMaxWidth().padding(16.dp)) {
-        Text(text = "شماره امنیتی", style = MaterialTheme.typography.titleMedium)
+        Text(text = stringResource(R.string.vm_safety_number_title), style = MaterialTheme.typography.titleMedium)
         Text(
             text = fingerprint,
             style = UserHashTextStyle,
