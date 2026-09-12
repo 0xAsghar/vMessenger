@@ -5,7 +5,6 @@ import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.MessageDao
-import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageDirection
@@ -22,7 +21,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import ir.vmessenger.core.proto.app.v1.ChatMessage as ProtoChatMessage
@@ -48,6 +46,8 @@ class IncomingMessageCollector @Inject constructor(
     private val conversationDao: ConversationDao,
     private val messageDao: MessageDao,
     private val contactRequestHandler: ContactRequestHandler,
+    private val conversationResolver: InboundConversationResolver,
+    private val groupControlHandler: GroupControlHandler,
     private val receiptHandler: InboundReceiptHandler,
     private val receiptSender: ReceiptSender,
     private val routes: InboundRoutes,
@@ -135,6 +135,7 @@ class IncomingMessageCollector @Inject constructor(
             InboundKind.LOCATION -> routes.location(contactId, envelope)
             InboundKind.CONTROL -> routes.control(contactId, envelope)
             InboundKind.RECEIPT -> receiptHandler.handle(contactId, envelope.receipt)
+            InboundKind.GROUP_CONTROL -> groupControlHandler.handle(contactId, envelope)
             InboundKind.NETWORK_NODES, null -> routes.infrastructure(incoming)
         }
     }
@@ -146,13 +147,16 @@ class IncomingMessageCollector @Inject constructor(
     ) {
         val messageId = envelope.messageId.toStringUtf8()
         val now = System.currentTimeMillis()
-        val existing = conversationDao.getByContactId(contactId)
-        if (messageId.isBlank() || isDuplicate(contactId, messageId, existing?.id, now, session)) return
-        val conversationId = existing?.id ?: createConversation(contactId, messageId, now)
+        // Resolved first: a group message the sender may not write is dropped
+        // before a conversation is created for it, and before it is acknowledged.
+        val target = messageId.takeIf { it.isNotBlank() }
+            ?.let { conversationResolver.resolve(contactId, envelope, now) }
+            ?.takeUnless { isDuplicate(contactId, messageId, it.conversationId, now, session) }
+            ?: return
         messageDao.insert(
             MessageEntity(
                 messageId = messageId,
-                conversationId = conversationId,
+                conversationId = target.conversationId,
                 direction = MessageDirection.INCOMING,
                 contentType = MessageContentType.TEXT,
                 body = envelope.chat.text,
@@ -163,20 +167,24 @@ class IncomingMessageCollector @Inject constructor(
                 sentAtUnixMs = envelope.sentAtUnixMs.coerceIn(now - SENT_AT_MAX_PAST_MS, now + SENT_AT_MAX_FUTURE_MS),
                 deliveredAtUnixMs = now,
                 readAtUnixMs = null,
+                senderIdentityHash = target.senderIdentityHash,
             ),
         )
-        if (existing != null) {
-            conversationDao.update(
-                existing.copy(
-                    lastMessageId = messageId,
-                    lastActivityUnixMs = now,
-                    unreadCount = existing.unreadCount + 1,
-                ),
-            )
-        }
+        bumpConversation(target.conversationId, messageId, now)
         AppLogger.info("Messaging", "incoming chat messageId=$messageId contact=$contactId")
-        notifyIncomingChat(contactId, conversationId, envelope.chat.text)
+        notifyIncomingChat(contactId, target, envelope.chat.text)
         receiptSender.enqueueDelivered(contactId, messageId, now, session)
+    }
+
+    private suspend fun bumpConversation(conversationId: String, messageId: String, now: Long) {
+        val conversation = conversationDao.getById(conversationId) ?: return
+        conversationDao.update(
+            conversation.copy(
+                lastMessageId = messageId,
+                lastActivityUnixMs = now,
+                unreadCount = conversation.unreadCount + 1,
+            ),
+        )
     }
 
     /**
@@ -201,21 +209,6 @@ class IncomingMessageCollector @Inject constructor(
         return true
     }
 
-    private suspend fun createConversation(contactId: String, messageId: String, now: Long): String {
-        val id = UUID.randomUUID().toString()
-        conversationDao.upsert(
-            ConversationEntity(
-                id = id,
-                contactId = contactId,
-                lastMessageId = messageId,
-                lastActivityUnixMs = now,
-                unreadCount = 1,
-                muted = false,
-            ),
-        )
-        return id
-    }
-
     private suspend fun handleAttachmentEnvelope(
         contactId: String,
         envelope: MessageEnvelope,
@@ -229,22 +222,29 @@ class IncomingMessageCollector @Inject constructor(
             return
         }
         routes.attachmentChunk(contactId, envelope)?.let { done ->
-            val conversationId = conversationDao.getByContactId(done.contactId)?.id ?: done.messageId
-            notifyIncomingChat(done.contactId, conversationId, "📎 ${done.fileName}")
+            // The receiver resolved (and authorized) the conversation when the
+            // header arrived, so the completion already knows where it landed.
+            val target = InboundTarget(done.conversationId, senderIdentityHash = null, groupName = done.groupName)
+            notifyIncomingChat(done.contactId, target, "📎 ${done.fileName}")
             receiptSender.enqueueDelivered(done.contactId, done.messageId, System.currentTimeMillis(), session)
         }
     }
 
-    /** Skips muted conversations and the one currently open on screen. */
-    private suspend fun notifyIncomingChat(contactId: String, conversationId: String, text: String) {
-        val muted = conversationDao.getById(conversationId)?.muted == true
-        if (muted || ActiveConversationTracker.isActive(conversationId)) return
+    /**
+     * Skips muted conversations and the one currently open on screen. A group
+     * notification is titled with the group and prefixed with the sender, the way
+     * a group message reads everywhere else.
+     */
+    private suspend fun notifyIncomingChat(contactId: String, target: InboundTarget, text: String) {
+        val muted = conversationDao.getById(target.conversationId)?.muted == true
+        if (muted || ActiveConversationTracker.isActive(target.conversationId)) return
         val contact = contactDao.getById(contactId) ?: return
+        val sender = contact.displayName.ifBlank { contact.userHash }
         runCatching {
             notifier.notify(
-                senderName = contact.displayName.ifBlank { contact.userHash },
-                preview = text,
-                conversationId = conversationId,
+                senderName = target.groupName ?: sender,
+                preview = if (target.groupName == null) text else "$sender: $text",
+                conversationId = target.conversationId,
             )
         }.onFailure { AppLogger.warn("Messaging", "notification failed: ${it.message}") }
     }

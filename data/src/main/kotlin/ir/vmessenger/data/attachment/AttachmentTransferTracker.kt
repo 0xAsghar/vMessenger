@@ -33,6 +33,15 @@ class AttachmentTransferTracker @Inject constructor() {
             .map { all -> all.filterValues { it.contactId == contactId }.mapValues { it.value.progress } }
             .distinctUntilChanged()
 
+    /**
+     * Transfers exchanged with any of [contactIds] — a group message is one
+     * transfer per member, and the conversation shows their union as one progress.
+     */
+    fun forContacts(contactIds: Set<String>): Flow<Map<String, AttachmentProgress>> =
+        entries
+            .map { all -> all.filterValues { it.contactId in contactIds }.mapValues { it.value.progress } }
+            .distinctUntilChanged()
+
     fun update(messageId: String, contactId: String, bytesDone: Long, totalBytes: Long, direction: MessageDirection) {
         val entry = Entry(contactId, AttachmentProgress(bytesDone.coerceIn(0L, totalBytes), totalBytes, direction))
         entries.update { it + (messageId to entry) }

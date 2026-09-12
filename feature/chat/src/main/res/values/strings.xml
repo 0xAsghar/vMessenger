@@ -25,6 +25,8 @@
     <string name="feature_chat_preview_video">🎬 ویدیو</string>
     <string name="feature_chat_preview_file">📎 %1$s</string>
     <string name="feature_chat_preview_location">📍 موقعیت مکانی</string>
+    <string name="feature_chat_preview_audio">🎤 پیام صوتی</string>
+    <string name="feature_chat_preview_sender">%1$s: %2$s</string>
     <string name="feature_chat_preview_empty">پیامی وجود ندارد</string>
 
     <!-- New chat picker -->

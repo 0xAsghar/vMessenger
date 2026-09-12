@@ -72,21 +72,24 @@ class AttachmentSender @Inject constructor(
     private val contentSource: AttachmentContentSource,
     private val tracker: AttachmentTransferTracker,
 ) {
+    @Suppress("LongParameterList") // both ends, the message, its file and the group it belongs to
     suspend fun send(
         contactId: String,
         self: PeerIdentity,
         peer: PeerIdentity,
         message: MessageEntity,
         file: File,
-    ): AppResult<Unit> = sendTransfer(contactId, self, peer, message, file).result
+        groupId: String? = null,
+    ): AppResult<Unit> = sendTransfer(contactId, self, peer, message, file, groupId).result
 
-    @Suppress("ReturnCount") // two local-read failures exit before the network is touched
+    @Suppress("ReturnCount", "LongParameterList") // two local-read failures exit before the network is touched
     suspend fun sendTransfer(
         contactId: String,
         self: PeerIdentity,
         peer: PeerIdentity,
         message: MessageEntity,
         file: File,
+        groupId: String? = null,
     ): AttachmentSendResult {
         val plan = runCatching { plan(message, file) }.getOrElse { failure ->
             AppLogger.warn("Attachment", "cannot read ${message.messageId}: ${failure.message}")
@@ -100,7 +103,7 @@ class AttachmentSender @Inject constructor(
         var sent = 0
         tracker.update(message.messageId, contactId, 0L, plan.size, MessageDirection.OUTGOING)
         val result = try {
-            batchSender.sendBatch(contactId, self, peer, envelopes(message, self, plan, chunks)) { index ->
+            batchSender.sendBatch(contactId, self, peer, envelopes(message, self, plan, chunks, groupId)) { index ->
                 sent = index + 1
                 val done = if (index == 0) 0L else minOf(index.toLong() * CHUNK_BYTES, plan.size)
                 tracker.update(message.messageId, contactId, done, plan.size, MessageDirection.OUTGOING)
@@ -199,9 +202,10 @@ class AttachmentSender @Inject constructor(
         self: PeerIdentity,
         plan: TransferPlan,
         chunks: ChunkReader,
+        groupId: String?,
     ): Sequence<MessageEnvelope> = sequence {
         val transferId = ByteString.copyFromUtf8(message.messageId)
-        yield(header(message, self, plan, transferId))
+        yield(header(message, self, plan, transferId, groupId))
         var index = 0
         while (index < plan.chunkCount) {
             val data = chunks.next(index) ?: break
@@ -211,6 +215,7 @@ class AttachmentSender @Inject constructor(
                     .setSenderIdentityHash(ByteString.copyFrom(self.identityHash))
                     .setSentAtUnixMs(System.currentTimeMillis())
                     .setCounter(1)
+                    .applyGroup(groupId)
                     .setAttachmentChunk(
                         AttachmentChunk.newBuilder()
                             .setTransferId(transferId)
@@ -223,31 +228,45 @@ class AttachmentSender @Inject constructor(
         }
     }
 
+    @Suppress("LongParameterList") // the header mirrors the message, its plan and its transfer identity
     private fun header(
         message: MessageEntity,
         self: PeerIdentity,
         plan: TransferPlan,
         transferId: ByteString,
+        groupId: String?,
     ): MessageEnvelope = MessageEnvelope.newBuilder()
         .setMessageId(ByteString.copyFromUtf8(message.messageId))
         .setSenderIdentityHash(ByteString.copyFrom(self.identityHash))
         .setSentAtUnixMs(message.createdAtUnixMs)
         .setCounter(1)
-        .setAttachmentInfo(
-            AttachmentInfo.newBuilder()
-                .setTransferId(transferId)
-                .setFileName(message.attachmentName.orEmpty())
-                .setMimeType(message.attachmentMimeType.orEmpty())
-                .setTotalSize(plan.size)
-                .setChunkCount(plan.chunkCount)
-                .setKind(message.contentType.toKind())
-                .setSha256(ByteString.copyFrom(plan.sha256)),
-        )
+        .applyGroup(groupId)
+        .setAttachmentInfo(message.info(plan, transferId))
         .build()
+
+    /**
+     * The transfer header. Duration and waveform travel with it so a voice bubble
+     * can draw its full shape and length while the audio is still arriving.
+     */
+    private fun MessageEntity.info(plan: TransferPlan, transferId: ByteString): AttachmentInfo.Builder {
+        val builder = AttachmentInfo.newBuilder()
+            .setTransferId(transferId)
+            .setFileName(attachmentName.orEmpty())
+            .setMimeType(attachmentMimeType.orEmpty())
+            .setTotalSize(plan.size)
+            .setChunkCount(plan.chunkCount)
+            .setKind(contentType.toKind())
+            .setCaption(caption.orEmpty())
+            .setSha256(ByteString.copyFrom(plan.sha256))
+        attachmentDurationMs?.let(builder::setDurationMs)
+        attachmentWaveform?.let { builder.waveform = ByteString.copyFrom(it) }
+        return builder
+    }
 
     private fun MessageContentType.toKind(): AttachmentKind = when (this) {
         MessageContentType.IMAGE -> AttachmentKind.ATTACHMENT_KIND_IMAGE
         MessageContentType.VIDEO -> AttachmentKind.ATTACHMENT_KIND_VIDEO
+        MessageContentType.AUDIO -> AttachmentKind.ATTACHMENT_KIND_AUDIO
         else -> AttachmentKind.ATTACHMENT_KIND_FILE
     }
 

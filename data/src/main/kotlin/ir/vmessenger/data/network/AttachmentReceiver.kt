@@ -4,7 +4,6 @@ import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.MessageDao
-import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageDirection
@@ -29,7 +28,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.BitSet
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -40,6 +38,9 @@ data class CompletedAttachment(
     val contactId: String,
     val messageId: String,
     val fileName: String,
+    val conversationId: String,
+    /** Group name for the notification title; null when the transfer was a 1:1 chat. */
+    val groupName: String?,
 )
 
 /**
@@ -59,6 +60,7 @@ data class CompletedAttachment(
 class AttachmentReceiver @Inject constructor(
     private val store: AttachmentIncomingStore,
     private val conversationDao: ConversationDao,
+    private val conversationResolver: InboundConversationResolver,
     private val messageDao: MessageDao,
     private val tracker: AttachmentTransferTracker,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -72,6 +74,7 @@ class AttachmentReceiver @Inject constructor(
         val info: AttachmentInfo,
         val staging: IncomingStaging,
         startedAt: Long,
+        val target: InboundTarget,
     ) {
         val mutex = Mutex()
         val received = BitSet(info.chunkCount)
@@ -114,7 +117,11 @@ class AttachmentReceiver @Inject constructor(
             AppLogger.info("Attachment", "duplicate transfer for delivered messageId=$messageId")
             return true
         }
-        if (messageId.isBlank() || !isAcceptable(info)) {
+        // Resolved here, not at send time: a transfer addressed to a group the
+        // sender is not in must be refused before a single chunk is staged, and
+        // the answer is kept so completion does not have to resolve it again.
+        val target = conversationResolver.resolve(contactId, envelope, clock())
+        if (messageId.isBlank() || target == null || !isAcceptable(info)) {
             AppLogger.warn(
                 "Attachment",
                 "rejected transfer size=${info.totalSize} chunks=${info.chunkCount} from contact=$contactId",
@@ -126,7 +133,7 @@ class AttachmentReceiver @Inject constructor(
             if (existing == null && !admits(contactId)) return false
             existing?.let { discard(it) }
             val staging = store.newIncomingStaging(info.totalSize, info.chunkCount, AttachmentSender.CHUNK_BYTES)
-            val transfer = Pending(contactId, messageId, info, staging, clock())
+            val transfer = Pending(contactId, messageId, info, staging, clock(), target)
             pending[key] = transfer
             existing != null
         }
@@ -218,19 +225,7 @@ class AttachmentReceiver @Inject constructor(
         val info = transfer.info
         val now = clock()
         val fileName = info.fileName.ifBlank { stored.name }
-        val conversationId = conversationDao.getByContactId(transfer.contactId)?.id
-            ?: UUID.randomUUID().toString().also { id ->
-                conversationDao.upsert(
-                    ConversationEntity(
-                        id = id,
-                        contactId = transfer.contactId,
-                        lastMessageId = transfer.messageId,
-                        lastActivityUnixMs = now,
-                        unreadCount = 0,
-                        muted = false,
-                    ),
-                )
-            }
+        val conversationId = transfer.target.conversationId
         messageDao.insert(
             MessageEntity(
                 messageId = transfer.messageId,
@@ -250,6 +245,12 @@ class AttachmentReceiver @Inject constructor(
                 attachmentPath = stored.absolutePath,
                 attachmentSha256 = info.sha256.toByteArray(),
                 attachmentEncrypted = true,
+                senderIdentityHash = transfer.target.senderIdentityHash,
+                caption = info.caption.take(MAX_CAPTION_LENGTH).ifBlank { null },
+                // Duration and waveform arrived with the header, so a voice bubble
+                // already had its shape while the audio was still streaming.
+                attachmentDurationMs = info.durationMs.takeIf { it > 0 },
+                attachmentWaveform = info.waveform.toByteArray().takeIf { it.size == WAVEFORM_BUCKETS },
             ),
         )
         conversationDao.getById(conversationId)?.let { conv ->
@@ -261,7 +262,13 @@ class AttachmentReceiver @Inject constructor(
                 ),
             )
         }
-        return CompletedAttachment(transfer.contactId, transfer.messageId, fileName)
+        return CompletedAttachment(
+            contactId = transfer.contactId,
+            messageId = transfer.messageId,
+            fileName = fileName,
+            conversationId = conversationId,
+            groupName = transfer.target.groupName,
+        )
     }
 
     /** Drops transfers that received nothing for [STALE_TRANSFER_MS]. */
@@ -305,6 +312,7 @@ class AttachmentReceiver @Inject constructor(
     private fun AttachmentKind.toContentType() = when (this) {
         AttachmentKind.ATTACHMENT_KIND_IMAGE -> MessageContentType.IMAGE
         AttachmentKind.ATTACHMENT_KIND_VIDEO -> MessageContentType.VIDEO
+        AttachmentKind.ATTACHMENT_KIND_AUDIO -> MessageContentType.AUDIO
         else -> MessageContentType.FILE
     }
 
@@ -314,5 +322,9 @@ class AttachmentReceiver @Inject constructor(
         const val PRUNE_INTERVAL_MS = 60_000L
         const val STALE_TRANSFER_MS = 10 * 60_000L
         private const val SHA256_BYTES = 32
+        private const val MAX_CAPTION_LENGTH = 1024
+
+        /** A waveform is exactly this many buckets; anything else is not one and is dropped. */
+        private const val WAVEFORM_BUCKETS = 64
     }
 }

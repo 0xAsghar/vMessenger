@@ -122,6 +122,30 @@ class AttachmentStore @Inject constructor(
         )
     }
 
+    /**
+     * Encrypts a file this app produced (a voice recording) into app-private
+     * storage and deletes the plaintext source, so the only clear copy lives for
+     * as long as the recording itself. Unlike [copyFromUri] the name and type are
+     * ours, not the system picker's.
+     */
+    suspend fun importFile(source: File, mimeType: String, fileName: String): CopiedAttachment =
+        withContext(ioDispatcher) {
+            val target = File(outDir, "${UUID.randomUUID()}-${sanitize(fileName)}")
+            val (size, digest) = try {
+                source.inputStream().use { encryptInto(it, target) }
+            } finally {
+                source.delete()
+            }
+            CopiedAttachment(
+                file = target,
+                fileName = fileName,
+                mimeType = mimeType,
+                sizeBytes = size,
+                contentType = contentTypeFor(mimeType),
+                sha256 = digest,
+            )
+        }
+
     override suspend fun newIncomingStaging(totalSize: Long, chunkCount: Int, chunkBytes: Int): IncomingStaging =
         SealedChunkStaging(
             cryptoEngine = cryptoEngine,
@@ -245,6 +269,7 @@ class AttachmentStore @Inject constructor(
         fun contentTypeFor(mimeType: String): MessageContentType = when {
             mimeType.startsWith("image/") -> MessageContentType.IMAGE
             mimeType.startsWith("video/") -> MessageContentType.VIDEO
+            mimeType.startsWith("audio/") -> MessageContentType.AUDIO
             else -> MessageContentType.FILE
         }
     }

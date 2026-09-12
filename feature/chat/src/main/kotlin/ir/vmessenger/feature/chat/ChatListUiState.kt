@@ -17,16 +17,22 @@ import kotlinx.collections.immutable.persistentSetOf
 @Immutable
 data class ChatListRow(
     val id: String,
-    val contactId: String,
+    /** Null for a group row; exactly one of this and [groupId] is set. */
+    val contactId: String?,
+    val groupId: String?,
     val title: String,
     val seed: IdentitySeed,
     val preview: String?,
     val previewKind: MessagePreviewKind?,
+    /** Who sent the last group message; prefixed to the preview as "Name: text". */
+    val senderName: String?,
     val ticks: DeliveryTicksState?,
     val time: String,
     val unreadCount: Int,
     val muted: Boolean,
-)
+) {
+    val isGroup: Boolean get() = groupId != null
+}
 
 /** What the chats tab is currently showing. */
 @Immutable

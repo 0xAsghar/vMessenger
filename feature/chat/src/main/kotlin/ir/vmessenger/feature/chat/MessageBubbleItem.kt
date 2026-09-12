@@ -166,8 +166,12 @@ private fun quotePreview(reply: ReplyQuoteUi): String = when (reply.kind) {
     MessagePreviewKind.IMAGE -> stringResource(R.string.feature_chat_preview_image)
     MessagePreviewKind.VIDEO -> stringResource(R.string.feature_chat_preview_video)
     MessagePreviewKind.FILE -> stringResource(R.string.feature_chat_preview_file, reply.preview)
+    MessagePreviewKind.AUDIO -> stringResource(R.string.feature_chat_preview_audio)
     MessagePreviewKind.LOCATION -> stringResource(R.string.feature_chat_preview_location)
-    MessagePreviewKind.TEXT, MessagePreviewKind.OTHER -> reply.preview
+    MessagePreviewKind.GROUP_EVENT,
+    MessagePreviewKind.TEXT,
+    MessagePreviewKind.OTHER,
+    -> reply.preview
 }
 
 /** The delivery state as a sentence, for `stateDescription` on the bubble. */

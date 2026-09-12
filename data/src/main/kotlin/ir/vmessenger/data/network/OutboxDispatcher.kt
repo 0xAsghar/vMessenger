@@ -10,8 +10,13 @@ import ir.vmessenger.core.common.network.P2PConfig
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.MessageDao
+import ir.vmessenger.core.database.dao.MessageRecipientDao
 import ir.vmessenger.core.database.dao.OutboxDao
+import ir.vmessenger.core.database.entity.ContactEntity
+import ir.vmessenger.core.database.entity.ContactRelationshipStatus
+import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.DeliveryStatus
+import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
@@ -92,6 +97,8 @@ class OutboxDispatcher @Inject constructor(
     private val conversationDao: ConversationDao,
     private val contactDao: ContactDao,
     private val outboxDao: OutboxDao,
+    private val recipientDao: MessageRecipientDao,
+    private val deliveryAggregator: DeliveryAggregator,
     private val selfIdentityCache: SelfIdentityCache,
     private val messagingService: MessagingService,
     private val mailboxService: MailboxService,
@@ -141,10 +148,11 @@ class OutboxDispatcher @Inject constructor(
     }
 
     /**
-     * Due rows are processed per conversation: order is kept within a
-     * conversation, but conversations run concurrently (bounded by
-     * [MAX_PARALLEL_CONVERSATIONS]) so a contact that takes the full dial
-     * timeout never holds back a message to a reachable one.
+     * Due rows are processed per recipient: order is kept per (conversation,
+     * recipient), but different recipients run concurrently (bounded by
+     * [MAX_PARALLEL_CONVERSATIONS]) so one member of a group that takes the full
+     * dial timeout never holds back delivery to the rest — which is the whole
+     * reason group fan-out is queued per recipient rather than per message.
      */
     private suspend fun drainOnce() {
         val now = System.currentTimeMillis()
@@ -152,7 +160,7 @@ class OutboxDispatcher @Inject constructor(
         if (due.isEmpty()) return
         val self = selfIdentityCache.get() ?: return
         coroutineScope {
-            due.groupBy { it.conversationId }.values.map { group ->
+            due.groupBy { it.conversationId to it.recipientIdentityHash }.values.map { group ->
                 async {
                     parallelism.withPermit {
                         for (item in group) processItem(item, self)
@@ -166,66 +174,95 @@ class OutboxDispatcher @Inject constructor(
     private suspend fun processItem(item: OutboxEntity, self: PeerIdentity) {
         val message = messageDao.getById(item.messageId)
         if (message == null) {
-            outboxDao.remove(item.messageId)
+            outboxDao.removeAll(item.messageId)
             return
         }
-        if (message.status == DeliveryStatus.DELIVERED || message.status == DeliveryStatus.READ) {
-            outboxDao.remove(item.messageId)
+        // This recipient's own state, not the message's aggregate: in a group the
+        // aggregate is still QUEUED while some members already have the message.
+        val recipientStatus = recipientDao.forMessage(item.messageId)
+            .firstOrNull { it.identityHash == item.recipientIdentityHash }
+            ?.status
+        if (recipientStatus == DeliveryStatus.DELIVERED || recipientStatus == DeliveryStatus.READ) {
+            finish(item)
             return
         }
         val conversation = conversationDao.getById(item.conversationId)
-        val contact = conversation?.let { contactDao.getById(it.contactId) }
+        val contact = contactDao.getByRoutingKey(item.recipientIdentityHash)
         if (conversation == null || contact == null) {
             backoff(item, OutboxError.CONTACT_MISSING)
             return
         }
+        val rejection = contact.sendRejection()
+        if (rejection != null) {
+            backoff(item, rejection)
+            return
+        }
+        send(item, message, conversation, contact, self, recipientStatus == DeliveryStatus.SENT)
+    }
+
+    /** Why this contact cannot be sent to right now, or null when they can. */
+    private fun ContactEntity.sendRejection(): String? = when {
         // Never send to a blocked contact; the row stays queued so unblocking resumes delivery.
-        if (contact.blocked) {
-            backoff(item, OutboxError.CONTACT_BLOCKED)
-            return
-        }
-        if (contact.relationshipStatus != ir.vmessenger.core.database.entity.ContactRelationshipStatus.APPROVED) {
-            backoff(item, OutboxError.CONTACT_NOT_APPROVED)
-            return
-        }
+        blocked -> OutboxError.CONTACT_BLOCKED
+        relationshipStatus != ContactRelationshipStatus.APPROVED -> OutboxError.CONTACT_NOT_APPROVED
+        else -> null
+    }
+
+    @Suppress("LongParameterList") // the send needs the queue row, the message, both ends and the wait state
+    private suspend fun send(
+        item: OutboxEntity,
+        message: MessageEntity,
+        conversation: ConversationEntity,
+        contact: ContactEntity,
+        self: PeerIdentity,
+        awaitingReceipt: Boolean,
+    ) {
         val peer = PeerIdentity(
             identityHash = contact.identityHash,
             ed25519PublicKey = contact.ed25519Public,
             x25519StaticPublicKey = contact.x25519StaticPublic ?: ByteArray(X25519_KEY_SIZE),
         )
         if (message.isAttachment()) {
-            processAttachment(item, message, self, peer, conversation.contactId)
+            processAttachment(item, message, self, peer, contact.id, conversation.groupId)
         } else {
-            sendChatMessage(item, message, self, peer, conversation.contactId)
+            sendChatMessage(item, message, self, peer, contact.id, conversation.groupId, awaitingReceipt)
         }
     }
 
+    /**
+     * Drops this recipient's queue row and refreshes the message's single status
+     * from whatever the other recipients are doing.
+     */
+    private suspend fun finish(item: OutboxEntity) {
+        outboxDao.remove(item.messageId, item.recipientIdentityHash)
+        deliveryAggregator.recompute(item.messageId)
+    }
+
+    @Suppress("LongParameterList") // queue row, message, both ends, the chat's group and the wait state
     private suspend fun sendChatMessage(
         item: OutboxEntity,
         message: MessageEntity,
         self: PeerIdentity,
         peer: PeerIdentity,
         contactId: String,
+        groupId: String?,
+        awaitingReceipt: Boolean,
     ) {
-        // Once transport-delivered (status SENT) we keep the row and re-send until
-        // a delivery receipt arrives, so a lost receipt doesn't strand the message
-        // on "Sent". The recipient dedups and re-acks, so no duplicate is shown.
-        val awaitingReceipt = message.status == DeliveryStatus.SENT
+        // Once transport-delivered we keep the row and re-send until a delivery
+        // receipt arrives, so a lost receipt doesn't strand the message on "Sent".
+        // The recipient dedups and re-acks, so no duplicate is shown.
         if (awaitingReceipt && item.receiptWaitCount >= MAX_RECEIPT_WAITS) {
-            outboxDao.remove(item.messageId)
+            finish(item)
             AppLogger.info("Outbox", "receipt wait exhausted messageId=${message.messageId}, left as sent")
             return
         }
-        val envelope = buildChatEnvelope(message, self)
+        val envelope = item.storedEnvelope() ?: buildChatEnvelope(message, self, groupId)
         // A receipt-wait re-send forces a fresh session: if the reused session had
         // silently died the message would otherwise vanish without another receipt.
         val result = messagingService.send(contactId, self, peer, envelope, forceReconnect = awaitingReceipt)
         when (result) {
             is AppResult.Success -> {
-                if (!awaitingReceipt) {
-                    messageDao.markSent(message.messageId, DeliveryStatus.SENT, System.currentTimeMillis())
-                    AppLogger.info("Outbox", "sent messageId=${message.messageId}, awaiting receipt")
-                }
+                if (!awaitingReceipt) markSent(item)
                 rescheduleForReceipt(item, if (awaitingReceipt) item.receiptWaitCount + 1 else 0)
             }
             // Delivered once already: keep waiting for the ack rather than failing.
@@ -239,6 +276,35 @@ class OutboxDispatcher @Inject constructor(
         }
     }
 
+    /**
+     * The exact envelope the queue row carries (a group control), or null when the
+     * dispatcher should build one from the message row. A row whose stored bytes
+     * no longer parse is treated as having none rather than failing the send: the
+     * rebuild path still produces something deliverable.
+     */
+    private fun OutboxEntity.storedEnvelope(): MessageEnvelope? =
+        envelopeBytes?.let { bytes ->
+            runCatching { MessageEnvelope.parseFrom(bytes) }
+                .onFailure { AppLogger.warn("Outbox", "stored envelope unreadable for messageId=$messageId") }
+                .getOrNull()
+        }
+
+    /** Records that this recipient has the message on the wire, then refreshes the aggregate. */
+    private suspend fun markSent(item: OutboxEntity) {
+        val now = System.currentTimeMillis()
+        recipientDao.advance(
+            messageId = item.messageId,
+            identityHash = item.recipientIdentityHash,
+            status = DeliveryStatus.SENT,
+            rank = DeliveryStatus.SENT.rank(),
+            sentAt = now,
+            deliveredAt = null,
+            readAt = null,
+        )
+        deliveryAggregator.recompute(item.messageId)
+        AppLogger.info("Outbox", "sent messageId=${item.messageId} to ${item.recipientIdentityHash}, awaiting receipt")
+    }
+
     private suspend fun rescheduleForReceipt(item: OutboxEntity, waitCount: Int) {
         outboxDao.update(
             item.copy(
@@ -250,25 +316,32 @@ class OutboxDispatcher @Inject constructor(
         )
     }
 
+    /**
+     * Attachments are transferred once per recipient (documented O(n) for a group:
+     * there is no shared storage to upload to, so every member gets their own
+     * encrypted stream over their own session).
+     */
+    @Suppress("LongParameterList") // queue row, message, both ends, the contact and the chat's group
     private suspend fun processAttachment(
         item: OutboxEntity,
         message: MessageEntity,
         self: PeerIdentity,
         peer: PeerIdentity,
         contactId: String,
+        groupId: String?,
     ) {
         val path = message.attachmentPath
         val file = path?.let(::File)
         if (file == null || !file.exists()) {
-            messageDao.updateStatus(item.messageId, DeliveryStatus.FAILED)
-            outboxDao.remove(item.messageId)
+            recipientDao.markFailed(item.messageId, item.recipientIdentityHash)
+            finish(item)
             AppLogger.warn("Outbox", "attachment file missing for messageId=${item.messageId}")
             return
         }
-        when (val result = attachmentSender.send(contactId, self, peer, message, file)) {
+        when (val result = attachmentSender.send(contactId, self, peer, message, file, groupId)) {
             is AppResult.Success -> {
-                messageDao.markSent(message.messageId, DeliveryStatus.SENT, System.currentTimeMillis())
-                outboxDao.remove(item.messageId)
+                markSent(item)
+                finish(item)
                 AppLogger.info("Outbox", "sent attachment messageId=${message.messageId}")
             }
             is AppResult.Error -> {
@@ -306,8 +379,11 @@ class OutboxDispatcher @Inject constructor(
         // instead of dropping it after a handful of minutes.
         val expired = createdAtUnixMs > 0 && System.currentTimeMillis() - createdAtUnixMs >= RETRY_WINDOW_MS
         if (expired) {
-            messageDao.updateStatus(item.messageId, DeliveryStatus.FAILED)
-            outboxDao.remove(item.messageId)
+            // Only this recipient is given up on; the aggregate stays QUEUED/SENT
+            // while other members still have a chance, and only turns FAILED when
+            // every one of them has been given up on.
+            recipientDao.markFailed(item.messageId, item.recipientIdentityHash)
+            finish(item)
             AppLogger.warn("Outbox", "giving up messageId=${item.messageId} after retry window: $error")
             return
         }
@@ -323,9 +399,10 @@ class OutboxDispatcher @Inject constructor(
     }
 
     private fun MessageEntity.isAttachment(): Boolean = when (contentType) {
-        ir.vmessenger.core.database.entity.MessageContentType.IMAGE,
-        ir.vmessenger.core.database.entity.MessageContentType.VIDEO,
-        ir.vmessenger.core.database.entity.MessageContentType.FILE,
+        MessageContentType.IMAGE,
+        MessageContentType.VIDEO,
+        MessageContentType.FILE,
+        MessageContentType.AUDIO,
         -> true
         else -> false
     }
@@ -354,7 +431,7 @@ class OutboxDispatcher @Inject constructor(
  * `message_id`, so the peer can match the quote against the message we sent them;
  * it is left unset when the message is not a reply.
  */
-internal fun buildChatEnvelope(message: MessageEntity, self: PeerIdentity): MessageEnvelope {
+internal fun buildChatEnvelope(message: MessageEntity, self: PeerIdentity, groupId: String?): MessageEnvelope {
     val chat = ProtoChatMessage.newBuilder().setText(message.body.orEmpty())
     message.replyToMessageId?.takeIf { it.isNotBlank() }?.let {
         chat.replyToMessageId = ByteString.copyFromUtf8(it)
@@ -364,6 +441,15 @@ internal fun buildChatEnvelope(message: MessageEntity, self: PeerIdentity): Mess
         .setSenderIdentityHash(ByteString.copyFrom(self.identityHash))
         .setSentAtUnixMs(message.createdAtUnixMs)
         .setCounter(1)
+        .applyGroup(groupId)
         .setChat(chat)
         .build()
 }
+
+/**
+ * Tags the envelope with the group it belongs to. The value is the group id as
+ * bytes, which is how the receiver looks the group up; a 1:1 envelope leaves the
+ * field empty.
+ */
+internal fun MessageEnvelope.Builder.applyGroup(groupId: String?): MessageEnvelope.Builder =
+    if (groupId.isNullOrBlank()) this else setGroupId(ByteString.copyFromUtf8(groupId))

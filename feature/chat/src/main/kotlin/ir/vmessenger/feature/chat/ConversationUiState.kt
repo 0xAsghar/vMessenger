@@ -71,6 +71,7 @@ sealed interface ChatItem {
         override val contentType: String
             get() = when (attachment?.type) {
                 AttachmentType.IMAGE -> "msg-image"
+                AttachmentType.AUDIO -> "msg-voice"
                 AttachmentType.VIDEO, AttachmentType.FILE -> "msg-file"
                 null -> "msg-text"
             }
@@ -104,5 +105,6 @@ internal fun AttachmentUi?.previewKind(): MessagePreviewKind = when (this?.type)
     AttachmentType.IMAGE -> MessagePreviewKind.IMAGE
     AttachmentType.VIDEO -> MessagePreviewKind.VIDEO
     AttachmentType.FILE -> MessagePreviewKind.FILE
+    AttachmentType.AUDIO -> MessagePreviewKind.AUDIO
     null -> MessagePreviewKind.TEXT
 }

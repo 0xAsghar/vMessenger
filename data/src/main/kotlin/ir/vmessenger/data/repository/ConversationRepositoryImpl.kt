@@ -5,11 +5,13 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
+import ir.vmessenger.core.database.dao.GroupDao
 import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.data.attachment.AttachmentStore
 import ir.vmessenger.data.attachment.AttachmentTransferTracker
+import ir.vmessenger.data.attachment.CopiedAttachment
 import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.model.Conversation
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import java.io.File
 import java.io.InputStream
 import java.util.UUID
 import javax.inject.Inject
@@ -37,6 +40,7 @@ class ConversationRepositoryImpl @Inject constructor(
     private val conversationDao: ConversationDao,
     private val messageDao: MessageDao,
     private val contactDao: ContactDao,
+    private val groupDao: GroupDao,
     private val attachmentStore: AttachmentStore,
     private val transferTracker: AttachmentTransferTracker,
     private val readMarker: ConversationReadMarker,
@@ -51,11 +55,11 @@ class ConversationRepositoryImpl @Inject constructor(
             val contactMap = contacts.associateBy { it.id }
             conversations.map { row ->
                 val conv = row.conversation
-                val contact = contactMap[conv.contactId]
+                val contact = conv.contactId?.let(contactMap::get)
                 Conversation(
                     id = conv.id,
                     contactId = conv.contactId,
-                    contactName = contact?.displayName ?: conv.contactId,
+                    contactName = contact?.displayName ?: conv.contactId ?: conv.groupId.orEmpty(),
                     lastMessagePreview = row.lastMessagePreview,
                     lastActivityUnixMs = conv.lastActivityUnixMs,
                     unreadCount = conv.unreadCount,
@@ -105,42 +109,64 @@ class ConversationRepositoryImpl @Inject constructor(
         conversationId: String,
         text: String,
         replyToMessageId: String?,
-    ): AppResult<String> = AppResult.Success(writer.sendText(conversationId, text, replyToMessageId))
+    ): AppResult<String> = writer.sendText(conversationId, text, replyToMessageId)
 
     override suspend fun sendAttachment(conversationId: String, sourceUri: String): AppResult<String> =
-        runCatching {
-            val copied = attachmentStore.copyFromUri(sourceUri)
-            val messageId = UUID.randomUUID().toString()
-            writer.queue(
-                MessageEntity(
-                    messageId = messageId,
-                    conversationId = conversationId,
-                    direction = DbMessageDirection.OUTGOING,
-                    contentType = copied.contentType,
-                    body = null,
-                    replyToMessageId = null,
-                    status = DbDeliveryStatus.QUEUED,
-                    createdAtUnixMs = System.currentTimeMillis(),
-                    sentAtUnixMs = null,
-                    deliveredAtUnixMs = null,
-                    readAtUnixMs = null,
-                    attachmentName = copied.fileName,
-                    attachmentMimeType = copied.mimeType,
-                    attachmentSizeBytes = copied.sizeBytes,
-                    attachmentPath = copied.file.absolutePath,
-                    attachmentSha256 = copied.sha256,
-                    attachmentEncrypted = true,
-                ),
-            )
-            AppLogger.info("Messaging", "outgoing attachment queued messageId=$messageId size=${copied.sizeBytes}")
-            messageId
-        }.fold(
-            onSuccess = { AppResult.Success(it) },
-            onFailure = {
-                AppLogger.warn("Messaging", "attachment queue failed: ${it.message}")
-                AppResult.Error(AppError.AttachmentFailed)
-            },
+        queueAttachment(conversationId) { attachmentStore.copyFromUri(sourceUri) }
+
+    override suspend fun sendVoice(
+        conversationId: String,
+        filePath: String,
+        durationMs: Long,
+        waveform: ByteArray,
+    ): AppResult<String> = queueAttachment(conversationId, durationMs, waveform) {
+        // The recorder wrote plaintext into the cache; importing encrypts it into
+        // app-private storage and deletes the temporary file.
+        attachmentStore.importFile(File(filePath), VOICE_MIME_TYPE, voiceFileName())
+    }
+
+    /**
+     * Stores an attachment and queues one delivery per recipient. [copy] runs the
+     * encrypting import, which is the only step that can fail before the message
+     * exists; everything after it is bookkeeping.
+     */
+    private suspend fun queueAttachment(
+        conversationId: String,
+        durationMs: Long? = null,
+        waveform: ByteArray? = null,
+        copy: suspend () -> CopiedAttachment,
+    ): AppResult<String> {
+        val copied = runCatching { copy() }.getOrElse {
+            AppLogger.warn("Messaging", "attachment queue failed: ${it.message}")
+            return AppResult.Error(AppError.AttachmentFailed)
+        }
+        val messageId = UUID.randomUUID().toString()
+        val result = writer.queue(
+            MessageEntity(
+                messageId = messageId,
+                conversationId = conversationId,
+                direction = DbMessageDirection.OUTGOING,
+                contentType = copied.contentType,
+                body = null,
+                replyToMessageId = null,
+                status = DbDeliveryStatus.QUEUED,
+                createdAtUnixMs = System.currentTimeMillis(),
+                sentAtUnixMs = null,
+                deliveredAtUnixMs = null,
+                readAtUnixMs = null,
+                attachmentName = copied.fileName,
+                attachmentMimeType = copied.mimeType,
+                attachmentSizeBytes = copied.sizeBytes,
+                attachmentPath = copied.file.absolutePath,
+                attachmentSha256 = copied.sha256,
+                attachmentEncrypted = true,
+                attachmentDurationMs = durationMs,
+                attachmentWaveform = waveform,
+            ),
         )
+        AppLogger.info("Messaging", "outgoing attachment queued messageId=$messageId size=${copied.sizeBytes}")
+        return result
+    }
 
     override suspend fun markConversationRead(conversationId: String) = readMarker.markRead(conversationId)
 
@@ -156,10 +182,28 @@ class ConversationRepositoryImpl @Inject constructor(
 
     override suspend fun saveDraft(conversationId: String, text: String) = writer.saveDraft(conversationId, text)
 
+    /**
+     * A group transfer runs once per member, so progress is the union of the
+     * per-contact trackers of everyone the message is going to.
+     */
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeAttachmentProgress(conversationId: String): Flow<Map<String, AttachmentProgress>> =
-        flow { emit(conversationDao.getById(conversationId)?.contactId) }
-            .flatMapLatest { contactId -> contactId?.let(transferTracker::forContact) ?: emptyFlow() }
+        flow { emit(progressContacts(conversationId)) }
+            .flatMapLatest { contactIds ->
+                if (contactIds.isEmpty()) emptyFlow() else transferTracker.forContacts(contactIds)
+            }
+
+    private suspend fun progressContacts(conversationId: String): Set<String> {
+        val conversation = conversationDao.getById(conversationId)
+        val groupId = conversation?.groupId
+        return when {
+            conversation == null -> emptySet()
+            groupId == null -> setOfNotNull(conversation.contactId)
+            else -> groupDao.activeMembers(groupId)
+                .mapNotNull { contactDao.getByRoutingKey(it.identityHash)?.id }
+                .toSet()
+        }
+    }
 
     override suspend fun openAttachment(messageId: String): InputStream? {
         val path = messageDao.getById(messageId)?.attachmentPath ?: return null
@@ -180,5 +224,12 @@ class ConversationRepositoryImpl @Inject constructor(
                     AppResult.Error(AppError.AttachmentFailed)
                 },
             )
+    }
+
+    private companion object {
+        /** AAC in an MP4 container: what [ir.vmessenger.domain.repository.ConversationRepository.sendVoice] records. */
+        const val VOICE_MIME_TYPE = "audio/mp4"
+
+        fun voiceFileName(): String = "voice-${System.currentTimeMillis()}.m4a"
     }
 }

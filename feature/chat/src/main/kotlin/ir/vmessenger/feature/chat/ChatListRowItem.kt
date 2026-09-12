@@ -44,9 +44,14 @@ private fun previewLine(row: ChatListRow): AnnotatedString {
         MessagePreviewKind.IMAGE -> stringResource(R.string.feature_chat_preview_image)
         MessagePreviewKind.VIDEO -> stringResource(R.string.feature_chat_preview_video)
         MessagePreviewKind.FILE -> stringResource(R.string.feature_chat_preview_file, row.preview.orEmpty())
+        MessagePreviewKind.AUDIO -> stringResource(R.string.feature_chat_preview_audio)
         MessagePreviewKind.LOCATION -> stringResource(R.string.feature_chat_preview_location)
+        // A membership line is already a full sentence; the sender prefix would only repeat it.
+        MessagePreviewKind.GROUP_EVENT -> row.preview.orEmpty()
         MessagePreviewKind.TEXT, MessagePreviewKind.OTHER -> row.preview.orEmpty()
         null -> stringResource(R.string.feature_chat_preview_empty)
     }
-    return remember(text) { AnnotatedString(text) }
+    val sender = row.senderName?.takeIf { row.previewKind != MessagePreviewKind.GROUP_EVENT }
+    val line = if (sender == null) text else stringResource(R.string.feature_chat_preview_sender, sender, text)
+    return remember(line) { AnnotatedString(line) }
 }

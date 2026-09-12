@@ -128,10 +128,13 @@ private fun ChatListRow.matches(query: String): Boolean {
 private fun ConversationSummary.toRow(): ChatListRow = ChatListRow(
     id = id,
     contactId = contactId,
+    groupId = groupId,
     title = contactName,
-    seed = IdentitySeed(identityHash),
+    // A group has no identity hash of its own, so its avatar is seeded from the group id.
+    seed = IdentitySeed(if (isGroup) groupId.orEmpty().toByteArray() else identityHash),
     preview = preview,
     previewKind = previewKind,
+    senderName = lastSenderName,
     // Ticks belong to the last message only when it is the user's own.
     ticks = lastStatus?.takeIf { lastDirection == MessageDirection.OUTGOING }?.toTicks(),
     time = if (lastActivityUnixMs > 0L) VmDateFormat.chatListTime(lastActivityUnixMs) else "",

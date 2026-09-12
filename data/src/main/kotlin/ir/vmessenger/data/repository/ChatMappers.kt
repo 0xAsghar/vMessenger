@@ -25,21 +25,26 @@ internal fun MessageEntity.toChatMessage(): ChatMessage = ChatMessage(
     messageId = messageId,
     conversationId = conversationId,
     direction = direction.toDomain(),
-    text = body.orEmpty(),
+    // A caption rides on the attachment row, so the bubble renders both without a second message.
+    text = body ?: caption.orEmpty(),
     status = status.toDomain(),
     createdAtUnixMs = createdAtUnixMs,
     replyToMessageId = replyToMessageId,
     attachment = toAttachment(),
+    senderIdentityHash = senderIdentityHash,
 )
 
 internal fun MessageWithReply.toChatMessage(): ChatMessage =
-    message.toChatMessage().copy(replyTo = replyPreview(), lastError = lastError)
+    message.toChatMessage().copy(replyTo = replyPreview(), lastError = lastError, senderName = senderName)
 
 internal fun ChatListRow.toSummary(): ConversationSummary = ConversationSummary(
     id = conversationId,
     contactId = contactId,
-    contactName = displayName ?: contactId,
+    groupId = groupId,
+    contactName = displayName ?: contactId ?: groupId.orEmpty(),
     identityHash = identityHash ?: ByteArray(0),
+    // Only an incoming group message names its sender; our own reads as "You" in the UI layer.
+    lastSenderName = lastSenderName?.takeIf { lastDirection == DbMessageDirection.INCOMING },
     preview = lastBody ?: lastAttachmentName,
     previewKind = lastContentType?.toPreviewKind(),
     lastDirection = lastDirection?.toDomain(),
@@ -74,6 +79,7 @@ private fun MessageEntity.toAttachment(): ChatAttachment? {
         MessageContentType.IMAGE -> AttachmentType.IMAGE
         MessageContentType.VIDEO -> AttachmentType.VIDEO
         MessageContentType.FILE -> AttachmentType.FILE
+        MessageContentType.AUDIO -> AttachmentType.AUDIO
         else -> null
     }
     return type?.let {
@@ -83,6 +89,8 @@ private fun MessageEntity.toAttachment(): ChatAttachment? {
             mimeType = attachmentMimeType ?: "application/octet-stream",
             sizeBytes = attachmentSizeBytes ?: 0L,
             localPath = attachmentPath,
+            durationMs = attachmentDurationMs,
+            waveform = attachmentWaveform,
         )
     }
 }
@@ -105,6 +113,8 @@ private fun MessageContentType.toPreviewKind(): MessagePreviewKind = when (this)
     MessageContentType.IMAGE -> MessagePreviewKind.IMAGE
     MessageContentType.VIDEO -> MessagePreviewKind.VIDEO
     MessageContentType.FILE -> MessagePreviewKind.FILE
+    MessageContentType.AUDIO -> MessagePreviewKind.AUDIO
     MessageContentType.LOCATION_CONTROL -> MessagePreviewKind.LOCATION
+    MessageContentType.GROUP_CONTROL -> MessagePreviewKind.GROUP_EVENT
     MessageContentType.RECEIPT -> MessagePreviewKind.OTHER
 }

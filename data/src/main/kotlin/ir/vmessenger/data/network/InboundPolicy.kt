@@ -16,6 +16,9 @@ enum class InboundKind {
 
     /** Peer-exchange node hints: only an approved contact may grow our node tables. */
     NETWORK_NODES,
+
+    /** A membership change. Who may actually apply it is decided by [GroupControlHandler]. */
+    GROUP_CONTROL,
     ;
 
     companion object {
@@ -29,6 +32,7 @@ enum class InboundKind {
             envelope.hasContactRequest() -> CONTACT_REQUEST
             envelope.hasContactResponse() -> CONTACT_RESPONSE
             envelope.hasNetworkNodes() -> NETWORK_NODES
+            envelope.hasGroupControl() -> GROUP_CONTROL
             else -> null
         }
     }
@@ -38,8 +42,8 @@ enum class InboundKind {
  * Single place that decides whether an authenticated sender may deliver a given
  * kind of envelope. [contact] is null for strangers (peers we have no row for).
  *
- * - Chat, attachments, location, control, receipts and network-node hints need
- *   an APPROVED, non-blocked contact.
+ * - Chat, attachments, location, control, receipts, group controls and
+ *   network-node hints need an APPROVED, non-blocked contact.
  * - Contact requests and responses only need the sender not to be blocked, so
  *   strangers can introduce themselves and pending contacts can answer.
  *
@@ -57,6 +61,7 @@ object InboundPolicy {
         InboundKind.CONTROL,
         InboundKind.RECEIPT,
         InboundKind.NETWORK_NODES,
+        InboundKind.GROUP_CONTROL,
         -> contact != null &&
             !contact.blocked &&
             contact.relationshipStatus == ContactRelationshipStatus.APPROVED

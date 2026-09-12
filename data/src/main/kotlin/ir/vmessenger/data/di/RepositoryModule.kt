@@ -18,6 +18,7 @@ import ir.vmessenger.data.repository.ConversationDraftStore
 import ir.vmessenger.data.repository.ConversationRepositoryImpl
 import ir.vmessenger.data.repository.DataStoreConversationDraftStore
 import ir.vmessenger.data.repository.DiscoveryRepositoryImpl
+import ir.vmessenger.data.repository.GroupRepositoryImpl
 import ir.vmessenger.data.repository.IdentityBackupRepositoryImpl
 import ir.vmessenger.data.repository.IdentityRepositoryImpl
 import ir.vmessenger.data.repository.LocationAccessRepositoryImpl
@@ -28,6 +29,7 @@ import ir.vmessenger.domain.repository.ContactRequestRepository
 import ir.vmessenger.domain.repository.ContactRequestSender
 import ir.vmessenger.domain.repository.ConversationRepository
 import ir.vmessenger.domain.repository.DiscoveryRepository
+import ir.vmessenger.domain.repository.GroupRepository
 import ir.vmessenger.domain.repository.IdentityBackupRepository
 import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.domain.repository.LocationAccessRepository
@@ -54,6 +56,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindIdentityRepository(impl: IdentityRepositoryImpl): IdentityRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindGroupRepository(impl: GroupRepositoryImpl): GroupRepository
 
     @Binds
     @Singleton
