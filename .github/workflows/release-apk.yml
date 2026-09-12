@@ -130,22 +130,41 @@ jobs:
             echo "== $(basename "$apk")" >> dist/SIGNING.txt
             "$APKSIGNER" verify --print-certs "$apk" >> dist/SIGNING.txt
           done
-          if grep -q 'CN=Android Debug' dist/SIGNING.txt; then
-            echo "::error::release APK is debug-signed"
-            exit 1
-          fi
-          # One signer for every ABI, otherwise the in-app updater breaks.
-          if [ "$(grep -c 'Signer #1 certificate SHA-256 digest' dist/SIGNING.txt)" -ne "$(ls dist/*.apk | wc -l)" ] \
-             || [ "$(grep 'Signer #1 certificate SHA-256 digest' dist/SIGNING.txt | sort -u | wc -l)" -ne 1 ]; then
-            echo "::error::APKs are not all signed by the same certificate"
-            exit 1
-          fi
+          # Printed before anything is asserted: a signing failure that hides the
+          # signing output is a failure you cannot act on.
           {
             echo "### APK signing"
             echo '```'
             cat dist/SIGNING.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          cat dist/SIGNING.txt
+          if grep -q 'CN=Android Debug' dist/SIGNING.txt; then
+            echo "::error::release APK is debug-signed"
+            exit 1
+          fi
+          # Every ABI must carry the same signer, or the in-app updater cannot offer an
+          # upgrade: Android refuses to replace an app with one signed by another key.
+          #
+          # Counted per APK, not per line. apksigner prints one digest line per signature
+          # scheme range, so an APK signed v1+v2+v3 contributes several identical lines —
+          # a count of lines against a count of APKs is simply wrong.
+          signers=""
+          for apk in dist/*.apk; do
+            digest=$("$APKSIGNER" verify --print-certs "$apk" \
+              | sed -n 's/.*certificate SHA-256 digest: *//p' | sort -u)
+            count=$(printf '%s\n' "$digest" | grep -c .)
+            if [ "$count" -ne 1 ]; then
+              echo "::error::$(basename "$apk") has $count distinct signers"
+              exit 1
+            fi
+            signers="$signers$digest"$'\n'
+          done
+          if [ "$(printf '%s' "$signers" | sort -u | grep -c .)" -ne 1 ]; then
+            echo "::error::APKs are not all signed by the same certificate"
+            exit 1
+          fi
+          echo "all $(ls dist/*.apk | wc -l) APKs signed by $(printf '%s' "$signers" | sort -u | head -1)"
 
       # GitHub Actions artifact storage is limited on free plans; publish via
       # GitHub Releases on version tags instead of upload-artifact.
