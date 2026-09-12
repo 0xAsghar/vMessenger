@@ -100,6 +100,7 @@ class MessagingService @Inject constructor(
     private var selfProvider: (suspend () -> PeerIdentity?)? = null
     private var resolveInboundPeer: (suspend (ByteArray, ByteArray) -> PeerIdentity?)? = null
     private var contactIdResolver: (suspend (ByteArray) -> String?)? = null
+    private var isProvisionalContactId: ((String) -> Boolean)? = null
     private var peerKeyUpdater: (suspend (String, PeerIdentity) -> Unit)? = null
     private var peerKeyChangeRecorder: (suspend (contactId: String, newStaticKey: ByteArray) -> Unit)? = null
 
@@ -117,16 +118,21 @@ class MessagingService @Inject constructor(
      * responder side records it in `resolveInboundPeer`. Both must persist the
      * new key as *pending* so the user can re-verify and accept it.
      */
+    // Independent optional hooks for one configuration seam; grouping them into a
+    // holder would only move the same list behind another type.
+    @Suppress("LongParameterList")
     fun configureInbound(
         selfProvider: suspend () -> PeerIdentity?,
         resolveInboundPeer: suspend (identityPub: ByteArray, staticPub: ByteArray) -> PeerIdentity?,
         contactIdResolver: suspend (ByteArray) -> String?,
         peerKeyUpdater: (suspend (String, PeerIdentity) -> Unit)? = null,
         peerKeyChangeRecorder: (suspend (contactId: String, newStaticKey: ByteArray) -> Unit)? = null,
+        isProvisionalContactId: ((String) -> Boolean)? = null,
     ) {
         this.selfProvider = selfProvider
         this.resolveInboundPeer = resolveInboundPeer
         this.contactIdResolver = contactIdResolver
+        this.isProvisionalContactId = isProvisionalContactId
         this.peerKeyUpdater = peerKeyUpdater
         this.peerKeyChangeRecorder = peerKeyChangeRecorder
     }
@@ -185,7 +191,7 @@ class MessagingService @Inject constructor(
      * [MAX_UNAUTHENTICATED_INBOUND] connections may be mid-handshake at once;
      * beyond that new ones are dropped outright rather than queued.
      */
-    private suspend fun acceptInbound(connection: Connection) {
+    internal suspend fun acceptInbound(connection: Connection) {
         if (!inboundPermits.tryAcquire()) {
             AppLogger.warn(TAG, "inbound handshake limit ($MAX_UNAUTHENTICATED_INBOUND) reached; dropping connection")
             connection.close()
@@ -232,9 +238,11 @@ class MessagingService @Inject constructor(
         try {
             readSecureFrames(session, contactId, connection)
         } finally {
-            inboundSessions.remove(session)
-            inboundReadContacts.remove(contactId)
-            postHandshakeDone.remove(contactId)
+            // The id may have been rebound mid-session (stranger -> approved
+            // contact), so clean up whichever one this session ended on.
+            val finalContactId = inboundSessions.remove(session) ?: contactId
+            inboundReadContacts.remove(finalContactId)
+            postHandshakeDone.remove(finalContactId)
             session.close()
         }
     }
@@ -475,14 +483,40 @@ class MessagingService @Inject constructor(
         contactId: String,
         connection: Connection,
     ) {
+        // The contact id is resolved once at handshake time, but a peer that was
+        // an unknown stranger then can become a real contact while this session
+        // is still open (the user approves the request it just sent). Re-resolve
+        // for as long as the id is provisional, otherwise every later frame is
+        // attributed to the stranger and dropped as "non-approved".
+        var currentContactId = contactId
         // Stop at the first frame that arrives after the session closed (peer
         // CLOSE, version mismatch, frame cap): whatever the transport still has
         // buffered must never reach the wiped ratchet.
         connection.read()
             .takeWhile { !session.isClosed }
             .collect { frameBytes ->
-                processSecureFrame(session, contactId, frameBytes)
+                currentContactId = refreshProvisionalContactId(session, currentContactId)
+                processSecureFrame(session, currentContactId, frameBytes)
             }
+    }
+
+    /**
+     * Returns the contact id to attribute the next inbound frame to, re-reading
+     * it from the resolver while [current] is still provisional. Rebinds the
+     * session's bookkeeping when the peer has meanwhile become a real contact.
+     */
+    private suspend fun refreshProvisionalContactId(session: ActiveSecureSession, current: String): String {
+        val resolved = current
+            .takeIf { isProvisionalContactId?.invoke(it) == true }
+            ?.let { contactIdResolver?.invoke(session.peer.identityHash) }
+            ?.takeIf { it != current }
+            ?: return current
+        inboundReadContacts.remove(current)
+        inboundReadContacts.add(resolved)
+        inboundSessions[session] = resolved
+        postHandshakeDone.remove(current)
+        AppLogger.info(TAG, "inbound session rebound to contact=$resolved")
+        return resolved
     }
 
     private suspend fun processSecureFrame(

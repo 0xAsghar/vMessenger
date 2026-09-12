@@ -324,6 +324,7 @@ class NetworkCoordinator @Inject constructor(
                 contactDao.findByIdentityHash(identityHash)?.id
                     ?: ContactRequestHandler.strangerContactId(identityHash)
             },
+            isProvisionalContactId = ContactRequestHandler::isStrangerContactId,
             peerKeyUpdater = { contactId, peer ->
                 contactDao.updateLearnedKeys(
                     contactId = contactId,

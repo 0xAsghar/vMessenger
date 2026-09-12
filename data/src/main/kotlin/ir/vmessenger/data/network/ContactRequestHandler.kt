@@ -253,7 +253,17 @@ class ContactRequestHandler @Inject constructor(
         private const val MAX_REJECTS_BEFORE_SILENT = 2
         private const val X25519_KEY_SIZE = 32
 
+        private const val STRANGER_PREFIX = "stranger:"
+
         fun strangerContactId(identityHash: ByteArray): String =
-            "stranger:" + identityHash.joinToString("") { "%02x".format(it) }
+            STRANGER_PREFIX + identityHash.joinToString("") { "%02x".format(it) }
+
+        /**
+         * A stranger id is provisional: it stands in until the peer becomes a real
+         * contact row. A session opened before approval must therefore re-resolve
+         * its contact id, or every frame on it keeps being attributed to the
+         * stranger and dropped as "non-approved" once the user has approved.
+         */
+        fun isStrangerContactId(contactId: String): Boolean = contactId.startsWith(STRANGER_PREFIX)
     }
 }
