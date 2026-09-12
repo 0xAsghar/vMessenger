@@ -11,7 +11,7 @@ Two version numbers move independently of this file and are stated where they ma
 protocol major** (currently 2, [docs/Protocol.md](docs/Protocol.md)) and the **database schema
 version** (currently 18, [docs/Database.md](docs/Database.md)).
 
-## [Unreleased]
+## [1.0.0] - 2026-09-12
 
 The 1.0 line. It carries a breaking wire-protocol change: **a 0.x install must be uninstalled
 before a 1.x build is installed**, and identity and contacts do not survive that. See
