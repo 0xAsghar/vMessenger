@@ -11,6 +11,34 @@ Two version numbers move independently of this file and are stated where they ma
 protocol major** (currently 2, [docs/Protocol.md](docs/Protocol.md)) and the **database schema
 version** (currently 18, [docs/Database.md](docs/Database.md)).
 
+## [1.0.1] - 2026-09-12
+
+### Fixed
+
+- **The in-app updater could not verify any real release.** It read the signer digest out of a
+  release's `SIGNING.txt` by matching `Signer #1 certificate SHA-256 digest:`, but the
+  `apksigner` on the release runner prints `V2 Signer: certificate SHA-256 digest:`. No line
+  matched, the digest came back empty, and the check — which fails closed — refused the
+  download. Every genuine update would have been rejected as unsigned.
+
+  The parser now matches on the stable part of the line (`certificate SHA-256 digest:`)
+  whatever prefix the build-tools version uses, and an asset whose block carries two
+  *different* digests is refused rather than resolved to one of them. The published 1.0.0
+  `SIGNING.txt` is pinned verbatim in a test.
+
+  Found by verifying the 1.0.0 release rather than trusting it: the format the updater was
+  written against was an assumed one, and the local test server had been emitting it too.
+
+  **1.0.0 users cannot update in-app to 1.0.1** — that is the bug. Download 1.0.1 from the
+  releases page and install it over 1.0.0; the signing key is unchanged, so it upgrades in
+  place with no data loss.
+
+- The release workflow's signature gate compared a count of digest *lines* against the number
+  of APKs. `apksigner` prints one line per signature scheme, so the counts could never match
+  and a correctly signed 1.0.0 build failed the gate. It now collects the distinct digests per
+  APK, and prints `SIGNING.txt` before it asserts anything — the old order hid the evidence in
+  exactly the case where it was needed.
+
 ## [1.0.0] - 2026-09-12
 
 The 1.0 line. It carries a breaking wire-protocol change: **a 0.x install must be uninstalled

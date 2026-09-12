@@ -12,8 +12,15 @@ import javax.inject.Singleton
 /** `== vMessenger-1.0.0-arm64-v8a.apk` — one block per APK in the release's `SIGNING.txt`. */
 private val BLOCK_HEADER = Regex("^==\\s*(\\S.*)$")
 
-/** The line `apksigner verify --print-certs` prints for the APK's own signer. */
-private val SIGNER_DIGEST = Regex("^Signer #1 certificate SHA-256 digest:\\s*([0-9a-fA-F:]+)$")
+/**
+ * A certificate digest line from `apksigner verify --print-certs`.
+ *
+ * The prefix varies with the build-tools version and with which signature schemes the APK
+ * carries — our own 1.0.0 release is `V2 Signer: certificate SHA-256 digest: …`, while other
+ * versions print `Signer #1 certificate SHA-256 digest: …` or a form naming an SDK range. The
+ * suffix is the stable part, so that is what is matched.
+ */
+private val SIGNER_DIGEST = Regex("^.*certificate SHA-256 digest:\\s*([0-9a-fA-F:]+)$")
 
 /**
  * The certificate digest the running app was installed with.
@@ -27,17 +34,24 @@ fun interface InstalledSignerDigest {
 
 /** Parses a release's `SIGNING.txt`. Pure, so the format is covered by unit tests. */
 object SigningInfo {
+    /**
+     * Asset name to its signer digest. An APK whose block carries **more than one distinct**
+     * digest is left out entirely rather than resolved to one of them: several signers is
+     * exactly the case where picking either would be a guess, and a guess here is the
+     * substitution the check exists to prevent. Repeated identical lines (one per signature
+     * scheme) are the normal case and collapse to one.
+     */
     fun parse(content: String): Map<String, String> {
-        val digests = LinkedHashMap<String, String>()
+        val perAsset = LinkedHashMap<String, MutableSet<String>>()
         var asset = ""
         for (raw in content.lineSequence()) {
             val line = raw.trim()
-            val header = BLOCK_HEADER.matchEntire(line)?.groupValues?.get(1)?.trim()
-            val digest = SIGNER_DIGEST.matchEntire(line)?.groupValues?.get(1)
-            if (header != null) asset = header
-            if (digest != null) digests[asset] = normalize(digest)
+            BLOCK_HEADER.matchEntire(line)?.groupValues?.get(1)?.trim()?.let { asset = it }
+            SIGNER_DIGEST.matchEntire(line)?.groupValues?.get(1)?.let {
+                perAsset.getOrPut(asset) { LinkedHashSet() } += normalize(it)
+            }
         }
-        return digests
+        return perAsset.filterValues { it.size == 1 }.mapValues { it.value.first() }
     }
 
     /**
