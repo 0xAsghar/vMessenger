@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark: VmColor.BackgroundDark. -->
+    <color name="vm_window_background">#0B0B0B</color>
+</resources>

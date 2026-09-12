@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.VMessenger" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- AppCompat.DayNight so the platform picks the light/dark variant itself and
+         appcompat-dependent components (dialogs, pickers) theme correctly. The
+         window background matches the Compose background to avoid a cold-start flash. -->
+    <style name="Theme.VMessenger" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">@color/vm_window_background</item>
+    </style>
     <style name="Theme.VMessenger.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@android:color/white</item>
+        <item name="windowSplashScreenBackground">@color/vm_window_background</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_vmessenger_logo</item>
         <item name="windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
         <item name="postSplashScreenTheme">@style/Theme.VMessenger</item>

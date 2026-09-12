@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Window background painted before Compose draws its first frame; kept in
+         step with the Compose `background` role so a cold start never flashes a
+         mismatched colour. Light: VmColor.BackgroundLight. -->
+    <color name="vm_window_background">#FAFAFA</color>
+</resources>
