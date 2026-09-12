@@ -125,7 +125,7 @@ private fun BubbleBody(
     }
     item.attachment?.let { attachment ->
         if (attachment.type == AttachmentType.AUDIO) {
-            VoiceBody(item = item, attachment = attachment, voice = voice)
+            VoiceBody(item = item, attachment = attachment, voice = voice, actions = actions)
         } else {
             AttachmentBody(
                 item = item,
@@ -146,7 +146,12 @@ private fun BubbleBody(
  * an unread row — and only makes sense on a message somebody else sent.
  */
 @Composable
-private fun VoiceBody(item: ChatItem.Message, attachment: AttachmentUi, voice: VoiceBubbleHost) {
+private fun VoiceBody(
+    item: ChatItem.Message,
+    attachment: AttachmentUi,
+    voice: VoiceBubbleHost,
+    actions: MessageActions,
+) {
     VoiceBubbleContent(
         waveform = attachment.waveform,
         durationMs = attachment.durationMs ?: 0L,
@@ -154,6 +159,7 @@ private fun VoiceBody(item: ChatItem.Message, attachment: AttachmentUi, voice: V
         onPlayPause = { voice.onToggle(item.messageId) },
         onSeek = voice.onSeek,
         onToggleSpeed = voice.onToggleSpeed,
+        onLongPress = { actions.onLongPress(item.messageId) },
     )
 }
 

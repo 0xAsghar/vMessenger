@@ -7,6 +7,7 @@ import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.GroupDao
 import ir.vmessenger.core.database.dao.MessageDao
+import ir.vmessenger.core.database.dao.MessageRecipientDao
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.data.attachment.AttachmentStore
@@ -16,6 +17,7 @@ import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.model.Conversation
 import ir.vmessenger.domain.model.ConversationSummary
+import ir.vmessenger.domain.model.RecipientDelivery
 import ir.vmessenger.domain.repository.ConversationRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +43,7 @@ class ConversationRepositoryImpl @Inject constructor(
     private val messageDao: MessageDao,
     private val contactDao: ContactDao,
     private val groupDao: GroupDao,
+    private val recipientDao: MessageRecipientDao,
     private val attachmentStore: AttachmentStore,
     private val transferTracker: AttachmentTransferTracker,
     private val readMarker: ConversationReadMarker,
@@ -173,6 +176,29 @@ class ConversationRepositoryImpl @Inject constructor(
     override suspend fun markVoicePlayed(messageId: String) =
         messageDao.markVoicePlayed(messageId, System.currentTimeMillis())
 
+    /**
+     * Names come from the user's own contact row first and the group snapshot second — what
+     * the user calls someone beats what that person calls themselves — and fall back to a
+     * short hash prefix for a member we have neither for.
+     */
+    override suspend fun deliveryInfo(messageId: String): List<RecipientDelivery> {
+        val groupId = messageDao.getById(messageId)
+            ?.let { conversationDao.getById(it.conversationId) }
+            ?.groupId
+        val members = groupId?.let { groupDao.activeMembers(it) }.orEmpty().associateBy { it.identityHash }
+        return recipientDao.forMessage(messageId).map { row ->
+            RecipientDelivery(
+                identityHash = row.identityHash,
+                displayName = contactDao.getByRoutingKey(row.identityHash)?.displayName?.ifBlank { null }
+                    ?: members[row.identityHash]?.displayName?.ifBlank { null }
+                    ?: row.identityHash.take(HASH_PREFIX_CHARS),
+                status = row.status.toDomain(),
+                deliveredAtUnixMs = row.deliveredAtUnixMs,
+                readAtUnixMs = row.readAtUnixMs,
+            )
+        }
+    }
+
     override suspend fun deleteMessageForMe(messageId: String) = writer.deleteMessageForMe(messageId)
 
     override suspend fun deleteConversation(conversationId: String) = writer.deleteConversation(conversationId)
@@ -234,5 +260,8 @@ class ConversationRepositoryImpl @Inject constructor(
         const val VOICE_MIME_TYPE = "audio/mp4"
 
         fun voiceFileName(): String = "voice-${System.currentTimeMillis()}.m4a"
+
+        /** Enough of a routing key to tell two unknown members apart, without being a wall of hex. */
+        const val HASH_PREFIX_CHARS = 8
     }
 }

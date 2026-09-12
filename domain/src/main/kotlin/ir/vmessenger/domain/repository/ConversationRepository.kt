@@ -5,6 +5,7 @@ import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.model.Conversation
 import ir.vmessenger.domain.model.ConversationSummary
+import ir.vmessenger.domain.model.RecipientDelivery
 import kotlinx.coroutines.flow.Flow
 import java.io.InputStream
 
@@ -66,6 +67,12 @@ interface ConversationRepository {
 
     /** Records the first listen of a voice message, which clears its "unplayed" dot for good. */
     suspend fun markVoicePlayed(messageId: String)
+
+    /**
+     * Per-member delivery state of an outgoing message, creator-name-resolved. Empty for a
+     * message that was never queued (an incoming one, or a system line).
+     */
+    suspend fun deliveryInfo(messageId: String): List<RecipientDelivery>
 
     /** Removes the local copy only; nothing is sent to the peer and their copy stays. */
     suspend fun deleteMessageForMe(messageId: String)

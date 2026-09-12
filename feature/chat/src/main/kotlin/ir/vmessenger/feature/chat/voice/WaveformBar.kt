@@ -37,12 +37,17 @@ private const val MIN_USABLE_BARS = 8
  * its shape and stays seekable.
  *
  * Bars run left to right in both layout directions: this is a timeline, not text.
+ *
+ * [onLongPress] is forwarded because this bar covers most of the bubble: its own tap detector
+ * consumes the gesture, so without it a long press on a voice message would reach nothing and
+ * the message-actions sheet would be unopenable there.
  */
 @Composable
 internal fun WaveformBar(
     waveform: ByteArray?,
     progress: Float,
     onSeek: (Float) -> Unit,
+    onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val playedColor = LocalContentColor.current
@@ -53,8 +58,11 @@ internal fun WaveformBar(
             .fillMaxWidth()
             .height(BarsHeight)
             .semantics { contentDescription = description }
-            .pointerInput(onSeek) {
-                detectTapGestures { offset -> onSeek(seekFraction(offset.x, size.width.toFloat())) }
+            .pointerInput(onSeek, onLongPress) {
+                detectTapGestures(
+                    onLongPress = { onLongPress() },
+                    onTap = { offset -> onSeek(seekFraction(offset.x, size.width.toFloat())) },
+                )
             }
             .pointerInput(onSeek) {
                 detectHorizontalDragGestures(

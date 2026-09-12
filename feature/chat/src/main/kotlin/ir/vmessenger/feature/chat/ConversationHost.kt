@@ -246,6 +246,12 @@ private fun rememberAttachmentPicker(onPicked: (String) -> Unit): AttachmentPick
     }
 }
 
+/** True when the message is one of ours; decides whether per-member delivery info is offered. */
+internal fun ConversationUiState.isOutgoing(messageId: String): Boolean = items
+    .filterIsInstance<ChatItem.Message>()
+    .firstOrNull { it.messageId == messageId }
+    ?.outgoing == true
+
 /** Body of one message, used by the copy action and by the sheet to hide it when empty. */
 internal fun ConversationUiState.textOf(messageId: String): String = items
     .filterIsInstance<ChatItem.Message>()

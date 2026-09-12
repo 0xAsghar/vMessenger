@@ -18,10 +18,12 @@ import ir.vmessenger.domain.model.DeliveryStatus
 import ir.vmessenger.domain.model.Group
 import ir.vmessenger.domain.model.GroupMember
 import ir.vmessenger.domain.model.MessageDirection
+import ir.vmessenger.domain.model.RecipientDelivery
 import ir.vmessenger.domain.repository.ConversationRepository
 import ir.vmessenger.domain.usecase.chat.DeleteMessageForMeUseCase
 import ir.vmessenger.domain.usecase.chat.MarkConversationReadUseCase
 import ir.vmessenger.domain.usecase.chat.ObserveChatListUseCase
+import ir.vmessenger.domain.usecase.chat.ObserveDeliveryInfoUseCase
 import ir.vmessenger.domain.usecase.chat.ObserveDraftUseCase
 import ir.vmessenger.domain.usecase.chat.ObserveMessagesPagedUseCase
 import ir.vmessenger.domain.usecase.chat.RetryMessageUseCase
@@ -81,6 +83,7 @@ class ConversationViewModel @Inject constructor(
     private val retryMessage: RetryMessageUseCase,
     private val markConversationRead: MarkConversationReadUseCase,
     private val sendVoice: SendVoiceUseCase,
+    private val observeDeliveryInfo: ObserveDeliveryInfoUseCase,
     // The application context: the recorder needs a cache directory and an audio source,
     // both process-scoped, so nothing here outlives the process or leaks an activity.
     @ApplicationContext context: Context,
@@ -226,6 +229,19 @@ class ConversationViewModel @Inject constructor(
 
     fun onClearReply() {
         replyTo.value = null
+    }
+
+    /** Per-member delivery of one message, while its sheet is open; null when it is closed. */
+    val deliveryInfo: StateFlow<ImmutableList<RecipientDelivery>?> = MutableStateFlow(null)
+
+    fun onShowInfo(messageId: String) {
+        viewModelScope.launch {
+            (deliveryInfo as MutableStateFlow).value = observeDeliveryInfo(messageId).toImmutableList()
+        }
+    }
+
+    fun onDismissInfo() {
+        (deliveryInfo as MutableStateFlow).value = null
     }
 
     fun onDeleteMessage(messageId: String) {

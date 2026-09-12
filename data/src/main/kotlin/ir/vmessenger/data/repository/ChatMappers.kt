@@ -103,7 +103,7 @@ private fun DbMessageDirection.toDomain(): MessageDirection = when (this) {
     DbMessageDirection.INCOMING -> MessageDirection.INCOMING
 }
 
-private fun DbDeliveryStatus.toDomain(): DeliveryStatus = when (this) {
+internal fun DbDeliveryStatus.toDomain(): DeliveryStatus = when (this) {
     DbDeliveryStatus.QUEUED -> DeliveryStatus.QUEUED
     DbDeliveryStatus.SENT -> DeliveryStatus.SENT
     DbDeliveryStatus.DELIVERED -> DeliveryStatus.DELIVERED

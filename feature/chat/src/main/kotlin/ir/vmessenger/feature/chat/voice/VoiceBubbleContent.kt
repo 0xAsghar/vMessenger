@@ -66,6 +66,7 @@ internal fun VoiceBubbleContent(
     onPlayPause: () -> Unit,
     onSeek: (Float) -> Unit,
     onToggleSpeed: () -> Unit,
+    onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val loaded = playback.playing || playback.progress > 0f
@@ -83,7 +84,12 @@ internal fun VoiceBubbleContent(
             )
         }
         Column(modifier = Modifier.weight(1f)) {
-            WaveformBar(waveform = waveform, progress = playback.progress, onSeek = onSeek)
+            WaveformBar(
+                waveform = waveform,
+                progress = playback.progress,
+                onSeek = onSeek,
+                onLongPress = onLongPress,
+            )
             MetaRow(
                 // Mid-message the elapsed time is the useful number; at rest, the length is.
                 label = VmTextFormat.duration(if (loaded) playback.elapsedMs else durationMs),

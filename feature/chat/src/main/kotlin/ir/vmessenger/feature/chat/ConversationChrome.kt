@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.FloatingActionButton
@@ -177,12 +178,15 @@ internal fun rememberReplyPreview(reply: ReplyQuoteUi, contactName: String): Rep
     }
 }
 
-/** Long-press menu of a single message. Forwarding and "info" belong to the group milestone. */
+/** Long-press menu of a single message. Forwarding is a documented non-goal for 1.0. */
+@Suppress("LongParameterList") // one lambda per action the sheet offers
 @Composable
 internal fun MessageActionsSheet(
     canCopy: Boolean,
+    canShowInfo: Boolean,
     onReply: () -> Unit,
     onCopy: () -> Unit,
+    onInfo: () -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -191,6 +195,12 @@ internal fun MessageActionsSheet(
             ActionRow(Icons.AutoMirrored.Outlined.Reply, stringResource(R.string.feature_chat_reply)) {
                 onDismiss()
                 onReply()
+            }
+            if (canShowInfo) {
+                ActionRow(Icons.Outlined.Info, stringResource(R.string.feature_chat_message_info)) {
+                    onDismiss()
+                    onInfo()
+                }
             }
             if (canCopy) {
                 ActionRow(Icons.Outlined.ContentCopy, stringResource(R.string.feature_chat_copy)) {

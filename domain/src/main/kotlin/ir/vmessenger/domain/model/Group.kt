@@ -40,3 +40,16 @@ data class GroupMember(
 ) {
     val isContact: Boolean get() = contactId != null
 }
+
+/**
+ * How one member's copy of a message is doing. A group message is delivered pairwise, so
+ * "delivered" is a different answer per member and the single tick on the bubble is only
+ * their aggregate — this is where the real answer lives.
+ */
+data class RecipientDelivery(
+    val identityHash: String,
+    val displayName: String,
+    val status: DeliveryStatus,
+    val deliveredAtUnixMs: Long?,
+    val readAtUnixMs: Long?,
+)

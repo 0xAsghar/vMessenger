@@ -180,11 +180,18 @@ private fun ConversationSheets(
         MessageActionsSheet(
             // Nothing to copy from a bare photo or file bubble.
             canCopy = state.textOf(messageId).isNotBlank(),
+            // Per-member delivery only means something for a group message we sent.
+            canShowInfo = state.header.isGroup && state.isOutgoing(messageId),
             onReply = { viewModel.onReply(messageId) },
             onCopy = { host.sheets.onCopy(state, messageId) },
+            onInfo = { viewModel.onShowInfo(messageId) },
             onDelete = { viewModel.onDeleteMessage(messageId) },
             onDismiss = { host.sheets.actionTarget.value = null },
         )
+    }
+    val info by viewModel.deliveryInfo.collectAsStateWithLifecycle()
+    info?.let { recipients ->
+        MessageInfoSheet(recipients = recipients, onDismiss = viewModel::onDismissInfo)
     }
 }
 
