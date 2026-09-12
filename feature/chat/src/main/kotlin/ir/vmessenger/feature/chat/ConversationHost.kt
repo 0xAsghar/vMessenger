@@ -9,6 +9,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -17,7 +20,11 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
+import ir.vmessenger.feature.chat.voice.MicButtonActions
+import ir.vmessenger.feature.chat.voice.VoiceBubbleHost
+import ir.vmessenger.feature.chat.voice.rememberRecordAudioPermission
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -28,6 +35,7 @@ private const val ANY_MIME = "*/*"
 internal class ConversationNavigation(
     val onBack: () -> Unit,
     val onOpenContact: (String) -> Unit,
+    val onOpenGroup: (String) -> Unit,
 )
 
 /** The three attachment sources, already bound to their activity-result launchers. */
@@ -53,6 +61,7 @@ internal class ConversationSheetState(
  * each composable stays inside the parameter budget.
  */
 @Stable
+@Suppress("LongParameterList") // one field per screen-owned concern; a nested bag would only hide them
 internal class ConversationHost(
     val listState: LazyListState,
     val snackbar: SnackbarHostState,
@@ -60,6 +69,22 @@ internal class ConversationHost(
     val images: AttachmentImages,
     val actions: MessageActions,
     val sheets: ConversationSheetState,
+    val voice: VoiceBubbleHost,
+    val mic: MicHost,
+)
+
+/**
+ * The mic gesture's own state: whether the recording is hands-free and how far the finger has
+ * slid toward cancelling. It lives here rather than in the ViewModel because it is a property
+ * of the gesture on screen, not of the conversation.
+ */
+@Stable
+internal class MicHost(
+    val actions: MicButtonActions,
+    val locked: State<Boolean>,
+    val slide: State<Float>,
+    val onCancel: () -> Unit,
+    val onSend: () -> Unit,
 )
 
 /**
@@ -79,7 +104,9 @@ internal fun rememberConversationHost(
     val actionTarget = rememberSaveable { mutableStateOf<String?>(null) }
     val actions = rememberMessageActions(viewModel, onOpenImage, actionTarget, snackbar, scope)
     val sheets = rememberSheetState(viewModel, actionTarget, snackbar, scope)
-    return remember(listState, actions, sheets, images) {
+    val voice = rememberVoiceBubbleHost(viewModel)
+    val mic = rememberMicHost(viewModel, snackbar)
+    return remember(listState, actions, sheets, images, voice, mic) {
         ConversationHost(
             listState = listState,
             snackbar = snackbar,
@@ -87,8 +114,59 @@ internal fun rememberConversationHost(
             images = images,
             actions = actions,
             sheets = sheets,
+            voice = voice,
+            mic = mic,
         )
     }
+}
+
+@Composable
+private fun rememberVoiceBubbleHost(viewModel: ConversationViewModel): VoiceBubbleHost {
+    val playback by viewModel.voice.playbackState.collectAsStateWithLifecycle()
+    return remember(playback, viewModel) {
+        VoiceBubbleHost(
+            playback = playback,
+            onToggle = viewModel.voice::toggle,
+            onSeek = viewModel.voice::seek,
+            onToggleSpeed = viewModel.voice::toggleSpeed,
+        )
+    }
+}
+
+/**
+ * The mic press, wired to the recorder. The permission check sits in [MicButtonActions.onStart]
+ * so a press without permission asks for it and simply does not become a recording — nothing
+ * starts and then silently fails.
+ */
+@Composable
+private fun rememberMicHost(viewModel: ConversationViewModel, snackbar: SnackbarHostState): MicHost {
+    val permission = rememberRecordAudioPermission(snackbar)
+    val locked = remember { mutableStateOf(false) }
+    val slide = remember { mutableFloatStateOf(0f) }
+    val cancel = remember(viewModel) {
+        {
+            locked.value = false
+            slide.floatValue = 0f
+            viewModel.voice.cancelRecording()
+        }
+    }
+    val send = remember(viewModel) {
+        {
+            locked.value = false
+            slide.floatValue = 0f
+            viewModel.voice.sendRecording()
+        }
+    }
+    val actions = remember(viewModel, permission, cancel, send) {
+        MicButtonActions(
+            onStart = { permission.ensureGranted() && viewModel.voice.startRecording() },
+            onCancel = cancel,
+            onSend = send,
+            onLocked = { locked.value = true },
+            onSlide = { slide.floatValue = it },
+        )
+    }
+    return remember(actions) { MicHost(actions, locked, slide, cancel, send) }
 }
 
 @Composable

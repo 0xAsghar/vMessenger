@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 18,
-    "identityHash": "927c503021051647196202b4dcd9e5aa",
+    "identityHash": "05ba4f6f910b77fcf52a66e9ef672a49",
     "entities": [
       {
         "tableName": "app_metadata",
@@ -805,7 +805,7 @@
       },
       {
         "tableName": "message",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`messageId` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `direction` TEXT NOT NULL, `contentType` TEXT NOT NULL, `body` TEXT, `replyToMessageId` TEXT, `status` TEXT NOT NULL, `createdAtUnixMs` INTEGER NOT NULL, `sentAtUnixMs` INTEGER, `deliveredAtUnixMs` INTEGER, `readAtUnixMs` INTEGER, `attachmentName` TEXT, `attachmentMimeType` TEXT, `attachmentSizeBytes` INTEGER, `attachmentPath` TEXT, `attachmentSha256` BLOB, `attachmentEncrypted` INTEGER NOT NULL, `senderIdentityHash` TEXT, `caption` TEXT, `attachmentDurationMs` INTEGER, `attachmentWaveform` BLOB, PRIMARY KEY(`messageId`), FOREIGN KEY(`conversationId`) REFERENCES `conversation`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`messageId` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `direction` TEXT NOT NULL, `contentType` TEXT NOT NULL, `body` TEXT, `replyToMessageId` TEXT, `status` TEXT NOT NULL, `createdAtUnixMs` INTEGER NOT NULL, `sentAtUnixMs` INTEGER, `deliveredAtUnixMs` INTEGER, `readAtUnixMs` INTEGER, `attachmentName` TEXT, `attachmentMimeType` TEXT, `attachmentSizeBytes` INTEGER, `attachmentPath` TEXT, `attachmentSha256` BLOB, `attachmentEncrypted` INTEGER NOT NULL, `senderIdentityHash` TEXT, `caption` TEXT, `attachmentDurationMs` INTEGER, `attachmentWaveform` BLOB, `attachmentPlayedAtUnixMs` INTEGER, PRIMARY KEY(`messageId`), FOREIGN KEY(`conversationId`) REFERENCES `conversation`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "messageId",
@@ -931,6 +931,12 @@
             "fieldPath": "attachmentWaveform",
             "columnName": "attachmentWaveform",
             "affinity": "BLOB",
+            "notNull": false
+          },
+          {
+            "fieldPath": "attachmentPlayedAtUnixMs",
+            "columnName": "attachmentPlayedAtUnixMs",
+            "affinity": "INTEGER",
             "notNull": false
           }
         ],
@@ -1435,7 +1441,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '927c503021051647196202b4dcd9e5aa')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '05ba4f6f910b77fcf52a66e9ef672a49')"
     ]
   }
 }

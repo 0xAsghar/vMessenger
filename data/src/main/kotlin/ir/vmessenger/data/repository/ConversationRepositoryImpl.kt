@@ -170,6 +170,9 @@ class ConversationRepositoryImpl @Inject constructor(
 
     override suspend fun markConversationRead(conversationId: String) = readMarker.markRead(conversationId)
 
+    override suspend fun markVoicePlayed(messageId: String) =
+        messageDao.markVoicePlayed(messageId, System.currentTimeMillis())
+
     override suspend fun deleteMessageForMe(messageId: String) = writer.deleteMessageForMe(messageId)
 
     override suspend fun deleteConversation(conversationId: String) = writer.deleteConversation(conversationId)

@@ -17,9 +17,6 @@
     <string name="coming_soon_title">به‌زودی</string>
     <string name="coming_soon_body">این بخش در نسخه‌های بعدی افزوده می‌شود.</string>
     <string name="route_new_chat">گفتگوی جدید</string>
-    <string name="route_new_group">گروه جدید</string>
-    <string name="route_group_info">اطلاعات گروه</string>
-    <string name="route_add_group_members">افزودن اعضا</string>
     <string name="route_image_viewer">تصویر</string>
     <string name="route_contact_detail">مخاطب</string>
     <string name="route_backup">پشتیبان‌گیری</string>

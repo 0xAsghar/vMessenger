@@ -22,6 +22,8 @@ import ir.vmessenger.core.designsystem.component.ComposerState
 import ir.vmessenger.core.designsystem.component.EmptyState
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
+import ir.vmessenger.feature.chat.voice.ComposerMicButton
+import ir.vmessenger.feature.chat.voice.RecordingBar
 import kotlinx.coroutines.launch
 
 private const val JUMP_VISIBLE_FROM_INDEX = 4
@@ -36,9 +38,11 @@ private const val LOAD_EARLIER_MARGIN = 10
  * around it.
  */
 @Composable
+@Suppress("LongParameterList") // one lambda per destination this screen can reach
 fun ConversationRoute(
     onBack: () -> Unit,
     onOpenContact: (String) -> Unit,
+    onOpenGroup: (String) -> Unit,
     onOpenImage: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ConversationViewModel = hiltViewModel(),
@@ -53,7 +57,9 @@ fun ConversationRoute(
         state = state,
         host = host,
         viewModel = viewModel,
-        navigation = remember(onBack, onOpenContact) { ConversationNavigation(onBack, onOpenContact) },
+        navigation = remember(onBack, onOpenContact, onOpenGroup) {
+            ConversationNavigation(onBack, onOpenContact, onOpenGroup)
+        },
         modifier = modifier,
     )
     ConversationSheets(state = state, host = host, viewModel = viewModel)
@@ -80,7 +86,7 @@ private fun ConversationScreen(
         },
         bottomBar = { ConversationComposer(state = state, host = host, viewModel = viewModel) },
         modifier = modifier,
-        titleContent = { ConversationTitle(header = state.header, onOpenContact = navigation.onOpenContact) },
+        titleContent = { ConversationTitle(header = state.header, navigation = navigation) },
         snackbarHost = { VmSnackbarHost(host.snackbar) },
     ) { padding ->
         Column(
@@ -102,6 +108,7 @@ private fun ConversationScreen(
                     listState = host.listState,
                     actions = host.actions,
                     images = host.images,
+                    voice = host.voice,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -109,12 +116,27 @@ private fun ConversationScreen(
     }
 }
 
+/**
+ * The composer, or the recording bar in its place: while a voice message is being recorded
+ * there is nothing to type into, and the bar owns the same bottom insets the composer does.
+ */
 @Composable
 private fun ConversationComposer(
     state: ConversationUiState,
     host: ConversationHost,
     viewModel: ConversationViewModel,
 ) {
+    val recorder by viewModel.voice.recorderState.collectAsStateWithLifecycle()
+    if (recorder.recording) {
+        RecordingBar(
+            state = recorder,
+            locked = host.mic.locked.value,
+            slide = host.mic.slide.value,
+            onCancel = host.mic.onCancel,
+            onSend = host.mic.onSend,
+        )
+        return
+    }
     val reply = state.composer.replyTo?.let { rememberReplyPreview(it, state.header.title) }
     Composer(
         state = ComposerState(text = state.composer.text, enabled = state.composer.enabled),
@@ -123,6 +145,7 @@ private fun ConversationComposer(
         onAttach = { host.sheets.attachOpen.value = true },
         replyTo = reply,
         onClearReply = viewModel::onClearReply,
+        micButton = { ComposerMicButton(actions = host.mic.actions, enabled = state.composer.enabled) },
     )
 }
 

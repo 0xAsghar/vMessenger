@@ -458,6 +458,7 @@ val MIGRATION_17_18_STATEMENTS: List<String> = listOf(
     "ALTER TABLE `message` ADD COLUMN `caption` TEXT",
     "ALTER TABLE `message` ADD COLUMN `attachmentDurationMs` INTEGER",
     "ALTER TABLE `message` ADD COLUMN `attachmentWaveform` BLOB",
+    "ALTER TABLE `message` ADD COLUMN `attachmentPlayedAtUnixMs` INTEGER",
 
     // --- per-recipient delivery state --------------------------------------
     """

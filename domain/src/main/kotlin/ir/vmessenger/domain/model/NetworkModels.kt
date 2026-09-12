@@ -26,6 +26,8 @@ data class ChatMessage(
      */
     val senderName: String? = null,
     val senderIdentityHash: String? = null,
+    /** A membership change, rendered as a centred system line rather than a bubble. */
+    val isSystemEvent: Boolean = false,
     /**
      * Why the last delivery attempt failed, straight from the outbox row (an
      * [ir.vmessenger.core.common.AppError] message, e.g. the peer's protocol
@@ -72,6 +74,8 @@ data class ChatAttachment(
     val durationMs: Long? = null,
     /** 64 amplitude buckets (0..255) drawn as the voice waveform; null for other kinds. */
     val waveform: ByteArray? = null,
+    /** False on a voice message nobody has listened to yet, which is what the unplayed dot means. */
+    val played: Boolean = true,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -84,7 +88,8 @@ data class ChatAttachment(
     override fun hashCode(): Int = 31 * scalarFields().hashCode() + (waveform?.contentHashCode() ?: 0)
 
     /** Every field except the byte array, so equality/hash keep data-class semantics. */
-    private fun scalarFields(): List<Any?> = listOf(type, fileName, mimeType, sizeBytes, localPath, durationMs)
+    private fun scalarFields(): List<Any?> =
+        listOf(type, fileName, mimeType, sizeBytes, localPath, durationMs, played)
 
     private companion object {
         val EMPTY = ByteArray(0)

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- New group: member picker, then the name -->
+    <string name="feature_chat_group_new_title">گروه جدید</string>
+    <string name="feature_chat_group_new_members_step">انتخاب اعضا</string>
+    <string name="feature_chat_group_new_name_step">نام‌گذاری گروه</string>
+    <string name="feature_chat_group_continue">ادامه</string>
+    <string name="feature_chat_group_create">ساختن گروه</string>
+    <string name="feature_chat_group_name_label">نام گروه</string>
+    <string name="feature_chat_group_name_remaining">%1$s نویسهٔ باقی‌مانده</string>
+    <string name="feature_chat_group_name_members">%1$s نفر انتخاب شده‌اند</string>
+    <!-- Drawn inside the avatar until the group has a name to take its first letter from -->
+    <string name="feature_chat_group_avatar_placeholder">گ</string>
+
+    <!-- Contact picker shared by "new group" and "add members" -->
+    <string name="feature_chat_group_picker_search">جستجوی مخاطب</string>
+    <string name="feature_chat_group_picker_clear">پاک کردن جستجو</string>
+    <string name="feature_chat_group_picker_selected">%1$s از %2$s انتخاب شد</string>
+    <string name="feature_chat_group_picker_cap">هر گروه حداکثر %1$s عضو می‌پذیرد.</string>
+    <string name="feature_chat_group_picker_empty_title">مخاطب تأییدشده‌ای ندارید</string>
+    <string name="feature_chat_group_picker_empty_body">گروه فقط از میان مخاطبانی ساخته می‌شود که درخواست شما را تأیید کرده‌اند.</string>
+
+    <!-- Group info -->
+    <string name="feature_chat_group_info_title">اطلاعات گروه</string>
+    <string name="feature_chat_group_avatar">تصویر گروه %1$s</string>
+    <string name="feature_chat_group_member_count">%1$s عضو</string>
+    <string name="feature_chat_group_members_section">اعضا</string>
+    <string name="feature_chat_group_manage_section">مدیریت گروه</string>
+    <string name="feature_chat_group_rename">تغییر نام گروه</string>
+    <string name="feature_chat_group_add_members">افزودن عضو</string>
+    <string name="feature_chat_group_seats_left">%1$s جای خالی</string>
+    <string name="feature_chat_group_closed_banner">این گروه بسته شده است؛ فقط می‌توانید پیام‌های گذشته را بخوانید.</string>
+
+    <!-- Member rows -->
+    <string name="feature_chat_group_member_unknown">ناشناس</string>
+    <string name="feature_chat_group_badge_creator">سازنده</string>
+    <string name="feature_chat_group_badge_me">شما</string>
+    <string name="feature_chat_group_add_contact">افزودن به مخاطبان</string>
+    <string name="feature_chat_group_request_sent">درخواست مخاطب فرستاده شد</string>
+    <string name="feature_chat_group_remove_member">حذف از گروه</string>
+
+    <!-- Add members sheet -->
+    <string name="feature_chat_group_add_members_title">افزودن عضو</string>
+    <string name="feature_chat_group_add_members_confirm">افزودن به گروه</string>
+
+    <!-- Rename -->
+    <string name="feature_chat_group_rename_title">تغییر نام گروه</string>
+    <string name="feature_chat_group_rename_save">ذخیره</string>
+    <string name="feature_chat_group_rename_cancel">انصراف</string>
+
+    <!-- Leaving, closing and removing: each names what is lost before it happens -->
+    <string name="feature_chat_group_leave">خروج از گروه</string>
+    <string name="feature_chat_group_leave_title">خروج از گروه</string>
+    <string name="feature_chat_group_leave_body">پس از خروج، پیام‌های تازهٔ این گروه به شما نمی‌رسد و گفتگو فقط خواندنی می‌شود. برگشتن به گروه فقط با دعوت دوبارهٔ سازنده ممکن است.</string>
+    <string name="feature_chat_group_leave_confirm">خروج</string>
+    <string name="feature_chat_group_close">بستن گروه</string>
+    <string name="feature_chat_group_close_title">بستن گروه</string>
+    <string name="feature_chat_group_close_body">گروه برای همهٔ اعضا بسته می‌شود و پس از آن کسی نمی‌تواند پیام بفرستد. پیام‌های گذشته باقی می‌مانند. این کار برگشت‌پذیر نیست.</string>
+    <string name="feature_chat_group_close_confirm">بستن گروه</string>
+    <string name="feature_chat_group_remove_title">حذف عضو</string>
+    <string name="feature_chat_group_remove_body">%1$s از گروه حذف می‌شود و نسخهٔ او فقط خواندنی خواهد شد.</string>
+    <string name="feature_chat_group_remove_confirm">حذف</string>
+</resources>

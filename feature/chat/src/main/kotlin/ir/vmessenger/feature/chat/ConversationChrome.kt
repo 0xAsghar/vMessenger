@@ -12,6 +12,7 @@ import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -27,19 +28,28 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import ir.vmessenger.core.designsystem.component.Avatar
+import ir.vmessenger.core.designsystem.component.AvatarVariant
 import ir.vmessenger.core.designsystem.component.KeyChangeBanner
 import ir.vmessenger.core.designsystem.component.ReplyPreview
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 
-/** Avatar, name and the one line that matters: verified, key changed, or blocked. */
+/**
+ * Avatar, name and the one line that matters: the members of a group, or — in a 1:1 chat —
+ * verified, key changed, or blocked. Tapping it opens whoever the chat is with.
+ */
 @Composable
-internal fun ConversationTitle(header: ConversationHeaderUi, onOpenContact: (String) -> Unit) {
-    val openContact = stringResource(R.string.feature_chat_open_contact)
+internal fun ConversationTitle(header: ConversationHeaderUi, navigation: ConversationNavigation) {
+    val description = stringResource(
+        if (header.isGroup) R.string.feature_chat_open_group else R.string.feature_chat_open_contact,
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = header.contactId != null) { header.contactId?.let(onOpenContact) },
+            .clickable(enabled = header.contactId != null || header.groupId != null) {
+                header.groupId?.let(navigation.onOpenGroup)
+                    ?: header.contactId?.let(navigation.onOpenContact)
+            },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
     ) {
@@ -47,7 +57,8 @@ internal fun ConversationTitle(header: ConversationHeaderUi, onOpenContact: (Str
             seed = header.seed.bytes,
             name = header.title,
             size = VmSizes.avatarSm,
-            contentDescription = openContact,
+            variant = if (header.isGroup) AvatarVariant.Group else AvatarVariant.Person,
+            contentDescription = description,
         )
         Column {
             Text(
@@ -71,13 +82,14 @@ internal fun ConversationTitle(header: ConversationHeaderUi, onOpenContact: (Str
 
 @Composable
 private fun subtitleText(header: ConversationHeaderUi): String? = when {
+    header.isGroup -> header.memberNames
     header.blocked -> stringResource(R.string.feature_chat_subtitle_blocked)
     header.keyChangePending -> stringResource(R.string.feature_chat_subtitle_key_changed)
     header.verified -> stringResource(R.string.feature_chat_subtitle_verified)
     else -> null
 }
 
-/** Key change first (it is a security decision), then the blocked notice. */
+/** Key change first (it is a security decision), then the blocked and closed notices. */
 @Composable
 internal fun ConversationBanners(header: ConversationHeaderUi, onOpenContact: (String) -> Unit) {
     if (header.keyChangePending) {
@@ -88,6 +100,31 @@ internal fun ConversationBanners(header: ConversationHeaderUi, onOpenContact: (S
     }
     if (header.blocked) {
         BlockedBanner()
+    }
+    if (header.closed) {
+        ClosedGroupBanner()
+    }
+}
+
+/** A closed group stays readable; the composer is gone, so the banner says why. */
+@Composable
+private fun ClosedGroupBanner() {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(VmSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
+        ) {
+            Icon(imageVector = Icons.Outlined.Lock, contentDescription = null)
+            Text(
+                text = stringResource(R.string.feature_chat_group_closed_banner),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Recording -->
+    <string name="feature_chat_voice_record">ضبط پیام صوتی</string>
+    <string name="feature_chat_voice_recording">در حال ضبط</string>
+    <string name="feature_chat_voice_slide_to_cancel">برای لغو بکشید</string>
+    <string name="feature_chat_voice_cancel">لغو ضبط</string>
+    <string name="feature_chat_voice_send">ارسال پیام صوتی</string>
+    <string name="feature_chat_voice_lock_hint">برای ضبط بدون نگه‌داشتن، انگشت را بالا بکشید</string>
+    <string name="feature_chat_voice_locked">ضبط قفل شد</string>
+
+    <!-- Playback -->
+    <string name="feature_chat_voice_play">پخش پیام صوتی</string>
+    <string name="feature_chat_voice_pause">توقف پخش</string>
+    <string name="feature_chat_voice_waveform">نوار پیشرفت پیام صوتی</string>
+    <string name="feature_chat_voice_unplayed">پخش‌نشده</string>
+    <string name="feature_chat_voice_speed">سرعت پخش: %1$s</string>
+    <string name="feature_chat_voice_speed_normal">۱×</string>
+    <string name="feature_chat_voice_speed_fast">۱٫۵×</string>
+    <string name="feature_chat_voice_speed_fastest">۲×</string>
+
+    <!-- Microphone permission -->
+    <string name="feature_chat_voice_permission_rationale">برای ضبط پیام صوتی به دسترسی میکروفون نیاز است.</string>
+    <string name="feature_chat_voice_permission_blocked">دسترسی به میکروفون بسته است؛ آن را از تنظیمات فعال کنید.</string>
+    <string name="feature_chat_voice_permission_allow">اجازه می‌دهم</string>
+    <string name="feature_chat_voice_permission_settings">تنظیمات</string>
+</resources>

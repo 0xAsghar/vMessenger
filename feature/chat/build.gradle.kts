@@ -23,4 +23,5 @@ dependencies {
     // Coil requests (the attachment fetcher), so the dependency is direct, not borrowed.
     implementation(libs.coil.compose)
     implementation(libs.kotlinx.collections.immutable)
+    testImplementation(libs.junit)
 }

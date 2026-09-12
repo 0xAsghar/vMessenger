@@ -93,6 +93,12 @@ data class MessageEntity(
     val attachmentDurationMs: Long? = null,
     /** 64 amplitude buckets (0..255), one byte each, rendered as the voice bubble's waveform. */
     val attachmentWaveform: ByteArray? = null,
+    /**
+     * When this voice message was first listened to. Null means the "unplayed" dot is shown —
+     * persisted rather than kept in memory, so it survives a restart instead of telling the
+     * user they never heard something they did.
+     */
+    val attachmentPlayedAtUnixMs: Long? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -130,6 +136,7 @@ data class MessageEntity(
         senderIdentityHash,
         caption,
         attachmentDurationMs,
+        attachmentPlayedAtUnixMs,
     )
 
     private companion object {

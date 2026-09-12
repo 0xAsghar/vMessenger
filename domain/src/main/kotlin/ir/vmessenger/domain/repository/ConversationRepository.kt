@@ -64,6 +64,9 @@ interface ConversationRepository {
     ): AppResult<String>
     suspend fun markConversationRead(conversationId: String)
 
+    /** Records the first listen of a voice message, which clears its "unplayed" dot for good. */
+    suspend fun markVoicePlayed(messageId: String)
+
     /** Removes the local copy only; nothing is sent to the peer and their copy stays. */
     suspend fun deleteMessageForMe(messageId: String)
 

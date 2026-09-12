@@ -1,0 +1,436 @@
+package ir.vmessenger.feature.chat.group
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.DriveFileRenameOutline
+import androidx.compose.material.icons.outlined.GroupAdd
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.PersonAddAlt
+import androidx.compose.material.icons.outlined.PersonRemove
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.designsystem.component.Avatar
+import ir.vmessenger.core.designsystem.component.AvatarVariant
+import ir.vmessenger.core.designsystem.component.ConfirmDialog
+import ir.vmessenger.core.designsystem.component.SectionHeader
+import ir.vmessenger.core.designsystem.component.SettingsRow
+import ir.vmessenger.core.designsystem.component.SettingsTrailing
+import ir.vmessenger.core.designsystem.component.SkeletonList
+import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmSnackbarHost
+import ir.vmessenger.core.designsystem.component.asText
+import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
+import ir.vmessenger.core.designsystem.format.VmTextFormat
+import ir.vmessenger.core.designsystem.theme.VmSizes
+import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.feature.chat.R
+
+private const val MEMBER_CONTENT_TYPE = "group-member"
+private const val SKELETON_ROWS = 6
+
+/** What a member row can ask for. */
+@Immutable
+private data class GroupInfoCallbacks(
+    val onOpenDialog: (GroupDialog) -> Unit,
+    val onAddContact: (String) -> Unit,
+    val onOpenContact: (String) -> Unit,
+)
+
+/** The confirmations and the member sheet all answer through these. */
+@Immutable
+private data class GroupDialogCallbacks(
+    val onConfirm: () -> Unit,
+    val onRename: (String) -> Unit,
+    val onDismiss: () -> Unit,
+    val onQueryChange: (String) -> Unit,
+    val onToggle: (String) -> Unit,
+)
+
+/**
+ * A group's own screen, reached as `VmRoute.GroupInfo`.
+ *
+ * It pops itself once the group stops existing, which is what happens right after leaving or
+ * closing it. A closed group still renders, read-only and behind a banner: the history is the
+ * reason to keep the screen reachable at all.
+ */
+@Composable
+fun GroupInfoRoute(
+    onBack: () -> Unit,
+    onOpenContact: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: GroupInfoViewModel = hiltViewModel(),
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbar = rememberVmSnackbar()
+
+    // asText() resolves a string resource, so the message is rendered here and only the
+    // finished sentence reaches the host.
+    val message = state.message?.asText()
+    LaunchedEffect(message) {
+        if (message != null) {
+            snackbar.showSnackbar(message)
+            viewModel.onMessageShown()
+        }
+    }
+    LaunchedEffect(state.notFound) {
+        if (state.notFound) onBack()
+    }
+
+    VMessengerScaffold(
+        title = state.name.ifBlank { stringResource(R.string.feature_chat_group_info_title) },
+        onNavigateBack = onBack,
+        modifier = modifier,
+        subtitle = stringResource(
+            R.string.feature_chat_group_member_count,
+            VmTextFormat.persianDigits(state.memberCount.toString()),
+        ),
+        snackbarHost = { VmSnackbarHost(snackbar) },
+    ) { padding ->
+        val content = Modifier
+            .fillMaxSize()
+            .padding(padding)
+        if (state.loading) {
+            SkeletonList(modifier = content, rows = SKELETON_ROWS)
+        } else {
+            GroupInfoList(
+                state = state,
+                callbacks = remember(viewModel, onOpenContact) {
+                    GroupInfoCallbacks(viewModel::onOpenDialog, viewModel::onAddContact, onOpenContact)
+                },
+                modifier = content,
+            )
+        }
+    }
+
+    GroupDialogHost(
+        state = state,
+        callbacks = remember(viewModel) {
+            GroupDialogCallbacks(
+                onConfirm = viewModel::onConfirmDialog,
+                onRename = viewModel::onConfirmRename,
+                onDismiss = viewModel::onDismissDialog,
+                onQueryChange = viewModel::onPickerQueryChange,
+                onToggle = viewModel::onPickerToggle,
+            )
+        },
+    )
+}
+
+@Composable
+private fun GroupInfoList(
+    state: GroupInfoUiState,
+    callbacks: GroupInfoCallbacks,
+    modifier: Modifier = Modifier,
+) {
+    val unknown = stringResource(R.string.feature_chat_group_member_unknown)
+    LazyColumn(modifier = modifier) {
+        item(key = "header") { GroupInfoHeader(state = state) }
+        if (state.canManage) {
+            item(key = "manage") { GroupManageSection(state = state, onOpenDialog = callbacks.onOpenDialog) }
+        }
+        item(key = "members-header") {
+            SectionHeader(title = stringResource(R.string.feature_chat_group_members_section))
+        }
+        items(items = state.members, key = { it.identityHash }, contentType = { MEMBER_CONTENT_TYPE }) { member ->
+            MemberRow(
+                member = member,
+                unknown = unknown,
+                canRemove = state.canManage,
+                callbacks = callbacks,
+            )
+        }
+        item(key = "danger") { GroupDangerSection(state = state, onOpenDialog = callbacks.onOpenDialog) }
+    }
+}
+
+@Composable
+private fun GroupInfoHeader(state: GroupInfoUiState) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
+    ) {
+        if (state.closed) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = stringResource(R.string.feature_chat_group_closed_banner),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
+                )
+            }
+        }
+        Avatar(
+            seed = state.seed.bytes,
+            name = state.name,
+            size = VmSizes.avatarLg,
+            variant = AvatarVariant.Group,
+            modifier = Modifier.padding(top = VmSpacing.md),
+            contentDescription = stringResource(R.string.feature_chat_group_avatar, state.name),
+        )
+        Text(text = state.name, style = MaterialTheme.typography.headlineSmall)
+        Text(
+            text = stringResource(
+                R.string.feature_chat_group_member_count,
+                VmTextFormat.persianDigits(state.memberCount.toString()),
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Creator-only, and only while the group is open; a closed group offers nothing here. */
+@Composable
+private fun GroupManageSection(state: GroupInfoUiState, onOpenDialog: (GroupDialog) -> Unit) {
+    SectionHeader(title = stringResource(R.string.feature_chat_group_manage_section))
+    SettingsRow(
+        label = stringResource(R.string.feature_chat_group_rename),
+        icon = Icons.Outlined.DriveFileRenameOutline,
+        trailing = SettingsTrailing.None,
+        onClick = { onOpenDialog(GroupDialog.Rename) },
+    )
+    SettingsRow(
+        label = stringResource(R.string.feature_chat_group_add_members),
+        icon = Icons.Outlined.GroupAdd,
+        // Stays visible when the group is full so the reason is the disabled state, not an
+        // action that quietly disappeared.
+        supporting = stringResource(
+            R.string.feature_chat_group_seats_left,
+            VmTextFormat.persianDigits(state.remainingSeats.toString()),
+        ),
+        trailing = SettingsTrailing.None,
+        enabled = state.canAddMembers,
+        onClick = { onOpenDialog(GroupDialog.AddMembers) },
+    )
+}
+
+@Composable
+private fun MemberRow(
+    member: GroupMemberRow,
+    unknown: String,
+    canRemove: Boolean,
+    callbacks: GroupInfoCallbacks,
+) {
+    val name = member.label(unknown)
+    val contactId = member.contactId?.takeIf { !member.isMe }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (contactId != null) {
+                    Modifier.clickable { callbacks.onOpenContact(contactId) }
+                } else {
+                    Modifier
+                },
+            )
+            .heightIn(min = VmSizes.listItemHeight)
+            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
+    ) {
+        Avatar(seed = member.seed.bytes, name = name, size = VmSizes.avatarMd)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(VmSpacing.xs)) {
+                if (member.isCreator) {
+                    MemberChip(label = stringResource(R.string.feature_chat_group_badge_creator))
+                }
+                if (member.isMe) {
+                    MemberChip(label = stringResource(R.string.feature_chat_group_badge_me))
+                }
+                if (member.requestPending) {
+                    MemberChip(label = stringResource(R.string.feature_chat_status_pending_out))
+                }
+            }
+        }
+        MemberActions(member = member, canRemove = canRemove, callbacks = callbacks)
+    }
+}
+
+@Composable
+private fun MemberActions(
+    member: GroupMemberRow,
+    canRemove: Boolean,
+    callbacks: GroupInfoCallbacks,
+) {
+    if (member.canBeAddedAsContact) {
+        IconButton(onClick = { callbacks.onAddContact(member.identityHash) }) {
+            Icon(
+                imageVector = Icons.Outlined.PersonAddAlt,
+                contentDescription = stringResource(R.string.feature_chat_group_add_contact),
+            )
+        }
+    }
+    // The creator cannot remove themselves out of a group they own; closing it is their exit.
+    if (canRemove && !member.isMe) {
+        IconButton(onClick = { callbacks.onOpenDialog(GroupDialog.RemoveMember(member)) }) {
+            Icon(
+                imageVector = Icons.Outlined.PersonRemove,
+                contentDescription = stringResource(R.string.feature_chat_group_remove_member),
+                tint = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MemberChip(label: String) {
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = VmSpacing.sm, vertical = VmSpacing.xxs),
+        )
+    }
+}
+
+/** Leaving and closing are the same door seen from either side, so only one of them shows. */
+@Composable
+private fun GroupDangerSection(state: GroupInfoUiState, onOpenDialog: (GroupDialog) -> Unit) {
+    if (!state.canLeave && !state.canClose) return
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.error) {
+        if (state.canLeave) {
+            SettingsRow(
+                label = stringResource(R.string.feature_chat_group_leave),
+                icon = Icons.AutoMirrored.Outlined.Logout,
+                trailing = SettingsTrailing.None,
+                onClick = { onOpenDialog(GroupDialog.Leave) },
+            )
+        }
+        if (state.canClose) {
+            SettingsRow(
+                label = stringResource(R.string.feature_chat_group_close),
+                icon = Icons.Outlined.Lock,
+                trailing = SettingsTrailing.None,
+                onClick = { onOpenDialog(GroupDialog.Close) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun GroupDialogHost(state: GroupInfoUiState, callbacks: GroupDialogCallbacks) {
+    val unknown = stringResource(R.string.feature_chat_group_member_unknown)
+    when (val dialog = state.dialog) {
+        GroupDialog.None -> Unit
+        GroupDialog.Rename -> RenameGroupDialog(
+            currentName = state.name,
+            onSave = callbacks.onRename,
+            onDismiss = callbacks.onDismiss,
+        )
+        GroupDialog.AddMembers -> state.picker?.let { picker ->
+            GroupMemberPickerSheet(
+                state = picker,
+                onQueryChange = callbacks.onQueryChange,
+                onToggle = callbacks.onToggle,
+                onConfirm = callbacks.onConfirm,
+                onDismiss = callbacks.onDismiss,
+            )
+        }
+        GroupDialog.Leave -> ConfirmDialog(
+            title = stringResource(R.string.feature_chat_group_leave_title),
+            body = stringResource(R.string.feature_chat_group_leave_body),
+            confirmLabel = stringResource(R.string.feature_chat_group_leave_confirm),
+            onConfirm = callbacks.onConfirm,
+            onDismiss = callbacks.onDismiss,
+            destructive = true,
+        )
+        GroupDialog.Close -> ConfirmDialog(
+            title = stringResource(R.string.feature_chat_group_close_title),
+            body = stringResource(R.string.feature_chat_group_close_body),
+            confirmLabel = stringResource(R.string.feature_chat_group_close_confirm),
+            onConfirm = callbacks.onConfirm,
+            onDismiss = callbacks.onDismiss,
+            destructive = true,
+        )
+        is GroupDialog.RemoveMember -> ConfirmDialog(
+            title = stringResource(R.string.feature_chat_group_remove_title),
+            body = stringResource(R.string.feature_chat_group_remove_body, dialog.member.label(unknown)),
+            confirmLabel = stringResource(R.string.feature_chat_group_remove_confirm),
+            onConfirm = callbacks.onConfirm,
+            onDismiss = callbacks.onDismiss,
+            destructive = true,
+        )
+    }
+}
+
+/** The name is announced to every member, which is why it is not edited in place on the header. */
+@Composable
+private fun RenameGroupDialog(
+    currentName: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var name by rememberSaveable(currentName) { mutableStateOf(currentName) }
+    val trimmed = name.trim()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = stringResource(R.string.feature_chat_group_rename_title)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { if (it.length <= GroupLimits.MAX_NAME_LENGTH) name = it },
+                label = { Text(text = stringResource(R.string.feature_chat_group_name_label)) },
+                singleLine = true,
+                isError = !GroupLimits.isValidName(name),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(trimmed) }, enabled = GroupLimits.isValidName(name)) {
+                Text(text = stringResource(R.string.feature_chat_group_rename_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(R.string.feature_chat_group_rename_cancel))
+            }
+        },
+        shape = MaterialTheme.shapes.large,
+    )
+}

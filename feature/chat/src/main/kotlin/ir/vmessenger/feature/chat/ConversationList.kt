@@ -25,6 +25,7 @@ import ir.vmessenger.core.designsystem.component.MessageBubble
 import ir.vmessenger.core.designsystem.component.ProgressPill
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.domain.model.AttachmentProgress
+import ir.vmessenger.feature.chat.voice.VoiceBubbleHost
 
 private const val INCOMING_CONTENT_TYPE = "incoming-transfer"
 
@@ -34,12 +35,14 @@ private const val INCOMING_CONTENT_TYPE = "incoming-transfer"
  * `reverseLayout` keeps index 0 at the bottom, so an arriving message never shifts the
  * scroll anchor and paging backwards only ever appends to the end of the list.
  */
+@Suppress("LongParameterList") // one collaborator per thing the list draws or reports
 @Composable
 internal fun ConversationMessageList(
     state: ConversationUiState,
     listState: LazyListState,
     actions: MessageActions,
     images: AttachmentImages,
+    voice: VoiceBubbleHost,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -63,6 +66,9 @@ internal fun ConversationMessageList(
         ) { item ->
             when (item) {
                 is ChatItem.Day -> DateSeparator(label = item.label)
+                // A membership change is the conversation talking about itself: centred,
+                // unowned by either side, and with nothing to reply to or long-press.
+                is ChatItem.System -> DateSeparator(label = item.text)
                 is ChatItem.Message -> SwipeToReply(onReply = { actions.onReply(item.messageId) }) {
                     MessageBubbleItem(
                         item = item,
@@ -70,6 +76,7 @@ internal fun ConversationMessageList(
                         progress = state.attachmentProgress[item.messageId],
                         actions = actions,
                         images = images,
+                        voice = voice,
                     )
                 }
             }

@@ -53,14 +53,6 @@ data class ComposerState(
     val canSend: Boolean get() = enabled && !recording && text.isNotBlank()
 }
 
-/** Playback position of the one voice message currently loaded in the player. */
-@Immutable
-data class VoicePlaybackState(
-    val playing: Boolean = false,
-    val positionMs: Long = 0L,
-    val speed: Float = 1f,
-)
-
 /** Optional call to action under an [EmptyState]. */
 @Stable
 data class EmptyStateAction(val label: String, val onClick: () -> Unit)

@@ -130,8 +130,8 @@ private fun ConversationSummary.toRow(): ChatListRow = ChatListRow(
     contactId = contactId,
     groupId = groupId,
     title = contactName,
-    // A group has no identity hash of its own, so its avatar is seeded from the group id.
-    seed = IdentitySeed(if (isGroup) groupId.orEmpty().toByteArray() else identityHash),
+    // A group has no identity hash of its own; its avatar is seeded from `chat_group.avatarSeed`.
+    seed = IdentitySeed(groupAvatarSeed?.toByteArray() ?: identityHash),
     preview = preview,
     previewKind = previewKind,
     senderName = lastSenderName,

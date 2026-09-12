@@ -32,10 +32,6 @@
     <string name="vm_bubble_video_play">پخش ویدیو</string>
     <string name="vm_bubble_file">فایل</string>
     <string name="vm_bubble_reply_to">پاسخ به %1$s</string>
-    <string name="vm_voice_play">پخش پیام صوتی</string>
-    <string name="vm_voice_pause">توقف پخش</string>
-    <string name="vm_voice_speed">سرعت پخش %1$s برابر</string>
-    <string name="vm_voice_waveform">نوار پیشرفت پیام صوتی</string>
 
     <!-- Composer -->
     <string name="vm_composer_placeholder">پیام</string>
@@ -45,10 +41,6 @@
     <string name="vm_composer_clear_reply">لغو پاسخ</string>
 
     <!-- Recording -->
-    <string name="vm_recording_slide_to_cancel">برای لغو بکشید</string>
-    <string name="vm_recording_cancel">لغو ضبط</string>
-    <string name="vm_recording_send">ارسال پیام صوتی</string>
-    <string name="vm_recording_indicator">در حال ضبط</string>
 
     <!-- Attachment sheet -->
     <string name="vm_attach_title">افزودن پیوست</string>

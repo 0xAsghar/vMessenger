@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import ir.vmessenger.core.designsystem.component.BubbleDirection
 import ir.vmessenger.core.designsystem.component.BubbleMeta
 import ir.vmessenger.core.designsystem.component.DeliveryTicksState
@@ -29,9 +30,12 @@ import ir.vmessenger.core.designsystem.component.MessageBubble
 import ir.vmessenger.core.designsystem.component.ReplyQuote
 import ir.vmessenger.core.designsystem.component.TextBubbleContent
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.vm
 import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.domain.model.AttachmentType
 import ir.vmessenger.domain.model.MessagePreviewKind
+import ir.vmessenger.feature.chat.voice.VoiceBubbleContent
+import ir.vmessenger.feature.chat.voice.VoiceBubbleHost
 import ir.vmessenger.core.designsystem.R as DesignSystemR
 
 /**
@@ -40,12 +44,14 @@ import ir.vmessenger.core.designsystem.R as DesignSystemR
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
+@Suppress("LongParameterList") // one collaborator per thing a bubble draws or reports
 internal fun MessageBubbleItem(
     item: ChatItem.Message,
     contactName: String,
     progress: AttachmentProgress?,
     actions: MessageActions,
     images: AttachmentImages,
+    voice: VoiceBubbleHost,
 ) {
     val direction = if (item.outgoing) BubbleDirection.Outgoing else BubbleDirection.Incoming
     val ticksLabel = item.ticks?.let { ticksLabel(it) }
@@ -60,7 +66,15 @@ internal fun MessageBubbleItem(
                 }
                 .semantics { ticksLabel?.let { stateDescription = it } },
         ) {
-            BubbleBody(item = item, contactName = contactName, progress = progress, actions = actions, images = images)
+            SenderLabel(item)
+            BubbleBody(
+                item = item,
+                contactName = contactName,
+                progress = progress,
+                actions = actions,
+                images = images,
+                voice = voice,
+            )
             BubbleMeta(
                 time = item.time,
                 modifier = Modifier.align(Alignment.End),
@@ -73,6 +87,25 @@ internal fun MessageBubbleItem(
     }
 }
 
+/**
+ * Who sent this, in a group. Only on the first bubble of a run: repeating the name above
+ * every message of the same person is noise, and the colour already carries the identity.
+ */
+@Composable
+private fun SenderLabel(item: ChatItem.Message) {
+    val name = item.senderName?.takeIf { item.startsSenderRun } ?: return
+    Text(
+        text = name,
+        style = MaterialTheme.typography.labelMedium,
+        color = item.senderSeed?.let { MaterialTheme.vm.senderColor(it.bytes) }
+            ?: MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(bottom = VmSpacing.xxs),
+    )
+}
+
+@Suppress("LongParameterList") // one collaborator per payload kind the body can draw
 @Composable
 private fun BubbleBody(
     item: ChatItem.Message,
@@ -80,6 +113,7 @@ private fun BubbleBody(
     progress: AttachmentProgress?,
     actions: MessageActions,
     images: AttachmentImages,
+    voice: VoiceBubbleHost,
 ) {
     item.reply?.let { reply ->
         ReplyQuote(
@@ -90,17 +124,37 @@ private fun BubbleBody(
         )
     }
     item.attachment?.let { attachment ->
-        AttachmentBody(
-            item = item,
-            attachment = attachment,
-            progress = progress?.fraction,
-            actions = actions,
-            images = images,
-        )
+        if (attachment.type == AttachmentType.AUDIO) {
+            VoiceBody(item = item, attachment = attachment, voice = voice)
+        } else {
+            AttachmentBody(
+                item = item,
+                attachment = attachment,
+                progress = progress?.fraction,
+                actions = actions,
+                images = images,
+            )
+        }
     }
     if (item.text.isNotBlank()) {
         TextBubbleContent(text = item.text)
     }
+}
+
+/**
+ * A voice message. The dot marks one that has never been played — the audio counterpart of
+ * an unread row — and only makes sense on a message somebody else sent.
+ */
+@Composable
+private fun VoiceBody(item: ChatItem.Message, attachment: AttachmentUi, voice: VoiceBubbleHost) {
+    VoiceBubbleContent(
+        waveform = attachment.waveform,
+        durationMs = attachment.durationMs ?: 0L,
+        playback = voice.stateFor(item.messageId, unplayed = !item.outgoing && attachment.unplayed),
+        onPlayPause = { voice.onToggle(item.messageId) },
+        onSeek = voice.onSeek,
+        onToggleSpeed = voice.onToggleSpeed,
+    )
 }
 
 @Composable

@@ -224,6 +224,13 @@ interface MessageDao {
     @Query("UPDATE message SET status = :status WHERE messageId = :id")
     suspend fun updateStatus(id: String, status: DeliveryStatus)
 
+    /** First listen of a voice message; later plays leave the timestamp alone. */
+    @Query(
+        "UPDATE message SET attachmentPlayedAtUnixMs = :ts " +
+            "WHERE messageId = :id AND attachmentPlayedAtUnixMs IS NULL",
+    )
+    suspend fun markVoicePlayed(id: String, ts: Long)
+
     @Query("SELECT * FROM message WHERE messageId = :id LIMIT 1")
     suspend fun getById(id: String): MessageEntity?
 

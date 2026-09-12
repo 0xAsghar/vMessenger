@@ -14,8 +14,10 @@ data class ConversationSummary(
     val groupId: String?,
     /** The contact's name, or the group's. */
     val contactName: String,
-    /** Identicon seed; empty for a group row, and if the contact row vanished under the conversation. */
+    /** Identicon seed of a 1:1 row; empty for a group, and if the contact row vanished under the conversation. */
     val identityHash: ByteArray,
+    /** Identicon seed of a group row; null for 1:1. */
+    val groupAvatarSeed: String?,
     /**
      * Who sent the last message of a group, so the row reads "Name: text" the way
      * every messenger shows it. Null for 1:1 rows and for our own last message.
@@ -46,6 +48,7 @@ data class ConversationSummary(
         contactId,
         groupId,
         contactName,
+        groupAvatarSeed,
         lastSenderName,
         preview,
         previewKind,

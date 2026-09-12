@@ -1,7 +1,5 @@
 package ir.vmessenger.core.designsystem.component
 
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,9 +24,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.R
@@ -43,8 +39,9 @@ private val FieldMaxHeight = 160.dp
  * morphs with the draft. Window insets are handled here, so callers pass it straight to
  * `Scaffold(bottomBar = ...)`.
  *
- * The mic callbacks report the raw press gesture only; the recording state machine (hold, lock,
- * slide-to-cancel) lives in the chat feature.
+ * The mic is a slot: the recording state machine (hold, lock, slide-to-cancel) belongs to the
+ * chat feature, and so does the gesture that drives it. The default is a plain, inert icon, for
+ * callers with nothing to record.
  */
 @Suppress("LongParameterList") // Compose slot API: one callback per independent composer action.
 @Composable
@@ -56,9 +53,7 @@ fun Composer(
     modifier: Modifier = Modifier,
     replyTo: ReplyPreview? = null,
     onClearReply: () -> Unit = {},
-    onMicPressStart: () -> Unit = {},
-    onMicMove: (Offset) -> Unit = {},
-    onMicRelease: () -> Unit = {},
+    micButton: @Composable () -> Unit = { InertMicButton() },
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -85,16 +80,7 @@ fun Composer(
                     onTextChange = onTextChange,
                     modifier = Modifier.weight(1f),
                 )
-                if (state.canSend) {
-                    SendButton(onSend)
-                } else {
-                    MicButton(
-                        enabled = state.enabled,
-                        onPressStart = onMicPressStart,
-                        onMove = onMicMove,
-                        onRelease = onMicRelease,
-                    )
-                }
+                if (state.canSend) SendButton(onSend) else micButton()
             }
         }
     }
@@ -160,36 +146,14 @@ private fun SendButton(onSend: () -> Unit) {
     }
 }
 
+/** What the mic slot draws when a caller has no recorder: the affordance, without the gesture. */
 @Composable
-private fun MicButton(
-    enabled: Boolean,
-    onPressStart: () -> Unit,
-    onMove: (Offset) -> Unit,
-    onRelease: () -> Unit,
-) {
-    val gestures = Modifier.pointerInput(enabled) {
-        if (!enabled) return@pointerInput
-        awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false)
-            onPressStart()
-            var pointerUp = false
-            while (!pointerUp) {
-                val event = awaitPointerEvent()
-                val change = event.changes.firstOrNull { it.id == down.id }
-                if (change == null || !change.pressed) {
-                    pointerUp = true
-                } else {
-                    onMove(change.position - down.position)
-                }
-            }
-            onRelease()
-        }
-    }
+private fun InertMicButton() {
     Icon(
         imageVector = Icons.Filled.Mic,
         contentDescription = stringResource(R.string.vm_composer_record),
-        tint = MaterialTheme.colorScheme.primary,
-        modifier = gestures
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
             .size(VmSizes.touchTarget)
             .padding(VmSpacing.md),
     )

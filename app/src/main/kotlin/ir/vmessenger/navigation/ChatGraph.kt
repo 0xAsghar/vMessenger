@@ -1,14 +1,13 @@
 package ir.vmessenger.navigation
 
-import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
-import ir.vmessenger.R
 import ir.vmessenger.feature.chat.ConversationRoute
 import ir.vmessenger.feature.chat.ImageViewerRoute
 import ir.vmessenger.feature.chat.NewChatRoute
-import ir.vmessenger.ui.placeholder.ComingSoonRoute
+import ir.vmessenger.feature.chat.group.GroupInfoRoute
+import ir.vmessenger.feature.chat.group.NewGroupRoute
 
 /**
  * Conversation and the chat-adjacent destinations.
@@ -24,6 +23,9 @@ internal fun NavGraphBuilder.chatGraph(navController: NavHostController) {
             onBack = { navController.popBackStack() },
             onOpenContact = { contactId ->
                 navController.navigate(VmRoute.ContactDetail(contactId)) { launchSingleTop = true }
+            },
+            onOpenGroup = { groupId ->
+                navController.navigate(VmRoute.GroupInfo(groupId)) { launchSingleTop = true }
             },
             onOpenImage = { messageId ->
                 navController.navigate(VmRoute.ImageViewer(messageId)) { launchSingleTop = true }
@@ -44,21 +46,25 @@ internal fun NavGraphBuilder.chatGraph(navController: NavHostController) {
         )
     }
     composable<VmRoute.NewGroup> {
-        ComingSoonRoute(
-            title = stringResource(R.string.route_new_group),
-            onNavigateBack = { navController.popBackStack() },
+        NewGroupRoute(
+            onBack = { navController.popBackStack() },
+            // Like the contact picker: a step on the way to the chat, not a place to come back to.
+            onGroupCreated = { conversationId ->
+                navController.navigate(VmRoute.Conversation(conversationId)) {
+                    popUpTo<VmRoute.NewChat> { inclusive = true }
+                    launchSingleTop = true
+                }
+            },
         )
     }
     composable<VmRoute.GroupInfo> {
-        ComingSoonRoute(
-            title = stringResource(R.string.route_group_info),
-            onNavigateBack = { navController.popBackStack() },
-        )
-    }
-    composable<VmRoute.AddGroupMembers> {
-        ComingSoonRoute(
-            title = stringResource(R.string.route_add_group_members),
-            onNavigateBack = { navController.popBackStack() },
+        // The screen pops itself once the group is gone (left or closed), so there
+        // is no leave/close result to handle here.
+        GroupInfoRoute(
+            onBack = { navController.popBackStack() },
+            onOpenContact = { contactId ->
+                navController.navigate(VmRoute.ContactDetail(contactId)) { launchSingleTop = true }
+            },
         )
     }
     composable<VmRoute.ImageViewer> {

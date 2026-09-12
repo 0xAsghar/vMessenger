@@ -44,9 +44,6 @@ sealed interface VmRoute {
     data class GroupInfo(val groupId: String) : VmRoute
 
     @Serializable
-    data class AddGroupMembers(val groupId: String) : VmRoute
-
-    @Serializable
     data class ImageViewer(val messageId: String) : VmRoute
 
     @Serializable

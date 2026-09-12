@@ -32,6 +32,7 @@ internal fun MessageEntity.toChatMessage(): ChatMessage = ChatMessage(
     replyToMessageId = replyToMessageId,
     attachment = toAttachment(),
     senderIdentityHash = senderIdentityHash,
+    isSystemEvent = contentType == MessageContentType.GROUP_CONTROL,
 )
 
 internal fun MessageWithReply.toChatMessage(): ChatMessage =
@@ -43,6 +44,7 @@ internal fun ChatListRow.toSummary(): ConversationSummary = ConversationSummary(
     groupId = groupId,
     contactName = displayName ?: contactId ?: groupId.orEmpty(),
     identityHash = identityHash ?: ByteArray(0),
+    groupAvatarSeed = groupAvatarSeed,
     // Only an incoming group message names its sender; our own reads as "You" in the UI layer.
     lastSenderName = lastSenderName?.takeIf { lastDirection == DbMessageDirection.INCOMING },
     preview = lastBody ?: lastAttachmentName,
@@ -91,6 +93,7 @@ private fun MessageEntity.toAttachment(): ChatAttachment? {
             localPath = attachmentPath,
             durationMs = attachmentDurationMs,
             waveform = attachmentWaveform,
+            played = it != AttachmentType.AUDIO || attachmentPlayedAtUnixMs != null,
         )
     }
 }

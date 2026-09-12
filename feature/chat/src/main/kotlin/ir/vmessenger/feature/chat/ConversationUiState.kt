@@ -10,16 +10,24 @@ import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 
-/** Conversation title block: who this is, and the two states worth warning about. */
+/** Conversation title block: who this is, and the states worth warning about. */
 @Immutable
 data class ConversationHeaderUi(
     val title: String = "",
     val seed: IdentitySeed = IdentitySeed.Empty,
     val contactId: String? = null,
+    /** Set for a group thread; exactly one of this and [contactId] is non-null. */
+    val groupId: String? = null,
+    /** The group's members as one line, the way every messenger writes a group subtitle. */
+    val memberNames: String? = null,
+    /** A closed group is history: readable, but nothing more can be sent. */
+    val closed: Boolean = false,
     val verified: Boolean = false,
     val keyChangePending: Boolean = false,
     val blocked: Boolean = false,
-)
+) {
+    val isGroup: Boolean get() = groupId != null
+}
 
 /** The quoted message above a reply bubble, and inside the composer's reply strip. */
 @Immutable
@@ -38,7 +46,30 @@ data class AttachmentUi(
     val mimeType: String,
     val sizeBytes: Long,
     val available: Boolean,
-)
+    /** Voice only: its length, its 64-bar waveform, and whether anyone has listened yet. */
+    val durationMs: Long? = null,
+    val waveform: ByteArray? = null,
+    val unplayed: Boolean = false,
+) {
+    // Written out because of the waveform: a data class would compare the array by identity,
+    // and every database emission would then look like a change and recompose every bubble.
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as AttachmentUi
+        return scalarFields() == other.scalarFields() &&
+            (waveform ?: EMPTY).contentEquals(other.waveform ?: EMPTY)
+    }
+
+    override fun hashCode(): Int = 31 * scalarFields().hashCode() + (waveform?.contentHashCode() ?: 0)
+
+    private fun scalarFields(): List<Any?> =
+        listOf(type, fileName, mimeType, sizeBytes, available, durationMs, unplayed)
+
+    private companion object {
+        val EMPTY = ByteArray(0)
+    }
+}
 
 /**
  * A row of the message list. Day separators are items too, so the list the LazyColumn
@@ -55,6 +86,13 @@ sealed interface ChatItem {
         override val contentType: String get() = "day"
     }
 
+    /** A membership change: a centred line, not a bubble, and not long-pressable. */
+    @Immutable
+    data class System(val messageId: String, val text: String) : ChatItem {
+        override val key: String get() = messageId
+        override val contentType: String get() = "system"
+    }
+
     @Immutable
     data class Message(
         val messageId: String,
@@ -66,6 +104,15 @@ sealed interface ChatItem {
         val reply: ReplyQuoteUi?,
         val failed: Boolean,
         val errorCode: String?,
+        /** Who sent this, in a group; null in a 1:1 chat and for our own messages. */
+        val senderName: String? = null,
+        /** Picks the sender's name colour and their avatar; null when no sender is shown. */
+        val senderSeed: IdentitySeed? = null,
+        /**
+         * True only for the first message of a run by the same sender, which is where the
+         * name and the avatar go — repeating them on every bubble is noise.
+         */
+        val startsSenderRun: Boolean = false,
     ) : ChatItem {
         override val key: String get() = messageId
         override val contentType: String

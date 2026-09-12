@@ -1,17 +1,22 @@
 package ir.vmessenger.feature.chat
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.designsystem.format.VmDateFormat
 import ir.vmessenger.core.notifications.ActiveConversationTracker
 import ir.vmessenger.domain.model.AttachmentProgress
+import ir.vmessenger.domain.model.AttachmentType
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.model.Contact
 import ir.vmessenger.domain.model.ConversationSummary
 import ir.vmessenger.domain.model.DeliveryStatus
+import ir.vmessenger.domain.model.Group
+import ir.vmessenger.domain.model.GroupMember
 import ir.vmessenger.domain.model.MessageDirection
 import ir.vmessenger.domain.repository.ConversationRepository
 import ir.vmessenger.domain.usecase.chat.DeleteMessageForMeUseCase
@@ -22,7 +27,14 @@ import ir.vmessenger.domain.usecase.chat.ObserveMessagesPagedUseCase
 import ir.vmessenger.domain.usecase.chat.RetryMessageUseCase
 import ir.vmessenger.domain.usecase.chat.SaveDraftUseCase
 import ir.vmessenger.domain.usecase.chat.SendMessageUseCase
+import ir.vmessenger.domain.usecase.chat.SendVoiceUseCase
 import ir.vmessenger.domain.usecase.contact.ObserveContactsUseCase
+import ir.vmessenger.domain.usecase.group.ObserveGroupMembersUseCase
+import ir.vmessenger.domain.usecase.group.ObserveGroupUseCase
+import ir.vmessenger.feature.chat.group.hexToBytes
+import ir.vmessenger.feature.chat.voice.VoicePlaybackController
+import ir.vmessenger.feature.chat.voice.VoiceRecorder
+import ir.vmessenger.feature.chat.voice.VoiceSession
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -36,7 +48,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
@@ -45,7 +59,6 @@ import kotlinx.coroutines.launch
 import java.io.InputStream
 import java.util.Calendar
 import javax.inject.Inject
-
 /**
  * One conversation.
  *
@@ -67,7 +80,14 @@ class ConversationViewModel @Inject constructor(
     private val deleteMessageForMe: DeleteMessageForMeUseCase,
     private val retryMessage: RetryMessageUseCase,
     private val markConversationRead: MarkConversationReadUseCase,
+    private val sendVoice: SendVoiceUseCase,
+    // The application context: the recorder needs a cache directory and an audio source,
+    // both process-scoped, so nothing here outlives the process or leaks an activity.
+    @ApplicationContext context: Context,
+    voicePlayback: VoicePlaybackController,
     observeChatList: ObserveChatListUseCase,
+    observeGroup: ObserveGroupUseCase,
+    observeGroupMembers: ObserveGroupMembersUseCase,
     observeContacts: ObserveContactsUseCase,
     observeMessagesPaged: ObserveMessagesPagedUseCase,
     observeDraft: ObserveDraftUseCase,
@@ -87,8 +107,38 @@ class ConversationViewModel @Inject constructor(
     /** Message the screen should scroll to once (tapping a reply quote); cleared by [onScrollHandled]. */
     val scrollToMessageId: StateFlow<String?> = scrollTarget.asStateFlow()
 
+    /** The conversation's group, and its members, or nulls while this is a 1:1 chat. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val group: Flow<GroupState> = observeChatList()
+        .map { summaries -> summaries.firstOrNull { it.id == conversationId }?.groupId }
+        .distinctUntilChanged()
+        .flatMapLatest { groupId ->
+            if (groupId == null) {
+                flowOf(GroupState())
+            } else {
+                combine(observeGroup(groupId), observeGroupMembers(groupId), ::GroupState)
+            }
+        }
+
     private val header: Flow<ConversationHeaderUi> =
-        combine(observeChatList(), observeContacts()) { summaries, contacts -> buildHeader(summaries, contacts) }
+        combine(observeChatList(), observeContacts(), group) { summaries, contacts, groupState ->
+            buildHeader(summaries, contacts, groupState)
+        }
+
+    /** Recording and playback for this conversation; see [VoiceSession] for why it is not inlined. */
+    val voice = VoiceSession(
+        recorder = VoiceRecorder(context, viewModelScope),
+        playback = voicePlayback,
+        scope = viewModelScope,
+        ports = VoiceSession.VoicePorts(
+            send = { recording ->
+                sendVoice(conversationId, recording.filePath, recording.durationMs, recording.waveform)
+            },
+            open = ::exportVoice,
+            upNext = ::voiceMessagesAfter,
+            markPlayed = conversationRepository::markVoicePlayed,
+        ),
+    )
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val items: Flow<ImmutableList<ChatItem>?> = pageLimit
@@ -119,7 +169,7 @@ class ConversationViewModel @Inject constructor(
             items = loaded ?: persistentListOf(),
             pendingIncoming = pendingIncoming(loaded, transfers),
             attachmentProgress = transfers.toImmutableMap(),
-            composer = composerState.copy(enabled = !headerUi.blocked),
+            composer = composerState.copy(enabled = !headerUi.blocked && !headerUi.closed),
             hasMore = more,
             loading = loaded == null,
         )
@@ -138,6 +188,7 @@ class ConversationViewModel @Inject constructor(
     /** Called when the conversation leaves the screen; notifications resume. */
     fun onHidden() {
         ActiveConversationTracker.clear(conversationId)
+        voice.detach()
     }
 
     fun onTextChange(text: String) {
@@ -234,23 +285,61 @@ class ConversationViewModel @Inject constructor(
         }
     }
 
-    private fun buildHeader(summaries: List<ConversationSummary>, contacts: List<Contact>): ConversationHeaderUi {
+    /**
+     * The next voice messages this one should flow into: later in the conversation (the list
+     * is newest-first, so that is *earlier* in it) and not yet played.
+     */
+    private fun voiceMessagesAfter(messageId: String): List<String> {
+        val items = uiState.value.items.filterIsInstance<ChatItem.Message>()
+        val index = items.indexOfFirst { it.messageId == messageId }
+        if (index <= 0) return emptyList()
+        return items.take(index).reversed()
+            .filter { it.attachment?.type == AttachmentType.AUDIO && it.attachment.available }
+            .map { it.messageId }
+    }
+
+    /** Decrypts a voice message for the player, which owns the temp file from then on. */
+    private suspend fun exportVoice(messageId: String): String? =
+        when (val result = conversationRepository.exportAttachmentForViewing(messageId)) {
+            is AppResult.Success -> result.data
+            is AppResult.Error -> null
+        }
+
+    private fun buildHeader(
+        summaries: List<ConversationSummary>,
+        contacts: List<Contact>,
+        groupState: GroupState,
+    ): ConversationHeaderUi {
         val summary = summaries.firstOrNull { it.id == conversationId }
         val contact = contacts.firstOrNull { it.id == summary?.contactId }
+        val groupInfo = groupState.group
         return ConversationHeaderUi(
-            title = summary?.contactName ?: contact?.displayName.orEmpty(),
-            seed = IdentitySeed(summary?.identityHash ?: contact?.identityHash ?: ByteArray(0)),
+            title = groupInfo?.name ?: summary?.contactName ?: contact?.displayName.orEmpty(),
+            seed = IdentitySeed(
+                groupInfo?.avatarSeed?.toByteArray() ?: summary?.identityHash ?: contact?.identityHash ?: ByteArray(0),
+            ),
             contactId = summary?.contactId ?: contact?.id,
+            groupId = groupInfo?.id,
+            memberNames = groupState.members
+                .takeIf { it.isNotEmpty() }
+                ?.joinToString(NAME_SEPARATOR) { it.displayName },
+            closed = groupInfo?.closed == true,
             verified = contact?.verified == true,
             keyChangePending = contact?.keyChangePending == true,
             blocked = contact?.blocked == true,
         )
     }
 
+    /** The group behind this conversation; both fields are null for a 1:1 chat. */
+    private data class GroupState(val group: Group? = null, val members: List<GroupMember> = emptyList())
+
     private companion object {
         const val PAGE_SIZE = 60
         const val SUBSCRIBE_TIMEOUT_MS = 5_000L
         const val DRAFT_DEBOUNCE_MS = 400L
+
+        /** Persian comma: the separator a member list is written with. */
+        const val NAME_SEPARATOR = "، "
     }
 }
 
@@ -263,14 +352,32 @@ private fun buildItems(messages: List<ChatMessage>): ImmutableList<ChatItem> {
     val now = System.currentTimeMillis()
     val items = ArrayList<ChatItem>(messages.size + DAY_SEPARATOR_HEADROOM)
     messages.forEachIndexed { index, message ->
-        items += message.toItem()
         val day = dayKey(message.createdAtUnixMs)
         val older = messages.getOrNull(index + 1)
+        items += if (message.isSystemEvent) {
+            ChatItem.System(message.messageId, message.text)
+        } else {
+            message.toItem(startsSenderRun = message.startsRunAfter(older, day))
+        }
         if (older == null || day != dayKey(older.createdAtUnixMs)) {
             items += ChatItem.Day(day, VmDateFormat.daySeparator(message.createdAtUnixMs, now))
         }
     }
     return items.toImmutableList()
+}
+
+/**
+ * True when this message opens a run by one sender in a group.
+ *
+ * The window is newest-first, so [older] is the message *above* this one on screen; the name and
+ * avatar go on the run's oldest message, which is where the eye starts reading it. A new day
+ * starts a new run, because a separator has already broken the thread visually.
+ */
+private fun ChatMessage.startsRunAfter(older: ChatMessage?, day: Int): Boolean {
+    if (senderIdentityHash == null) return false
+    return older == null ||
+        older.senderIdentityHash != senderIdentityHash ||
+        dayKey(older.createdAtUnixMs) != day
 }
 
 private fun pendingIncoming(
@@ -295,7 +402,7 @@ private fun dayKey(ms: Long): Int {
     return calendar.get(Calendar.YEAR) * DAYS_PER_YEAR_SLOT + calendar.get(Calendar.DAY_OF_YEAR)
 }
 
-private fun ChatMessage.toItem(): ChatItem.Message {
+private fun ChatMessage.toItem(startsSenderRun: Boolean): ChatItem.Message {
     val outgoing = direction == MessageDirection.OUTGOING
     return ChatItem.Message(
         messageId = messageId,
@@ -310,11 +417,17 @@ private fun ChatMessage.toItem(): ChatItem.Message {
                 mimeType = it.mimeType,
                 sizeBytes = it.sizeBytes,
                 available = it.localPath != null,
+                durationMs = it.durationMs,
+                waveform = it.waveform,
+                unplayed = !it.played,
             )
         },
         reply = replyTo?.let { ReplyQuoteUi(it.messageId, it.senderIsMe, it.preview, it.contentType) },
         failed = status == DeliveryStatus.FAILED,
         errorCode = lastError,
+        senderName = senderName,
+        senderSeed = senderIdentityHash?.let { IdentitySeed(hexToBytes(it)) },
+        startsSenderRun = startsSenderRun,
     )
 }
 

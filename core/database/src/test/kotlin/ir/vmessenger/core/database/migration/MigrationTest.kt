@@ -154,6 +154,7 @@ class MigrationTest {
         assertContains(columns, "caption")
         assertContains(columns, "attachmentDurationMs")
         assertContains(columns, "attachmentWaveform")
+        assertContains(columns, "attachmentPlayedAtUnixMs")
     }
 
     @Test
