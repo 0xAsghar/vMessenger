@@ -55,22 +55,25 @@ import ir.vmessenger.core.designsystem.theme.VmSpacing
  * All four share one shape: the app looks perfectly healthy while messages
  * cannot reach it, and nothing else in the UI would ever say so. They are ranked
  * rather than stacked — two banners across the top would only hide each other —
- * and the passing conditions come first, because the permission one stays up
- * until it is granted and would otherwise bury them for good.
+ * and the passing conditions come first, because the permission one is the only
+ * one that does not clear on its own and would otherwise bury them.
  *
- * [dismissible] is false for that permission: it is not a condition that passes
- * but a choice the app cannot work around, since the foreground service keeping
- * the P2P stack alive *is* that notification.
+ * Every alert can be closed, including the permission. This banner is an
+ * overlay at the top of the root Box, so it sits *on* whatever app bar is below
+ * it and eats its taps: on the chats screen that is the title and the search
+ * button. An alert that could never be closed would take those away for as long
+ * as the user leaves the permission off, which is indefinitely. The dismissal is
+ * remembered in saved state rather than on disk, so a denied permission is put
+ * back in front of them on the next launch.
  */
 private enum class AppAlert(
     @StringRes val title: Int,
     @StringRes val body: Int,
-    val dismissible: Boolean,
 ) {
-    IDENTITY_ELSEWHERE(R.string.alert_identity_title, R.string.alert_identity_body, true),
-    CLOCK_SKEW(R.string.alert_clock_title, R.string.alert_clock_skew_body, true),
-    CLOCK_CERTIFICATE(R.string.alert_clock_title, R.string.alert_clock_certificate_body, true),
-    NOTIFICATIONS_OFF(R.string.alert_notifications_title, R.string.alert_notifications_body, false),
+    IDENTITY_ELSEWHERE(R.string.alert_identity_title, R.string.alert_identity_body),
+    CLOCK_SKEW(R.string.alert_clock_title, R.string.alert_clock_skew_body),
+    CLOCK_CERTIFICATE(R.string.alert_clock_title, R.string.alert_clock_certificate_body),
+    NOTIFICATIONS_OFF(R.string.alert_notifications_title, R.string.alert_notifications_body),
 }
 
 /**
@@ -91,7 +94,7 @@ fun AppAlertBanner(modifier: Modifier = Modifier) {
     }
 
     AnimatedVisibility(
-        visible = alert != null && (!alert.dismissible || alert.name != dismissed),
+        visible = alert != null && alert.name != dismissed,
         modifier = modifier,
         enter = slideInVertically { -it } + fadeIn(),
         exit = slideOutVertically { -it } + fadeOut(),
@@ -142,13 +145,11 @@ private fun AlertSurface(alert: AppAlert, onDismiss: () -> Unit) {
                     }
                 }
             }
-            if (alert.dismissible) {
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.Rounded.Close,
-                        contentDescription = stringResource(R.string.alert_dismiss),
-                    )
-                }
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = Icons.Rounded.Close,
+                    contentDescription = stringResource(R.string.alert_dismiss),
+                )
             }
         }
     }
