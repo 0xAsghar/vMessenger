@@ -73,6 +73,15 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".app.network.LocationSharingStopReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="ir.vmessenger.location.STOP_SHARING" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

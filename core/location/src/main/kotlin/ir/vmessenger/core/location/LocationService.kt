@@ -18,14 +18,6 @@ import androidx.core.app.NotificationCompat
 
 class LocationService : Service(), LocationListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_STOP -> {
-                LocationUpdateBus.setServiceRunning(false)
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-                return START_NOT_STICKY
-            }
-        }
         startForeground(NOTIFICATION_ID, buildNotification())
         // Tells DeviceLocationProvider to stand down: while this service runs it is the only
         // location listener in the process.
@@ -59,7 +51,10 @@ class LocationService : Service(), LocationListener {
         } catch (_: SecurityException) {
             // Permission not granted; service stays idle
         }
-        return START_STICKY
+        // NOT sticky. A redelivered null intent used to fall straight through to the code above
+        // and re-register GPS after a process kill, even when the user had turned sharing off.
+        // Restoring a genuinely active share is LocationSharingCoordinator's job, deliberately.
+        return START_NOT_STICKY
     }
 
     override fun onLocationChanged(location: Location) {
@@ -90,8 +85,12 @@ class LocationService : Service(), LocationListener {
 
     private fun buildNotification(): Notification {
         createChannel()
-        val stopIntent = Intent(this, LocationService::class.java).apply { action = ACTION_STOP }
-        val stopPending = PendingIntent.getService(
+        // Broadcast rather than a direct service stop: tapping this must end the share the same
+        // way the in-app switch does — marking the rows inactive and telling the peers. Stopping
+        // only the service left peers believing the share was still open, and the next start
+        // restored it. The app module owns the receiver; this module cannot reach the coordinator.
+        val stopIntent = Intent(ACTION_STOP_SHARING).setPackage(packageName)
+        val stopPending = PendingIntent.getBroadcast(
             this,
             0,
             stopIntent,
@@ -122,7 +121,8 @@ class LocationService : Service(), LocationListener {
     }
 
     companion object {
-        const val ACTION_STOP = "ir.vmessenger.location.STOP"
+        /** Handled in :app, which can reach the sharing coordinator this module must not depend on. */
+        const val ACTION_STOP_SHARING = "ir.vmessenger.location.STOP_SHARING"
         private const val CHANNEL_ID = "location_sharing"
         private const val NOTIFICATION_ID = 2001
         private const val INTERVAL_MS = 15_000L
@@ -136,9 +136,13 @@ class LocationService : Service(), LocationListener {
             context.startForegroundService(intent)
         }
 
+        /**
+         * stopService, not a startService carrying a stop action: on Android 12+ the latter throws
+         * BackgroundServiceStartNotAllowedException from a backgrounded process, and the call site
+         * swallowed it — so blocking a contact from a background event left GPS running.
+         */
         fun stop(context: Context) {
-            val intent = Intent(context, LocationService::class.java).apply { action = ACTION_STOP }
-            context.startService(intent)
+            context.stopService(Intent(context, LocationService::class.java))
         }
     }
 }

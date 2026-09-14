@@ -74,6 +74,7 @@ dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
     implementation(project(":core:datastore"))
+    implementation(project(":core:location"))
     implementation(project(":core:notifications"))
     implementation(project(":network:discovery"))
     implementation(project(":network:dht"))

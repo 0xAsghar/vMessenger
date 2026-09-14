@@ -113,6 +113,6 @@ private fun MapEffects(
         controller.updateMyLocation(options.showMyLocation, camera.mode == MapCameraMode.FollowMe)
     }
     LaunchedEffect(controller, styleGeneration, camera, markerIds) {
-        controller.applyCamera(camera, latestMarkers.value)
+        controller.applyCamera(camera, latestMarkers.value, content.self)
     }
 }

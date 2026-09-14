@@ -52,6 +52,12 @@ data class MapUiState(
     val markers: ImmutableList<ContactMarker> = persistentListOf(),
     val contacts: ImmutableList<ContactAccess> = persistentListOf(),
     val myLocation: MapPoint? = null,
+    /**
+     * Whether to draw the location puck. Deliberately not "has the permission": the puck holds a
+     * live GPS registration open, so it follows what the user is actually doing — sharing, or
+     * having asked to see themselves — not merely what they once granted.
+     */
+    val showMyLocation: Boolean = false,
     val camera: CameraRequest = CameraRequest(),
     val selectedContactId: String? = null,
     val tilesError: Boolean = false,

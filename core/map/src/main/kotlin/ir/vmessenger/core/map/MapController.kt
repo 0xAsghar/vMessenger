@@ -102,11 +102,11 @@ internal class MapController(
     }
 
     /** Following is the puck's job ([updateMyLocation]); this only handles explicit moves. */
-    fun applyCamera(request: CameraRequest, markers: List<MapMarker>) {
+    fun applyCamera(request: CameraRequest, markers: List<MapMarker>, self: MapCoordinate? = null) {
         val target = map ?: return
         val move = when (request.mode) {
-            MapCameraMode.FitAll -> MapCamera.updateFor(markers, request.focusId)
-            MapCameraMode.Free -> request.focusId?.let { MapCamera.updateFor(markers, it) }
+            MapCameraMode.FitAll -> MapCamera.updateFor(markers, request.focusId, self)
+            MapCameraMode.Free -> request.focusId?.let { MapCamera.updateFor(markers, it, self) }
             MapCameraMode.FollowMe -> null
         }
         move?.let(target::animateCamera)

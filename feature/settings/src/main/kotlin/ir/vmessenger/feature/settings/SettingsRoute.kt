@@ -17,7 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.BatteryAlert
-import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.DeleteForever
@@ -50,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.datastore.ThemeMode
 import ir.vmessenger.core.designsystem.component.Avatar
@@ -188,7 +188,6 @@ private fun SettingsContent(
                 icon = Icons.Outlined.Hub,
                 onClick = navigation.onNodes,
             )
-            SettingsDivider()
             BatteryOptimizationRow()
             // Hidden in release builds until developer mode is unlocked in About.
             if (developerToolsVisible) {
@@ -363,40 +362,40 @@ private fun SettingsPrivacySection(
 }
 
 /**
- * Aggressive OEM battery managers kill the network foreground service, which
- * silently stops message delivery and notifications. This row deep-links to the
- * system exemption dialog; once granted it shows a passive confirmation.
+ * Aggressive OEM battery managers kill the network foreground service, which silently stops message
+ * delivery and notifications. This row deep-links to the system exemption dialog — and once the
+ * exemption is granted it emits nothing at all, because a settings row that does nothing when
+ * tapped is worse than no row. It also re-reads on resume: the exemption can be granted or revoked
+ * from the system settings app, which never calls back here.
+ *
+ * Emits its own leading divider, since a section cannot know whether this row will render.
  */
 @Composable
 private fun BatteryOptimizationRow() {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var exempt by remember {
-        mutableStateOf(isIgnoringBatteryOptimizations(context))
-    }
+    var exempt by remember { mutableStateOf(isIgnoringBatteryOptimizations(context)) }
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) {
         exempt = isIgnoringBatteryOptimizations(context)
     }
-    if (exempt) {
-        SettingsActionRow(
-            label = stringResource(R.string.settings_battery_optimization_done),
-            icon = Icons.Outlined.BatteryFull,
-            onClick = {},
-        )
-    } else {
-        SettingsActionRow(
-            label = stringResource(R.string.settings_battery_optimization),
-            icon = Icons.Outlined.BatteryAlert,
-            onClick = {
-                val intent = android.content.Intent(
-                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                    android.net.Uri.parse("package:${context.packageName}"),
-                )
-                runCatching { launcher.launch(intent) }
-            },
-        )
+    LifecycleResumeEffect(Unit) {
+        exempt = isIgnoringBatteryOptimizations(context)
+        onPauseOrDispose { }
     }
+    if (exempt) return
+    SettingsDivider()
+    SettingsActionRow(
+        label = stringResource(R.string.settings_battery_optimization),
+        icon = Icons.Outlined.BatteryAlert,
+        onClick = {
+            val intent = android.content.Intent(
+                android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                android.net.Uri.parse("package:${context.packageName}"),
+            )
+            runCatching { launcher.launch(intent) }
+        },
+    )
 }
 
 private fun isIgnoringBatteryOptimizations(context: android.content.Context): Boolean {

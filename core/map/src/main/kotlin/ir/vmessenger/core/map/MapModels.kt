@@ -36,7 +36,13 @@ data class MapMarker(
 data class MapContent(
     val markers: ImmutableList<MapMarker>,
     val camera: CameraRequest = CameraRequest(),
+    /** This device's own position. Never drawn — the puck does that — but included in a fit. */
+    val self: MapCoordinate? = null,
 )
+
+/** A bare coordinate, for camera work that must include a point no marker is drawn for. */
+@Immutable
+data class MapCoordinate(val latitude: Double, val longitude: Double)
 
 /** Static rendering knobs; they change rarely, so they never invalidate marker or camera work. */
 @Immutable

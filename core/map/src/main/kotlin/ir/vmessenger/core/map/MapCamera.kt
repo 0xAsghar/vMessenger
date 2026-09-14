@@ -42,17 +42,17 @@ internal object MapCamera {
     /** Below this the bounding box is a point and `newLatLngBounds` would zoom to infinity. */
     private const val MIN_SPAN_DEGREES = 1e-4
 
-    fun updateFor(markers: List<MapMarker>, focusId: String?): CameraUpdate? {
+    fun updateFor(markers: List<MapMarker>, focusId: String?, self: MapCoordinate? = null): CameraUpdate? {
         val focused = focusId?.let { id -> markers.firstOrNull { it.id == id } }
         return when {
             focused != null -> CameraUpdateFactory.newLatLngZoom(focused.toLatLng(), SINGLE_MARKER_ZOOM)
             markers.isEmpty() -> null
-            else -> fit(markers)
+            // Fitting the contacts but not ourselves would scroll the user off their own screen.
+            else -> fit(markers.map { it.toLatLng() } + listOfNotNull(self?.toLatLng()))
         }
     }
 
-    private fun fit(markers: List<MapMarker>): CameraUpdate {
-        val points = markers.map { it.toLatLng() }
+    private fun fit(points: List<LatLng>): CameraUpdate {
         val latSpan = abs((points.maxOf { it.latitude }) - (points.minOf { it.latitude }))
         val lonSpan = abs((points.maxOf { it.longitude }) - (points.minOf { it.longitude }))
         return if (points.size < 2 || (latSpan < MIN_SPAN_DEGREES && lonSpan < MIN_SPAN_DEGREES)) {
@@ -65,3 +65,5 @@ internal object MapCamera {
 }
 
 internal fun MapMarker.toLatLng(): LatLng = LatLng(latitude, longitude)
+
+internal fun MapCoordinate.toLatLng(): LatLng = LatLng(latitude, longitude)

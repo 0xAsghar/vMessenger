@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.designsystem.component.UiMessage
-import ir.vmessenger.data.location.MyLocationSource
+import ir.vmessenger.core.location.DeviceLocationProvider
 import ir.vmessenger.domain.repository.ContactRequestRepository
 import ir.vmessenger.domain.repository.LocationRepository
 import ir.vmessenger.domain.usecase.contact.ObserveContactsUseCase
@@ -35,7 +35,7 @@ private const val SUBSCRIPTION_TIMEOUT_MS = 5_000L
 class ContactsViewModel @Inject constructor(
     observeContacts: ObserveContactsUseCase,
     locationRepository: LocationRepository,
-    myLocationSource: MyLocationSource,
+    deviceLocationProvider: DeviceLocationProvider,
     private val contactRequests: ContactRequestRepository,
     private val actions: ContactActions,
     messageBus: ContactMessageBus,
@@ -50,7 +50,9 @@ class ContactsViewModel @Inject constructor(
     private val contactRows = combine(
         observeContacts(),
         locationRepository.observeIncomingLocations(),
-        myLocationSource.observe(),
+        // Distances are happy with a last-known fix, so this collects without acquiring a live
+        // one — opening this tab must never be a reason to switch the GPS on.
+        deviceLocationProvider.observe(),
     ) { contacts, incoming, myLocation ->
         contacts.map { contact -> contact.toRow(incoming[contact.id], myLocation) }.sortedByPersianName()
     }

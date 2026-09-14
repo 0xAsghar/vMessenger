@@ -1,7 +1,7 @@
 package ir.vmessenger.feature.contacts
 
 import android.location.Location
-import ir.vmessenger.data.location.LatLng
+import ir.vmessenger.core.location.LocationUpdate
 import ir.vmessenger.domain.model.Contact
 import ir.vmessenger.domain.model.ContactRequest
 import ir.vmessenger.domain.model.LocationSample
@@ -39,7 +39,7 @@ internal data class ContactsControl(
     val pending: PendingContactAction? = null,
 )
 
-internal fun Contact.toRow(shared: LocationSample?, myLocation: LatLng?): ContactRow = ContactRow(
+internal fun Contact.toRow(shared: LocationSample?, myLocation: LocationUpdate?): ContactRow = ContactRow(
     id = id,
     name = displayName,
     userHash = userHash,
@@ -127,7 +127,7 @@ private fun dialogFor(pending: PendingContactAction?, name: String?): ContactDia
     else -> ContactDialog.RejectRequest(pending.targetId, name)
 }
 
-private fun distanceOrNull(mine: LatLng?, theirs: LocationSample?): Double? {
+private fun distanceOrNull(mine: LocationUpdate?, theirs: LocationSample?): Double? {
     if (mine == null || theirs == null) return null
     val result = FloatArray(1)
     Location.distanceBetween(mine.latitude, mine.longitude, theirs.latitude, theirs.longitude, result)

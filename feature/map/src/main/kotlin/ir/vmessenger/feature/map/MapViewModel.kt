@@ -44,10 +44,13 @@ private data class ScreenSlice(
     val selectedContactId: String?,
     val tiles: TilesState,
     val hint: MapHint?,
+    val myLocationRequested: Boolean,
 )
 
 /** Whether the basemap failed, plus the token that "try again" bumps to force a fresh fetch. */
 private data class TilesState(val error: Boolean = false, val token: Int = 0)
+
+private data class ScreenExtras(val hint: MapHint?, val myLocationRequested: Boolean)
 
 /**
  * Everything the map tab shows, as one state.
@@ -74,6 +77,10 @@ class MapViewModel @Inject constructor(
     private val tiles = MutableStateFlow(TilesState())
     private val hint = MutableStateFlow<MapHint?>(null)
 
+    // The puck is not a free consequence of holding the permission: drawing it means registering
+    // for live fixes. It appears while we are sharing, or once the user has asked to see it.
+    private val myLocationRequested = MutableStateFlow(false)
+
     private val sharingSlice = combine(
         contactRepository.observeContacts(),
         locationAccessRepository.observeAll(),
@@ -89,7 +96,12 @@ class MapViewModel @Inject constructor(
         ::LiveSlice,
     )
 
-    private val screenSlice = combine(permission, camera, selected, tiles, hint, ::ScreenSlice)
+    // combine() tops out at five typed flows, so the two smallest pair up first.
+    private val screenExtras = combine(hint, myLocationRequested, ::ScreenExtras)
+
+    private val screenSlice = combine(permission, camera, selected, tiles, screenExtras) { p, c, s, t, extras ->
+        ScreenSlice(p, c, s, t, extras.hint, extras.myLocationRequested)
+    }
 
     val uiState: StateFlow<MapUiState> = combine(sharingSlice, liveSlice, screenSlice, ::buildState)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT_MS), MapUiState())
@@ -119,14 +131,20 @@ class MapViewModel @Inject constructor(
         camera.update { CameraRequest(MapCameraMode.Free, it.token + 1, contactId) }
     }
 
+    /**
+     * Fits every sharing contact, and us with them. It used to fall back to [MapCameraMode.FollowMe]
+     * with no markers — which is the normal state — making this button identical to "my location";
+     * the control is now hidden instead when there is nothing to fit.
+     */
     fun fitAll() {
         selected.value = null
-        val mode = if (uiState.value.markers.isEmpty()) MapCameraMode.FollowMe else MapCameraMode.FitAll
-        camera.update { CameraRequest(mode, it.token + 1) }
+        myLocationRequested.value = true
+        camera.update { CameraRequest(MapCameraMode.FitAll, it.token + 1) }
     }
 
     fun followMe() {
         selected.value = null
+        myLocationRequested.value = true
         camera.update { CameraRequest(MapCameraMode.FollowMe, it.token + 1) }
     }
 
@@ -168,20 +186,15 @@ private fun buildState(sharing: SharingSlice, live: LiveSlice, screen: ScreenSli
         markers = markers,
         contacts = approved.map { it.toAccess(sharing.access[it.id] == true) }.toImmutableList(),
         myLocation = live.mine?.let { MapPoint(it.latitude, it.longitude) },
-        camera = screen.camera.forMarkers(markers.isNotEmpty()),
+        showMyLocation = screen.permission == MapPermission.Granted &&
+            (sharing.active || screen.myLocationRequested),
+        camera = screen.camera,
         selectedContactId = screen.selectedContactId.takeIf { id -> markers.any { it.contactId == id } },
         tilesError = screen.tiles.error,
         styleToken = screen.tiles.token,
         hint = screen.hint,
     )
 }
-
-/**
- * "Fit everything" with nothing to fit would leave the map at world zoom, so with no contact
- * sharing the camera follows this device instead.
- */
-private fun CameraRequest.forMarkers(hasMarkers: Boolean): CameraRequest =
-    if (mode == MapCameraMode.FitAll && !hasMarkers) copy(mode = MapCameraMode.FollowMe) else this
 
 private fun marker(contact: Contact, sample: LocationSample, mine: LocationUpdate?): ContactMarker =
     ContactMarker(

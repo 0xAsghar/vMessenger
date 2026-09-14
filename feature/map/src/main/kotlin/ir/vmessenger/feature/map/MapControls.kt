@@ -5,9 +5,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.MyLocation
-import androidx.compose.material.icons.outlined.ZoomOutMap
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SmallFloatingActionButton
@@ -54,20 +54,30 @@ internal fun SharingPill(sharing: SharingState, watcherCount: Int, modifier: Mod
     }
 }
 
-/** Follow-me and fit-all; the only two camera affordances the screen offers. */
+/**
+ * Follow-me and fit-all; the only two camera affordances the screen offers.
+ *
+ * [onFitAll] is null when nobody is sharing. The button used to stay and quietly fall back to
+ * follow-me, which is why it read as a broken duplicate of the control beside it.
+ */
 @Composable
-internal fun MapCameraButtons(onFollowMe: () -> Unit, onFitAll: () -> Unit, modifier: Modifier = Modifier) {
+internal fun MapCameraButtons(onFollowMe: () -> Unit, onFitAll: (() -> Unit)?, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SmallFloatingActionButton(
-            onClick = onFitAll,
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ) {
-            Icon(Icons.Outlined.ZoomOutMap, contentDescription = stringResource(R.string.feature_map_action_fit_all))
+        if (onFitAll != null) {
+            SmallFloatingActionButton(
+                onClick = onFitAll,
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ) {
+                Icon(
+                    Icons.Outlined.CenterFocusStrong,
+                    contentDescription = stringResource(R.string.feature_map_action_fit_all),
+                )
+            }
         }
         SmallFloatingActionButton(
             onClick = onFollowMe,

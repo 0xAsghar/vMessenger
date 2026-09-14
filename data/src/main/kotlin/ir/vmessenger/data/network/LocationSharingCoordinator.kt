@@ -88,9 +88,21 @@ class LocationSharingCoordinator @Inject constructor(
     @Volatile
     private var started = false
 
+    private val grantReconciler = LocationGrantReconciler(
+        locationAccessRepository,
+        object : LocationGrantReconciler.Target {
+            override fun sharedWith(): Set<String> = outgoingShareIds.keys.toSet()
+            override suspend fun startSharingWith(contactIds: List<String>) {
+                startSharesFor(contactIds)
+            }
+            override suspend fun revokeSharingWith(contactId: String) = revokeShareWith(contactId)
+        },
+    )
+
     fun start() {
         if (started) return
         started = true
+        scope.launch { grantReconciler.run() }
         scope.launch {
             restoreActiveOutgoingShares()
             LocationUpdateBus.updates.collect { update ->
@@ -195,6 +207,23 @@ class LocationSharingCoordinator @Inject constructor(
         for (share in shares) {
             runCatching { sendShareStop(share.contactId, share.shareId) }
                 .onFailure { AppLogger.warn("Location", "share stop notify failed: ${it.message}") }
+        }
+    }
+
+    /**
+     * Ends our outgoing share with one contact because they were un-ticked in the picker, and tells
+     * them so their map stops showing a position that will never update again. The block/delete
+     * path below is deliberately silent instead; this one is not, because the contact remains a
+     * contact and a stale pin is worse than no pin.
+     */
+    private suspend fun revokeShareWith(contactId: String) {
+        val shareId = outgoingShareIds.remove(contactId) ?: return
+        locationRepository.stopSharing(shareId)
+        runCatching { sendShareStop(contactId, shareId) }
+            .onFailure { AppLogger.warn("Location", "share revoke notify failed: ${it.message}") }
+        if (outgoingShareIds.isEmpty()) {
+            runCatching { locationServiceControl.stop() }
+                .onFailure { AppLogger.warn("Location", "service stop failed: ${it.message}") }
         }
     }
 

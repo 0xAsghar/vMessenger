@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,7 +25,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.location.DeviceLocationProvider
+import ir.vmessenger.core.location.LocationUpdateBus
 import ir.vmessenger.core.map.MapContent
+import ir.vmessenger.core.map.MapCoordinate
 import ir.vmessenger.core.map.MapMarker
 import ir.vmessenger.core.map.VmMapCallbacks
 import ir.vmessenger.core.map.VmMapOptions
@@ -60,6 +63,14 @@ private fun MapScreen(
 ) {
     val scaffoldState = rememberBottomSheetScaffoldState()
     val scope = rememberCoroutineScope()
+    // The puck is the only thing on this screen that needs a *live* fix, so the registration is
+    // scoped to it — leaving the tab releases it even if the flag is still set.
+    if (state.showMyLocation) {
+        DisposableEffect(Unit) {
+            LocationUpdateBus.acquireLiveFix()
+            onDispose { LocationUpdateBus.releaseLiveFix() }
+        }
+    }
     var pickerVisible by rememberSaveable { mutableStateOf(false) }
     val callbacks = remember(actions, scaffoldState, scope) {
         VmMapCallbacks(
@@ -82,7 +93,7 @@ private fun MapScreen(
             VmMapView(
                 content = rememberMapContent(state),
                 options = VmMapOptions(
-                    showMyLocation = permission.state == MapPermission.Granted,
+                    showMyLocation = state.showMyLocation,
                     darkStyle = isSystemInDarkTheme(),
                     styleToken = state.styleToken,
                 ),
@@ -120,7 +131,10 @@ private fun MapOverlay(state: MapUiState, actions: MapActions, modifier: Modifie
                 watcherCount = state.markers.size,
                 modifier = Modifier.weight(1f, fill = false),
             )
-            MapCameraButtons(onFollowMe = actions.onFollowMe, onFitAll = actions.onFitAll)
+            MapCameraButtons(
+                onFollowMe = actions.onFollowMe,
+                onFitAll = actions.onFitAll.takeIf { state.markers.isNotEmpty() },
+            )
         }
         if (state.tilesError) TilesErrorBanner(onRetry = actions.onRetryTiles)
     }
@@ -141,7 +155,8 @@ private fun rememberMapContent(state: MapUiState): MapContent {
             )
         }.toImmutableList()
     }
-    return remember(markers, state.camera) { MapContent(markers, state.camera) }
+    val self = state.myLocation?.let { MapCoordinate(it.latitude, it.longitude) }
+    return remember(markers, state.camera, self) { MapContent(markers, state.camera, self) }
 }
 
 @Composable

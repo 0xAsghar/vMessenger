@@ -16,7 +16,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
@@ -25,11 +27,19 @@ import javax.inject.Singleton
 /**
  * The device's own position — one consumer per process.
  *
- * While [LocationService] runs it is the only listener and this class just relays its bus; with
- * the service stopped it registers a [LocationManager] listener of its own, and only while
- * somebody is actually collecting. Screens therefore never add a second (or third) registration
- * of their own, which is what previously kept GPS awake behind the map.
+ * While [LocationService] runs it is the only listener and this class just relays its bus. With the
+ * service stopped it registers a [LocationManager] listener of its own *only* while some screen has
+ * asked for a live fix via [LocationUpdateBus.acquireLiveFix]; otherwise it seeds the last known
+ * position and registers nothing.
+ *
+ * That gate is the point. Collecting this flow used to be enough to turn GPS on, so switching
+ * location sharing off merely moved the registration out of the foreground service and into the app
+ * process — the hardware never stood down. Callers that only need a distance label must collect
+ * without acquiring, and tolerate a stale or null fix.
  */
+/** The two inputs that decide whether a registration is warranted, combined once. */
+private data class Demand(val serviceRunning: Boolean, val holders: Int)
+
 @Singleton
 class DeviceLocationProvider @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -37,17 +47,29 @@ class DeviceLocationProvider @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val stream: StateFlow<LocationUpdate?> = LocationUpdateBus.serviceRunning
-        .flatMapLatest { serviceRunning ->
-            if (serviceRunning) LocationUpdateBus.updates else merge(LocationUpdateBus.updates, systemUpdates())
-        }
-        .stateIn(scope, SharingStarted.WhileSubscribed(IDLE_TIMEOUT_MS), null)
+    private val stream: StateFlow<LocationUpdate?> =
+        combine(LocationUpdateBus.serviceRunning, LocationUpdateBus.liveFixHolders, ::Demand)
+            .flatMapLatest { demand ->
+                when {
+                    // The service owns the registration; adding ours would be the second listener.
+                    demand.serviceRunning -> LocationUpdateBus.updates
+                    demand.holders > 0 -> merge(LocationUpdateBus.updates, systemUpdates())
+                    else -> merge(LocationUpdateBus.updates, lastKnownOnce())
+                }
+            }
+            .stateIn(scope, SharingStarted.WhileSubscribed(IDLE_TIMEOUT_MS), null)
 
     /** Null until the first fix arrives; callers should then omit distance rather than fail. */
     fun observe(): Flow<LocationUpdate?> = stream
 
     /** The newest fix seen so far, for callers that cannot wait for one (`getLastLocation`). */
     val latest: LocationUpdate? get() = stream.value
+
+    /** Seeds a fix for distance labels without ever touching the hardware. */
+    @SuppressLint("MissingPermission")
+    private fun lastKnownOnce(): Flow<LocationUpdate> = flow {
+        lastKnown(context.getSystemService(LocationManager::class.java))?.let { emit(it) }
+    }
 
     @SuppressLint("MissingPermission")
     private fun systemUpdates(): Flow<LocationUpdate> = callbackFlow {
