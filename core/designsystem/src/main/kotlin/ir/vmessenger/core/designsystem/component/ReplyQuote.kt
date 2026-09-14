@@ -4,8 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -27,7 +29,7 @@ private const val QUOTE_ALPHA = 0.12f
  *
  * [QuoteMinHeight] is a minimum, not a fixed height — it was applied with `height()` despite the
  * name, and the two Persian lines inside need more than it allows, so the descenders of the second
- * line were sheared off. The accent bar still spans the full height because it fills, not measures.
+ * line were sheared off.
  */
 @Composable
 fun ReplyQuote(
@@ -41,6 +43,11 @@ fun ReplyQuote(
         modifier = modifier
             .then(clickable)
             .heightIn(min = QuoteMinHeight)
+            // The accent bar fills the row's height, and a wrap-content row would hand it the
+            // *incoming* maximum instead — in the composer's reply strip that is the whole screen,
+            // which made the bar, the strip and the bottom bar screen-tall. Intrinsic-min resolves
+            // the row to its tallest real child first, so there is something finite to fill.
+            .height(IntrinsicSize.Min)
             .clip(MaterialTheme.shapes.extraSmall)
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = QUOTE_ALPHA)),
     ) {

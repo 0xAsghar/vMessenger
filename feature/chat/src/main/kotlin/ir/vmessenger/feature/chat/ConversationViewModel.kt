@@ -451,11 +451,15 @@ private fun ChatMessage.toItem(startsSenderRun: Boolean): ChatItem.Message {
         messageId = messageId,
         outgoing = outgoing,
         text = text,
-        // The confirmation time, not the compose time: the label under the bubble should agree
-        // with the tick beside it. Falls back for a message still queued, one that failed, and
-        // anything stored before per-recipient fan-out existed — those have no sent time at all.
-        // Only the label moves; ordering, paging and day separators still key off createdAtUnixMs.
-        time = VmDateFormat.time(sentAtUnixMs ?: createdAtUnixMs),
+        // Outgoing only: the confirmation time, so the label agrees with the tick beside it. It
+        // falls back for a message still queued or failed, and for anything stored before
+        // per-recipient fan-out existed, which have no sent time at all.
+        //
+        // Incoming deliberately keeps arrival time. Its sentAtUnixMs is the *peer's* clock, and
+        // ordering, paging and the day separators all key off arrival — so a message composed on
+        // Saturday and delivered on Tuesday would sit under «امروز» reading Saturday's time. The
+        // sender's clock is shown where it is labelled as such, in the Information sheet.
+        time = VmDateFormat.time(if (outgoing) sentAtUnixMs ?: createdAtUnixMs else createdAtUnixMs),
         ticks = if (outgoing) status.toTicks() else null,
         attachment = attachment?.let {
             AttachmentUi(

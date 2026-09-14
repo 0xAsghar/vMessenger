@@ -73,9 +73,10 @@ internal fun MessageBubbleItem(
         MessageBubble(
             direction = direction,
             colors = base.copy(container = container),
-            // Only a reply bubble needs the quote to span its width; asking for it elsewhere
-            // shrinks any payload that cannot report an intrinsic width.
-            matchWidestChild = item.reply != null,
+            // Only a text reply. The quote needs the bubble's width, but intrinsic measurement
+            // asks every child for one — and an attachment payload (a waveform Canvas, an image
+            // still loading) reports zero, which would collapse the bubble around it.
+            matchWidestChild = item.reply != null && item.attachment == null,
             // A raw long-press detector rather than combinedClickable: the bubble's row is
             // full width, so a click modifier would ripple across the empty half of it.
             modifier = Modifier
