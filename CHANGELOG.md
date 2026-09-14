@@ -9,7 +9,94 @@ GitHub Releases; they were never tracked here and are not reconstructed.
 
 Two version numbers move independently of this file and are stated where they matter: the **wire
 protocol major** (currently 2, [docs/Protocol.md](docs/Protocol.md)) and the **database schema
-version** (currently 18, [docs/Database.md](docs/Database.md)).
+version** (currently 19, [docs/Database.md](docs/Database.md)).
+
+## [1.1.0] - 2026-09-15
+
+The first release after 1.0.1 was used in anger. Eleven reported interface bugs, four reported
+technical ones, three new features, and an audit of what a peer-to-peer app does when it cannot
+reach the other side — which turned up about twenty more defects nobody had reported yet.
+
+**Database schema 18 → 19.** Migration included; no action needed.
+
+### Security
+
+- **App lock.** A PIN gate over the app, off until you set one. The default mode protects the
+  screen and says so in as many words — messages still arrive, storage is unchanged, and anyone
+  holding your unlocked phone reads everything regardless. **Strict mode** is the one that changes
+  anything: the database passphrase is re-wrapped under a second Keystore key that requires
+  authentication, and the ordinary copy is deleted, so the retry limit is enforced by the device's
+  secure hardware rather than by this app. Device credential is always accepted alongside
+  biometrics — enrolling a new fingerprint invalidates the key, and without that fallback it would
+  mean an unopenable database. Background delivery stops while locked; that is the cost.
+- **The secure wipe now clears the app lock's own store and its Keystore alias.** It cleared
+  neither. The PIN verifier is offline-crackable, and a surviving strict-mode blob left the app
+  refusing to open a database that no longer existed — a crash on every start after a wipe.
+- **Screen security is forced on while the lock is showing**, whatever the setting says, so the
+  recents thumbnail cannot leak the last unlocked screen.
+
+### Added
+
+- **Edit and delete for everyone.** Both are additive to wire protocol 2, so a 1.0.x peer ignores
+  them rather than breaking. Delete renders a tombstone rather than removing the row, and is worded
+  as a request: a peer can ignore it and nothing here can prove otherwise.
+- **Your display name now reaches your contacts** instead of only ever being local. A name you
+  typed for someone else is never overwritten by theirs.
+- **Store-and-forward actually delivers.** The third-party mailbox existed on the wire with no
+  caller: a message to an offline peer simply died after 24 hours. It is now offered to reachable
+  approved contacts and collected on connect. The trade is recorded in
+  [docs/Security.md](docs/Security.md): parked blobs have no forward secrecy, and a host learns
+  that someone holds a message for a routing key.
+- **Last heard from** on the contact row — worded that way because the column tracks the last
+  inbound frame, receipts included, not a visit.
+- **Message information** for any message, not only outgoing group ones, showing only what is
+  actually recorded.
+
+### Fixed
+
+- **Location sharing did not stop the GPS.** Six separate causes, including a third location
+  registration that ran whenever the contacts tab was open, regardless of the toggle. Verified with
+  `dumpsys location`: no registration on the contacts tab, none on the map with sharing off, one
+  while "my location" is held, and none twenty seconds after leaving.
+- **Latin text rendered with its punctuation on the wrong side.** No text style in the app set a
+  direction, and an unspecified direction under an RTL layout resolves to hard RTL rather than
+  first-strong. Names interpolated into Persian sentences are isolated so a Latin name cannot flip
+  the sentence around it.
+- **The composer.** Voice and attachment swapped sides, the send glyph is an up arrow, the card
+  floats, and the slide-to-cancel axis follows the mic to its new side.
+- **A reply icon sat beside every message** — it was the swipe background, always drawn and merely
+  revealed. **Tapping reply could expand the composer to fill the screen.**
+- **"Extended map" behaved like "my location"**, because fitting all markers downgraded itself to
+  follow-me whenever there were none, which is the ordinary case.
+- Two back arrows on the new-chat screen; a dead text button under the add-contact button; a
+  duplicate identity row in settings; a QR scanner that neither closed nor said anything on a
+  successful scan, and could fire the same request once per camera frame.
+- The battery-optimisation row now disappears once granted instead of showing a finished task.
+- Outgoing messages show when they were sent rather than when they were queued.
+
+### Fixed — found by audit, not reported
+
+- **A deleted contact was never told.** The revoke was sent once, best effort; if the peer was
+  offline — the usual case — they kept you approved forever while their messages were dropped in
+  silence. It is queued now, survives the contact row, and retries for a week.
+- **Re-adding a revoked contact created a dead-end duplicate** that could never leave pending.
+- **A clock jump forward failed every queued message**, because the retry window was measured
+  against the wall clock.
+- **Attachments claimed delivery on transport success**, so a receiver's disk-full or hash mismatch
+  showed as sent.
+- **Four states where the app went quiet and looked healthy** now say what is wrong, in Persian:
+  a device clock outside the relay's window, the same identity active on another device, a group
+  whose absent creator has frozen its membership, and notifications turned off — which stops
+  background delivery, because the foreground-service notification is what keeps the stack alive.
+- The contact-request retry budget is persisted, so a restart no longer re-dials at full speed.
+
+### Changed
+
+- One design system rather than eight screens that shipped together: shared list row, bottom sheet,
+  input dialog and FAB, and the size and spacing tokens the settings, identity, debug, nodes, about
+  and pairing screens had been bypassing. Some rows move by four device-independent pixels.
+- The about screen states the protocol major, the database schema version and the nodes in use.
+- Messages animate in and move rather than appearing; the delivery ticks cross-fade.
 
 ## [1.0.1] - 2026-09-12
 
@@ -209,4 +296,4 @@ before a 1.x build is installed**, and identity and contacts do not survive that
 - **The reference node was hardened**: connection and record limits, listener-proof freshness and
   replay rejection, record expiry, and rejection counters on `/healthz?verbose=1`.
 
-[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v1.1.0...HEAD
