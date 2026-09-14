@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -35,7 +36,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,13 +46,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.datastore.ThemeMode
 import ir.vmessenger.core.designsystem.component.Avatar
+import ir.vmessenger.core.designsystem.component.ConfirmDialog
 import ir.vmessenger.core.designsystem.component.SettingsDivider
 import ir.vmessenger.core.designsystem.component.SettingsSection
 import ir.vmessenger.core.designsystem.component.UiMessageSnackbarEffect
@@ -61,6 +61,7 @@ import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
 import ir.vmessenger.core.designsystem.theme.VmSizes
+import ir.vmessenger.core.designsystem.theme.VmSpacing
 
 @Suppress("LongParameterList") // one entry per destination the settings tab can reach
 private data class SettingsNavigation(
@@ -199,9 +200,9 @@ private fun SettingsContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(VmSpacing.xl),
     ) {
         profile?.let { ProfileHeader(profile = it, onClick = navigation.onIdentity) }
         SettingsThemeSection(themeMode = themeMode, onThemeMode = viewModel::setThemeMode)
@@ -243,12 +244,12 @@ private fun SettingsBackupSection(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(enabled = status !is BackupExportStatus.InProgress, onClick = onExport)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(VmSpacing.xs),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Backup,
@@ -276,9 +277,12 @@ private fun BackupExportStatusText(status: BackupExportStatus) {
         BackupExportStatus.Idle -> Unit
         BackupExportStatus.InProgress -> Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
         ) {
-            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            CircularProgressIndicator(
+                modifier = Modifier.size(VmSizes.iconSm),
+                strokeWidth = VmSizes.progressStroke,
+            )
             Text(
                 text = stringResource(R.string.settings_backup_in_progress),
                 style = MaterialTheme.typography.bodyMedium,
@@ -309,8 +313,8 @@ private fun SettingsThemeSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(VmSpacing.md),
+            horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
         ) {
             ThemeMode.entries.forEach { mode ->
                 FilterChip(
@@ -503,12 +507,12 @@ private fun ProfileHeader(profile: SettingsProfile, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
+            .padding(vertical = VmSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(VmSpacing.lg),
     ) {
         Avatar(seed = profile.identityHash, name = profile.displayName, size = VmSizes.avatarLg)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(VmSpacing.xxs)) {
             Text(text = profile.displayName, style = MaterialTheme.typography.titleMedium)
             UserHashText(text = profile.userHash, style = MaterialTheme.typography.bodySmall)
         }
@@ -526,14 +530,15 @@ private fun SettingsToggleRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onCheckedChange(!checked) }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .heightIn(min = VmSizes.touchTarget)
+            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
             modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
         ) {
             Icon(
                 imageVector = icon,
@@ -558,9 +563,10 @@ private fun SettingsActionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .heightIn(min = VmSizes.touchTarget)
+            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
     ) {
         Icon(
             imageVector = icon,
@@ -592,7 +598,7 @@ private fun NewVersionBadge() {
         Text(
             text = stringResource(R.string.settings_update_badge),
             style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            modifier = Modifier.padding(horizontal = VmSpacing.sm, vertical = VmSpacing.xxs),
         )
     }
 }
@@ -602,20 +608,14 @@ private fun WipeConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = stringResource(R.string.settings_wipe_confirm_title)) },
-        text = { Text(text = stringResource(R.string.settings_wipe_confirm_body)) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(text = stringResource(R.string.settings_wipe_confirm_action))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(R.string.settings_wipe_cancel))
-            }
-        },
+    ConfirmDialog(
+        title = stringResource(R.string.settings_wipe_confirm_title),
+        body = stringResource(R.string.settings_wipe_confirm_body),
+        confirmLabel = stringResource(R.string.settings_wipe_confirm_action),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+        destructive = true,
+        dismissLabel = stringResource(R.string.settings_wipe_cancel),
     )
 }
 
@@ -628,14 +628,18 @@ private fun WipeProgressDialog() {
         title = { Text(text = stringResource(R.string.settings_wipe_confirm_title)) },
         text = {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                CircularProgressIndicator(
+                    modifier = Modifier.size(VmSizes.iconMd),
+                    strokeWidth = VmSizes.progressStroke,
+                )
                 Text(text = stringResource(R.string.settings_wipe_in_progress))
             }
         },
         confirmButton = {},
+        shape = MaterialTheme.shapes.large,
     )
 }
 

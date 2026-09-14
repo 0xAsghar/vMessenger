@@ -1,14 +1,10 @@
 package ir.vmessenger.feature.settings
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,7 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.component.VmInputDialog
 
 internal const val BACKUP_PASSPHRASE_MIN_CHARS = 8
 
@@ -37,50 +33,40 @@ internal fun BackupPassphraseDialog(
     val tooShort = passphrase.length < BACKUP_PASSPHRASE_MIN_CHARS
     val mismatch = passphrase != confirmation
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = stringResource(R.string.settings_backup_passphrase_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = stringResource(R.string.settings_backup_passphrase_body),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                PassphraseField(
-                    value = passphrase,
-                    onValueChange = { passphrase = it },
-                    label = stringResource(R.string.settings_backup_passphrase_label),
-                    error = stringResource(R.string.settings_backup_passphrase_too_short)
-                        .takeIf { showErrors && tooShort },
-                )
-                PassphraseField(
-                    value = confirmation,
-                    onValueChange = { confirmation = it },
-                    label = stringResource(R.string.settings_backup_passphrase_confirm_label),
-                    error = stringResource(R.string.settings_backup_passphrase_mismatch)
-                        .takeIf { showErrors && !tooShort && mismatch },
-                )
+    VmInputDialog(
+        title = stringResource(R.string.settings_backup_passphrase_title),
+        confirmLabel = stringResource(R.string.settings_backup_passphrase_action),
+        // The button stays live and answers with the reason: a disabled button says nothing
+        // about which of the two fields is wrong.
+        onConfirm = {
+            if (tooShort || mismatch) {
+                showErrors = true
+            } else {
+                onConfirm(passphrase.toCharArray())
             }
         },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    if (tooShort || mismatch) {
-                        showErrors = true
-                    } else {
-                        onConfirm(passphrase.toCharArray())
-                    }
-                },
-            ) {
-                Text(text = stringResource(R.string.settings_backup_passphrase_action))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(R.string.settings_backup_cancel))
-            }
-        },
-    )
+        onDismiss = onDismiss,
+        dismissLabel = stringResource(R.string.settings_backup_cancel),
+    ) {
+        Text(
+            text = stringResource(R.string.settings_backup_passphrase_body),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        PassphraseField(
+            value = passphrase,
+            onValueChange = { passphrase = it },
+            label = stringResource(R.string.settings_backup_passphrase_label),
+            error = stringResource(R.string.settings_backup_passphrase_too_short)
+                .takeIf { showErrors && tooShort },
+        )
+        PassphraseField(
+            value = confirmation,
+            onValueChange = { confirmation = it },
+            label = stringResource(R.string.settings_backup_passphrase_confirm_label),
+            error = stringResource(R.string.settings_backup_passphrase_mismatch)
+                .takeIf { showErrors && !tooShort && mismatch },
+        )
+    }
 }
 
 @Composable

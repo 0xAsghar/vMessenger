@@ -20,8 +20,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.R
+import ir.vmessenger.core.designsystem.theme.VmSpacing
 
 @Composable
 fun UserHashShareRow(
@@ -36,7 +36,7 @@ fun UserHashShareRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 8.dp),
+            .padding(top = VmSpacing.sm),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {

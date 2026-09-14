@@ -21,4 +21,19 @@ object VmSizes {
     val listItemHeight = 72.dp
     const val bubbleMaxWidthFraction = 0.78f
     val touchTarget = 48.dp
+
+    /** An icon set inside a line of text: a delivery tick, a mute bell, an inline spinner. */
+    val iconSm = 16.dp
+
+    /** An icon that shares a row with a label of its own: the spinner inside a button. */
+    val iconMd = 20.dp
+
+    /** An icon that is the content rather than a decoration: an attachment tile's glyph. */
+    val iconLg = 28.dp
+
+    /** The single large glyph an otherwise-empty screen is allowed to show. */
+    val emptyStateIcon = 56.dp
+
+    /** A progress ring keeps this stroke at every diameter, or it stops reading as one ring. */
+    val progressStroke = 2.dp
 }

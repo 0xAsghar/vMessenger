@@ -11,9 +11,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.feature.pairing.QrScannerScreen
 
 @Composable
@@ -46,7 +46,7 @@ private fun NodeQrScannerOverlay(
             is NodeScanUiState.Error -> {
                 Text(
                     text = uiState.message,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(VmSpacing.xl),
                     color = MaterialTheme.colorScheme.error,
                 )
             }
@@ -57,7 +57,7 @@ private fun NodeQrScannerOverlay(
                 )
                 Button(
                     onClick = onDone,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(VmSpacing.xl),
                 ) {
                     Text(stringResource(R.string.nodes_close))
                 }

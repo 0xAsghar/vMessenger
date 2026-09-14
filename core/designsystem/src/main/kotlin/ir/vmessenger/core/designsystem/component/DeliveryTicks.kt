@@ -15,12 +15,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.R
 import ir.vmessenger.core.designsystem.theme.VmMotion
+import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.vm
-
-private val TickSize = 16.dp
 
 /**
  * Delivery state as an icon rather than a word: clock, one check, two checks, two accented
@@ -44,7 +42,7 @@ fun DeliveryTicks(
             imageVector = current.icon(),
             contentDescription = stringResource(current.labelRes()),
             tint = animatedTint,
-            modifier = modifier.size(TickSize),
+            modifier = modifier.size(VmSizes.iconSm),
         )
     }
 }

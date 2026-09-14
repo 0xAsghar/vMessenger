@@ -22,12 +22,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.common.logging.LogLevel
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.theme.VmSpacing
 import java.io.File
 
 @Composable
@@ -48,12 +48,12 @@ fun LogsRoute(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
             ) {
                 Button(
                     onClick = {
@@ -87,7 +87,7 @@ fun LogsRoute(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(VmSpacing.xs),
                 ) {
                     items(entries, key = { "${it.timestampUnixMs}-${it.tag}-${it.message}" }) { entry ->
                         Text(

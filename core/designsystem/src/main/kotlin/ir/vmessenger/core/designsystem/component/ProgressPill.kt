@@ -13,12 +13,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.theme.VmMotion
+import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 
-private val IndicatorSize = 16.dp
-private val IndicatorStroke = 2.dp
 private const val SCRIM_ALPHA = 0.72f
 
 /**
@@ -44,9 +42,9 @@ fun ProgressPill(
         ) {
             if (progress == null) {
                 CircularProgressIndicator(
-                    strokeWidth = IndicatorStroke,
+                    strokeWidth = VmSizes.progressStroke,
                     color = MaterialTheme.colorScheme.inverseOnSurface,
-                    modifier = Modifier.size(IndicatorSize),
+                    modifier = Modifier.size(VmSizes.iconSm),
                 )
             } else {
                 // A transfer reports once per chunk, so the raw value visibly steps; animating it
@@ -58,9 +56,9 @@ fun ProgressPill(
                 )
                 CircularProgressIndicator(
                     progress = { animated },
-                    strokeWidth = IndicatorStroke,
+                    strokeWidth = VmSizes.progressStroke,
                     color = MaterialTheme.colorScheme.inverseOnSurface,
-                    modifier = Modifier.size(IndicatorSize),
+                    modifier = Modifier.size(VmSizes.iconSm),
                 )
             }
             Text(text = label, style = MaterialTheme.typography.labelMedium)

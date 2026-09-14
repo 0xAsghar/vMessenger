@@ -5,9 +5,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Article
@@ -16,7 +16,6 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -38,13 +37,21 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.SettingsDivider
 import ir.vmessenger.core.designsystem.component.SettingsSection
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.core.designsystem.theme.UserHashTextStyle
+import ir.vmessenger.core.designsystem.theme.VmSizes
+import ir.vmessenger.core.designsystem.theme.VmSpacing
+
+/** A tint, not a fill: the message has to stay readable on top of it. */
+private const val ERROR_TINT_ALPHA = 0.12f
+
+/** The code block is a quieter surface than the card it sits in, not a second card. */
+private const val CODE_SURFACE_ALPHA = 0.55f
+
 @Composable
 fun DebugRoute(
     onNavigateBack: () -> Unit = {},
@@ -64,9 +71,9 @@ fun DebugRoute(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(VmSpacing.xl),
         ) {
             DebugNetworkStatusSection(state = state)
             DebugPathSection(state = state)
@@ -93,8 +100,8 @@ private fun DebugUpdateSection(baseUrl: String?, onBaseUrl: (String) -> Unit) {
     var draft by rememberSaveable(baseUrl) { mutableStateOf(baseUrl.orEmpty()) }
     SettingsSection(title = "Update base URL") {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
         ) {
             OutlinedTextField(
                 value = draft,
@@ -138,13 +145,13 @@ private fun DebugNetworkStatusSection(state: DebugUiState) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                    .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.error.copy(alpha = ERROR_TINT_ALPHA),
             ) {
                 Text(
                     text = error,
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(VmSpacing.md),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -171,7 +178,7 @@ private fun DebugPathSection(state: DebugUiState) {
         )
         if (state.recentPaths.size > 1) {
             SettingsDivider()
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Column(modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm)) {
                 state.recentPaths.take(6).forEach { entry ->
                     Text(
                         text = entry,
@@ -179,7 +186,7 @@ private fun DebugPathSection(state: DebugUiState) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(vertical = 2.dp),
+                        modifier = Modifier.padding(vertical = VmSpacing.xxs),
                     )
                 }
             }
@@ -236,7 +243,8 @@ private fun DebugFlagRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .heightIn(min = VmSizes.touchTarget)
+            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -260,7 +268,7 @@ private fun DebugActionsSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -280,13 +288,10 @@ private fun DebugActionsSection(
                 onCheckedChange = onDevModeChange,
             )
         }
-        HorizontalDivider(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
-        )
+        SettingsDivider()
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(VmSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
         ) {
             Button(
                 onClick = onJoinAndPublish,
@@ -295,7 +300,7 @@ private fun DebugActionsSection(
                 Icon(
                     imageVector = Icons.Outlined.CloudUpload,
                     contentDescription = null,
-                    modifier = Modifier.padding(end = 8.dp),
+                    modifier = Modifier.padding(end = VmSpacing.sm),
                 )
                 Text(text = stringResource(R.string.feature_debug_join_publish))
             }
@@ -306,7 +311,7 @@ private fun DebugActionsSection(
                 Icon(
                     imageVector = Icons.Outlined.Article,
                     contentDescription = null,
-                    modifier = Modifier.padding(end = 8.dp),
+                    modifier = Modifier.padding(end = VmSpacing.sm),
                 )
                 Text(text = stringResource(R.string.feature_debug_view_logs))
             }
@@ -321,14 +326,14 @@ private fun DebugAdbSection(adbCommands: String) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 4.dp),
+                .padding(start = VmSpacing.lg, end = VmSpacing.sm, top = VmSpacing.md, bottom = VmSpacing.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 imageVector = Icons.Outlined.Terminal,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(end = 8.dp),
+                modifier = Modifier.padding(end = VmSpacing.sm),
             )
             Text(
                 text = stringResource(R.string.feature_debug_adb_instructions),
@@ -339,27 +344,27 @@ private fun DebugAdbSection(adbCommands: String) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = CODE_SURFACE_ALPHA),
         ) {
             Text(
                 text = adbCommands,
-                modifier = Modifier.padding(12.dp),
+                modifier = Modifier.padding(VmSpacing.md),
                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
             )
         }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(end = 8.dp, bottom = 4.dp),
+                .padding(end = VmSpacing.sm, bottom = VmSpacing.xs),
             horizontalArrangement = Arrangement.End,
         ) {
             TextButton(onClick = { clipboard.setText(AnnotatedString(adbCommands)) }) {
                 Icon(
                     imageVector = Icons.Outlined.ContentCopy,
                     contentDescription = null,
-                    modifier = Modifier.padding(end = 6.dp),
+                    modifier = Modifier.padding(end = VmSpacing.sm),
                 )
                 Text(text = stringResource(R.string.feature_debug_copy_adb))
             }
@@ -377,7 +382,8 @@ private fun DebugStatusRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .heightIn(min = VmSizes.touchTarget)
+            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -393,7 +399,7 @@ private fun DebugStatusRow(
                 } else {
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
-                modifier = Modifier.padding(end = 10.dp),
+                modifier = Modifier.padding(end = VmSpacing.md),
             )
             Text(
                 text = label,
@@ -412,7 +418,7 @@ private fun DebugStatusRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 12.dp),
+                .padding(start = VmSpacing.md),
         )
     }
 }

@@ -32,13 +32,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.format.VmTextFormat
+import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.data.lock.AppLockWipePolicy
 import ir.vmessenger.data.lock.LockState
 
 private val LockIconSize = 40.dp
-private val IndicatorSize = 18.dp
-private val IndicatorStroke = 2.dp
 
 /** The keypad against the screen edges would be a row of keys that are hard to miss by accident. */
 private const val KEYPAD_WIDTH_FRACTION = 0.88f
@@ -180,8 +179,8 @@ private fun CheckingRow() {
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
     ) {
         CircularProgressIndicator(
-            strokeWidth = IndicatorStroke,
-            modifier = Modifier.size(IndicatorSize),
+            strokeWidth = VmSizes.progressStroke,
+            modifier = Modifier.size(VmSizes.iconMd),
         )
         Text(
             text = stringResource(R.string.app_lock_checking),

@@ -12,6 +12,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.theme.VmElevation
+import ir.vmessenger.core.designsystem.theme.VmSpacing
+
+/** A hairline: the section outline separates, it does not decorate. */
+private val SectionBorderWidth = 1.dp
+
+/** Outline at full strength would out-weigh the rows it encloses. */
+private const val BORDER_ALPHA = 0.35f
+
+/** The divider sits between two rows of the same card, so it is fainter still than the border. */
+private const val DIVIDER_ALPHA = 0.25f
 
 @Composable
 fun SettingsSection(
@@ -24,15 +35,18 @@ fun SettingsSection(
             text = title,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+            modifier = Modifier.padding(start = VmSpacing.xs, bottom = VmSpacing.sm),
         )
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+            tonalElevation = VmElevation.none,
+            shadowElevation = VmElevation.none,
+            border = BorderStroke(
+                width = SectionBorderWidth,
+                color = MaterialTheme.colorScheme.outline.copy(alpha = BORDER_ALPHA),
+            ),
         ) {
             Column(content = content)
         }
@@ -42,7 +56,7 @@ fun SettingsSection(
 @Composable
 fun SettingsDivider() {
     HorizontalDivider(
-        modifier = Modifier.padding(horizontal = 16.dp),
-        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+        modifier = Modifier.padding(horizontal = VmSpacing.lg),
+        color = MaterialTheme.colorScheme.outline.copy(alpha = DIVIDER_ALPHA),
     )
 }

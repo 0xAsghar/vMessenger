@@ -11,26 +11,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.Photo
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.R
+import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 
-private val TileIconSize = 28.dp
-
 /** The three attachment sources offered in 1.0; the camera tile is deliberately out of scope. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AttachmentSheet(
     onPickPhoto: () -> Unit,
@@ -39,42 +33,35 @@ fun AttachmentSheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(),
+    VmBottomSheet(
+        title = stringResource(R.string.vm_attach_title),
+        onDismiss = onDismiss,
         modifier = modifier,
     ) {
-        Column(modifier = Modifier.padding(bottom = VmSpacing.xl)) {
-            Text(
-                text = stringResource(R.string.vm_attach_title),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = VmSpacing.lg),
+            horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
+        ) {
+            AttachmentTile(
+                icon = Icons.Outlined.Photo,
+                label = stringResource(R.string.vm_attach_photo),
+                onClick = onPickPhoto,
+                modifier = Modifier.weight(1f),
             )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = VmSpacing.lg),
-                horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
-            ) {
-                AttachmentTile(
-                    icon = Icons.Outlined.Photo,
-                    label = stringResource(R.string.vm_attach_photo),
-                    onClick = onPickPhoto,
-                    modifier = Modifier.weight(1f),
-                )
-                AttachmentTile(
-                    icon = Icons.Outlined.Movie,
-                    label = stringResource(R.string.vm_attach_video),
-                    onClick = onPickVideo,
-                    modifier = Modifier.weight(1f),
-                )
-                AttachmentTile(
-                    icon = Icons.Outlined.InsertDriveFile,
-                    label = stringResource(R.string.vm_attach_file),
-                    onClick = onPickFile,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            AttachmentTile(
+                icon = Icons.Outlined.Movie,
+                label = stringResource(R.string.vm_attach_video),
+                onClick = onPickVideo,
+                modifier = Modifier.weight(1f),
+            )
+            AttachmentTile(
+                icon = Icons.Outlined.InsertDriveFile,
+                label = stringResource(R.string.vm_attach_file),
+                onClick = onPickFile,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
@@ -102,7 +89,7 @@ private fun AttachmentTile(
                 imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(TileIconSize),
+                modifier = Modifier.size(VmSizes.iconLg),
             )
             Text(text = label, style = MaterialTheme.typography.labelLarge)
         }

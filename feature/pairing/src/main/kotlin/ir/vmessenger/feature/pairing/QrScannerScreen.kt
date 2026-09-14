@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.theme.VmSpacing
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 
@@ -87,12 +88,12 @@ fun QrScannerScreen(
                 Column(
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .padding(24.dp),
+                        .padding(VmSpacing.xl),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
                         text = stringResource(R.string.camera_permission_required),
-                        modifier = Modifier.padding(bottom = 16.dp),
+                        modifier = Modifier.padding(bottom = VmSpacing.lg),
                     )
                     Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
                         Text(stringResource(R.string.camera_permission_grant))
@@ -120,18 +121,18 @@ private fun QrScanFrameOverlay(hint: String) {
             modifier = Modifier.size(ViewfinderSize),
             shape = RoundedCornerShape(ViewfinderCorner),
             color = Color.Transparent,
-            border = BorderStroke(3.dp, Color.White),
+            border = BorderStroke(ViewfinderBorder, Color.White),
         ) {}
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 40.dp),
+                .padding(bottom = HintBottomOffset),
             shape = RoundedCornerShape(ViewfinderCorner),
             color = Color.Black.copy(alpha = HINT_SCRIM_ALPHA),
         ) {
             Text(
                 text = hint,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White,
             )
@@ -141,6 +142,12 @@ private fun QrScanFrameOverlay(hint: String) {
 
 private val ViewfinderSize = 260.dp
 private val ViewfinderCorner = 24.dp
+
+/** Thick enough to stay visible against whatever the camera is pointed at. */
+private val ViewfinderBorder = 3.dp
+
+/** Clear of the viewfinder, so the hint never sits on top of the code being scanned. */
+private val HintBottomOffset = 40.dp
 private const val SCRIM_ALPHA = 0.35f
 private const val HINT_SCRIM_ALPHA = 0.6f
 

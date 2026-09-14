@@ -14,10 +14,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
-
-private val EmptyIconSize = 56.dp
 
 /**
  * "Nothing here yet" placeholder. The [icon] is decorative — the title and body carry the
@@ -42,7 +40,7 @@ fun EmptyState(
             imageVector = icon,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(EmptyIconSize),
+            modifier = Modifier.size(VmSizes.emptyStateIcon),
         )
         Text(
             text = title,

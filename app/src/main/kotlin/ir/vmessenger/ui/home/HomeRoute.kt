@@ -27,7 +27,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -38,6 +37,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ir.vmessenger.R
+import ir.vmessenger.core.designsystem.theme.VmElevation
 import ir.vmessenger.feature.chat.ChatRoute
 import ir.vmessenger.feature.contacts.ContactsNavigation
 import ir.vmessenger.feature.contacts.ContactsRoute
@@ -47,6 +47,7 @@ import ir.vmessenger.feature.settings.SettingsRoute
 import ir.vmessenger.feature.settings.update.UpdateBanner
 import ir.vmessenger.feature.settings.update.UpdateBannerViewModel
 import ir.vmessenger.navigation.VmRoute
+
 private const val TAB_FADE_MS = 160
 
 private data class HomeTab(
@@ -144,7 +145,7 @@ private fun HomeBottomBar(navController: NavHostController) {
     val destination = backStackEntry?.destination
     NavigationBar(
         containerColor = MaterialTheme.colorScheme.background,
-        tonalElevation = 0.dp,
+        tonalElevation = VmElevation.none,
     ) {
         HomeTabs.forEach { tab ->
             NavigationBarItem(
