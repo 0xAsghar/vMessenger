@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.securityDataStore: DataStore<Preferences> by preferencesDataStore(
+internal val Context.securityDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "vmessenger_security",
 )
 
@@ -50,10 +50,10 @@ class SecurityPreferences @Inject constructor(
     }
 
     private suspend fun setWrapped(key: Preferences.Key<String>, wrapped: ByteArray) {
-        context.securityDataStore.edit { preferences ->
-            preferences[key] = Base64.encodeToString(wrapped, Base64.NO_WRAP)
-        }
+        context.securityDataStore.edit { preferences -> preferences[key] = encode(wrapped) }
     }
+
+    private fun encode(bytes: ByteArray): String = Base64.encodeToString(bytes, Base64.NO_WRAP)
 
     suspend fun clear() {
         context.securityDataStore.edit { it.clear() }

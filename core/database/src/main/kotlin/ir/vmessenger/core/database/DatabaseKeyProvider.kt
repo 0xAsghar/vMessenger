@@ -55,12 +55,42 @@ class DatabaseKeyProvider @Inject constructor(
     @Volatile
     private var cachedPassphrase: ByteArray? = null
 
+    /**
+     * True while strict app-lock is holding the database shut.
+     *
+     * Separate from the cache being empty, and that distinction is the whole point: an empty cache
+     * means "load it", a locked provider means "do not, and say so". Without it [lock] would be
+     * theatre — the very next DAO access would quietly unwrap the key again.
+     */
+    @Volatile
+    private var locked = false
+
     suspend fun initialize() {
         if (cachedPassphrase != null) return
         mutex.withLock {
             if (cachedPassphrase == null) cachedPassphrase = source.load()
         }
     }
+
+    /**
+     * Shuts the database until the user authenticates again (strict mode only).
+     *
+     * The caller must close the Room database first: SQLCipher holds the key inside its open
+     * connection, so zeroing this cache alone leaves an already-open handle reading and writing
+     * perfectly well.
+     */
+    fun lock() {
+        locked = true
+        cachedPassphrase?.fill(0)
+        cachedPassphrase = null
+    }
+
+    /** Lets the database be opened again, after a successful authentication. */
+    fun unlock() {
+        locked = false
+    }
+
+    val isLocked: Boolean get() = locked
 
     /**
      * The passphrase Room opens the database with. Hilt resolves it from
@@ -73,6 +103,15 @@ class DatabaseKeyProvider @Inject constructor(
     fun getPassphrase(): ByteArray = cachedPassphrase ?: loadBlocking()
 
     /**
+     * The passphrase, or null while the app is locked.
+     *
+     * Background callers — the boot receiver, the keep-alive worker, a sticky service restart —
+     * must use this rather than [getPassphrase] and treat null as "stay down". Asking them to
+     * survive an exception instead would turn a locked phone into a crash loop.
+     */
+    fun getPassphraseOrNull(): ByteArray? = if (locked) null else cachedPassphrase
+
+    /**
      * Last-resort synchronous load. Unwrapping from the Keystore takes
      * hundreds of milliseconds on first use, which is why
      * `VMessengerApplication` warms it up off the main thread; reaching this
@@ -81,6 +120,7 @@ class DatabaseKeyProvider @Inject constructor(
      * simply waited on rather than duplicated.
      */
     private fun loadBlocking(): ByteArray {
+        check(!locked) { "the database is locked; the user has not authenticated" }
         AppLogger.warn(TAG, "database passphrase needed before init finished; loading it synchronously")
         return runBlocking {
             initialize()
