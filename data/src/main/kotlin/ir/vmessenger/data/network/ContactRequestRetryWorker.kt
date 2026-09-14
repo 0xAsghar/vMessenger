@@ -15,35 +15,54 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Per-contact retry bookkeeping shared by the retry worker (which spends the
  * budget) and the request service (which resets it when the user re-sends).
+ *
+ * The budget outlives the process: it is read once on first use and written back
+ * on every change. Held in memory only, it reset on every launch, which made
+ * [ContactRequestRetryWorker.MAX_ATTEMPTS_PER_CONTACT] a cap on nothing — a
+ * contact that has been unreachable for months was dialled hard from scratch
+ * each time the app started.
  */
 @Singleton
-class ContactRequestRetryBudget @Inject constructor() {
+class ContactRequestRetryBudget @Inject constructor(
+    private val store: ContactRequestRetryStore,
+) {
     /** [attempts] counts every automatic send; [failures] only the consecutive failed ones (backoff). */
     data class State(val attempts: Int, val failures: Int, val nextAttemptUnixMs: Long)
 
-    private val states = ConcurrentHashMap<String, State>()
+    private val mutex = Mutex()
 
-    operator fun get(contactId: String): State? = states[contactId]
+    /** Null until the first read pulls the persisted budget in. */
+    private var states: MutableMap<String, State>? = null
 
-    operator fun set(contactId: String, state: State) {
-        states[contactId] = state
+    suspend fun state(contactId: String): State? = mutex.withLock { loaded()[contactId] }
+
+    suspend fun record(contactId: String, state: State) = mutex.withLock {
+        val current = loaded()
+        current[contactId] = state
+        store.save(current.toMap())
     }
 
     /** The user re-sent by hand: start the automatic budget over. */
-    fun reset(contactId: String) {
-        states.remove(contactId)
+    suspend fun reset(contactId: String) = mutex.withLock {
+        val current = loaded()
+        if (current.remove(contactId) != null) store.save(current.toMap())
     }
 
-    fun retainOnly(contactIds: Set<String>) {
-        states.keys.retainAll(contactIds)
+    suspend fun retainOnly(contactIds: Set<String>) = mutex.withLock {
+        val current = loaded()
+        if (current.keys.retainAll(contactIds)) store.save(current.toMap())
     }
+
+    private suspend fun loaded(): MutableMap<String, State> =
+        states ?: store.load().toMutableMap().also { states = it }
 }
 
 /**
@@ -100,7 +119,7 @@ class ContactRequestRetryWorker @Inject constructor(
         if (selfIdentityCache.get() == null) return
         val owed = contactDao.getAll().filter { it.owesRequest(now) }
         val due = owed.filter { entity ->
-            val state = budget[entity.id]
+            val state = budget.state(entity.id)
             state == null || now >= state.nextAttemptUnixMs
         }
         for (entity in due) {
@@ -125,7 +144,7 @@ class ContactRequestRetryWorker @Inject constructor(
         }
 
     private suspend fun sendWithBackoff(contactId: String, contact: Contact, now: Long) {
-        val previous = budget[contactId]
+        val previous = budget.state(contactId)
         val attempts = (previous?.attempts ?: 0) + 1
         val capped = attempts >= MAX_ATTEMPTS_PER_CONTACT
         when (val result = contactRequestService.deliverRequest(contact)) {
@@ -133,7 +152,7 @@ class ContactRequestRetryWorker @Inject constructor(
                 // Delivered; keep a slow heartbeat until the peer answers so a
                 // lost response still heals (receiver auto-accepts duplicates).
                 val repeat = if (capped) CAPPED_REPEAT_MS else DELIVERED_REPEAT_MS
-                budget[contactId] = ContactRequestRetryBudget.State(attempts, 0, now + repeat)
+                budget.record(contactId, ContactRequestRetryBudget.State(attempts, 0, now + repeat))
                 AppLogger.info("Contact", "re-sent contact request to ${contact.userHash} (attempt $attempts)")
             }
             is AppResult.Error -> {
@@ -143,7 +162,7 @@ class ContactRequestRetryWorker @Inject constructor(
                 } else {
                     (BASE_BACKOFF_MS shl minOf(failures, MAX_SHIFT)).coerceAtMost(MAX_BACKOFF_MS)
                 }
-                budget[contactId] = ContactRequestRetryBudget.State(attempts, failures, now + backoff)
+                budget.record(contactId, ContactRequestRetryBudget.State(attempts, failures, now + backoff))
                 AppLogger.info(
                     "Contact",
                     "contact request retry $contactId failed (${result.error.message}), next in ${backoff}ms",

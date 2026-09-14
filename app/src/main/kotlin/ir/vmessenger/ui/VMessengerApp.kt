@@ -20,7 +20,7 @@ import ir.vmessenger.core.designsystem.theme.VMessengerTheme
 import ir.vmessenger.navigation.VMessengerNavHost
 import ir.vmessenger.navigation.VmRoute
 import ir.vmessenger.ui.contact.ContactRequestOverlay
-import ir.vmessenger.ui.network.ClockWarningBanner
+import ir.vmessenger.ui.network.AppAlertBanner
 
 /**
  * Everything the activity draws.
@@ -63,9 +63,9 @@ fun VMessengerApp(
                             onPendingConversationHandled = onPendingConversationHandled,
                         )
                     }
-                    ClockWarningBanner(modifier = Modifier.align(Alignment.TopCenter))
+                    AppAlertBanner(modifier = Modifier.align(Alignment.TopCenter))
                     // LAST child of the root Box, not a navigation destination. The contact-request
-                    // overlay and the clock banner above are siblings of the NavHost, so a
+                    // overlay and the alert banner above are siblings of the NavHost, so a
                     // route-level gate would have shown incoming contact requests over the lock.
                     if (locked) lockContent()
                 }

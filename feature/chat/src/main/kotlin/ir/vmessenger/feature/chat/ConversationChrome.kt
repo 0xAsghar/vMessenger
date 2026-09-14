@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.SyncProblem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -31,6 +32,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -98,7 +100,11 @@ private fun subtitleText(header: ConversationHeaderUi): String? = when {
     else -> null
 }
 
-/** Key change first (it is a security decision), then the blocked and closed notices. */
+/**
+ * Key change first (it is a security decision), then the blocked and group
+ * notices. Closed outranks out of sync: a closed group has no membership left to
+ * be behind on, so saying both would only muddle it.
+ */
 @Composable
 internal fun ConversationBanners(header: ConversationHeaderUi, onOpenContact: (String) -> Unit) {
     if (header.keyChangePending) {
@@ -108,50 +114,45 @@ internal fun ConversationBanners(header: ConversationHeaderUi, onOpenContact: (S
         )
     }
     if (header.blocked) {
-        BlockedBanner()
+        ConversationBanner(
+            icon = Icons.Outlined.Block,
+            textRes = R.string.feature_chat_blocked_banner,
+            color = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        )
     }
-    if (header.closed) {
-        ClosedGroupBanner()
+    when {
+        // A closed group stays readable; the composer is gone, so the banner says why.
+        header.closed -> ConversationBanner(
+            icon = Icons.Outlined.Lock,
+            textRes = R.string.feature_chat_group_closed_banner,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        // Only the creator can hand out the membership, and this one has stopped
+        // answering. Messages still flow; who is in the group no longer moves, which
+        // is the part nothing else on this screen would ever admit.
+        header.outOfSync -> ConversationBanner(
+            icon = Icons.Outlined.SyncProblem,
+            textRes = R.string.feature_chat_group_out_of_sync_banner,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
-/** A closed group stays readable; the composer is gone, so the banner says why. */
+/** One shape for every notice above the message list: icon, one line, full width. */
 @Composable
-private fun ClosedGroupBanner() {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
+private fun ConversationBanner(icon: ImageVector, textRes: Int, color: Color, contentColor: Color) {
+    Surface(color = color, contentColor = contentColor, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(VmSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
         ) {
-            Icon(imageVector = Icons.Outlined.Lock, contentDescription = null)
+            Icon(imageVector = icon, contentDescription = null)
             Text(
-                text = stringResource(R.string.feature_chat_group_closed_banner),
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-    }
-}
-
-@Composable
-private fun BlockedBanner() {
-    Surface(
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(VmSpacing.md),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
-        ) {
-            Icon(imageVector = Icons.Outlined.Block, contentDescription = null)
-            Text(
-                text = stringResource(R.string.feature_chat_blocked_banner),
+                text = stringResource(textRes),
                 style = MaterialTheme.typography.bodySmall,
             )
         }

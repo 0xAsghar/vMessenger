@@ -22,6 +22,11 @@ data class ConversationHeaderUi(
     val memberNames: String? = null,
     /** A closed group is history: readable, but nothing more can be sent. */
     val closed: Boolean = false,
+    /**
+     * The creator has stopped answering this group's snapshot requests, so its
+     * membership is stuck at whatever we last saw.
+     */
+    val outOfSync: Boolean = false,
     val verified: Boolean = false,
     val keyChangePending: Boolean = false,
     val blocked: Boolean = false,

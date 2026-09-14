@@ -12,6 +12,7 @@ import ir.vmessenger.data.repository.FakeMessageDao
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -23,6 +24,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
 import java.security.MessageDigest
 import kotlin.random.Random
 
@@ -148,6 +150,36 @@ class AttachmentReceiverTest {
         assertNull(tracker.transfers.value["m1"])
         assertNull(receiver.handleChunk("a", chunk("m1", 1)))
         receiver.stop()
+    }
+
+    /**
+     * A process killed mid-receive leaves sealed chunk files behind: the receiver's
+     * bookkeeping was in memory and the per-transfer key died with it, so nothing
+     * can ever finish or read them, and no other path deletes them.
+     */
+    @Test
+    fun startSweepsStagingLeftByAKilledProcess() = runTest(dispatcher) {
+        val orphan = File(store.stagingDir, "left-behind.part").apply { writeBytes(ByteArray(8)) }
+
+        receiver.start()
+        runCurrent()
+        receiver.stop()
+
+        assertFalse(orphan.exists())
+    }
+
+    @Test
+    fun startLeavesATransferInFlightAlone() = runTest(dispatcher) {
+        assertFalse(receiver.handleInfo("a", header("m1")))
+        assertNull(receiver.handleChunk("a", chunk("m1", 0)))
+        val staged = store.stagingDir.listFiles()!!.single()
+
+        receiver.start()
+        runCurrent()
+        receiver.stop()
+
+        assertTrue(staged.exists())
+        assertEquals(1, receiver.pendingCount())
     }
 
     @Test

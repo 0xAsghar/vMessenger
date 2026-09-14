@@ -199,7 +199,7 @@ class CleanupHarness(val contactDao: FakeContactDao = FakeContactDao()) {
             identityRepository,
             selfIdentityCache,
             messaging,
-            ContactRequestRetryBudget(),
+            ContactRequestRetryBudget(ContactRequestRetryStore.Transient),
         ),
         locationSharingCoordinator = locationSharing,
         attachmentFileStore = attachmentStore,

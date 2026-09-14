@@ -1,6 +1,7 @@
 package ir.vmessenger.data.network
 
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
+import ir.vmessenger.core.common.group.GroupSyncTracker
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
@@ -120,6 +121,7 @@ class GroupControlHandler @Inject constructor(
         // conversation — and every message in it — away on a re-sent snapshot.
         if (local == null) groupDao.insert(group) else groupDao.update(group)
         groupDao.replaceMembers(incoming.groupId, members, now)
+        GroupSyncTracker.recordSnapshotApplied(incoming.groupId)
         val conversationId = ensureConversation(incoming.groupId, now)
         if (local == null) writer.recordGroupEvent(conversationId, GroupEventText.created(group.name))
     }
@@ -145,6 +147,10 @@ class GroupControlHandler @Inject constructor(
      * An incremental change is only meaningful in sequence: at `local + 1` it is
      * applied, above that a control was missed and a snapshot is requested, below
      * it is a replay and is ignored.
+     *
+     * Only the creator can answer that request, so the ask is counted: a creator
+     * that has gone for good leaves the group frozen at its last version, and
+     * [GroupSyncTracker] is what stops that from being silent.
      */
     private suspend fun applyIncremental(incoming: Incoming, local: GroupEntity?) {
         if (local == null || incoming.senderKey != local.creatorIdentityHash) {
@@ -153,7 +159,10 @@ class GroupControlHandler @Inject constructor(
         }
         val conversationId = conversationDao.getByGroupId(incoming.groupId)?.id
         if (incoming.version != local.version + 1 || conversationId == null) {
-            if (incoming.version > local.version) controlSender.requestSnapshot(local, incoming.senderKey)
+            if (incoming.version > local.version) {
+                controlSender.requestSnapshot(local, incoming.senderKey)
+                GroupSyncTracker.recordSnapshotRequest(incoming.groupId)
+            }
             AppLogger.info(TAG, "control out of order group=${incoming.groupId} v=${incoming.version}")
             return
         }

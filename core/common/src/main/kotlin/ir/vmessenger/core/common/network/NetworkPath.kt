@@ -36,6 +36,37 @@ enum class RelayPeerPolicy {
     CHARGING_ONLY,
 }
 
+/**
+ * The one reachability fault worth putting in front of the user.
+ *
+ * Each of these leaves the app looking perfectly healthy while nothing can reach
+ * it, and the transport cannot resolve any of them on its own: they end when a
+ * person changes something. Everything else — an outage, a dead relay, no
+ * network — is the retry loop's business and never appears here.
+ */
+enum class ListenerAlert {
+    NONE,
+
+    /**
+     * TLS chain/validity failure. The device clock sits outside the server
+     * certificate's validity window, i.e. the date is wrong by a lot.
+     */
+    CLOCK_CERTIFICATE,
+
+    /**
+     * The relay refused the listener proof as stale. The clock is off by more
+     * than the relay's skew window — minutes, not months — which also stops this
+     * device's discovery records from being accepted.
+     */
+    CLOCK_SKEW,
+
+    /**
+     * The relay handed this identity's listener slot to another device. Relays
+     * key listeners by identity, so a backup restored elsewhere evicts this one.
+     */
+    IDENTITY_ELSEWHERE,
+}
+
 data class NetworkPathEvent(
     val path: NetworkPath,
     val detail: String,
@@ -83,15 +114,13 @@ object NetworkPathTracker {
     private val _snapshot = MutableStateFlow(NetworkDiagnosticsSnapshot())
     val snapshot: StateFlow<NetworkDiagnosticsSnapshot> = _snapshot
 
-    private val _clockWarning = MutableStateFlow(false)
+    private val _listenerAlert = MutableStateFlow(ListenerAlert.NONE)
 
     /**
-     * True when relay/DHT connections are failing TLS certificate validation.
-     * This almost always means the device clock sits outside the server
-     * certificate's validity window (a wrong date/time), so the UI can prompt
-     * the user to check it instead of silently retrying forever.
+     * The reachability fault the UI should be showing right now, or
+     * [ListenerAlert.NONE]. See [ListenerAlert] for why only these three qualify.
      */
-    val clockWarning: StateFlow<Boolean> = _clockWarning
+    val listenerAlert: StateFlow<ListenerAlert> = _listenerAlert
 
     fun record(path: NetworkPath, detail: String, atUnixMs: Long = System.currentTimeMillis()) {
         val event = NetworkPathEvent(path = path, detail = detail, atUnixMs = atUnixMs)
@@ -182,20 +211,65 @@ object NetworkPathTracker {
 
     /**
      * Report a failed connection attempt. If the failure is a TLS certificate
-     * chain/validity error, raise [clockWarning] so the UI can hint that the
-     * device date & time may be wrong. Non-certificate failures (plain offline,
-     * timeouts, resets) are ignored so an ordinary outage never shows the hint.
+     * chain/validity error, raise [ListenerAlert.CLOCK_CERTIFICATE] so the UI can
+     * hint that the device date & time may be wrong. Non-certificate failures
+     * (plain offline, timeouts, resets) are ignored so an ordinary outage never
+     * shows the hint.
      */
     fun reportConnectionError(error: Throwable?) {
         if (isCertValidityError(error)) {
-            _clockWarning.value = true
+            raise(ListenerAlert.CLOCK_CERTIFICATE)
         }
     }
 
-    /** A successful connection proves the clock/cert are fine — clear the hint. */
+    /**
+     * A completed TLS handshake proves the certificate validated, so the date is
+     * at least roughly right. It says nothing about the other two alerts: a clock
+     * minutes out still gives a valid certificate, and a stolen listener slot does
+     * not stop this device from dialling anywhere.
+     */
     fun reportConnectionSuccess() {
-        if (_clockWarning.value) {
-            _clockWarning.value = false
+        if (_listenerAlert.value == ListenerAlert.CLOCK_CERTIFICATE) {
+            _listenerAlert.value = ListenerAlert.NONE
+        }
+    }
+
+    /**
+     * The relay held our listener registration through a whole keepalive interval.
+     * Silence is the only acknowledgement it gives a listener, and it settles all
+     * three at once: the proof was fresh enough, the certificate validated, and no
+     * other device has taken the slot.
+     */
+    fun reportListenerAccepted() {
+        if (_listenerAlert.value != ListenerAlert.NONE) {
+            _listenerAlert.value = ListenerAlert.NONE
+        }
+    }
+
+    /**
+     * The relay turned the listener hello away, saying [reason] in its own words.
+     * Only a stale proof is the user's to fix; every other rejection is the retry
+     * loop's business.
+     */
+    fun reportListenerRejected(reason: String?) {
+        if (RelayRejection.isStaleProof(reason)) {
+            raise(ListenerAlert.CLOCK_SKEW)
+        }
+    }
+
+    /** Another device installed a listener for this identity and took the slot. */
+    fun reportListenerReplaced() {
+        _listenerAlert.value = ListenerAlert.IDENTITY_ELSEWHERE
+    }
+
+    /**
+     * [ListenerAlert.IDENTITY_ELSEWHERE] outranks the clock hints: while a second
+     * device owns the slot, everything else that fails here is a symptom of that,
+     * and sending the user off to check their clock would waste their time.
+     */
+    private fun raise(alert: ListenerAlert) {
+        if (_listenerAlert.value != ListenerAlert.IDENTITY_ELSEWHERE) {
+            _listenerAlert.value = alert
         }
     }
 
@@ -204,7 +278,7 @@ object NetworkPathTracker {
         _lastPath.value = null
         _attempts.value = emptyList()
         _snapshot.value = NetworkDiagnosticsSnapshot()
-        _clockWarning.value = false
+        _listenerAlert.value = ListenerAlert.NONE
     }
 
     /**

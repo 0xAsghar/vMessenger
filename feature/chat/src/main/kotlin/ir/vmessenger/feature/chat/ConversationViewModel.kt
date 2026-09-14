@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.group.GroupSyncTracker
 import ir.vmessenger.core.designsystem.format.VmDateFormat
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.notifications.ActiveConversationTracker
@@ -127,10 +128,14 @@ class ConversationViewModel @Inject constructor(
             }
         }
 
-    private val header: Flow<ConversationHeaderUi> =
-        combine(observeChatList(), observeContacts(), group) { summaries, contacts, groupState ->
-            buildHeader(summaries, contacts, groupState)
-        }
+    private val header: Flow<ConversationHeaderUi> = combine(
+        observeChatList(),
+        observeContacts(),
+        group,
+        GroupSyncTracker.outOfSync,
+    ) { summaries, contacts, groupState, outOfSync ->
+        buildHeader(summaries, contacts, groupState, outOfSync)
+    }
 
     /** Recording and playback for this conversation; see [VoiceSession] for why it is not inlined. */
     val voice = VoiceSession(
@@ -376,6 +381,7 @@ class ConversationViewModel @Inject constructor(
         summaries: List<ConversationSummary>,
         contacts: List<Contact>,
         groupState: GroupState,
+        outOfSyncGroups: Set<String>,
     ): ConversationHeaderUi {
         val summary = summaries.firstOrNull { it.id == conversationId }
         val contact = contacts.firstOrNull { it.id == summary?.contactId }
@@ -393,6 +399,7 @@ class ConversationViewModel @Inject constructor(
                 .takeIf { it.isNotEmpty() }
                 ?.joinToString(NAME_SEPARATOR) { VmTextFormat.isolate(it.displayName) },
             closed = groupInfo?.closed == true,
+            outOfSync = groupInfo != null && groupInfo.id in outOfSyncGroups,
             verified = contact?.verified == true,
             keyChangePending = contact?.keyChangePending == true,
             blocked = contact?.blocked == true,

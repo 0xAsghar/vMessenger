@@ -78,6 +78,8 @@ class FakeAttachmentIncomingStore(root: File) : AttachmentIncomingStore {
     override suspend fun newIncomingStaging(totalSize: Long, chunkCount: Int, chunkBytes: Int): IncomingStaging =
         PlainStaging(File(stagingDir, "${UUID.randomUUID()}.part"), chunkBytes)
 
+    override suspend fun sweepOrphanedStaging(): Int = stagingDir.listFiles()?.count { it.delete() } ?: 0
+
     override suspend fun importStaged(staging: IncomingStaging, fileName: String, expectedSha256: ByteArray): File? {
         val plain = staging as PlainStaging
         plain.output.close()

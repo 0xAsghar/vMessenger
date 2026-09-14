@@ -41,7 +41,7 @@ class ContactRequestHandlerTest {
                 identityRepository,
                 SelfIdentityCache(identityRepository, cryptoEngine),
                 FakeMessagingPort(),
-                ContactRequestRetryBudget(),
+                ContactRequestRetryBudget(ContactRequestRetryStore.Transient),
             ),
             contactDao = contactDao,
             identityRepository = identityRepository,

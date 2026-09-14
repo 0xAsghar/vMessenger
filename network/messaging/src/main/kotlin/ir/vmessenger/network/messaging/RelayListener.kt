@@ -4,9 +4,11 @@ import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.common.network.RelayDns
+import ir.vmessenger.core.common.network.RelayRejection
 import ir.vmessenger.core.common.network.WebSocketFrameClient
 import ir.vmessenger.core.proto.relay.v1.RelayEvent
 import ir.vmessenger.core.proto.relay.v1.RelayEventType
+import ir.vmessenger.core.proto.relay.v1.RelayHello
 import ir.vmessenger.network.transport.Connection
 import ir.vmessenger.network.transport.RelayTransport
 import kotlinx.coroutines.CompletableDeferred
@@ -28,6 +30,21 @@ import javax.inject.Singleton
 
 fun interface InboundConnectionHandler {
     suspend fun onInboundConnection(connection: Connection)
+}
+
+/**
+ * How one control-channel session ended, and how long to wait before dialling
+ * again. [CLOSED] is the ordinary idle-timeout drop and has to be quick, because
+ * the device is unreachable until the next session is up. The other two are
+ * conditions only a person can resolve, and hammering them makes things worse:
+ * two devices holding the same identity would evict each other once a second
+ * forever, and a proof refused for its timestamp is refused again the moment it
+ * is rebuilt.
+ */
+private enum class ControlChannelEnd(val pauseMs: Long) {
+    CLOSED(1_000L),
+    STALE_PROOF(60_000L),
+    REPLACED(5 * 60_000L),
 }
 
 @Singleton
@@ -87,10 +104,8 @@ class RelayListener @Inject constructor(
     private suspend fun maintainControlChannel() {
         var backoffMs = 1_000L
         while (running && scope.isActive) {
-            val hash = identityHash
-            val pub = identityPub
-            val key = ed25519PrivateKeyProvider?.let { provider -> runCatching { provider() }.getOrNull() }
-            if (hash == null || pub == null || key == null) {
+            val credentials = credentials()
+            if (credentials == null) {
                 delay(1_000)
                 continue
             }
@@ -98,12 +113,12 @@ class RelayListener @Inject constructor(
             val url = selected.url
             try {
                 AppLogger.info(TAG, "control channel connecting via $url")
-                connectControlChannel(url, hash, pub, key)
+                val end = connectControlChannel(url, credentials)
                 relayDirectory.reportResult(url, ok = true)
                 NetworkPathTracker.reportConnectionSuccess()
                 backoffMs = 1_000L
-                AppLogger.info(TAG, "control channel ended, reconnecting in ${backoffMs}ms")
-                delay(backoffMs)
+                AppLogger.info(TAG, "control channel ended (${end.name}), reconnecting in ${end.pauseMs}ms")
+                delay(end.pauseMs)
             } catch (e: Exception) {
                 relayDirectory.reportResult(url, ok = false)
                 NetworkPathTracker.reportConnectionError(e)
@@ -114,24 +129,31 @@ class RelayListener @Inject constructor(
         }
     }
 
+    /** The three identity parts of a listener hello, or null while any of them is still missing. */
+    private class Credentials(
+        val identityHash: ByteArray,
+        val identityPub: ByteArray,
+        val ed25519PrivateKey: ByteArray,
+    )
+
+    private suspend fun credentials(): Credentials? {
+        val hash = identityHash
+        val pub = identityPub
+        val key = ed25519PrivateKeyProvider?.let { provider -> runCatching { provider() }.getOrNull() }
+        return if (hash == null || pub == null || key == null) null else Credentials(hash, pub, key)
+    }
+
     @Suppress("TooGenericExceptionCaught") // per-IP attempt: any failure moves on to the next backend
-    private suspend fun connectControlChannel(
-        url: String,
-        identityHash: ByteArray,
-        identityPub: ByteArray,
-        ed25519PrivateKey: ByteArray,
-    ) {
+    private suspend fun connectControlChannel(url: String, credentials: Credentials): ControlChannelEnd {
         val host = RelayDns.hostFromUrl(url)
         val ips = host?.let { RelayDns.candidateIps(it) }.orEmpty()
         if (host == null || ips.isEmpty()) {
-            connectControlChannelOnce(url, host, targetIp = null, identityHash, identityPub, ed25519PrivateKey)
-            return
+            return connectControlChannelOnce(url, host, targetIp = null, credentials)
         }
         var lastError: Exception? = null
         for (ip in ips) {
             try {
-                connectControlChannelOnce(url, host, ip, identityHash, identityPub, ed25519PrivateKey)
-                return
+                return connectControlChannelOnce(url, host, ip, credentials)
             } catch (e: Exception) {
                 lastError = e
                 AppLogger.warn(TAG, "control channel failed via $ip: ${e.message}")
@@ -140,73 +162,42 @@ class RelayListener @Inject constructor(
         throw lastError ?: IllegalStateException("Relay control channel failed")
     }
 
-    @Suppress("LongParameterList") // url/host/ip plus the three identity parts of the listener hello
     private suspend fun connectControlChannelOnce(
         url: String,
         host: String?,
         targetIp: String?,
-        identityHash: ByteArray,
-        identityPub: ByteArray,
-        ed25519PrivateKey: ByteArray,
-    ) {
-        val hello = relayHelloFactory.buildListenerHello(identityHash, identityPub, ed25519PrivateKey)
-        val request = Request.Builder().url(url).build()
-        val openLatch = CompletableDeferred<Unit>()
-        val closeLatch = CompletableDeferred<Unit>()
-        val listener = object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send(hello.toByteArray().toByteString())
-                AppLogger.info(TAG, "control channel connected")
-                openLatch.complete(Unit)
-            }
-
-            override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                val event = runCatching { RelayEvent.parseFrom(bytes.toByteArray()) }.getOrNull() ?: return
-                when (event.type) {
-                    RelayEventType.RELAY_EVENT_TYPE_INCOMING -> {
-                        AppLogger.info(TAG, "incoming circuit ${event.circuitId}")
-                        scope.launch { acceptCircuit(url, event.circuitId) }
-                    }
-                    RelayEventType.RELAY_EVENT_TYPE_ERROR -> {
-                        AppLogger.warn(TAG, "relay error: ${event.message}")
-                        webSocket.close(1000, event.message)
-                    }
-                    else -> Unit
-                }
-            }
-
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                if (!openLatch.isCompleted) {
-                    openLatch.completeExceptionally(
-                        IllegalStateException("closed before open: $code $reason"),
-                    )
-                }
-                closeLatch.complete(Unit)
-            }
-
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                if (!openLatch.isCompleted) {
-                    openLatch.completeExceptionally(t)
-                }
-                closeLatch.complete(Unit)
-            }
-        }
-        val webSocket = when {
-            host != null && targetIp != null ->
-                WebSocketFrameClient.httpClientWithPinning(host, targetIp).newWebSocket(request, listener)
-            host != null ->
-                WebSocketFrameClient.httpClientWithPinning(host).newWebSocket(request, listener)
-            else ->
-                WebSocketFrameClient.httpClient().newWebSocket(request, listener)
-        }
+        credentials: Credentials,
+    ): ControlChannelEnd {
+        val hello = relayHelloFactory.buildListenerHello(
+            credentials.identityHash,
+            credentials.identityPub,
+            credentials.ed25519PrivateKey,
+        )
+        val session = ControlChannelSession(url, hello)
+        val webSocket = openWebSocket(Request.Builder().url(url).build(), host, targetIp, session)
         try {
-            openLatch.await()
-            val keepAlive = scope.launch { keepAliveLoop(webSocket, closeLatch) }
-            closeLatch.await()
+            session.openLatch.await()
+            val keepAlive = scope.launch { keepAliveLoop(webSocket, session.closeLatch) }
+            session.closeLatch.await()
             keepAlive.cancel()
         } finally {
             webSocket.cancel()
         }
+        return session.end
+    }
+
+    private fun openWebSocket(
+        request: Request,
+        host: String?,
+        targetIp: String?,
+        listener: WebSocketListener,
+    ): WebSocket = when {
+        host != null && targetIp != null ->
+            WebSocketFrameClient.httpClientWithPinning(host, targetIp).newWebSocket(request, listener)
+        host != null ->
+            WebSocketFrameClient.httpClientWithPinning(host).newWebSocket(request, listener)
+        else ->
+            WebSocketFrameClient.httpClient().newWebSocket(request, listener)
     }
 
     /**
@@ -222,6 +213,9 @@ class RelayListener @Inject constructor(
         while (alive && !closeLatch.isCompleted) {
             delay(KEEPALIVE_INTERVAL_MS)
             alive = !closeLatch.isCompleted && webSocket.send(KEEPALIVE_FRAME.toByteString())
+            // Keeping the slot for a whole interval is the only acknowledgement the
+            // relay ever gives a listener, so it is also what retires a stale banner.
+            if (alive) NetworkPathTracker.reportListenerAccepted()
         }
     }
 
@@ -245,9 +239,92 @@ class RelayListener @Inject constructor(
                 .isSuccess
     }
 
+    /**
+     * One control-channel socket. The relay acknowledges nothing, so everything
+     * read here is either an incoming circuit, a typed rejection, or the close —
+     * and [end] is what the maintain loop does about it.
+     */
+    private inner class ControlChannelSession(
+        private val url: String,
+        private val hello: RelayHello,
+    ) : WebSocketListener() {
+        val openLatch = CompletableDeferred<Unit>()
+        val closeLatch = CompletableDeferred<Unit>()
+
+        @Volatile
+        var end: ControlChannelEnd = ControlChannelEnd.CLOSED
+            private set
+
+        override fun onOpen(webSocket: WebSocket, response: Response) {
+            webSocket.send(hello.toByteArray().toByteString())
+            AppLogger.info(TAG, "control channel connected")
+            openLatch.complete(Unit)
+        }
+
+        override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+            val event = runCatching { RelayEvent.parseFrom(bytes.toByteArray()) }.getOrNull() ?: return
+            when (event.type) {
+                RelayEventType.RELAY_EVENT_TYPE_INCOMING -> {
+                    AppLogger.info(TAG, "incoming circuit ${event.circuitId}")
+                    scope.launch { acceptCircuit(url, event.circuitId) }
+                }
+                RelayEventType.RELAY_EVENT_TYPE_ERROR -> onRelayError(webSocket, event.message)
+                else -> Unit
+            }
+        }
+
+        /**
+         * A rejection the relay states out loud. A stale proof is the one the user
+         * can do something about — this device's clock is outside the relay's skew
+         * window, which also has discovery refusing its records — so it is published
+         * instead of disappearing into the retry loop.
+         */
+        private fun onRelayError(webSocket: WebSocket, message: String) {
+            AppLogger.warn(TAG, "relay error: $message")
+            if (RelayRejection.isStaleProof(message)) {
+                end = ControlChannelEnd.STALE_PROOF
+                NetworkPathTracker.reportListenerRejected(message)
+            }
+            webSocket.close(NORMAL_CLOSE, message)
+        }
+
+        /**
+         * The relay closes with "replaced" when a second device installs a listener
+         * for the same identity. Answering the close is also what turns it into an
+         * [onClosed]: without a reply OkHttp leaves the socket half-open until a
+         * keepalive write eventually fails, which is up to a whole interval of
+         * looking connected while nothing can arrive.
+         */
+        override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            if (RelayRejection.isReplaced(reason)) {
+                end = ControlChannelEnd.REPLACED
+                NetworkPathTracker.reportListenerReplaced()
+                AppLogger.warn(TAG, "listener slot taken over by another device holding this identity")
+            }
+            webSocket.close(NORMAL_CLOSE, null)
+        }
+
+        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            if (!openLatch.isCompleted) {
+                openLatch.completeExceptionally(
+                    IllegalStateException("closed before open: $code $reason"),
+                )
+            }
+            closeLatch.complete(Unit)
+        }
+
+        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            if (!openLatch.isCompleted) {
+                openLatch.completeExceptionally(t)
+            }
+            closeLatch.complete(Unit)
+        }
+    }
+
     companion object {
         private const val TAG = "Relay"
         private const val KEEPALIVE_INTERVAL_MS = 40_000L
+        private const val NORMAL_CLOSE = 1000
         private val KEEPALIVE_FRAME = byteArrayOf(0)
 
         private fun newScope() = CoroutineScope(SupervisorJob() + Dispatchers.IO + loggingExceptionHandler(TAG))

@@ -52,7 +52,7 @@ class PendingRevokeWorkerTest {
                 harness.identityRepository,
                 harness.selfIdentityCache,
                 harness.messaging,
-                ContactRequestRetryBudget(),
+                ContactRequestRetryBudget(ContactRequestRetryStore.Transient),
             ),
             selfIdentityCache = harness.selfIdentityCache,
             ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,

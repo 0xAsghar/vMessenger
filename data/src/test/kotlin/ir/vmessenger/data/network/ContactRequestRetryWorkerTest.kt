@@ -21,22 +21,31 @@ class ContactRequestRetryWorkerTest {
     private lateinit var messaging: FakeMessagingPort
     private lateinit var service: ContactRequestService
     private lateinit var worker: ContactRequestRetryWorker
+    private lateinit var store: FakeContactRequestRetryStore
+    private lateinit var identityRepository: FakeIdentityRepository
+    private lateinit var identityCache: SelfIdentityCache
 
     @Before
     fun setUp() {
         val cryptoEngine = LazysodiumCryptoEngine(LazySodiumJava(SodiumJava()))
-        val identityRepository = FakeIdentityRepository(cryptoEngine)
+        identityRepository = FakeIdentityRepository(cryptoEngine)
         InboundFixtures.installIdentity(identityRepository, 0x01)
-        val cache = SelfIdentityCache(identityRepository, cryptoEngine)
-        val budget = ContactRequestRetryBudget()
+        identityCache = SelfIdentityCache(identityRepository, cryptoEngine)
+        store = FakeContactRequestRetryStore()
         contactDao = FakeContactDao()
         messaging = FakeMessagingPort()
-        service = ContactRequestService(identityRepository, cache, messaging, budget)
-        worker = ContactRequestRetryWorker(
+        worker = newWorker()
+    }
+
+    /** A worker over a fresh budget but the same disk: what a process restart gives. */
+    private fun newWorker(): ContactRequestRetryWorker {
+        val budget = ContactRequestRetryBudget(store)
+        service = ContactRequestService(identityRepository, identityCache, messaging, budget)
+        return ContactRequestRetryWorker(
             contactDao = contactDao,
             contactRepository = FakeContactRepository(contactDao),
             contactRequestService = service,
-            selfIdentityCache = cache,
+            selfIdentityCache = identityCache,
             budget = budget,
             ioDispatcher = Dispatchers.Unconfined,
         )
@@ -113,5 +122,52 @@ class ContactRequestRetryWorkerTest {
 
         worker.runPass(t0 + 15 * 60_000L)
         assertEquals(1, requestsSent())
+    }
+
+    /**
+     * The cap only means anything if it outlives the process. Held in memory, it
+     * reset on every launch, so a contact that stopped answering months ago was
+     * dialled hard all over again each time the app started.
+     */
+    @Test
+    fun budgetSurvivesARestart() = runTest {
+        contactDao.contacts += InboundFixtures.contact("a", peerA, status = ContactRelationshipStatus.PENDING_OUT)
+        val cap = ContactRequestRetryWorker.MAX_ATTEMPTS_PER_CONTACT
+        var now = t0
+        repeat(cap) {
+            worker.runPass(now)
+            now += ContactRequestRetryWorker.DELIVERED_REPEAT_MS
+        }
+        assertEquals(cap, requestsSent())
+
+        worker = newWorker()
+
+        worker.runPass(now)
+        assertEquals("the restored budget is still spent", cap, requestsSent())
+        worker.runPass(now + ContactRequestRetryWorker.CAPPED_REPEAT_MS)
+        assertEquals(cap + 1, requestsSent())
+    }
+
+    @Test
+    fun theUsersOwnResendClearsTheContactFromDisk() = runTest {
+        contactDao.contacts += InboundFixtures.contact("a", peerA, status = ContactRelationshipStatus.PENDING_OUT)
+        worker.runPass(t0)
+        assertEquals(setOf("a"), store.saved.keys)
+
+        service.sendRequest(requireNotNull(FakeContactRepository(contactDao).getContact("a")))
+
+        assertEquals(emptySet<String>(), store.saved.keys)
+    }
+}
+
+/** Stands in for the DataStore: one map that outlives the budget reading it. */
+private class FakeContactRequestRetryStore : ContactRequestRetryStore {
+    var saved: Map<String, ContactRequestRetryBudget.State> = emptyMap()
+        private set
+
+    override suspend fun load(): Map<String, ContactRequestRetryBudget.State> = saved
+
+    override suspend fun save(states: Map<String, ContactRequestRetryBudget.State>) {
+        saved = states
     }
 }

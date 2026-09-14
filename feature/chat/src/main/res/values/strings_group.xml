@@ -30,6 +30,7 @@
     <string name="feature_chat_group_add_members">افزودن عضو</string>
     <string name="feature_chat_group_seats_left">%1$s جای خالی</string>
     <string name="feature_chat_group_closed_banner">این گروه بسته شده است؛ فقط می‌توانید پیام‌های گذشته را بخوانید.</string>
+    <string name="feature_chat_group_out_of_sync_banner">فهرست اعضای این گروه به‌روز نیست؛ سازندهٔ گروه به درخواست‌های هماهنگی پاسخ نمی‌دهد. پیام‌ها می‌رسند، اما تغییرهای تازهٔ اعضا را نمی‌بینید.</string>
 
     <!-- Member rows -->
     <string name="feature_chat_group_member_unknown">ناشناس</string>

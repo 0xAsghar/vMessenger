@@ -9,9 +9,16 @@
     <string name="contact_request_body">%1$s با شناسه %2$s شما را به مخاطبین اضافه کرده است. آیا این فرد را به مخاطبین خود اضافه می‌کنید؟</string>
     <string name="contact_request_approve">تأیید</string>
     <string name="contact_request_reject">رد</string>
-    <string name="clock_warning_title">تاریخ و ساعت دستگاه را بررسی کنید</string>
-    <string name="clock_warning_body">اتصال به شبکه به دلیل خطای گواهی امنیتی ناموفق است. معمولاً این مشکل با تنظیم صحیح تاریخ و ساعت (ترجیحاً حالت خودکار) برطرف می‌شود.</string>
-    <string name="clock_warning_dismiss">بستن</string>
+    <!-- The app-wide banner: conditions that stop messages from arriving while everything looks fine -->
+    <string name="alert_dismiss">بستن</string>
+    <string name="alert_clock_title">تاریخ و ساعت دستگاه را بررسی کنید</string>
+    <string name="alert_clock_certificate_body">اتصال به شبکه به دلیل خطای گواهی امنیتی ناموفق است. معمولاً این مشکل با تنظیم صحیح تاریخ و ساعت (ترجیحاً حالت خودکار) برطرف می‌شود.</string>
+    <string name="alert_clock_skew_body">ساعت دستگاه شما با ساعت شبکه اختلاف دارد و به همین دلیل سرور رله شما را نمی‌پذیرد؛ تا وقتی این اختلاف باقی باشد هیچ پیامی به شما نمی‌رسد. تاریخ و ساعت را روی حالت خودکار بگذارید.</string>
+    <string name="alert_identity_title">این حساب روی دستگاه دیگری فعال است</string>
+    <string name="alert_identity_body">دستگاه دیگری با همین هویت به شبکه وصل شده و پیام‌های ورودی به آن می‌رسد. هر هویت در یک زمان فقط روی یک دستگاه کار می‌کند؛ برای استفاده از این دستگاه، برنامه را روی دستگاه دیگر ببندید.</string>
+    <string name="alert_notifications_title">اعلان‌ها خاموش است</string>
+    <string name="alert_notifications_body">برنامه برای دریافت پیام در پس‌زمینه به اجازهٔ اعلان نیاز دارد. تا وقتی اعلان‌ها خاموش باشد، ممکن است پیام‌ها با تأخیر برسند یا اصلاً نرسند.</string>
+    <string name="alert_notifications_action">باز کردن تنظیمات اعلان</string>
 
     <!-- Destinations whose screens land in a later milestone (M5/M6). -->
     <string name="route_new_chat">گفتگوی جدید</string>

@@ -66,6 +66,15 @@ interface AttachmentIncomingStore {
      * when the import itself fails. The staging is discarded either way.
      */
     suspend fun importStaged(staging: IncomingStaging, fileName: String, expectedSha256: ByteArray): File?
+
+    /**
+     * Deletes every staged chunk file and returns how many. A process killed
+     * mid-receive leaves them behind for good: the receiver's bookkeeping was in
+     * memory, and the per-transfer key died with the process, so they can never
+     * be finished or read. Only safe with no transfer in flight — the caller owns
+     * that guarantee.
+     */
+    suspend fun sweepOrphanedStaging(): Int
 }
 
 /**
@@ -94,9 +103,11 @@ class AttachmentStore @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher + loggingExceptionHandler("Attachment"))
 
     init {
-        // Anything left from a previous process is scratch (plaintext view copies,
-        // sealed partial transfers whose keys died with the process): drop it.
-        scope.launch { purgeTransient() }
+        // Plaintext view copies from a previous process, dropped as early as
+        // possible because they are the only clear-text attachments on disk.
+        // Staged transfers are swept separately, by the receiver, which is the
+        // only thing that knows when none is in flight.
+        scope.launch { purgeViewCache() }
     }
 
     override fun delete(path: String): Boolean {
@@ -178,6 +189,12 @@ class AttachmentStore @Inject constructor(
         }
     }
 
+    override suspend fun sweepOrphanedStaging(): Int = withContext(ioDispatcher) {
+        val removed = stagingDir.listFiles()?.count { it.delete() } ?: 0
+        if (removed > 0) AppLogger.info("Attachment", "swept $removed orphaned staging file(s)")
+        removed
+    }
+
     override suspend fun openDecrypted(path: String): InputStream {
         val file = insideRoots(path) ?: throw IllegalArgumentException("attachment path outside store")
         val key = keyProvider.get()
@@ -235,12 +252,9 @@ class AttachmentStore @Inject constructor(
         return file.takeIf { inside }
     }
 
-    private fun purgeTransient() {
-        var removed = 0
-        for (dir in listOf(viewDir, stagingDir)) {
-            dir.listFiles()?.forEach { if (it.delete()) removed++ }
-        }
-        if (removed > 0) AppLogger.info("Attachment", "purged $removed transient file(s)")
+    private fun purgeViewCache() {
+        val removed = viewDir.listFiles()?.count { it.delete() } ?: 0
+        if (removed > 0) AppLogger.info("Attachment", "purged $removed plaintext view file(s)")
     }
 
     private fun queryDisplayName(uri: Uri): String? =

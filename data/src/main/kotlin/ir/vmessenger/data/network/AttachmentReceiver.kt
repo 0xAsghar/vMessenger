@@ -88,13 +88,30 @@ class AttachmentReceiver @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher + loggingExceptionHandler("Attachment"))
     private var pruneJob: Job? = null
 
-    /** Starts the periodic prune of transfers that stopped receiving chunks. */
+    /** Sweeps whatever a killed process left staged, then prunes transfers that stall. */
     fun start() {
         if (pruneJob?.isActive == true) return
         pruneJob = scope.launch {
+            sweepOrphanedStaging()
             while (isActive) {
                 delay(PRUNE_INTERVAL_MS)
                 pruneStale(clock())
+            }
+        }
+    }
+
+    /**
+     * A process killed mid-receive leaves sealed chunk files on disk with nothing
+     * left to finish them — the bookkeeping was in memory and the per-transfer key
+     * died with the process — and no other path ever deletes them. Taken under the
+     * lock that admits a transfer, and only with nothing in flight, so a live
+     * staging can never be swept out from under its own chunks.
+     */
+    private suspend fun sweepOrphanedStaging() {
+        registry.withLock {
+            if (pending.isEmpty()) {
+                runCatching { store.sweepOrphanedStaging() }
+                    .onFailure { AppLogger.warn("Attachment", "staging sweep failed: ${it.message}") }
             }
         }
     }

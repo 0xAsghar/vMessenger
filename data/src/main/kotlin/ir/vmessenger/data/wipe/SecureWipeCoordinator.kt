@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import dagger.hilt.android.qualifiers.ApplicationContext
+import ir.vmessenger.core.common.group.GroupSyncTracker
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.common.network.P2PConfig
@@ -13,6 +14,7 @@ import ir.vmessenger.core.crypto.keystore.KeyStoreKeyManager
 import ir.vmessenger.core.database.DatabaseKeyProvider
 import ir.vmessenger.core.database.VMessengerDatabase
 import ir.vmessenger.core.database.di.DatabaseModule
+import ir.vmessenger.core.datastore.ContactRetryPreferences
 import ir.vmessenger.core.datastore.DiscoveryPreferences
 import ir.vmessenger.core.datastore.DraftPreferences
 import ir.vmessenger.core.datastore.P2PPreferences
@@ -57,6 +59,7 @@ class SecureWipeCoordinator @Inject constructor(
     private val privacyPreferences: PrivacyPreferences,
     private val p2pPreferences: P2PPreferences,
     private val discoveryPreferences: DiscoveryPreferences,
+    private val contactRetryPreferences: ContactRetryPreferences,
     private val themePreferences: ThemePreferences,
     private val updateStore: UpdateStore,
     private val draftPreferences: DraftPreferences,
@@ -119,6 +122,8 @@ class SecureWipeCoordinator @Inject constructor(
         p2pPreferences.clear()
         discoveryPreferences.clear()
         themePreferences.clear()
+        // Who this device was still dialling, and how hard.
+        contactRetryPreferences.clear()
         // The updater's store too: the last-checked stamp, the cached release and the version
         // the user waved away all outlive a wipe otherwise, and they say when this device was
         // last used and which build it was running.
@@ -130,6 +135,7 @@ class SecureWipeCoordinator @Inject constructor(
         databaseKeyProvider.reset()
         attachmentKeyProvider.reset()
         NetworkPathTracker.clear()
+        GroupSyncTracker.clear()
         P2PConfig.resetToDefaults()
         RelayDns.clearPins()
         AppLogger.clear()

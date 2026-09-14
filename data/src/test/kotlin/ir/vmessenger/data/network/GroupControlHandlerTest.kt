@@ -1,6 +1,7 @@
 package ir.vmessenger.data.network
 
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
+import ir.vmessenger.core.common.group.GroupSyncTracker
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.GroupEntity
 import ir.vmessenger.core.database.entity.GroupMemberEntity
@@ -11,6 +12,7 @@ import ir.vmessenger.data.repository.GroupEventText
 import ir.vmessenger.data.repository.GroupFixtures
 import ir.vmessenger.network.messaging.PeerIdentity
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -39,11 +41,15 @@ class GroupControlHandlerTest {
 
     @Before
     fun setUp() {
+        GroupSyncTracker.clear()
         harness = InboundHarness(selfSeed = SELF_SEED)
         handler = harness.groupControlHandler
         harness.contactDao.contacts += InboundFixtures.contact("a", peerA)
         harness.contactDao.contacts += InboundFixtures.contact("b", peerB)
     }
+
+    @After
+    fun tearDown() = GroupSyncTracker.clear()
 
     @Test
     fun `a create from the creator that includes us is stored`() = runTest {
@@ -209,6 +215,35 @@ class GroupControlHandlerTest {
         assertEquals(before, harness.messageDao.messages.size)
         // And no second "group created" line: the group was already known.
         assertEquals(1, harness.messageDao.messages.count { it.body == GroupEventText.created("Team") })
+    }
+
+    /**
+     * The gap is real and the creator never answers. Membership is stuck at v1
+     * forever, and until this the only sign was a group where nobody's changes
+     * ever arrived.
+     */
+    @Test
+    fun `a creator that never answers marks the group out of sync`() = runTest {
+        seedLocalGroup(version = 1L)
+
+        repeat(GroupSyncTracker.UNANSWERED_REQUESTS_BEFORE_ALERT) {
+            handler.handle("a", control(GroupControlType.GROUP_CONTROL_TYPE_ADD, version = 3L))
+        }
+
+        assertTrue(GroupFixtures.GROUP_ID in GroupSyncTracker.outOfSync.value)
+    }
+
+    @Test
+    fun `a snapshot from the creator clears the out of sync mark`() = runTest {
+        seedLocalGroup(version = 1L)
+        repeat(GroupSyncTracker.UNANSWERED_REQUESTS_BEFORE_ALERT) {
+            handler.handle("a", control(GroupControlType.GROUP_CONTROL_TYPE_ADD, version = 3L))
+        }
+
+        handler.handle("a", control(GroupControlType.GROUP_CONTROL_TYPE_SNAPSHOT, version = 3L))
+
+        assertFalse(GroupFixtures.GROUP_ID in GroupSyncTracker.outOfSync.value)
+        assertEquals(3L, harness.groupDao.getById(GroupFixtures.GROUP_ID)?.version)
     }
 
     /** Creator A, member B and us, already stored locally with its conversation. */
