@@ -60,8 +60,6 @@
     <string name="nodes_health_fail">خطای اتصال</string>
     <string name="nodes_health_never">بدون سابقه اتصال</string>
     <string name="nodes_failures">خطاها: %1$d</string>
-    <string name="settings_identity_section">هویت</string>
-    <string name="settings_identity">هویت من</string>
     <string name="settings_about">درباره</string>
     <string name="settings_backup_section">پشتیبان‌گیری</string>
     <string name="settings_backup_export">ساخت فایل پشتیبان</string>

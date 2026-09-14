@@ -8,7 +8,6 @@
     <string name="contacts_empty_title">هنوز مخاطبی ندارید</string>
     <string name="contacts_empty_body">برای شروع، QR دستگاه مقابل را اسکن کنید یا شناسهٔ کاربری او را وارد کنید.</string>
     <string name="contacts_empty_scan">اسکن QR</string>
-    <string name="contacts_empty_add_by_hash">افزودن با شناسهٔ کاربری</string>
     <string name="contacts_add">افزودن مخاطب</string>
     <string name="contacts_my_qr">QR من</string>
     <string name="contacts_scan_qr">اسکن QR</string>
@@ -76,4 +75,6 @@
     <string name="contacts_unmarked_verified">علامت تأیید برداشته شد</string>
     <string name="contact_detail_verified">تأیید شده</string>
     <string name="contact_detail_verified_body">اگر شمارهٔ امنیتی را از راه دیگری (تماس یا حضوری) با مخاطب مقایسه کرده‌اید، این گزینه را روشن کنید.</string>
+    <string name="contacts_last_heard">آخرین ارتباط %1$s</string>
+    <string name="contacts_never_heard">هنوز پاسخی دریافت نشده</string>
 </resources>

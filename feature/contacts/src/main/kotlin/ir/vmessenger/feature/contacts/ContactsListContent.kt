@@ -95,11 +95,15 @@ private fun ContactRowItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            UserHashText(
-                text = contact.userHash,
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            contactSubtitle(contact)?.let { subtitle ->
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         ContactRowTrailing(contact = contact)
     }

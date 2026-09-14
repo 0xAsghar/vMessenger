@@ -1,21 +1,23 @@
 package ir.vmessenger.feature.pairing
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import ir.vmessenger.core.designsystem.error.toUiText
 
+/**
+ * Scan a contact's QR code.
+ *
+ * The screen closes itself once the scan has an answer, either way, and the answer appears as a
+ * snackbar on whatever the user lands back on. It used to stay open on a bare centred label with a
+ * manual «بازگشت» button, and on failure it drew a red line of text that never timed out and never
+ * reset — so a bad code left the scanner permanently accusing the user of nothing in particular.
+ *
+ * The message travels on [ir.vmessenger.core.designsystem.component.UiMessageBus] rather than a
+ * host here: this composition is being popped, so a snackbar shown in it would race the pop.
+ */
 @Composable
 fun QrScannerRoute(
     onDone: () -> Unit,
@@ -24,45 +26,19 @@ fun QrScannerRoute(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    // Keyed on the state so a second outcome re-fires; onDone is idempotent (it pops once).
+    LaunchedEffect(uiState) {
+        if (uiState is AddContactUiState.Success || uiState is AddContactUiState.Error) onDone()
+    }
+
     QrScannerScreen(
         title = stringResource(R.string.scan_qr_title),
         hint = stringResource(R.string.scan_qr_hint),
         onNavigateBack = onNavigateBack,
-        scanPaused = uiState is AddContactUiState.Success,
+        // Stop analysing the moment there is an answer, so the camera is not still firing
+        // barcodes at a ViewModel whose screen is on its way out.
+        scanPaused = !uiState.acceptsScan || uiState is AddContactUiState.Error,
         onQrScanned = viewModel::onQrScanned,
-        overlay = {
-            ContactQrScannerOverlay(uiState = uiState, onDone = onDone)
-        },
+        overlay = {},
     )
-}
-
-@Composable
-private fun ContactQrScannerOverlay(
-    uiState: AddContactUiState,
-    onDone: () -> Unit,
-) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        when (uiState) {
-            is AddContactUiState.Error -> {
-                Text(
-                    text = uiState.error.toUiText(),
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            AddContactUiState.Success -> {
-                Text(
-                    text = stringResource(R.string.add_contact_success),
-                    modifier = Modifier.align(Alignment.Center),
-                )
-                Button(
-                    onClick = onDone,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
-                ) {
-                    Text(stringResource(R.string.add_contact_done))
-                }
-            }
-            else -> Unit
-        }
-    }
 }

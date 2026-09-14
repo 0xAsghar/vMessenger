@@ -1,4 +1,4 @@
-package ir.vmessenger.feature.contacts
+package ir.vmessenger.core.designsystem.component
 
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
@@ -7,8 +7,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import ir.vmessenger.core.designsystem.component.UiMessage
-import ir.vmessenger.core.designsystem.component.asText
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -18,7 +16,7 @@ import kotlinx.coroutines.flow.Flow
  * and can only run there — a ViewModel never touches a `Context`.
  */
 @Composable
-internal fun UiMessageSnackbarEffect(
+fun UiMessageSnackbarEffect(
     messages: Flow<UiMessage>,
     hostState: SnackbarHostState,
 ) {

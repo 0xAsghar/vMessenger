@@ -1,7 +1,6 @@
 package ir.vmessenger.feature.contacts
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,10 +16,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -28,11 +25,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.EmptyState
 import ir.vmessenger.core.designsystem.component.EmptyStateAction
 import ir.vmessenger.core.designsystem.component.SkeletonList
+import ir.vmessenger.core.designsystem.component.UiMessageSnackbarEffect
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.core.designsystem.component.VmSearchBar
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
-import ir.vmessenger.core.designsystem.theme.VmSpacing
 
 /**
  * The contacts tab: pending requests, then the contacts themselves.
@@ -166,11 +163,7 @@ private fun ContactsBody(
         .padding(padding)
     when {
         state.loading -> SkeletonList(modifier = modifier)
-        state.isEmpty -> ContactsEmpty(
-            onScanQr = navigation.onScanQr,
-            onAddByHash = navigation.onAddByHash,
-            modifier = modifier,
-        )
+        state.isEmpty -> ContactsEmpty(onScanQr = navigation.onScanQr, modifier = modifier)
         state.noSearchResults -> EmptyState(
             icon = Icons.Outlined.Search,
             title = stringResource(R.string.contacts_search_empty_title),
@@ -181,32 +174,25 @@ private fun ContactsBody(
     }
 }
 
-/** Both ways in are offered: scanning the other device's QR, or typing their user hash. */
+/**
+ * Scanning a QR is the offer here; typing a hash lives behind the «افزودن مخاطب» button, which the
+ * scaffold draws over this content. This used to end with a second, redundant text button for the
+ * same destination, and in RTL the extended FAB landed squarely on top of it — leaving a fragment
+ * of its label peeking out from under, which read as leftover text from an older build.
+ */
 @Composable
 private fun ContactsEmpty(
     onScanQr: () -> Unit,
-    onAddByHash: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    EmptyState(
+        icon = Icons.Outlined.Contacts,
+        title = stringResource(R.string.contacts_empty_title),
+        body = stringResource(R.string.contacts_empty_body),
+        action = EmptyStateAction(
+            label = stringResource(R.string.contacts_empty_scan),
+            onClick = onScanQr,
+        ),
         modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        EmptyState(
-            icon = Icons.Outlined.Contacts,
-            title = stringResource(R.string.contacts_empty_title),
-            body = stringResource(R.string.contacts_empty_body),
-            action = EmptyStateAction(
-                label = stringResource(R.string.contacts_empty_scan),
-                onClick = onScanQr,
-            ),
-            modifier = Modifier.weight(1f),
-        )
-        TextButton(
-            onClick = onAddByHash,
-            modifier = Modifier.padding(bottom = VmSpacing.xxl),
-        ) {
-            Text(text = stringResource(R.string.contacts_empty_add_by_hash))
-        }
-    }
+    )
 }

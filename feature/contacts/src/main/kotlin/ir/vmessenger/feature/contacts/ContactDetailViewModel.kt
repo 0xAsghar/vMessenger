@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ir.vmessenger.core.designsystem.component.UiMessage
+import ir.vmessenger.core.designsystem.component.UiMessageBus
 import ir.vmessenger.domain.model.ContactRelationshipStatus
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -61,7 +62,7 @@ class ContactDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val source: ContactDetailSource,
     private val actions: ContactActions,
-    private val messageBus: ContactMessageBus,
+    private val messageBus: UiMessageBus,
 ) : ViewModel() {
 
     private val contactId: String = savedStateHandle.get<String>(CONTACT_ID_KEY).orEmpty()

@@ -25,3 +25,6 @@ captures/
 
 # Room schemas are committed; generated outputs are not
 **/intermediates/
+
+# Transient git worktrees created by background agents.
+.claude/worktrees/

@@ -50,6 +50,7 @@ internal fun Contact.toRow(shared: LocationSample?, myLocation: LocationUpdate?)
     verified = verified,
     sharesLocation = shared != null,
     distanceMeters = distanceOrNull(myLocation, shared),
+    lastSeenUnixMs = lastSeenUnixMs,
 )
 
 internal fun ContactRequest.toRow(): ContactRequestRow = ContactRequestRow(

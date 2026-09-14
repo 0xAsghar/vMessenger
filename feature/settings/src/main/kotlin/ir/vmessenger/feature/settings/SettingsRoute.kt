@@ -21,7 +21,6 @@ import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.DoneAll
-import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.Security
@@ -31,6 +30,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -63,7 +63,6 @@ import ir.vmessenger.core.designsystem.theme.VmSizes
 private data class SettingsNavigation(
     val onDebug: () -> Unit,
     val onNodes: () -> Unit,
-    val onAbout: () -> Unit,
     val onIdentity: () -> Unit,
     val onSecureWipe: () -> Unit,
     val onBackup: () -> Unit,
@@ -100,13 +99,22 @@ fun SettingsRoute(
 
     VMessengerScaffold(
         title = stringResource(R.string.settings_title),
+        // The actions slot resolves to the layout end, which under this app's RTL-only locale is
+        // the left of the bar.
+        actions = {
+            IconButton(onClick = onNavigateToAbout) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+                    contentDescription = stringResource(R.string.settings_about),
+                )
+            }
+        },
     ) { padding ->
         SettingsContent(
             viewModel = viewModel,
             navigation = SettingsNavigation(
                 onDebug = onNavigateToDebug,
                 onNodes = onNavigateToNodes,
-                onAbout = onNavigateToAbout,
                 onIdentity = onNavigateToIdentity,
                 onBlockedContacts = onNavigateToBlockedContacts,
                 onUpdate = onNavigateToUpdate,
@@ -200,10 +208,6 @@ private fun SettingsContent(
             }
         }
         SettingsUpdateSection(available = updateAvailable, onUpdate = navigation.onUpdate)
-        SettingsIdentitySection(
-            onIdentity = navigation.onIdentity,
-            onAbout = navigation.onAbout,
-        )
         SettingsBackupSection(status = backupStatus, onExport = navigation.onBackup)
     }
 }
@@ -434,26 +438,6 @@ private fun ProfileHeader(profile: SettingsProfile, onClick: () -> Unit) {
             Text(text = profile.displayName, style = MaterialTheme.typography.titleMedium)
             UserHashText(text = profile.userHash, style = MaterialTheme.typography.bodySmall)
         }
-    }
-}
-
-@Composable
-private fun SettingsIdentitySection(
-    onIdentity: () -> Unit,
-    onAbout: () -> Unit,
-) {
-    SettingsSection(title = stringResource(R.string.settings_identity_section)) {
-        SettingsActionRow(
-            label = stringResource(R.string.settings_identity),
-            icon = Icons.Outlined.Fingerprint,
-            onClick = onIdentity,
-        )
-        SettingsDivider()
-        SettingsActionRow(
-            label = stringResource(R.string.settings_about),
-            icon = Icons.AutoMirrored.Outlined.HelpOutline,
-            onClick = onAbout,
-        )
     }
 }
 

@@ -39,6 +39,8 @@ import ir.vmessenger.core.designsystem.component.SectionHeader
 import ir.vmessenger.core.designsystem.component.SettingsRow
 import ir.vmessenger.core.designsystem.component.SettingsTrailing
 import ir.vmessenger.core.designsystem.component.SkeletonList
+import ir.vmessenger.core.designsystem.component.UiMessageBus
+import ir.vmessenger.core.designsystem.component.UiMessageSnackbarEffect
 import ir.vmessenger.core.designsystem.component.UserHashShareRow
 import ir.vmessenger.core.designsystem.component.UserHashText
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
@@ -66,7 +68,7 @@ private data class ContactDetailCallbacks(
  * A contact's own screen, reached as `VmRoute.ContactDetail`.
  *
  * It pops itself when the contact stops existing, which is what happens right after the delete
- * confirmation; the snackbar is handed to the contacts list through [ContactMessageBus].
+ * confirmation; the snackbar is handed to the contacts list through [UiMessageBus].
  */
 @Composable
 fun ContactDetailRoute(

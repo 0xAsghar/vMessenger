@@ -7,6 +7,8 @@ import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.common.logging.AppLogger
+import ir.vmessenger.core.designsystem.component.UiMessage
+import ir.vmessenger.core.designsystem.component.UiMessageBus
 import ir.vmessenger.domain.repository.PairingRepository
 import ir.vmessenger.domain.usecase.contact.AddContactByHashUseCase
 import ir.vmessenger.domain.usecase.contact.AddContactByQrUseCase
@@ -63,6 +65,9 @@ sealed class AddContactUiState {
 
     /** Carries the code, not a sentence: the Persian text comes from `AppError.toUiText()`. */
     data class Error(val error: AppError) : AddContactUiState()
+
+    /** Whether a fresh scan should be acted on, or ignored as a repeat of one already in flight. */
+    val acceptsScan: Boolean get() = this is Idle || this is Error
 }
 
 @HiltViewModel
@@ -94,26 +99,48 @@ class AddByHashViewModel @Inject constructor(
     }
 }
 
+/**
+ * The contact-QR scanner.
+ *
+ * The outcome is published to [UiMessageBus] rather than drawn here, because this screen closes
+ * itself the moment it has an answer: a snackbar hosted by a composition that is about to be
+ * popped would race the pop and usually lose. The message surfaces on the screen underneath.
+ */
 @HiltViewModel
 class QrScanViewModel @Inject constructor(
     private val addByQr: AddContactByQrUseCase,
     private val pairingRepository: PairingRepository,
+    private val messageBus: UiMessageBus,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<AddContactUiState>(AddContactUiState.Idle)
     val uiState: StateFlow<AddContactUiState> = _uiState.asStateFlow()
 
+    /**
+     * ML Kit reports a barcode for *every* analysed frame, and the camera stays live until the
+     * state settles — so without this guard a single held-up QR code fired ten to thirty contact
+     * requests a second at the peer.
+     */
     fun onQrScanned(payload: String) {
+        if (!_uiState.value.acceptsScan) return
         val descriptorBytes = pairingRepository.decodeDescriptor(payload.trim())
-            ?: run {
-                _uiState.value = AddContactUiState.Error(AppError.InvalidQr)
-                return
-            }
+        if (descriptorBytes == null) {
+            fail(AppError.InvalidQr)
+            return
+        }
         viewModelScope.launch {
             _uiState.value = AddContactUiState.Saving
             when (val result = addByQr(descriptorBytes)) {
-                is AppResult.Success -> _uiState.value = AddContactUiState.Success
-                is AppResult.Error -> _uiState.value = AddContactUiState.Error(result.error)
+                is AppResult.Success -> {
+                    messageBus.send(UiMessage.Text(R.string.add_contact_success))
+                    _uiState.value = AddContactUiState.Success
+                }
+                is AppResult.Error -> fail(result.error)
             }
         }
+    }
+
+    private fun fail(error: AppError) {
+        _uiState.value = AddContactUiState.Error(error)
+        viewModelScope.launch { messageBus.send(UiMessage.Failure(error)) }
     }
 }

@@ -99,5 +99,6 @@ class ContactsStateTest {
         verified = false,
         sharesLocation = false,
         distanceMeters = null,
+        lastSeenUnixMs = null,
     )
 }

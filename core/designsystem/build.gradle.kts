@@ -10,6 +10,7 @@ android {
 dependencies {
     api(project(":core:common"))
     implementation(libs.androidx.core.ktx)
+    implementation(libs.javax.inject)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.zxing.core)

@@ -40,6 +40,7 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Reusable QR/barcode scanner shell (camera permission, preview, scan frame).
@@ -148,18 +149,30 @@ internal fun QrCameraPreview(
     lifecycleOwner: androidx.lifecycle.LifecycleOwner,
     onQrScanned: (String) -> Unit,
 ) {
+    // Held across recompositions so both can be shut down when the view leaves: the analyzer used
+    // to leak a thread per entry into the scanner, and the provider stayed bound to the lifecycle
+    // with nothing on screen.
+    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+    val providerHolder = remember { AtomicReference<ProcessCameraProvider?>(null) }
+    DisposableEffect(analysisExecutor, providerHolder) {
+        onDispose {
+            runCatching { providerHolder.getAndSet(null)?.unbindAll() }
+            analysisExecutor.shutdown()
+        }
+    }
     AndroidView(
         factory = { ctx ->
             val previewView = PreviewView(ctx)
             val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
             cameraProviderFuture.addListener({
                 val cameraProvider = cameraProviderFuture.get()
+                providerHolder.set(cameraProvider)
                 val preview = Preview.Builder().build().also {
                     it.surfaceProvider = previewView.surfaceProvider
                 }
                 val scanner = BarcodeScanning.getClient()
                 val analysis = ImageAnalysis.Builder().build().also { imageAnalysis ->
-                    imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor()) { imageProxy ->
+                    imageAnalysis.setAnalyzer(analysisExecutor) { imageProxy ->
                         val mediaImage = imageProxy.image
                         if (mediaImage != null) {
                             val image = InputImage.fromMediaImage(

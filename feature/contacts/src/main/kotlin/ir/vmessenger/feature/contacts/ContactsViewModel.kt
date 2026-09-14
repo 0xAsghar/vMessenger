@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.designsystem.component.UiMessage
+import ir.vmessenger.core.designsystem.component.UiMessageBus
 import ir.vmessenger.core.location.DeviceLocationProvider
 import ir.vmessenger.domain.repository.ContactRequestRepository
 import ir.vmessenger.domain.repository.LocationRepository
@@ -38,7 +39,7 @@ class ContactsViewModel @Inject constructor(
     deviceLocationProvider: DeviceLocationProvider,
     private val contactRequests: ContactRequestRepository,
     private val actions: ContactActions,
-    messageBus: ContactMessageBus,
+    messageBus: UiMessageBus,
 ) : ViewModel() {
 
     private val control = MutableStateFlow(ContactsControl())

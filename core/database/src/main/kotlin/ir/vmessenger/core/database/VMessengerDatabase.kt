@@ -3,6 +3,7 @@ package ir.vmessenger.core.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import ir.vmessenger.core.common.database.DatabaseSchema
 import ir.vmessenger.core.database.converter.EnumConverters
 import ir.vmessenger.core.database.dao.AppMetadataDao
 import ir.vmessenger.core.database.dao.BootstrapNodeDao
@@ -63,7 +64,7 @@ import ir.vmessenger.core.database.entity.RelayNodeEntity
         MailboxBlobEntity::class,
         DhtRecordEntity::class,
     ],
-    version = 18,
+    version = DatabaseSchema.VERSION,
     exportSchema = true,
 )
 @TypeConverters(EnumConverters::class)

@@ -1,54 +1,57 @@
 package ir.vmessenger.core.designsystem.component
 
-import android.graphics.Bitmap
-import android.graphics.Paint
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.EncodeHintType
-import com.google.zxing.qrcode.QRCodeWriter
-import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import ir.vmessenger.core.designsystem.R
+import ir.vmessenger.core.designsystem.theme.VmSizes
+import ir.vmessenger.core.designsystem.theme.VmSpacing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import android.graphics.Canvas as AndroidCanvas
 
 @Composable
 fun QrCard(
     payload: String,
     userHash: String,
     modifier: Modifier = Modifier,
-    qrSize: Dp = 220.dp,
+    // A pairing descriptor at level H needs 79-87 module columns, quiet zone included. At 256.dp
+    // that is 9 device pixels a module on a 3x screen and 6 on a 2x one, which is where a dotted
+    // code still reads; 220.dp left the same grid at 7 and 5.
+    qrSize: Dp = 256.dp,
     showShareActions: Boolean = true,
 ) {
     Column(
-        modifier = modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+        // Was 24.dp at the sides; the wider code needs that back to clear a 360.dp screen edge.
+        modifier = modifier.padding(VmSpacing.lg),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         StyledQrCode(
             payload = payload,
-            modifier = Modifier.padding(vertical = 8.dp),
+            modifier = Modifier.padding(vertical = VmSpacing.sm),
             size = qrSize,
+            style = QrStyle.Branded,
         )
-        UserHashLabel(modifier = Modifier.padding(top = 16.dp))
+        UserHashLabel(modifier = Modifier.padding(top = VmSpacing.lg))
         UserHashText(
             text = userHash,
-            modifier = Modifier.padding(top = 8.dp, start = 8.dp, end = 8.dp),
+            modifier = Modifier.padding(top = VmSpacing.sm, start = VmSpacing.sm, end = VmSpacing.sm),
         )
         if (showShareActions) {
             UserHashShareRow(userHash = userHash)
@@ -61,85 +64,53 @@ fun StyledQrCode(
     payload: String,
     modifier: Modifier = Modifier,
     size: Dp = 220.dp,
-    // Always dark-on-light regardless of app theme: inverted (light-on-dark)
-    // QR codes fail on many scanners, and a white quiet zone is required.
-    moduleColor: Color = Color.Black,
-    backgroundColor: Color = Color.White,
+    style: QrStyle = QrStyle.Plain,
 ) {
-    val density = LocalDensity.current
-    val pixelSize = with(density) { size.roundToPx().coerceAtLeast(1) }
-    val bitmap = produceState<Bitmap?>(initialValue = null, payload, pixelSize, moduleColor, backgroundColor) {
-        value = withContext(Dispatchers.Default) {
-            runCatching {
-                rasterizeQr(payload, pixelSize, moduleColor, backgroundColor)
-            }.getOrNull()
-        }
-    }.value
+    BoxWithConstraints(modifier = modifier) {
+        // Shrink to what the parent actually offers instead of overflowing: a dialog on a narrow
+        // screen would otherwise clip a finder pattern, and a clipped finder pattern never scans.
+        val available = (maxWidth - VmSpacing.md * 2).coerceAtLeast(VmSizes.touchTarget)
+        val side = size.coerceAtMost(available)
+        val maxPixelSize = with(LocalDensity.current) { side.roundToPx().coerceAtLeast(1) }
+        val render = produceState<QrRender?>(initialValue = null, payload, maxPixelSize, style) {
+            value = withContext(Dispatchers.Default) {
+                runCatching { rasterizeQr(payload, maxPixelSize, style) }.getOrNull()
+            }
+        }.value
 
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        color = backgroundColor,
-    ) {
-        Box(
-            modifier = Modifier
-                .padding(12.dp)
-                .size(size),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.size(size),
-                )
-            } else {
-                CircularProgressIndicator()
+        Surface(shape = MaterialTheme.shapes.large, color = style.backgroundColor) {
+            Box(
+                modifier = Modifier
+                    .padding(VmSpacing.md)
+                    .size(side),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (render == null) CircularProgressIndicator() else QrImage(render, style)
             }
         }
     }
 }
 
-private fun rasterizeQr(
-    payload: String,
-    pixelSize: Int,
-    moduleColor: Color,
-    backgroundColor: Color,
-): Bitmap {
-    val matrix = encodeQrMatrix(payload)
-    val moduleCount = matrix.width
-    val bitmap = Bitmap.createBitmap(pixelSize, pixelSize, Bitmap.Config.ARGB_8888)
-    val canvas = AndroidCanvas(bitmap)
-    if (backgroundColor == Color.Transparent) {
-        canvas.drawColor(android.graphics.Color.TRANSPARENT)
-    } else {
-        canvas.drawColor(backgroundColor.toArgb())
-    }
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = moduleColor.toArgb()
-        style = Paint.Style.FILL
-    }
-    val cellSize = pixelSize.toFloat() / moduleCount
-    for (y in 0 until moduleCount) {
-        for (x in 0 until moduleCount) {
-            if (matrix[x, y]) {
-                canvas.drawRect(
-                    x * cellSize,
-                    y * cellSize,
-                    (x + 1) * cellSize,
-                    (y + 1) * cellSize,
-                    paint,
-                )
-            }
-        }
-    }
-    return bitmap
-}
-
-private fun encodeQrMatrix(payload: String): com.google.zxing.common.BitMatrix {
-    val hints = mapOf(
-        EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.L,
-        EncodeHintType.MARGIN to 1,
+@Composable
+private fun QrImage(render: QrRender, style: QrStyle) {
+    // Drawn at the bitmap's own pixel count, which the rasterizer rounded down to a whole number
+    // of pixels per module: at any other size the modules would be resampled into each other.
+    val side = with(LocalDensity.current) { render.sidePx.toDp() }
+    Image(
+        bitmap = render.bitmap.asImageBitmap(),
+        contentDescription = null,
+        modifier = Modifier.size(side),
+        filterQuality = FilterQuality.None,
     )
-    return QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, 0, 0, hints)
+    if (render.logoSideFraction > 0f) {
+        Image(
+            painter = painterResource(R.drawable.ic_vmessenger_logo),
+            contentDescription = null,
+            modifier = Modifier.size(side * render.logoSideFraction),
+            // drawable-night carries the same mark in white, and painterResource would pick it
+            // under a dark system theme — invisible on a plate that is always light. The tint,
+            // not the resource qualifier, decides the colour here.
+            colorFilter = ColorFilter.tint(style.moduleColor),
+        )
+    }
 }

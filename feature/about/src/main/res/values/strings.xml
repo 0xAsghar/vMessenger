@@ -2,15 +2,42 @@
 <resources>
     <string name="feature_about_title">درباره</string>
     <string name="feature_about_app_name">vMessenger</string>
-    <string name="feature_about_version">نسخهٔ %1$s (%2$s)</string>
-    <string name="feature_about_protocol">پروتکل نسخهٔ %1$s</string>
-    <string name="feature_about_license_title">پروانه</string>
-    <string name="feature_about_license_body">این برنامه نرم‌افزار آزاد است و تحت پروانهٔ GPL-3.0 منتشر می‌شود. متن کامل پروانه در فایل LICENSE مخزن آمده است.</string>
-    <string name="feature_about_source_title">کد منبع</string>
-    <string name="feature_about_source_url">github.com/0xAsghar/vMessenger</string>
     <string name="feature_about_description">پیام‌رسان غیرمتمرکز با رمزنگاری سرتاسری. بدون حساب کاربری، بدون سرور مرکزی.</string>
-    <string name="feature_about_docs_hint">مستندات کامل در پوشهٔ docs/ مخزن موجود است.</string>
-    <string name="feature_about_developer_mode_countdown">%1$d مرحله تا تغییر وضعیت حالت توسعه‌دهنده</string>
+
+    <string name="feature_about_section_build">این نسخه</string>
+    <string name="feature_about_row_version">نسخهٔ برنامه</string>
+    <string name="feature_about_row_build_number">شمارهٔ ساخت</string>
+    <string name="feature_about_row_protocol">نسخهٔ پروتکل</string>
+    <string name="feature_about_row_protocol_body">تنها عدد نخست تعیین‌کننده است؛ همتایی که نسخهٔ اصلی دیگری داشته باشد پذیرفته نمی‌شود.</string>
+    <string name="feature_about_row_database">نگارش پایگاه‌داده</string>
+    <string name="feature_about_row_database_body">ساختار پایگاه‌دادهٔ رمزشده روی همین دستگاه؛ با هر مهاجرت یک شماره جلو می‌رود.</string>
+
+    <string name="feature_about_section_network">شبکه</string>
+    <string name="feature_about_row_bootstrap">گره‌های راه‌انداز</string>
+    <string name="feature_about_row_bootstrap_body">برای یافتن همتایان در شبکه به کار می‌روند.</string>
+    <string name="feature_about_row_relay">گره‌های بازپخش</string>
+    <string name="feature_about_row_relay_body">فریم‌های رمزشده را میان همتایان جابه‌جا می‌کنند و محتوای آن‌ها را نمی‌بینند.</string>
+    <string name="feature_about_nodes_empty">هیچ گره فعالی وجود ندارد.</string>
+    <string name="feature_about_row_nodes_manage">مدیریت گره‌ها</string>
+    <string name="feature_about_row_nodes_manage_body">این فهرست فقط خواندنی است؛ افزودن و خاموش کردن گره‌ها در بخش گره‌های تنظیمات انجام می‌شود.</string>
+
+    <string name="feature_about_section_license">پروانه</string>
+    <string name="feature_about_row_license">پروانهٔ انتشار</string>
+    <string name="feature_about_license_name">GPL-3.0</string>
+    <string name="feature_about_row_freedom_use">اجرا و مطالعه</string>
+    <string name="feature_about_row_freedom_use_body">برنامه را برای هر هدفی اجرا کنید و کد آن را بخوانید.</string>
+    <string name="feature_about_row_freedom_share">تغییر و بازتوزیع</string>
+    <string name="feature_about_row_freedom_share_body">تغییرش دهید و منتشر کنید، به شرط آنکه نسخهٔ تازه هم با همین پروانه و همراه کد منبع منتشر شود.</string>
+    <string name="feature_about_row_license_text">متن کامل پروانه</string>
+    <string name="feature_about_row_license_text_body">فایل LICENSE در مخزن پروژه</string>
+
+    <string name="feature_about_section_source">کد منبع</string>
+    <string name="feature_about_row_repository">مخزن پروژه</string>
+    <string name="feature_about_source_url">github.com/0xAsghar/vMessenger</string>
+    <string name="feature_about_row_docs">مستندات</string>
+    <string name="feature_about_row_docs_body">پوشهٔ docs/ در مخزن</string>
+
+    <string name="feature_about_developer_mode_countdown">%1$s مرحله تا تغییر وضعیت حالت توسعه‌دهنده</string>
     <string name="feature_about_developer_mode_enabled">حالت توسعه‌دهنده فعال شد؛ بخش اشکال‌زدایی در تنظیمات نمایش داده می‌شود.</string>
     <string name="feature_about_developer_mode_disabled">حالت توسعه‌دهنده غیرفعال شد.</string>
 </resources>

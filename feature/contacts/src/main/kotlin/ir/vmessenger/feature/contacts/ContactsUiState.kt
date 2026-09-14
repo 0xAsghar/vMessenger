@@ -23,6 +23,12 @@ data class ContactRow(
     val verified: Boolean,
     val sharesLocation: Boolean,
     val distanceMeters: Double?,
+    /**
+     * When we last heard anything from this contact — not a presence beacon. The column is touched
+     * by any inbound frame, receipts and control packets included, and it is null for a contact who
+     * has never sent one and for every contact after a backup restore.
+     */
+    val lastSeenUnixMs: Long?,
 ) {
     val isApproved: Boolean get() = status == ContactRelationshipStatus.APPROVED
 
@@ -42,7 +48,8 @@ data class ContactRow(
             keyChangePending == other.keyChangePending &&
             verified == other.verified &&
             sharesLocation == other.sharesLocation &&
-            distanceMeters == other.distanceMeters
+            distanceMeters == other.distanceMeters &&
+            lastSeenUnixMs == other.lastSeenUnixMs
     }
 
     override fun hashCode(): Int {
@@ -56,6 +63,7 @@ data class ContactRow(
         result = 31 * result + verified.hashCode()
         result = 31 * result + sharesLocation.hashCode()
         result = 31 * result + (distanceMeters?.hashCode() ?: 0)
+        result = 31 * result + (lastSeenUnixMs?.hashCode() ?: 0)
         return result
     }
 }

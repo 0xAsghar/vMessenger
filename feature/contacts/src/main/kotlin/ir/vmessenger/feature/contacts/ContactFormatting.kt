@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.format.VmDateFormat
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.vm
@@ -31,6 +32,29 @@ internal fun distanceLabel(meters: Double): String = if (meters >= METERS_PER_KM
     stringResource(R.string.contacts_distance_km, persianDecimal(meters / METERS_PER_KM))
 } else {
     stringResource(R.string.contacts_distance_meters, VmTextFormat.persianDigits(meters.toInt().toString()))
+}
+
+/**
+ * The second line of a contact row.
+ *
+ * It used to be the user hash, which is unreadable, identical in shape for everyone, and already
+ * available on the detail screen and its share row. The priority is what is most alive: a distance
+ * if they are sharing a position, otherwise when we last heard from them, otherwise nothing.
+ *
+ * "Last heard from", not "last seen" — the underlying column is touched by any inbound frame,
+ * receipts and control packets included, so calling it presence would overstate it. It is null for
+ * a contact who has never sent one and for every contact after a backup restore, which is why the
+ * pending case has its own line rather than an empty one.
+ */
+@Composable
+internal fun contactSubtitle(contact: ContactRow): String? = when {
+    contact.sharesLocation && contact.distanceMeters != null -> distanceLabel(contact.distanceMeters)
+    contact.lastSeenUnixMs != null -> stringResource(
+        R.string.contacts_last_heard,
+        VmDateFormat.relative(contact.lastSeenUnixMs),
+    )
+    contact.status == ContactRelationshipStatus.PENDING_OUT -> stringResource(R.string.contacts_never_heard)
+    else -> null
 }
 
 @Composable

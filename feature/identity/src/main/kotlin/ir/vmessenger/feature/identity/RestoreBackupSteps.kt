@@ -1,16 +1,14 @@
 package ir.vmessenger.feature.identity
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,7 +17,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.component.SettingsSection
+import ir.vmessenger.core.designsystem.format.VmTextFormat
+import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.domain.model.BackupHeaderInfo
 
 private const val BYTES_PER_MIB = 1024L * 1024L
@@ -32,21 +32,25 @@ internal fun RestoreConfirmStep(
     onRestore: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    Text(
-        text = stringResource(R.string.restore_backup_confirm_title),
-        style = MaterialTheme.typography.headlineSmall,
-        textAlign = TextAlign.Center,
-    )
-    Spacer(modifier = Modifier.height(8.dp))
-    Text(
-        text = stringResource(R.string.restore_backup_confirm_body),
-        style = MaterialTheme.typography.bodyMedium,
-        textAlign = TextAlign.Center,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Spacer(modifier = Modifier.height(16.dp))
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
+    ) {
+        Text(
+            text = stringResource(R.string.restore_backup_confirm_title),
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = stringResource(R.string.restore_backup_confirm_body),
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+    }
     BackupHeaderCard(header = state.header)
-    Spacer(modifier = Modifier.height(16.dp))
     OutlinedTextField(
         value = state.passphrase,
         onValueChange = onPassphraseChange,
@@ -58,37 +62,45 @@ internal fun RestoreConfirmStep(
         visualTransformation = PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
     )
-    Spacer(modifier = Modifier.height(24.dp))
-    Button(
-        onClick = onRestore,
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        enabled = state.passphrase.isNotEmpty(),
+        verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
     ) {
-        Text(text = stringResource(R.string.restore_backup_confirm_action))
-    }
-    Spacer(modifier = Modifier.height(8.dp))
-    OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-        Text(text = stringResource(R.string.restore_backup_cancel))
+        Button(
+            onClick = onRestore,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = state.passphrase.isNotEmpty(),
+        ) {
+            Text(text = stringResource(R.string.restore_backup_confirm_action))
+        }
+        OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+            Text(text = stringResource(R.string.restore_backup_cancel))
+        }
     }
 }
 
+/** What the file claims about itself, before a passphrase is spent on it. */
 @Composable
 private fun BackupHeaderCard(header: BackupHeaderInfo) {
-    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+    SettingsSection(title = stringResource(R.string.restore_backup_file_section)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(VmSpacing.xxs),
         ) {
             Text(
-                text = stringResource(R.string.restore_backup_format_version, header.version),
+                text = stringResource(
+                    R.string.restore_backup_format_version,
+                    VmTextFormat.persianDigits(header.version.toString()),
+                ),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
                 text = stringResource(
                     R.string.restore_backup_kdf_params,
-                    header.kdfOps,
-                    header.kdfMemBytes / BYTES_PER_MIB,
+                    VmTextFormat.persianDigits(header.kdfOps.toString()),
+                    VmTextFormat.persianDigits((header.kdfMemBytes / BYTES_PER_MIB).toString()),
                 ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -100,18 +112,24 @@ private fun BackupHeaderCard(header: BackupHeaderInfo) {
 @Composable
 internal fun RestoreProgressStep(inspecting: Boolean) {
     CircularProgressIndicator()
-    Spacer(modifier = Modifier.height(16.dp))
     Text(
         text = stringResource(
             if (inspecting) R.string.restore_backup_reading else R.string.restore_backup_restoring,
         ),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
 @Composable
 internal fun RestoreFailedStep(failure: RestoreFailure, onBack: () -> Unit) {
-    Text(text = failure.message(), color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
-    Spacer(modifier = Modifier.height(16.dp))
+    Text(
+        text = failure.message(),
+        modifier = Modifier.fillMaxWidth(),
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.error,
+        textAlign = TextAlign.Center,
+    )
     Button(onClick = onBack) {
         Text(text = stringResource(R.string.restore_backup_back))
     }
