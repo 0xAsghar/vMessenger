@@ -14,6 +14,25 @@ interface MailboxDao {
     @Query("SELECT * FROM mailbox_blob WHERE recipientIdentityHash = :hash AND expiresAtUnixMs > :now")
     suspend fun forRecipient(hash: ByteArray, now: Long): List<MailboxBlobEntity>
 
+    /**
+     * Our own parked blobs for someone other than [exclude], newest first.
+     *
+     * Backs the hand-off to a third-party host: [sender] is always this device, because forwarding
+     * blobs other people left here would make every install a relay for traffic it never agreed to
+     * carry — a different feature, with a different threat model.
+     */
+    @Query(
+        """
+        SELECT * FROM mailbox_blob
+        WHERE senderIdentityHash = :sender
+          AND recipientIdentityHash != :exclude
+          AND expiresAtUnixMs > :now
+        ORDER BY createdAtUnixMs DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun ownBlobsForOthers(sender: ByteArray, exclude: ByteArray, now: Long, limit: Int): List<MailboxBlobEntity>
+
     @Query("SELECT * FROM mailbox_blob WHERE blobId = :blobId LIMIT 1")
     suspend fun getById(blobId: String): MailboxBlobEntity?
 

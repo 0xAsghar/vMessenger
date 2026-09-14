@@ -4,8 +4,11 @@ import dagger.Lazy
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.common.logging.AppLogger
+import ir.vmessenger.core.common.network.NetworkPath
+import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.common.network.P2PConfig
 import ir.vmessenger.core.database.dao.ContactDao
+import ir.vmessenger.core.database.dao.MailboxDao
 import ir.vmessenger.core.database.entity.ContactEntity
 import ir.vmessenger.core.proto.app.v1.MailboxBlob
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
@@ -30,8 +33,43 @@ class MailboxSyncService @Inject constructor(
     private val mailboxSeal: MailboxSeal,
     private val identityRepository: IdentityRepository,
     private val contactDao: ContactDao,
+    private val mailboxDao: MailboxDao,
     private val collector: Lazy<IncomingMessageCollector>,
 ) {
+    /**
+     * Hands our parked blobs to a contact who can hold them for their recipient.
+     *
+     * This is the half that makes store-and-forward mean anything. Parking a sealed copy locally
+     * only helps if the recipient later dials *us*, which is the case that did not need a mailbox;
+     * pushing it to a third party is what lets a message reach someone while this device is
+     * offline. The host hands it over when the recipient next dials them.
+     *
+     * Two limits, both deliberate. Only our own blobs are pushed — forwarding what other people
+     * left here would quietly make every install a relay for traffic it never agreed to carry. And
+     * only a handful per session, because the host is spending its own storage on our behalf and
+     * its quota will refuse the rest anyway.
+     *
+     * The trade to be aware of: the host learns that *someone* holds a message for a given routing
+     * key. The content stays sealed to the recipient, but that fact is new metadata this app did
+     * not previously emit, which is why hosts are limited to approved contacts and the TTL is short.
+     */
+    suspend fun pushPendingToHost(session: ActiveSecureSession, self: PeerIdentity) {
+        if (!P2PConfig.storeAndForwardEnabled) return
+        val now = System.currentTimeMillis()
+        mailboxDao.purgeExpired(now)
+        val candidates = mailboxDao.ownBlobsForOthers(
+            sender = self.identityHash,
+            exclude = session.peer.identityHash,
+            now = now,
+            limit = MAX_PUSH_PER_SESSION,
+        )
+        for (entry in candidates) {
+            runCatching { mailboxProtocolService.putBlob(session, self, entry.toProto()) }
+                .onSuccess { NetworkPathTracker.record(NetworkPath.STORE_AND_FORWARD, "host-${entry.blobId}") }
+                .onFailure { AppLogger.warn("Mailbox", "host push failed ${entry.blobId}: ${it.message}") }
+        }
+    }
+
     suspend fun pullFromPeer(session: ActiveSecureSession, self: PeerIdentity) {
         if (!P2PConfig.storeAndForwardEnabled) return
         mailboxProtocolService.requestList(session, self, self.identityHash)
@@ -116,5 +154,8 @@ class MailboxSyncService @Inject constructor(
 
     companion object {
         private const val MAX_FETCH_PER_SYNC = 10
+
+        /** Per handshake, because the host is spending its own storage on our behalf. */
+        private const val MAX_PUSH_PER_SESSION = 5
     }
 }

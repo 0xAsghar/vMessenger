@@ -549,7 +549,17 @@ Deliberately not implemented, and not planned for 1.0: admin transfer, uploaded 
 
 ## 11. Mailbox (store-and-forward)
 
-Off by default (`P2PConfig.DEFAULT_STORE_AND_FORWARD = false`). `data/.../network/MailboxSeal.kt`, `MailboxProtocolService.kt`.
+**On since 1.1** (`P2PConfig.DEFAULT_STORE_AND_FORWARD = true`). `data/.../network/MailboxSeal.kt`, `MailboxProtocolService.kt`, `MailboxSyncService.kt`.
+
+Before 1.1 the flag existed but the feature did not: `MailboxService.enqueueForRecipient` parked a sealed blob in the **sender's own** database and `offerPending` handed it over only if the recipient later dialled the sender — which is the case that never needed a mailbox. `MailboxProtocolService.putBlob` had no caller at all, so no blob ever reached a third party and a message to an offline peer was simply retried for 24 h and then given up on.
+
+The loop as it now runs, all three steps on a fresh authenticated session (`P2PSessionHooks.onEstablished`):
+
+1. **Offer** — hand over blobs we are holding *for this peer* (`MailboxService.offerPending`), then delete the local copy.
+2. **Pull** — ask what they are holding for us (`MailboxSyncService.pullFromPeer` → `List`, `Fetch`, `Delete`).
+3. **Push** — ask them to hold up to `MAX_PUSH_PER_SESSION = 5` of *our own* parked blobs addressed to someone else (`MailboxSyncService.pushPendingToHost` → `Put`).
+
+Only our own blobs are pushed. Forwarding what other peers left here would make every install a relay for traffic it never agreed to carry, which is a different feature with a different threat model.
 
 ```proto
 message MailboxBlob {
@@ -571,7 +581,8 @@ message MailboxInner {
 - The inner signature is Ed25519 by the sender's identity key over `"vmessenger-mailbox-v2" || lp(recipient_identity_hash) || SHA256(envelope)`, binding the envelope to its intended recipient so a blob cannot be re-addressed.
 - `blob_id = hex(SHA256(sealed_payload))[0..32)` — content-addressed; a sender-chosen id is ignored by the storing peer.
 - `MailboxPut` is accepted only from approved contacts; `MailboxList` / `MailboxFetch` / `MailboxDelete` only ever touch blobs addressed to the authenticated session peer. A per-sender quota is backed by `mailbox_blob.senderIdentityHash`.
-- **Limitation:** mailbox delivery is a sealed box, not a ratcheted session, so it has **no forward secrecy**.
+- **Limitation:** mailbox delivery is a sealed box, not a ratcheted session, so it has **no forward secrecy**. Anyone who later obtains the recipient's long-term X25519 static key can decrypt every blob that was stored under it. The TTL (24 h) bounds how much there is to obtain.
+- **Limitation:** a host learns that *someone* holds a message for a given routing key, and roughly when. The content stays sealed, but that association is metadata the direct path does not emit. Hosts are therefore limited to approved contacts, and the quotas above bound how much any one peer can be asked to carry.
 
 ---
 

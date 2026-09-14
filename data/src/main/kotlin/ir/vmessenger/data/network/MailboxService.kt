@@ -167,17 +167,19 @@ class MailboxService @Inject constructor(
 
         /** Blobs one authenticated sender may park here per rolling 24 h. */
         const val MAX_PER_SENDER = 20
+
         private const val SENDER_WINDOW_MS = 24 * 60 * 60 * 1000L
         private const val DEFAULT_TTL_MS = 24 * 60 * 60 * 1000L
         private const val MAX_TOTAL_BLOBS = 200
         private const val IDENTITY_HASH_BYTES = 32
-
-        fun MailboxBlobEntity.toProto(): MailboxBlob = MailboxBlob.newBuilder()
-            .setBlobId(ByteString.copyFromUtf8(blobId))
-            .setRecipientIdentityHash(ByteString.copyFrom(recipientIdentityHash))
-            .setSealedPayload(ByteString.copyFrom(sealedPayload))
-            .setExpiresAtUnixMs(expiresAtUnixMs)
-            .setSealVersion(MailboxSeal.SEAL_VERSION)
-            .build()
     }
 }
+
+/** Two services send these on the wire, so the mapping lives beside neither of them. */
+internal fun MailboxBlobEntity.toProto(): MailboxBlob = MailboxBlob.newBuilder()
+    .setBlobId(ByteString.copyFromUtf8(blobId))
+    .setRecipientIdentityHash(ByteString.copyFrom(recipientIdentityHash))
+    .setSealedPayload(ByteString.copyFrom(sealedPayload))
+    .setExpiresAtUnixMs(expiresAtUnixMs)
+    .setSealVersion(MailboxSeal.SEAL_VERSION)
+    .build()

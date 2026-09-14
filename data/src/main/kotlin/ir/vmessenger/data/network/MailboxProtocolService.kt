@@ -17,7 +17,6 @@ import ir.vmessenger.core.proto.app.v1.MailboxListRequest
 import ir.vmessenger.core.proto.app.v1.MailboxListResponse
 import ir.vmessenger.core.proto.app.v1.MailboxPut
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
-import ir.vmessenger.data.network.MailboxService.Companion.toProto
 import ir.vmessenger.network.messaging.ActiveSecureSession
 import ir.vmessenger.network.messaging.PeerIdentity
 import javax.inject.Inject

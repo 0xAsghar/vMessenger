@@ -69,6 +69,18 @@ class FakeMailboxDao : MailboxDao {
     override suspend fun forRecipient(hash: ByteArray, now: Long): List<MailboxBlobEntity> =
         blobs.filter { it.recipientIdentityHash.contentEquals(hash) && it.expiresAtUnixMs > now }
 
+    override suspend fun ownBlobsForOthers(
+        sender: ByteArray,
+        exclude: ByteArray,
+        now: Long,
+        limit: Int,
+    ): List<MailboxBlobEntity> = blobs
+        .filter { it.senderIdentityHash?.contentEquals(sender) == true }
+        .filterNot { it.recipientIdentityHash.contentEquals(exclude) }
+        .filter { it.expiresAtUnixMs > now }
+        .sortedByDescending { it.createdAtUnixMs }
+        .take(limit)
+
     override suspend fun getById(blobId: String): MailboxBlobEntity? = blobs.firstOrNull { it.blobId == blobId }
 
     override suspend fun countActive(now: Long): Int = blobs.count { it.expiresAtUnixMs > now }

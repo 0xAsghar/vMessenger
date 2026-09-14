@@ -207,7 +207,14 @@ class MailboxSealTest {
             val mailboxDao = FakeMailboxDao()
             val mailboxService = MailboxService(mailboxDao, identityRepository, seal)
             val protocol = MailboxProtocolService(mailboxDao, mailboxService, contactDao)
-            sync = MailboxSyncService(protocol, seal, identityRepository, contactDao, Lazy { harness.collector })
+            sync = MailboxSyncService(
+                protocol,
+                seal,
+                identityRepository,
+                contactDao,
+                mailboxDao,
+                Lazy { harness.collector },
+            )
         }
 
         fun senderContact(senderPub: ByteArray): ContactEntity {

@@ -21,7 +21,7 @@ object P2PConfig {
     const val DEFAULT_DHT_PARTICIPATION = false
     const val DEFAULT_RELAY_PEER_MODE = false
     const val DEFAULT_NAT_TRAVERSAL = false
-    const val DEFAULT_STORE_AND_FORWARD = false
+    const val DEFAULT_STORE_AND_FORWARD = true
     const val DEFAULT_REDUCE_DEFAULT_RELAY = false
 
     /** Phase 1: try multiple bootstrap/relay nodes instead of a single hardcoded one. */

@@ -21,16 +21,26 @@ class P2PFlagDefaultsTest {
         assertEquals(P2PConfig.reduceDefaultRelayEnabled, snapshot.reduceDefaultRelayEnabled)
     }
 
+    /**
+     * Which flags actually ship on, pinned so that turning one on is a deliberate edit here rather
+     * than something that slips out in a release.
+     *
+     * Store-and-forward joined them in 1.1, when the third-party half was finally wired: before
+     * that the flag only parked blobs in the sender's own database, so a message to an offline peer
+     * was never delivered by it. Enabling it is a real trade — a host learns that someone holds a
+     * message for a routing key, and mailbox blobs have no forward secrecy — and docs/Security.md
+     * records that alongside this.
+     */
     @Test
-    fun onlyMultiNodeAndPeerCacheAreOnByDefault() {
+    fun onlyTheDeliberatelyEnabledFlagsAreOnByDefault() {
         val snapshot = P2PFlagSnapshot()
         assertTrue(snapshot.multiNodeEnabled)
         assertTrue(snapshot.peerCacheEnabled)
+        assertTrue(snapshot.storeAndForwardEnabled)
         assertFalse(snapshot.peerExchangeEnabled)
         assertFalse(snapshot.dhtParticipationEnabled)
         assertFalse(snapshot.relayPeerModeEnabled)
         assertFalse(snapshot.natTraversalEnabled)
-        assertFalse(snapshot.storeAndForwardEnabled)
         assertFalse(snapshot.reduceDefaultRelayEnabled)
     }
 }

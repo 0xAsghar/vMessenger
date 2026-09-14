@@ -34,11 +34,12 @@ class P2PConfigLoaderTest {
         assertEquals(snapshot.reduceDefaultRelayEnabled, P2PConfig.reduceDefaultRelayEnabled)
         assertTrue(P2PConfig.multiNodeEnabled)
         assertTrue(P2PConfig.peerCacheEnabled)
+        // On since 1.1, when the third-party half was wired; see P2PFlagDefaultsTest for why.
+        assertTrue(P2PConfig.storeAndForwardEnabled)
         assertFalse(P2PConfig.peerExchangeEnabled)
         assertFalse(P2PConfig.dhtParticipationEnabled)
         assertFalse(P2PConfig.relayPeerModeEnabled)
         assertFalse(P2PConfig.natTraversalEnabled)
-        assertFalse(P2PConfig.storeAndForwardEnabled)
         assertFalse(P2PConfig.reduceDefaultRelayEnabled)
         assertEquals(P2PPreferences.P2P_DEFAULT_MULTI_NODE, P2PConfig.DEFAULT_MULTI_NODE)
         assertEquals(P2PPreferences.P2P_DEFAULT_PEER_CACHE, P2PConfig.DEFAULT_PEER_CACHE)
