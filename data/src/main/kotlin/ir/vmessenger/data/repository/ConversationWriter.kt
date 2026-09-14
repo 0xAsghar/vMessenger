@@ -168,6 +168,55 @@ class ConversationWriter @Inject constructor(
     }
 
     /**
+     * Queues a pre-built control envelope to every recipient, with nothing added to the thread.
+     *
+     * Unlike [queueGroupControl] this writes no visible line and does not repoint the chat-list
+     * preview: an edit is not a new message, and a thread that jumped to the top of the list every
+     * time someone fixed a typo would be worse than the typo. The row exists only because the
+     * outbox and the per-recipient delivery table are keyed on a message id, and reusing them is
+     * what gives a control retry, the mailbox hand-off and receipt-driven completion.
+     */
+    suspend fun queueMessageControl(
+        conversationId: String,
+        envelope: ByteArray,
+        recipients: List<String>,
+    ): String {
+        val messageId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        messageDao.insert(
+            MessageEntity(
+                messageId = messageId,
+                conversationId = conversationId,
+                direction = MessageDirection.OUTGOING,
+                contentType = MessageContentType.MESSAGE_CONTROL,
+                body = null,
+                replyToMessageId = null,
+                status = DeliveryStatus.QUEUED,
+                createdAtUnixMs = now,
+                sentAtUnixMs = null,
+                deliveredAtUnixMs = null,
+                readAtUnixMs = null,
+            ),
+        )
+        recipientDao.insertAll(recipients.map { queuedRecipient(messageId, it) })
+        for (recipient in recipients) {
+            outboxDao.enqueue(
+                OutboxEntity(
+                    messageId = messageId,
+                    recipientIdentityHash = recipient,
+                    conversationId = conversationId,
+                    envelopeBytes = envelope,
+                    attemptCount = 0,
+                    nextAttemptUnixMs = now,
+                    lastError = null,
+                ),
+            )
+        }
+        outboxWaker.wake()
+        return messageId
+    }
+
+    /**
      * A system line. It renders centred whichever direction it carries, so direction is
      * free to mean the useful thing: a change **we** made is OUTGOING, which is what lets
      * the recipients' delivery receipts validate against it and stop the re-sends. One

@@ -28,6 +28,12 @@ interface InboundRoutes {
 
     suspend fun control(contactId: String, envelope: MessageEnvelope)
 
+    /** An edit or a delete-for-everyone aimed at a message this peer sent us. */
+    suspend fun messageRevision(contactId: String, envelope: MessageEnvelope)
+
+    /** A peer's new display name or avatar. */
+    suspend fun profileUpdate(contactId: String, envelope: MessageEnvelope)
+
     /** Network hints, mailbox and peer-relay traffic; false when the envelope kind is unknown. */
     suspend fun infrastructure(incoming: IncomingEnvelope): Boolean
 }
@@ -42,6 +48,8 @@ class DefaultInboundRoutes @Inject constructor(
     private val mailboxSyncService: MailboxSyncService,
     private val peerRelayForwarder: PeerRelayForwarder,
     private val peerRelayService: PeerRelayService,
+    private val messageRevisionHandler: MessageRevisionHandler,
+    private val profileUpdateHandler: ProfileUpdateHandler,
 ) : InboundRoutes {
     override fun start() {
         locationSharingCoordinator.start()
@@ -64,6 +72,12 @@ class DefaultInboundRoutes @Inject constructor(
 
     override suspend fun control(contactId: String, envelope: MessageEnvelope) =
         locationSharingCoordinator.handleIncomingControl(contactId, envelope)
+
+    override suspend fun messageRevision(contactId: String, envelope: MessageEnvelope) =
+        messageRevisionHandler.handle(contactId, envelope)
+
+    override suspend fun profileUpdate(contactId: String, envelope: MessageEnvelope) =
+        profileUpdateHandler.handle(contactId, envelope)
 
     override suspend fun infrastructure(incoming: IncomingEnvelope): Boolean {
         val envelope = incoming.envelope

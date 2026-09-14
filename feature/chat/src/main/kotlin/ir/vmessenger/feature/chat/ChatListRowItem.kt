@@ -48,6 +48,7 @@ private fun previewLine(row: ChatListRow): AnnotatedString {
             stringResource(R.string.feature_chat_preview_file, VmTextFormat.isolate(row.preview.orEmpty()))
         MessagePreviewKind.AUDIO -> stringResource(R.string.feature_chat_preview_audio)
         MessagePreviewKind.LOCATION -> stringResource(R.string.feature_chat_preview_location)
+        MessagePreviewKind.DELETED -> stringResource(R.string.feature_chat_preview_deleted)
         // A membership line is already a full sentence; the sender prefix would only repeat it.
         MessagePreviewKind.GROUP_EVENT -> row.preview.orEmpty()
         MessagePreviewKind.TEXT, MessagePreviewKind.OTHER -> row.preview.orEmpty()

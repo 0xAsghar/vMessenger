@@ -64,6 +64,7 @@ class InboundHarness(
         outboxWaker = waker,
     )
     val conversationResolver = InboundConversationResolver(conversationDao, contactDao, groupDao)
+    val revisionHandler = MessageRevisionHandler(messageDao, conversationDao, contactDao, attachmentFiles)
     val receiptHandler = InboundReceiptHandler(messageDao, contactDao, recipientDao, outboxDao, deliveryAggregator)
     val groupControlHandler = GroupControlHandler(
         groupDao = groupDao,

@@ -93,6 +93,17 @@ class FakeInboundRoutes : InboundRoutes {
 
     override suspend fun control(contactId: String, envelope: MessageEnvelope) = Unit
 
+    val revisions = mutableListOf<String>()
+    val profileUpdates = mutableListOf<String>()
+
+    override suspend fun messageRevision(contactId: String, envelope: MessageEnvelope) {
+        revisions += contactId
+    }
+
+    override suspend fun profileUpdate(contactId: String, envelope: MessageEnvelope) {
+        profileUpdates += contactId
+    }
+
     override suspend fun infrastructure(incoming: IncomingEnvelope): Boolean {
         infrastructure += incoming.envelope
         return true

@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import ir.vmessenger.core.designsystem.component.BubbleDirection
 import ir.vmessenger.core.designsystem.component.BubbleMeta
@@ -95,6 +96,7 @@ internal fun MessageBubbleItem(
                 voice = voice,
             )
             BubbleMeta(
+                edited = item.edited,
                 time = item.time,
                 modifier = Modifier.align(Alignment.End),
                 ticks = item.ticks,
@@ -134,6 +136,16 @@ private fun BubbleBody(
     images: AttachmentImages,
     voice: VoiceBubbleHost,
 ) {
+    if (item.deleted) {
+        // Italic and muted, so a tombstone never passes for something the sender wrote.
+        Text(
+            text = stringResource(R.string.feature_chat_message_deleted),
+            style = MaterialTheme.typography.bodyLarge,
+            fontStyle = FontStyle.Italic,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
     item.reply?.let { reply ->
         ReplyQuote(
             senderName = if (reply.senderIsMe) stringResource(R.string.feature_chat_reply_self) else contactName,
@@ -249,6 +261,7 @@ private fun quotePreview(reply: ReplyQuoteUi): String = when (reply.kind) {
     MessagePreviewKind.FILE -> stringResource(R.string.feature_chat_preview_file, VmTextFormat.isolate(reply.preview))
     MessagePreviewKind.AUDIO -> stringResource(R.string.feature_chat_preview_audio)
     MessagePreviewKind.LOCATION -> stringResource(R.string.feature_chat_preview_location)
+    MessagePreviewKind.DELETED -> stringResource(R.string.feature_chat_preview_deleted)
     MessagePreviewKind.GROUP_EVENT,
     MessagePreviewKind.TEXT,
     MessagePreviewKind.OTHER,

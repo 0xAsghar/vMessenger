@@ -253,6 +253,21 @@ internal fun ConversationUiState.isOutgoing(messageId: String): Boolean = items
     ?.outgoing == true
 
 /** Body of one message, used by the copy action and by the sheet to hide it when empty. */
+/** What the long-press sheet may offer for one message, decided in one place. */
+internal fun ConversationUiState.abilitiesFor(messageId: String): MessageAbilities {
+    val message = items.filterIsInstance<ChatItem.Message>().firstOrNull { it.messageId == messageId }
+    val text = message?.text.orEmpty()
+    val alive = message != null && !message.deleted
+    return MessageAbilities(
+        // Nothing to copy from a bare photo or file bubble, or from a tombstone.
+        canCopy = alive && text.isNotBlank(),
+        // Only our own words, and only while there are still words: an attachment's caption is
+        // editable, a photo without one is not.
+        canEdit = alive && message.outgoing && text.isNotBlank(),
+        canDeleteForEveryone = alive && message.outgoing,
+    )
+}
+
 internal fun ConversationUiState.textOf(messageId: String): String = items
     .filterIsInstance<ChatItem.Message>()
     .firstOrNull { it.messageId == messageId }

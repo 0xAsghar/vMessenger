@@ -253,6 +253,12 @@ class FakeMessageDao(
         if (messages.none { it.messageId == message.messageId }) messages += message
     }
 
+    /** A real UPDATE: it replaces the row in place and never removes and re-adds it. */
+    override suspend fun update(message: MessageEntity) {
+        val index = messages.indexOfFirst { it.messageId == message.messageId }
+        if (index >= 0) messages[index] = message
+    }
+
     override fun observeConversation(cid: String): Flow<List<MessageEntity>> =
         flowOf(messages.filter { it.conversationId == cid }.sortedBy { it.createdAtUnixMs })
 

@@ -36,6 +36,8 @@ internal fun MessageEntity.toChatMessage(): ChatMessage = ChatMessage(
     attachment = toAttachment(),
     senderIdentityHash = senderIdentityHash,
     isSystemEvent = contentType == MessageContentType.GROUP_CONTROL,
+    editedAtUnixMs = editedAtUnixMs,
+    deleted = contentType == MessageContentType.DELETED,
 )
 
 internal fun MessageWithReply.toChatMessage(): ChatMessage =
@@ -122,5 +124,8 @@ private fun MessageContentType.toPreviewKind(): MessagePreviewKind = when (this)
     MessageContentType.AUDIO -> MessagePreviewKind.AUDIO
     MessageContentType.LOCATION_CONTROL -> MessagePreviewKind.LOCATION
     MessageContentType.GROUP_CONTROL -> MessagePreviewKind.GROUP_EVENT
-    MessageContentType.RECEIPT -> MessagePreviewKind.OTHER
+    MessageContentType.DELETED -> MessagePreviewKind.DELETED
+    MessageContentType.RECEIPT,
+    MessageContentType.MESSAGE_CONTROL,
+    -> MessagePreviewKind.OTHER
 }

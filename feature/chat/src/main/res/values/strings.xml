@@ -89,4 +89,10 @@
     <string name="feature_chat_info_read_at">خوانده شد</string>
     <string name="feature_chat_info_size">اندازه</string>
     <string name="feature_chat_info_sent_short">ارسال %1$s</string>
+    <string name="feature_chat_preview_deleted">پیام حذف شد</string>
+    <string name="feature_chat_message_deleted">این پیام حذف شد</string>
+    <string name="feature_chat_delete_for_everyone">حذف برای همه</string>
+    <string name="feature_chat_delete_for_everyone_body">از این دستگاه و از دستگاه گیرنده حذف می‌شود. گیرنده می‌تواند این درخواست را نادیده بگیرد.</string>
+    <string name="feature_chat_edit_message">ویرایش</string>
+    <string name="feature_chat_editing">ویرایش پیام</string>
 </resources>

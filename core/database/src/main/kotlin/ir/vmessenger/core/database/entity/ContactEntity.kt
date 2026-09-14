@@ -26,6 +26,13 @@ data class ContactEntity(
      */
     val pendingX25519StaticPublic: ByteArray? = null,
     val keyChangedAtUnixMs: Long? = null,
+    /**
+     * Path to this contact's avatar, encrypted at rest in the same container as attachments, and
+     * the revision it came from. The revision is what makes a profile update idempotent: an older
+     * one arriving late over a mailbox hand-off is dropped rather than reinstating a stale photo.
+     */
+    val avatarPath: String? = null,
+    val avatarRevision: Long = 0,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -39,7 +46,9 @@ data class ContactEntity(
             ed25519Public.contentEquals(other.ed25519Public) &&
             x25519StaticPublic.contentEqualsOrBothNull(other.x25519StaticPublic) &&
             pendingX25519StaticPublic.contentEqualsOrBothNull(other.pendingX25519StaticPublic) &&
-            keyChangedAtUnixMs == other.keyChangedAtUnixMs
+            keyChangedAtUnixMs == other.keyChangedAtUnixMs &&
+            avatarPath == other.avatarPath &&
+            avatarRevision == other.avatarRevision
 
     private fun sameProfile(other: ContactEntity): Boolean =
         id == other.id &&

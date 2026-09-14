@@ -209,6 +209,16 @@ interface MessageDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(message: MessageEntity)
 
+    /**
+     * A real UPDATE, deliberately not an upsert.
+     *
+     * `message` is the parent of `message_recipient` with ON DELETE CASCADE, and an
+     * `@Insert(REPLACE)` is a DELETE followed by an INSERT — it would silently take every
+     * per-recipient delivery row with it, losing who had already received the message.
+     */
+    @Update
+    suspend fun update(message: MessageEntity)
+
     @Query("SELECT * FROM message WHERE conversationId = :cid ORDER BY createdAtUnixMs ASC")
     fun observeConversation(cid: String): Flow<List<MessageEntity>>
 
@@ -295,14 +305,14 @@ interface MessageDao {
         LEFT JOIN contact ct
             ON m.senderIdentityHash IS NOT NULL
             AND lower(substr(hex(ct.identityHash), 1, 32)) = m.senderIdentityHash
-        WHERE m.conversationId = :cid
+        WHERE m.conversationId = :cid AND m.contentType != 'MESSAGE_CONTROL'
         ORDER BY m.createdAtUnixMs DESC, m.messageId DESC
         LIMIT :limit
         """,
     )
     fun observeConversation(cid: String, limit: Int): Flow<List<MessageWithReply>>
 
-    @Query("SELECT COUNT(*) FROM message WHERE conversationId = :cid")
+    @Query("SELECT COUNT(*) FROM message WHERE conversationId = :cid AND contentType != 'MESSAGE_CONTROL'")
     suspend fun countForConversation(cid: String): Int
 
     /**
@@ -318,6 +328,7 @@ interface MessageDao {
         SELECT COUNT(*) - 1 FROM message m
         JOIN message anchor ON anchor.messageId = :messageId AND anchor.conversationId = :cid
         WHERE m.conversationId = :cid
+          AND m.contentType != 'MESSAGE_CONTROL'
           AND (
             m.createdAtUnixMs > anchor.createdAtUnixMs
             OR (m.createdAtUnixMs = anchor.createdAtUnixMs AND m.messageId >= anchor.messageId)
@@ -329,7 +340,8 @@ interface MessageDao {
     /** The newest message id of a conversation; used to repoint the chat-list preview. */
     @Query(
         """
-        SELECT messageId FROM message WHERE conversationId = :cid
+        SELECT messageId FROM message
+        WHERE conversationId = :cid AND contentType != 'MESSAGE_CONTROL'
         ORDER BY createdAtUnixMs DESC, messageId DESC LIMIT 1
         """,
     )

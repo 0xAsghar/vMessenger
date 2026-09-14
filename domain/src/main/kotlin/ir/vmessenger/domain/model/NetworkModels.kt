@@ -39,6 +39,10 @@ data class ChatMessage(
     val senderIdentityHash: String? = null,
     /** A membership change, rendered as a centred system line rather than a bubble. */
     val isSystemEvent: Boolean = false,
+    /** When the sender last revised the text; null for a message never edited. */
+    val editedAtUnixMs: Long? = null,
+    /** The sender asked everyone to delete it. The row stays so reply quotes still resolve. */
+    val deleted: Boolean = false,
     /**
      * Why the last delivery attempt failed, straight from the outbox row (an
      * [ir.vmessenger.core.common.AppError] message, e.g. the peer's protocol
@@ -50,6 +54,9 @@ data class ChatMessage(
 /** How a message renders in a one-line preview (chat list row, reply quote). */
 enum class MessagePreviewKind {
     TEXT,
+
+    /** The sender asked everyone to delete it; the row survives as a tombstone. */
+    DELETED,
     IMAGE,
     VIDEO,
     FILE,

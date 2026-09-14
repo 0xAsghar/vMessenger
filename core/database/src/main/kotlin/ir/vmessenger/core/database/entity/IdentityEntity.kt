@@ -12,6 +12,9 @@ data class IdentityEntity(
     val displayName: String = "",
     val x25519StaticPublic: ByteArray,
     val createdAtUnixMs: Long,
+    /** Our own avatar, and the revision every approved contact has been told about. */
+    val avatarPath: String? = null,
+    val avatarRevision: Long = 0,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -23,7 +26,9 @@ data class IdentityEntity(
             userHash == other.userHash &&
             displayName == other.displayName &&
             x25519StaticPublic.contentEquals(other.x25519StaticPublic) &&
-            createdAtUnixMs == other.createdAtUnixMs
+            createdAtUnixMs == other.createdAtUnixMs &&
+            avatarPath == other.avatarPath &&
+            avatarRevision == other.avatarRevision
     }
 
     override fun hashCode(): Int {
@@ -34,6 +39,8 @@ data class IdentityEntity(
         result = 31 * result + displayName.hashCode()
         result = 31 * result + x25519StaticPublic.contentHashCode()
         result = 31 * result + createdAtUnixMs.hashCode()
+        result = 31 * result + (avatarPath?.hashCode() ?: 0)
+        result = 31 * result + avatarRevision.hashCode()
         return result
     }
 }

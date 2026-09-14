@@ -20,6 +20,7 @@ import ir.vmessenger.core.designsystem.component.AttachmentSheet
 import ir.vmessenger.core.designsystem.component.Composer
 import ir.vmessenger.core.designsystem.component.ComposerState
 import ir.vmessenger.core.designsystem.component.EmptyState
+import ir.vmessenger.core.designsystem.component.ReplyPreview
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
 import ir.vmessenger.feature.chat.voice.ComposerMicButton
@@ -127,14 +128,27 @@ private fun ConversationComposer(
     viewModel: ConversationViewModel,
 ) {
     val recorder by viewModel.voice.recorderState.collectAsStateWithLifecycle()
-    val reply = state.composer.replyTo?.let { rememberReplyPreview(it, state.header.title) }
+    // Editing borrows the reply strip rather than adding a second banner: it is the same shape of
+    // thing — a quoted line above the field with one way out — and the X cancels the edit.
+    val editingLabel = stringResource(R.string.feature_chat_editing)
+    val strip = when {
+        state.composer.editingMessageId != null ->
+            ReplyPreview(
+                messageId = state.composer.editingMessageId,
+                senderName = editingLabel,
+                preview = state.composer.text,
+            )
+        else -> state.composer.replyTo?.let { rememberReplyPreview(it, state.header.title) }
+    }
     Composer(
         state = ComposerState(text = state.composer.text, enabled = state.composer.enabled),
         onTextChange = viewModel::onTextChange,
         onSend = viewModel::onSend,
         onAttach = { host.sheets.attachOpen.value = true },
-        replyTo = reply,
-        onClearReply = viewModel::onClearReply,
+        replyTo = strip,
+        onClearReply = {
+            if (state.composer.editingMessageId != null) viewModel.onCancelEdit() else viewModel.onClearReply()
+        },
         micButton = { ComposerMicButton(actions = host.mic.actions, enabled = state.composer.enabled) },
         // Same bar, different contents: the mic must not leave composition mid-gesture.
         recordingContent = if (!recorder.recording) {
@@ -179,13 +193,17 @@ private fun ConversationSheets(
     host.sheets.actionTarget.value?.let { messageId ->
         MessageActionsSheet(
             preview = state.textOf(messageId),
-            // Nothing to copy from a bare photo or file bubble.
-            canCopy = state.textOf(messageId).isNotBlank(),
-            onReply = { viewModel.onReply(messageId) },
-            onCopy = { host.sheets.onCopy(state, messageId) },
-            onInfo = { viewModel.onShowInfo(messageId) },
-            onDelete = { viewModel.onDeleteMessage(messageId) },
-            onDismiss = { host.sheets.actionTarget.value = null },
+            abilities = state.abilitiesFor(messageId),
+            actions = MessageSheetActions(
+                onReply = { viewModel.onReply(messageId) },
+                onEdit = { viewModel.onEditMessage(messageId) },
+                onCopy = { host.sheets.onCopy(state, messageId) },
+                onInfo = { viewModel.onShowInfo(messageId) },
+                onDelete = { forEveryone ->
+                    if (forEveryone) viewModel.onDeleteForEveryone(messageId) else viewModel.onDeleteMessage(messageId)
+                },
+                onDismiss = { host.sheets.actionTarget.value = null },
+            ),
         )
     }
     val info by viewModel.deliveryInfo.collectAsStateWithLifecycle()

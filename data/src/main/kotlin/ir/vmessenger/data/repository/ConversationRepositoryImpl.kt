@@ -13,6 +13,7 @@ import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.data.attachment.AttachmentStore
 import ir.vmessenger.data.attachment.AttachmentTransferTracker
 import ir.vmessenger.data.attachment.CopiedAttachment
+import ir.vmessenger.data.network.MessageRevisionSender
 import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.model.Conversation
@@ -48,6 +49,7 @@ class ConversationRepositoryImpl @Inject constructor(
     private val transferTracker: AttachmentTransferTracker,
     private val readMarker: ConversationReadMarker,
     private val writer: ConversationWriter,
+    private val revisions: MessageRevisionSender,
 ) : ConversationRepository {
 
     override fun observeConversations(): Flow<List<Conversation>> =
@@ -211,6 +213,12 @@ class ConversationRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteMessageForMe(messageId: String) = writer.deleteMessageForMe(messageId)
+
+    override suspend fun editMessage(messageId: String, newText: String): AppResult<Unit> =
+        revisions.edit(messageId, newText)
+
+    override suspend fun deleteMessageForEveryone(messageId: String): AppResult<Unit> =
+        revisions.deleteForEveryone(messageId)
 
     override suspend fun deleteConversation(conversationId: String) = writer.deleteConversation(conversationId)
 

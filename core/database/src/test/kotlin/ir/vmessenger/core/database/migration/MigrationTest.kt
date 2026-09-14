@@ -8,7 +8,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Every migration up to 17, in order; [UP_TO_18] adds the current one. */
+/** Every migration up to 17, in order; [UP_TO_18] and [UP_TO_19] add the later ones. */
 internal val UP_TO_17 = listOf(
     MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
     MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
@@ -17,6 +17,8 @@ internal val UP_TO_17 = listOf(
 )
 
 internal val UP_TO_18 = UP_TO_17 + MIGRATION_17_18
+
+internal val UP_TO_19 = UP_TO_18 + MIGRATION_18_19
 
 /**
  * Replays every migration on a real SQLite engine (JDBC, in memory), because a
@@ -38,6 +40,44 @@ class MigrationTest {
     private fun migrateTo18() {
         migrateTo17()
         MIGRATION_17_18.migrate(database.db)
+    }
+
+    private fun migrateTo19() {
+        migrateTo18()
+        MIGRATION_18_19.migrate(database.db)
+    }
+
+    @Test
+    fun `message edit, delete and profile photos add their columns without rewriting a table`() {
+        migrateTo19()
+
+        assertContains(database.columns("message"), "editedAtUnixMs")
+        assertContains(database.columns("contact"), "avatarPath")
+        assertContains(database.columns("contact"), "avatarRevision")
+        assertContains(database.columns("identity"), "avatarPath")
+        assertContains(database.columns("identity"), "avatarRevision")
+    }
+
+    @Test
+    fun `an existing message survives the 19 migration with no edit recorded`() {
+        migrateTo18()
+        database.db.execSQL(
+            """
+            INSERT INTO `message` (
+                `messageId`, `conversationId`, `direction`, `contentType`, `body`,
+                `replyToMessageId`, `status`, `createdAtUnixMs`, `sentAtUnixMs`,
+                `deliveredAtUnixMs`, `readAtUnixMs`, `attachmentEncrypted`
+            ) VALUES ('m1', 'c1', 'OUTGOING', 'TEXT', 'salam', NULL, 'SENT', 1, 1, NULL, NULL, 0)
+            """.trimIndent(),
+        )
+
+        MIGRATION_18_19.migrate(database.db)
+
+        // The row is still there and reads as never edited, rather than as edited at epoch zero.
+        val edited = database.query("SELECT `editedAtUnixMs` FROM `message` WHERE `messageId` = 'm1'") {
+            it.getString("editedAtUnixMs")
+        }
+        assertEquals(listOf<String?>(null), edited)
     }
 
     @Test

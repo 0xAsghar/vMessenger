@@ -12,6 +12,8 @@ import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Lock
@@ -25,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -194,41 +197,62 @@ internal fun rememberReplyPreview(reply: ReplyQuoteUi, contactName: String): Rep
  *
  * "Information" sits at the end, after the everyday actions and before the destructive one.
  */
-@Suppress("LongParameterList") // one lambda per action the sheet offers
 @Composable
 internal fun MessageActionsSheet(
     preview: String,
-    canCopy: Boolean,
-    onReply: () -> Unit,
-    onCopy: () -> Unit,
-    onInfo: () -> Unit,
-    onDelete: () -> Unit,
-    onDismiss: () -> Unit,
+    abilities: MessageAbilities,
+    actions: MessageSheetActions,
 ) {
     val sheetState = rememberModalBottomSheetState()
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+    ModalBottomSheet(onDismissRequest = actions.onDismiss, sheetState = sheetState) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding(),
         ) {
             SheetHeader(preview)
-            SheetAction(R.string.feature_chat_reply, Icons.AutoMirrored.Outlined.Reply, onDismiss, onReply)
-            if (canCopy) {
-                SheetAction(R.string.feature_chat_copy, Icons.Outlined.ContentCopy, onDismiss, onCopy)
+            SheetAction(
+                R.string.feature_chat_reply,
+                Icons.AutoMirrored.Outlined.Reply,
+                actions.onDismiss,
+                actions.onReply,
+            )
+            if (abilities.canEdit) {
+                SheetAction(R.string.feature_chat_edit_message, Icons.Outlined.Edit, actions.onDismiss, actions.onEdit)
             }
-            SheetAction(R.string.feature_chat_message_info, Icons.Outlined.Info, onDismiss, onInfo)
+            if (abilities.canCopy) {
+                SheetAction(R.string.feature_chat_copy, Icons.Outlined.ContentCopy, actions.onDismiss, actions.onCopy)
+            }
+            SheetAction(R.string.feature_chat_message_info, Icons.Outlined.Info, actions.onDismiss, actions.onInfo)
             CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.error) {
                 SheetAction(
                     R.string.feature_chat_delete_message,
                     Icons.Outlined.DeleteOutline,
-                    onDismiss,
-                    onDelete,
+                    actions.onDismiss,
+                    { actions.onDelete(false) },
                 )
+                // Only offered for our own messages, and worded as a request: a peer can ignore
+                // the control and nothing here can verify that they did not.
+                if (abilities.canDeleteForEveryone) {
+                    SheetAction(
+                        R.string.feature_chat_delete_for_everyone,
+                        Icons.Outlined.DeleteSweep,
+                        actions.onDismiss,
+                        { actions.onDelete(true) },
+                    )
+                }
             }
         }
     }
 }
+
+/** What this particular message allows; each is false for a reason the sheet should not restate. */
+@Immutable
+internal data class MessageAbilities(
+    val canCopy: Boolean,
+    val canEdit: Boolean,
+    val canDeleteForEveryone: Boolean,
+)
 
 /** Names the message being acted on, the way the contact sheet names the contact. */
 @Composable

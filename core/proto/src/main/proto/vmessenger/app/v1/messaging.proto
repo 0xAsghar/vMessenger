@@ -41,6 +41,9 @@ message MessageEnvelope {
     AttachmentInfo attachment_info = 29;
     AttachmentChunk attachment_chunk = 30;
     GroupControl group_control = 31;
+    MessageEdit message_edit = 32;
+    MessageDelete message_delete = 33;
+    ProfileUpdate profile_update = 34;
   }
 }
 
@@ -222,6 +225,60 @@ message MailboxDeleteAck {
 message ChatMessage {
   string text = 1;
   bytes reply_to_message_id = 2;
+}
+
+/**
+ * A new body for a message the sender already sent.
+ *
+ * Deliberately its own arm rather than extra fields on ChatMessage: a 1.0.x peer
+ * parses an unknown oneof arm as nothing at all, but would parse an extended
+ * ChatMessage as an ordinary new message and insert a second bubble carrying the
+ * edited text. Being ignored is the correct fallback; being duplicated is not.
+ *
+ * `target_message_id` is UTF-8 of the local message id, the same convention as
+ * `message_id` and `reply_to_message_id`, and is bounded at 64 characters by the
+ * receiver. An edit whose `edited_at_unix_ms` is not strictly newer than the one
+ * already applied is ignored, which makes replay harmless.
+ */
+message MessageEdit {
+  bytes target_message_id = 1;
+  string new_text = 2;
+  int64 edited_at_unix_ms = 3;
+}
+
+/**
+ * A request to remove a message from the recipient's history too.
+ *
+ * A request, not a command: nothing in an end-to-end encrypted peer-to-peer
+ * network can make another device comply, and the Persian copy says so. The
+ * receiver renders a tombstone rather than erasing the row, which keeps reply
+ * quotes resolvable and avoids stranding the conversation's unread count, which
+ * is only ever incremented.
+ */
+message MessageDelete {
+  bytes target_message_id = 1;
+  int64 deleted_at_unix_ms = 2;
+}
+
+/**
+ * The sender's own profile, pushed to approved contacts when it changes.
+ *
+ * Until this existed a display name reached a peer exactly once, inside the
+ * pairing handshake, so renaming yourself was invisible to every existing
+ * contact forever. `revision` is monotonic per sender and lets a receiver drop a
+ * stale update that arrives out of order; `avatar` is empty when the user has no
+ * photo, and clearing one is an update with `avatar` empty and a higher revision.
+ *
+ * The avatar rides inline rather than through the chunked attachment transfer
+ * because it is downscaled to fit well inside the 64 KiB relay frame limit.
+ */
+message ProfileUpdate {
+  string display_name = 1;
+  int64 updated_at_unix_ms = 2;
+  uint64 revision = 3;
+  bytes avatar = 4;
+  string avatar_mime = 5;
+  bytes avatar_sha256 = 6;
 }
 
 message Receipt {

@@ -99,6 +99,8 @@ data class MessageEntity(
      * user they never heard something they did.
      */
     val attachmentPlayedAtUnixMs: Long? = null,
+    /** When the sender last revised this message's text; null for one never edited. */
+    val editedAtUnixMs: Long? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -137,6 +139,7 @@ data class MessageEntity(
         caption,
         attachmentDurationMs,
         attachmentPlayedAtUnixMs,
+        editedAtUnixMs,
     )
 
     private companion object {

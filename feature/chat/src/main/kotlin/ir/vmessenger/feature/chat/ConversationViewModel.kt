@@ -104,6 +104,7 @@ class ConversationViewModel @Inject constructor(
     private val hasMore = MutableStateFlow(false)
     private val typedText = MutableStateFlow<String?>(null)
     private val replyTo = MutableStateFlow<ReplyQuoteUi?>(null)
+    private val editing = MutableStateFlow<String?>(null)
     private val scrollTarget = MutableStateFlow<String?>(null)
     private val highlighted = MutableStateFlow<String?>(null)
     private var highlightJob: Job? = null
@@ -156,8 +157,8 @@ class ConversationViewModel @Inject constructor(
         .onStart { emit(null) }
 
     private val composer: Flow<ComposerUiState> =
-        combine(typedText, observeDraft(conversationId), replyTo) { typed, saved, reply ->
-            ComposerUiState(text = typed ?: saved, replyTo = reply)
+        combine(typedText, observeDraft(conversationId), replyTo, editing) { typed, saved, reply, edited ->
+            ComposerUiState(text = typed ?: saved, replyTo = reply, editingMessageId = edited)
         }
 
     private val progress: Flow<Map<String, AttachmentProgress>> =
@@ -214,13 +215,35 @@ class ConversationViewModel @Inject constructor(
         val text = uiState.value.composer.text.trim()
         if (text.isEmpty()) return
         val quoted = replyTo.value?.messageId
+        val edited = editing.value
         typedText.value = ""
         replyTo.value = null
+        editing.value = null
         draftJob?.cancel()
         viewModelScope.launch {
             saveDraft(conversationId, "")
-            sendMessage(conversationId, text, quoted)
+            // Same button, because it is the same act from the user's side: they are done typing.
+            if (edited != null) {
+                conversationRepository.editMessage(edited, text)
+            } else {
+                sendMessage(conversationId, text, quoted)
+            }
         }
+    }
+
+    /** Loads a sent message back into the composer; [onSend] then applies it instead of sending. */
+    fun onEditMessage(messageId: String) {
+        val message = uiState.value.items
+            .filterIsInstance<ChatItem.Message>()
+            .firstOrNull { it.messageId == messageId } ?: return
+        replyTo.value = null
+        editing.value = messageId
+        typedText.value = message.text
+    }
+
+    fun onCancelEdit() {
+        editing.value = null
+        typedText.value = ""
     }
 
     fun onAttachmentPicked(uri: String) {
@@ -253,6 +276,10 @@ class ConversationViewModel @Inject constructor(
 
     fun onDeleteMessage(messageId: String) {
         viewModelScope.launch { deleteMessageForMe(messageId) }
+    }
+
+    fun onDeleteForEveryone(messageId: String) {
+        viewModelScope.launch { conversationRepository.deleteMessageForEveryone(messageId) }
     }
 
     fun onRetry(messageId: String) {
@@ -461,6 +488,8 @@ private fun ChatMessage.toItem(startsSenderRun: Boolean): ChatItem.Message {
         // sender's clock is shown where it is labelled as such, in the Information sheet.
         time = VmDateFormat.time(if (outgoing) sentAtUnixMs ?: createdAtUnixMs else createdAtUnixMs),
         ticks = if (outgoing) status.toTicks() else null,
+        edited = editedAtUnixMs != null,
+        deleted = deleted,
         attachment = attachment?.let {
             AttachmentUi(
                 type = it.type,

@@ -113,6 +113,10 @@ sealed interface ChatItem {
          * name and the avatar go — repeating them on every bubble is noise.
          */
         val startsSenderRun: Boolean = false,
+        /** Marks the bubble as revised since it was sent. */
+        val edited: Boolean = false,
+        /** The sender asked everyone to drop it; the row survives so replies to it still resolve. */
+        val deleted: Boolean = false,
     ) : ChatItem {
         override val key: String get() = messageId
         override val contentType: String
@@ -131,6 +135,8 @@ data class ComposerUiState(
     val text: String = "",
     val enabled: Boolean = true,
     val replyTo: ReplyQuoteUi? = null,
+    /** Set while the composer is revising a sent message rather than writing a new one. */
+    val editingMessageId: String? = null,
 )
 
 @Immutable

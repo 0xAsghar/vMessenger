@@ -138,7 +138,12 @@ class IncomingMessageCollector @Inject constructor(
             InboundKind.LOCATION -> routes.location(contactId, envelope)
             InboundKind.CONTROL -> routes.control(contactId, envelope)
             InboundKind.RECEIPT -> receiptHandler.handle(contactId, envelope.receipt)
-            InboundKind.GROUP_CONTROL -> acknowledgeControl(contactId, envelope, incoming.session)
+            InboundKind.GROUP_CONTROL ->
+                acknowledge(contactId, envelope, incoming.session) { groupControlHandler.handle(contactId, envelope) }
+            InboundKind.MESSAGE_REVISION ->
+                acknowledge(contactId, envelope, incoming.session) { routes.messageRevision(contactId, envelope) }
+            InboundKind.PROFILE_UPDATE ->
+                acknowledge(contactId, envelope, incoming.session) { routes.profileUpdate(contactId, envelope) }
             InboundKind.NETWORK_NODES, null -> routes.infrastructure(incoming)
         }
     }
@@ -184,12 +189,13 @@ class IncomingMessageCollector @Inject constructor(
      * outbox keeps re-sending the control until its wait budget runs out, reopening a
      * session every few seconds for a change that already landed.
      */
-    private suspend fun acknowledgeControl(
+    private suspend fun acknowledge(
         contactId: String,
         envelope: MessageEnvelope,
         session: ActiveSecureSession?,
+        apply: suspend () -> Unit,
     ) {
-        groupControlHandler.handle(contactId, envelope)
+        apply()
         val messageId = envelope.messageId.toStringUtf8()
         if (messageId.isNotBlank()) {
             receiptSender.enqueueDelivered(contactId, messageId, System.currentTimeMillis(), session)

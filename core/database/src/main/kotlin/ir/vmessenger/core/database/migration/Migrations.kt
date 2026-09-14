@@ -513,3 +513,27 @@ val MIGRATION_17_18_STATEMENTS: List<String> = listOf(
     // --- carry-over from migration 16: the dead session table --------------
     "DROP TABLE IF EXISTS `session`",
 )
+
+val MIGRATION_18_19 = object : Migration(18, 19) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_18_19_STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/**
+ * Message edit, delete-for-everyone, and peer-visible profile photos.
+ *
+ * All additive: six ADD COLUMNs and no table rewrite, because nothing about the existing rows
+ * changes meaning. A message that was never edited keeps a null `editedAtUnixMs`, and a contact
+ * with no photo keeps a null `avatarPath` at revision 0, which is exactly what a peer who has
+ * never sent a profile update looks like.
+ *
+ * Exposed so a plain-SQLite test can replay the migration without Room.
+ */
+val MIGRATION_18_19_STATEMENTS: List<String> = listOf(
+    "ALTER TABLE `message` ADD COLUMN `editedAtUnixMs` INTEGER DEFAULT NULL",
+    "ALTER TABLE `contact` ADD COLUMN `avatarPath` TEXT DEFAULT NULL",
+    "ALTER TABLE `contact` ADD COLUMN `avatarRevision` INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE `identity` ADD COLUMN `avatarPath` TEXT DEFAULT NULL",
+    "ALTER TABLE `identity` ADD COLUMN `avatarRevision` INTEGER NOT NULL DEFAULT 0",
+)

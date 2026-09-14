@@ -77,6 +77,17 @@ interface ConversationRepository {
     /** Removes the local copy only; nothing is sent to the peer and their copy stays. */
     suspend fun deleteMessageForMe(messageId: String)
 
+    /** Replaces the text of a message we sent, and asks every recipient to do the same. */
+    suspend fun editMessage(messageId: String, newText: String): AppResult<Unit>
+
+    /**
+     * Asks every recipient to drop a message we sent, and drops our own copy to a tombstone.
+     *
+     * A request, not a command: a peer can ignore it, and nothing in an end-to-end encrypted
+     * network can verify that they did not. The wording the user sees says so.
+     */
+    suspend fun deleteMessageForEveryone(messageId: String): AppResult<Unit>
+
     /** Deletes the conversation with its messages, queued sends and saved draft. */
     suspend fun deleteConversation(conversationId: String)
 
