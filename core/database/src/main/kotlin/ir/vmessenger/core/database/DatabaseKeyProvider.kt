@@ -2,6 +2,7 @@ package ir.vmessenger.core.database
 
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.crypto.keystore.KeyStoreKeyManager
+import ir.vmessenger.core.datastore.AppLockPreferences
 import ir.vmessenger.core.datastore.SecurityPreferences
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -24,11 +25,18 @@ interface DatabasePassphraseSource {
 class KeystoreDatabasePassphraseSource @Inject constructor(
     private val keyStoreKeyManager: KeyStoreKeyManager,
     private val securityPreferences: SecurityPreferences,
+    private val lockPreferences: AppLockPreferences,
 ) : DatabasePassphraseSource {
     override suspend fun load(): ByteArray {
         val wrapped = securityPreferences.getWrappedDbPassphrase()
         if (wrapped != null && wrapped.isNotEmpty()) {
             return keyStoreKeyManager.unwrap(KeyStoreKeyManager.ALIAS_DATABASE, wrapped)
+        }
+        // No ordinary copy is the *normal* state under strict app lock, and minting a fresh
+        // passphrase here would abandon the real database rather than open it. This is the
+        // single most destructive thing this class could do, so it refuses instead.
+        check(lockPreferences.getStrictWrappedPassphrase() == null) {
+            "the database passphrase is behind the app lock; authenticate before opening it"
         }
         val passphrase = keyStoreKeyManager.newDatabasePassphrase()
         securityPreferences.setWrappedDbPassphrase(
@@ -66,10 +74,25 @@ class DatabaseKeyProvider @Inject constructor(
     private var locked = false
 
     suspend fun initialize() {
-        if (cachedPassphrase != null) return
+        // Locked is not "not loaded yet": loading is exactly what must not happen.
+        if (locked || cachedPassphrase != null) return
         mutex.withLock {
-            if (cachedPassphrase == null) cachedPassphrase = source.load()
+            if (!locked && cachedPassphrase == null) cachedPassphrase = source.load()
         }
+    }
+
+    /**
+     * Hands the provider a passphrase that was unwrapped elsewhere, and opens the gate.
+     *
+     * Strict app lock uses this after authenticating: the passphrase comes back from a Keystore key
+     * the hardware would not touch a moment earlier, and it goes into memory only. Persisting an
+     * ordinary copy at that point would put the key back within reach of anything that can read the
+     * app's files, which is the whole thing strict mode exists to prevent.
+     */
+    fun provide(passphrase: ByteArray) {
+        cachedPassphrase?.fill(0)
+        cachedPassphrase = passphrase
+        locked = false
     }
 
     /**

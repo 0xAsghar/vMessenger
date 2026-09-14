@@ -41,6 +41,7 @@ import ir.vmessenger.R
 import ir.vmessenger.feature.chat.ChatRoute
 import ir.vmessenger.feature.contacts.ContactsNavigation
 import ir.vmessenger.feature.contacts.ContactsRoute
+import ir.vmessenger.feature.lock.PinSetupDialog
 import ir.vmessenger.feature.map.MapRoute
 import ir.vmessenger.feature.settings.SettingsRoute
 import ir.vmessenger.feature.settings.update.UpdateBanner
@@ -217,6 +218,7 @@ private fun HomeTabNavHost(
                 onNavigateToIdentity = navigation.onNavigateToIdentity,
                 onNavigateToBlockedContacts = navigation.onNavigateToBlockedContacts,
                 onNavigateToUpdate = navigation.onNavigateToUpdate,
+                pinDialog = { onDone -> PinSetupDialog(onDone = onDone) },
             )
         }
     }

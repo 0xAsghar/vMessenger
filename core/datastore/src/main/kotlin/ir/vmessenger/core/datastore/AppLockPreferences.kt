@@ -63,6 +63,10 @@ class AppLockPreferences @Inject constructor(
         context.securityDataStore.edit { it[STRICT_WRAPPED_DB] = encode(wrapped) }
     }
 
+    suspend fun clearStrictPassphrase() {
+        context.securityDataStore.edit { it.remove(STRICT_WRAPPED_DB) }
+    }
+
     suspend fun failedAttempts(): Int = context.securityDataStore.data.first()[ATTEMPTS] ?: 0
 
     /**
@@ -94,8 +98,8 @@ class AppLockPreferences @Inject constructor(
             it.remove(ATTEMPTS)
         }
     }
-
-    private fun encode(bytes: ByteArray): String = Base64.encodeToString(bytes, Base64.NO_WRAP)
-
-    private fun decode(value: String): ByteArray = Base64.decode(value, Base64.NO_WRAP)
 }
+
+private fun encode(bytes: ByteArray): String = Base64.encodeToString(bytes, Base64.NO_WRAP)
+
+private fun decode(value: String): ByteArray = Base64.decode(value, Base64.NO_WRAP)

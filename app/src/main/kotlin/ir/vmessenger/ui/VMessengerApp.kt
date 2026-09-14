@@ -35,11 +35,14 @@ import ir.vmessenger.ui.network.ClockWarningBanner
  * the system splash screen covers that window, so nothing is drawn in its place.
  */
 @Composable
+@Suppress("LongParameterList") // the app root: one parameter per thing the whole window depends on
 fun VMessengerApp(
     darkTheme: Boolean,
     startRoute: VmRoute?,
     pendingConversationId: String?,
     onPendingConversationHandled: () -> Unit,
+    locked: Boolean = false,
+    lockContent: @Composable () -> Unit = {},
 ) {
     RtlLayout {
         VMessengerTheme(darkTheme = darkTheme) {
@@ -61,6 +64,10 @@ fun VMessengerApp(
                         )
                     }
                     ClockWarningBanner(modifier = Modifier.align(Alignment.TopCenter))
+                    // LAST child of the root Box, not a navigation destination. The contact-request
+                    // overlay and the clock banner above are siblings of the NavHost, so a
+                    // route-level gate would have shown incoming contact requests over the lock.
+                    if (locked) lockContent()
                 }
             }
         }

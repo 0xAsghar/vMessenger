@@ -2,25 +2,35 @@ package ir.vmessenger
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import ir.vmessenger.core.notifications.MessageNotificationManager
+import ir.vmessenger.data.lock.LockState
+import ir.vmessenger.feature.lock.AppLockScreen
 import ir.vmessenger.ui.VMessengerApp
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
+/**
+ * A FragmentActivity rather than a ComponentActivity: `androidx.biometric`'s BiometricPrompt needs
+ * one to attach to, and the app lock offers biometric unlock. The theme already parents
+ * `Theme.AppCompat.DayNight.NoActionBar`, so nothing else about the window changes.
+ */
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,7 +39,12 @@ class MainActivity : ComponentActivity() {
         // The system splash stays up until the start destination is known, so the
         // first composed frame is already the right screen — no in-app splash and
         // no artificial delay.
-        splashScreen.setKeepOnScreenCondition { viewModel.startRoute.value == null }
+        // Held only while the destination is genuinely unknown *and* the app is not locked. Under
+        // strict mode the route cannot be resolved until the user authenticates, so keeping the
+        // system splash up would hide the lock screen behind a blank window forever.
+        splashScreen.setKeepOnScreenCondition {
+            viewModel.startRoute.value == null && viewModel.lockState.value == LockState.Unlocked
+        }
         enableEdgeToEdge()
         // Secure by default: the flag is set before any content is drawn so the
         // first frame can never reach a screenshot, the recents thumbnail or a
@@ -37,17 +52,25 @@ class MainActivity : ComponentActivity() {
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         observeScreenSecurity()
         handleDeepLink(intent)
+        observeAutoLock()
 
         setContent {
             val darkThemePref by viewModel.darkTheme.collectAsStateWithLifecycle()
             val startRoute by viewModel.startRoute.collectAsStateWithLifecycle()
             val pendingConversationId by viewModel.pendingConversationId.collectAsStateWithLifecycle()
 
+            val lockState by viewModel.lockState.collectAsStateWithLifecycle()
+
             VMessengerApp(
                 darkTheme = darkThemePref ?: isSystemInDarkTheme(),
                 startRoute = startRoute,
-                pendingConversationId = pendingConversationId,
+                // Held back while locked. A notification tap would otherwise have the NavHost open
+                // the conversation underneath the lock screen, which is the one place the gate is
+                // easiest to walk around.
+                pendingConversationId = pendingConversationId.takeIf { lockState == LockState.Unlocked },
                 onPendingConversationHandled = viewModel::consumePendingConversation,
+                locked = lockState != LockState.Unlocked,
+                lockContent = { AppLockScreen(onUnlocked = {}) },
             )
         }
     }
@@ -74,13 +97,40 @@ class MainActivity : ComponentActivity() {
     private fun observeScreenSecurity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.screenSecurityEnabled.collect { enabled ->
-                    if (enabled) {
+                // The lock forces the flag on regardless of the preference. A user who turned
+                // screen security off would otherwise leak a recents thumbnail of whatever was on
+                // screen when the app locked — which is exactly what the lock is for.
+                combine(viewModel.screenSecurityEnabled, viewModel.lockState) { enabled, lock ->
+                    enabled || lock != LockState.Unlocked
+                }.collect { secure ->
+                    if (secure) {
                         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
                     } else {
                         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * Re-arms the lock after the app has been away long enough.
+     *
+     * Timed on `elapsedRealtime`, never the wall clock: a timeout measured against a clock the
+     * user can change is not a timeout.
+     */
+    private fun observeAutoLock() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                lifecycle.addObserver(
+                    LifecycleEventObserver { _, event ->
+                        when (event) {
+                            Lifecycle.Event.ON_STOP -> viewModel.onBackgrounded(SystemClock.elapsedRealtime())
+                            Lifecycle.Event.ON_START -> viewModel.onForegrounded(SystemClock.elapsedRealtime())
+                            else -> Unit
+                        }
+                    },
+                )
             }
         }
     }

@@ -49,6 +49,7 @@ include(":network:transport")
 include(":network:messaging")
 
 include(":feature:identity")
+include(":feature:lock")
 include(":feature:pairing")
 include(":feature:contacts")
 include(":feature:chat")

@@ -5,23 +5,21 @@ plugins {
 }
 
 android {
-    namespace = "ir.vmessenger.feature.settings"
+    namespace = "ir.vmessenger.feature.lock"
 }
 
 dependencies {
-    implementation(project(":domain"))
-    // The app-lock rows read AppLockCoordinator; :feature:map and :feature:contacts reach into
-    // :data the same way for their coordinators.
     implementation(project(":data"))
-    implementation(project(":feature:pairing"))
-    implementation(project(":core:common"))
+    // Only for PinVerifier's length bounds: the keypad and the setup dialog have to enforce the
+    // same minimum the verifier was designed around rather than pick their own.
+    implementation(project(":core:crypto"))
     implementation(project(":core:designsystem"))
-    implementation(project(":core:datastore"))
+    implementation(libs.androidx.biometric)
+    implementation(libs.androidx.activity.compose)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.hilt.navigation.compose)
+
     testImplementation(libs.junit)
-    testImplementation(libs.kotlin.test)
-    testImplementation(libs.kotlinx.coroutines.test)
 }

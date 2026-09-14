@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_lock_title">وی‌مسنجر قفل است</string>
+    <string name="app_lock_prompt">رمز عددی خود را وارد کنید</string>
+    <string name="app_lock_mode_soft">پیام‌ها در پس‌زمینه دریافت می‌شوند؛ این قفل فقط جلوی دیده شدن صفحه را می‌گیرد.</string>
+    <string name="app_lock_mode_strict">تا باز شدن قفل هیچ پیامی دریافت نمی‌شود؛ کلید پایگاه داده در سخت‌افزار بسته است.</string>
+    <string name="app_lock_checking">در حال بررسی رمز…</string>
+    <string name="app_lock_entered_digits">%1$s رقم وارد شده است</string>
+    <string name="app_lock_key_backspace">حذف آخرین رقم</string>
+    <string name="app_lock_key_submit">باز کردن قفل</string>
+    <string name="app_lock_wrong">رمز نادرست است. تلاش ناموفق: %1$s</string>
+    <string name="app_lock_wrong_wipe">رمز نادرست است. تلاش %1$s از %2$s؛ پس از آن همهٔ داده‌های برنامه پاک می‌شود.</string>
+    <string name="app_lock_wrong_wipe_close">رمز نادرست است. تنها %1$s تلاش تا پاک شدن همهٔ داده‌های برنامه باقی مانده است.</string>
+    <string name="app_lock_hardware_refused">رمز درست بود، اما سخت‌افزار کلید را آزاد نکرد. اگر اثر انگشت تازه‌ای ثبت کرده‌اید یا رمز صفحهٔ دستگاه را برداشته‌اید، اول هویت خود را تأیید کنید.</string>
+    <string name="app_lock_biometric_action">تأیید هویت با اثر انگشت یا رمز دستگاه</string>
+    <string name="app_lock_biometric_title">تأیید هویت</string>
+    <string name="app_lock_biometric_subtitle">برای آزاد شدن کلید پایگاه داده، هویت خود را تأیید کنید.</string>
+    <string name="app_lock_biometric_done">هویت شما تأیید شد؛ اکنون رمز عددی را وارد کنید.</string>
+    <string name="app_lock_biometric_failed">تأیید هویت انجام نشد.</string>
+
+    <string name="pin_setup_title">رمز عددی</string>
+    <string name="pin_setup_enter">رمز عددی تازه‌ای انتخاب کنید؛ دست‌کم %1$s رقم.</string>
+    <string name="pin_setup_confirm">همان رمز را دوباره وارد کنید.</string>
+    <string name="pin_setup_mismatch">دو رمز یکسان نبودند؛ از ابتدا وارد کنید.</string>
+    <string name="pin_setup_next">ادامه</string>
+    <string name="pin_setup_save">ذخیره</string>
+</resources>

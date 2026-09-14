@@ -39,6 +39,11 @@ class SecurityPreferences @Inject constructor(
 
     suspend fun setWrappedDbPassphrase(wrapped: ByteArray) = setWrapped(WRAPPED_DB_PASSPHRASE_KEY, wrapped)
 
+    /** Removes the ordinary copy, leaving the app lock's auth-bound one as the only way in. */
+    suspend fun clearWrappedDbPassphrase() {
+        context.securityDataStore.edit { it.remove(WRAPPED_DB_PASSPHRASE_KEY) }
+    }
+
     /** Keystore-wrapped 32-byte master key for attachments at rest (never the DB passphrase). */
     suspend fun getWrappedAttachmentKey(): ByteArray? = getWrapped(WRAPPED_ATTACHMENT_KEY)
 

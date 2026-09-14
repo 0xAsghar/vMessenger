@@ -55,8 +55,11 @@ import ir.vmessenger.core.datastore.ThemeMode
 import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.SettingsDivider
 import ir.vmessenger.core.designsystem.component.SettingsSection
+import ir.vmessenger.core.designsystem.component.UiMessageSnackbarEffect
 import ir.vmessenger.core.designsystem.component.UserHashText
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmSnackbarHost
+import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
 import ir.vmessenger.core.designsystem.theme.VmSizes
 
 @Suppress("LongParameterList") // one entry per destination the settings tab can reach
@@ -68,17 +71,38 @@ private data class SettingsNavigation(
     val onBackup: () -> Unit,
     val onBlockedContacts: () -> Unit,
     val onUpdate: () -> Unit,
+    /** Both open the lock module's PIN screen, which lives outside this module. */
+    val onSetUpAppLock: () -> Unit,
+    val onChangeAppLockPin: () -> Unit,
 )
 
-/** The privacy section's switch states, bundled so the composable stays short on parameters. */
+/** The privacy section's switches, each with the setter that belongs to it. */
 private data class PrivacyToggles(
     val screenSecurity: Boolean,
+    val onScreenSecurity: (Boolean) -> Unit,
     val hideNotifications: Boolean,
+    val onHideNotifications: (Boolean) -> Unit,
     val sendReadReceipts: Boolean,
+    val onSendReadReceipts: (Boolean) -> Unit,
 )
 
+/** Shows the PIN dialog when asked and hands the result to the ViewModel, which owns the array. */
 @Composable
+private fun PinPrompt(
+    visible: Boolean,
+    dialog: @Composable (onDone: (CharArray?) -> Unit) -> Unit,
+    viewModel: AppLockSettingsViewModel,
+    onDismissed: () -> Unit,
+) {
+    if (!visible) return
+    dialog { pin ->
+        onDismissed()
+        pin?.let(viewModel::setPin)
+    }
+}
+
 // Navigation callbacks only; they are forwarded one-for-one to rows and never combined.
+@Composable
 @Suppress("LongParameterList")
 fun SettingsRoute(
     onNavigateToDebug: () -> Unit = {},
@@ -87,11 +111,21 @@ fun SettingsRoute(
     onNavigateToIdentity: () -> Unit = {},
     onNavigateToBlockedContacts: () -> Unit = {},
     onNavigateToUpdate: () -> Unit = {},
+    /**
+     * Collects a PIN. Supplied by :app from :feature:lock, so settings never depends on it —
+     * null means the user cancelled, and the caller owns and zeroes the array.
+     */
+    pinDialog: @Composable (onDone: (CharArray?) -> Unit) -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
+    appLockViewModel: AppLockSettingsViewModel = hiltViewModel(),
 ) {
+    var askingForPin by remember { mutableStateOf(false) }
+    PinPrompt(visible = askingForPin, dialog = pinDialog, viewModel = appLockViewModel) { askingForPin = false }
     var showWipeDialog by remember { mutableStateOf(false) }
     var showBackupDialog by remember { mutableStateOf(false) }
     val wipeInProgress by viewModel.wipeInProgress.collectAsStateWithLifecycle()
+    val snackbar = rememberVmSnackbar()
+    UiMessageSnackbarEffect(messages = appLockViewModel.messages, hostState = snackbar)
     // The passphrase is staged in the ViewModel so a configuration change while the picker is open keeps it.
     val createBackupDocument = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
@@ -99,25 +133,20 @@ fun SettingsRoute(
 
     VMessengerScaffold(
         title = stringResource(R.string.settings_title),
-        // The actions slot resolves to the layout end, which under this app's RTL-only locale is
-        // the left of the bar.
-        actions = {
-            IconButton(onClick = onNavigateToAbout) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
-                    contentDescription = stringResource(R.string.settings_about),
-                )
-            }
-        },
+        snackbarHost = { VmSnackbarHost(hostState = snackbar) },
+        actions = { AboutAction(onClick = onNavigateToAbout) },
     ) { padding ->
         SettingsContent(
             viewModel = viewModel,
+            appLockViewModel = appLockViewModel,
             navigation = SettingsNavigation(
                 onDebug = onNavigateToDebug,
                 onNodes = onNavigateToNodes,
                 onIdentity = onNavigateToIdentity,
                 onBlockedContacts = onNavigateToBlockedContacts,
                 onUpdate = onNavigateToUpdate,
+                onSetUpAppLock = { askingForPin = true },
+                onChangeAppLockPin = { askingForPin = true },
                 onSecureWipe = { showWipeDialog = true },
                 onBackup = {
                     viewModel.dismissBackupStatus()
@@ -157,13 +186,11 @@ fun SettingsRoute(
 @Composable
 private fun SettingsContent(
     viewModel: SettingsViewModel,
+    appLockViewModel: AppLockSettingsViewModel,
     navigation: SettingsNavigation,
     modifier: Modifier = Modifier,
 ) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
-    val screenSecurity by viewModel.screenSecurityEnabled.collectAsStateWithLifecycle()
-    val hideNotifications by viewModel.hideNotificationContent.collectAsStateWithLifecycle()
-    val sendReadReceipts by viewModel.sendReadReceipts.collectAsStateWithLifecycle()
     val backupStatus by viewModel.backupExportStatus.collectAsStateWithLifecycle()
     val developerToolsVisible by viewModel.developerToolsVisible.collectAsStateWithLifecycle()
     val profile by viewModel.profile.collectAsStateWithLifecycle()
@@ -179,14 +206,8 @@ private fun SettingsContent(
         profile?.let { ProfileHeader(profile = it, onClick = navigation.onIdentity) }
         SettingsThemeSection(themeMode = themeMode, onThemeMode = viewModel::setThemeMode)
         SettingsPrivacySection(
-            toggles = PrivacyToggles(
-                screenSecurity = screenSecurity,
-                hideNotifications = hideNotifications,
-                sendReadReceipts = sendReadReceipts,
-            ),
-            onScreenSecurity = viewModel::setScreenSecurity,
-            onHideNotifications = viewModel::setHideNotificationContent,
-            onSendReadReceipts = viewModel::setSendReadReceipts,
+            toggles = privacyToggles(viewModel),
+            appLock = appLockSettings(appLockViewModel, navigation),
             onBlockedContacts = navigation.onBlockedContacts,
             onSecureWipe = navigation.onSecureWipe,
         )
@@ -318,36 +339,89 @@ private fun SettingsThemeSection(
     }
 }
 
+/**
+ * The bar's one action. It sits in the actions slot, which resolves to the layout end — under this
+ * app's RTL-only locale, the left of the bar.
+ */
 @Composable
-@Suppress("LongParameterList") // one callback per row of the privacy section
+private fun AboutAction(onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+            contentDescription = stringResource(R.string.settings_about),
+        )
+    }
+}
+
+/** Collected here rather than in [SettingsContent] so that one stays a list of sections. */
+@Composable
+private fun privacyToggles(viewModel: SettingsViewModel): PrivacyToggles {
+    val screenSecurity by viewModel.screenSecurityEnabled.collectAsStateWithLifecycle()
+    val hideNotifications by viewModel.hideNotificationContent.collectAsStateWithLifecycle()
+    val sendReadReceipts by viewModel.sendReadReceipts.collectAsStateWithLifecycle()
+    return PrivacyToggles(
+        screenSecurity = screenSecurity,
+        onScreenSecurity = viewModel::setScreenSecurity,
+        hideNotifications = hideNotifications,
+        onHideNotifications = viewModel::setHideNotificationContent,
+        sendReadReceipts = sendReadReceipts,
+        onSendReadReceipts = viewModel::setSendReadReceipts,
+    )
+}
+
+@Composable
+private fun appLockSettings(
+    viewModel: AppLockSettingsViewModel,
+    navigation: SettingsNavigation,
+): AppLockSettings {
+    val enabled by viewModel.enabled.collectAsStateWithLifecycle()
+    val strictEnabled by viewModel.strictEnabled.collectAsStateWithLifecycle()
+    val autoLockMinutes by viewModel.autoLockMinutes.collectAsStateWithLifecycle()
+    val wipeOnFailedAttempts by viewModel.wipeOnFailedAttempts.collectAsStateWithLifecycle()
+    return AppLockSettings(
+        enabled = enabled,
+        strictEnabled = strictEnabled,
+        strictSupported = viewModel.strictModeSupported,
+        autoLockMinutes = autoLockMinutes,
+        wipeOnFailedAttempts = wipeOnFailedAttempts,
+        onSetUp = navigation.onSetUpAppLock,
+        onDisable = viewModel::disableLock,
+        onChangePin = navigation.onChangeAppLockPin,
+        onStrictMode = viewModel::setStrictMode,
+        onAutoLockMinutes = viewModel::setAutoLockMinutes,
+        onWipeOnFailedAttempts = viewModel::setWipeOnFailedAttempts,
+    )
+}
+
+@Composable
 private fun SettingsPrivacySection(
     toggles: PrivacyToggles,
-    onScreenSecurity: (Boolean) -> Unit,
-    onHideNotifications: (Boolean) -> Unit,
-    onSendReadReceipts: (Boolean) -> Unit,
+    appLock: AppLockSettings,
     onBlockedContacts: () -> Unit,
     onSecureWipe: () -> Unit,
 ) {
     SettingsSection(title = stringResource(R.string.settings_privacy_section)) {
+        AppLockRows(state = appLock)
+        SettingsDivider()
         SettingsToggleRow(
             label = stringResource(R.string.settings_screen_security),
             icon = Icons.Outlined.Security,
             checked = toggles.screenSecurity,
-            onCheckedChange = onScreenSecurity,
+            onCheckedChange = toggles.onScreenSecurity,
         )
         SettingsDivider()
         SettingsToggleRow(
             label = stringResource(R.string.settings_hide_notifications),
             icon = Icons.Outlined.NotificationsOff,
             checked = toggles.hideNotifications,
-            onCheckedChange = onHideNotifications,
+            onCheckedChange = toggles.onHideNotifications,
         )
         SettingsDivider()
         SettingsToggleRow(
             label = stringResource(R.string.settings_read_receipts),
             icon = Icons.Outlined.DoneAll,
             checked = toggles.sendReadReceipts,
-            onCheckedChange = onSendReadReceipts,
+            onCheckedChange = toggles.onSendReadReceipts,
         )
         SettingsDivider()
         SettingsActionRow(
