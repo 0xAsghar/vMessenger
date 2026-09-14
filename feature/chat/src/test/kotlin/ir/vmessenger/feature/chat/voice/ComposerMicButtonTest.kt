@@ -54,4 +54,30 @@ class ComposerMicButtonTest {
     fun `a zero threshold does not divide by zero`() {
         assertEquals(0f, slideFraction(40f, 0f), TOLERANCE)
     }
+
+    /**
+     * The mic is the composer row's leading child, so in RTL it is drawn on the right and the
+     * text field is to its left. These four assertions are the whole reason the sign is not
+     * inlined: the app ships RTL-only, so an inverted axis would cancel on a drag away from the
+     * field and nothing would ever contradict it.
+     */
+    @Test
+    fun `in RTL the field is to the left of the mic, so a leftward drag is toward it`() {
+        assertEquals(60f, towardField(dx = -60f, rtl = true), TOLERANCE)
+        assertEquals(-60f, towardField(dx = 60f, rtl = true), TOLERANCE)
+    }
+
+    @Test
+    fun `in LTR it is the other way round`() {
+        assertEquals(60f, towardField(dx = 60f, rtl = false), TOLERANCE)
+        assertEquals(-60f, towardField(dx = -60f, rtl = false), TOLERANCE)
+    }
+
+    @Test
+    fun `a full leftward drag in RTL cancels, the same drag rightward does not`() {
+        val left = towardField(dx = -200f, rtl = true)
+        val right = towardField(dx = 200f, rtl = true)
+        assertEquals(MicPhase.Cancelled, reduceMicDrag(MicPhase.Recording, left, 0f, Limits))
+        assertEquals(MicPhase.Recording, reduceMicDrag(MicPhase.Recording, right, 0f, Limits))
+    }
 }

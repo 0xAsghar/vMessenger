@@ -75,6 +75,20 @@ internal fun reduceMicDrag(phase: MicPhase, towardField: Float, upward: Float, l
     else -> phase
 }
 
+/**
+ * A raw horizontal pointer delta, turned into "how far toward the text field".
+ *
+ * The mic leads the composer row, so it is drawn at the layout START — the right in RTL, the left
+ * in LTR — and the field sits on the other side of it. Toward the field is therefore leftward
+ * (negative x) under RTL and rightward under LTR.
+ *
+ * This is one sign, it flips with a layout the app never runs in, and getting it backwards makes
+ * slide-to-cancel fire when the finger moves away from the field instead of toward it. The app is
+ * Persian-only, so there is no second locale in which the mistake would show up — which is exactly
+ * why it is a named function with a test rather than an expression inside a pointer loop.
+ */
+internal fun towardField(dx: Float, rtl: Boolean): Float = if (rtl) -dx else dx
+
 /** How far the slide-to-cancel hint has travelled, 0..1. */
 internal fun slideFraction(towardField: Float, cancelPx: Float): Float =
     if (cancelPx > 0f) (towardField / cancelPx).coerceIn(0f, 1f) else 0f
@@ -150,9 +164,8 @@ private class MicGesture(
 
     /** True once the pointer stops mattering: the gesture has cancelled itself, or locked. */
     fun move(offset: Offset): Boolean {
-        // The mic now leads the row, so the field sits toward the layout END: left of the mic in
-        // RTL, right of it in LTR — the opposite of when the mic was the last child. Up is -y.
-        val toward = if (rtl) -offset.x else offset.x
+        // Up is -y; the horizontal axis is [towardField], which owns the direction flip.
+        val toward = towardField(offset.x, rtl)
         val next = reduceMicDrag(phase.value, toward, -offset.y, limits)
         actions.value.onSlide(slideFraction(toward, limits.cancelPx))
         return when (next) {
