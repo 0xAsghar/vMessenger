@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -187,7 +188,15 @@ fun GroupMemberPickerSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(modifier = Modifier.fillMaxHeight(SHEET_HEIGHT_FRACTION)) {
+        // Not VmBottomSheet: this one is a fixed fraction of the screen with a weighted list
+        // above a pinned button, which the component's wrap-content column cannot express. The
+        // inset it would have brought is applied here instead — without it the confirm button
+        // sits under the gesture pill.
+        Column(
+            modifier = Modifier
+                .fillMaxHeight(SHEET_HEIGHT_FRACTION)
+                .navigationBarsPadding(),
+        ) {
             Text(
                 text = stringResource(R.string.feature_chat_group_add_members_title),
                 style = MaterialTheme.typography.titleMedium,

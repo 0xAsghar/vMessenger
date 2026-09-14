@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Reply
@@ -22,10 +21,8 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -42,6 +39,7 @@ import ir.vmessenger.core.designsystem.component.KeyChangeBanner
 import ir.vmessenger.core.designsystem.component.ReplyPreview
 import ir.vmessenger.core.designsystem.component.SettingsRow
 import ir.vmessenger.core.designsystem.component.SettingsTrailing
+import ir.vmessenger.core.designsystem.component.VmBottomSheet
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 
@@ -204,44 +202,36 @@ internal fun MessageActionsSheet(
     abilities: MessageAbilities,
     actions: MessageSheetActions,
 ) {
-    val sheetState = rememberModalBottomSheetState()
-    ModalBottomSheet(onDismissRequest = actions.onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding(),
-        ) {
-            SheetHeader(preview)
+    VmBottomSheet(title = preview, onDismiss = actions.onDismiss) {
+        SheetAction(
+            R.string.feature_chat_reply,
+            Icons.AutoMirrored.Outlined.Reply,
+            actions.onDismiss,
+            actions.onReply,
+        )
+        if (abilities.canEdit) {
+            SheetAction(R.string.feature_chat_edit_message, Icons.Outlined.Edit, actions.onDismiss, actions.onEdit)
+        }
+        if (abilities.canCopy) {
+            SheetAction(R.string.feature_chat_copy, Icons.Outlined.ContentCopy, actions.onDismiss, actions.onCopy)
+        }
+        SheetAction(R.string.feature_chat_message_info, Icons.Outlined.Info, actions.onDismiss, actions.onInfo)
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.error) {
             SheetAction(
-                R.string.feature_chat_reply,
-                Icons.AutoMirrored.Outlined.Reply,
+                R.string.feature_chat_delete_message,
+                Icons.Outlined.DeleteOutline,
                 actions.onDismiss,
-                actions.onReply,
+                { actions.onDelete(false) },
             )
-            if (abilities.canEdit) {
-                SheetAction(R.string.feature_chat_edit_message, Icons.Outlined.Edit, actions.onDismiss, actions.onEdit)
-            }
-            if (abilities.canCopy) {
-                SheetAction(R.string.feature_chat_copy, Icons.Outlined.ContentCopy, actions.onDismiss, actions.onCopy)
-            }
-            SheetAction(R.string.feature_chat_message_info, Icons.Outlined.Info, actions.onDismiss, actions.onInfo)
-            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.error) {
+            // Only offered for our own messages, and worded as a request: a peer can ignore
+            // the control and nothing here can verify that they did not.
+            if (abilities.canDeleteForEveryone) {
                 SheetAction(
-                    R.string.feature_chat_delete_message,
-                    Icons.Outlined.DeleteOutline,
+                    R.string.feature_chat_delete_for_everyone,
+                    Icons.Outlined.DeleteSweep,
                     actions.onDismiss,
-                    { actions.onDelete(false) },
+                    { actions.onDelete(true) },
                 )
-                // Only offered for our own messages, and worded as a request: a peer can ignore
-                // the control and nothing here can verify that they did not.
-                if (abilities.canDeleteForEveryone) {
-                    SheetAction(
-                        R.string.feature_chat_delete_for_everyone,
-                        Icons.Outlined.DeleteSweep,
-                        actions.onDismiss,
-                        { actions.onDelete(true) },
-                    )
-                }
             }
         }
     }
@@ -256,18 +246,6 @@ internal data class MessageAbilities(
 )
 
 /** Names the message being acted on, the way the contact sheet names the contact. */
-@Composable
-private fun SheetHeader(preview: String) {
-    if (preview.isBlank()) return
-    Text(
-        text = preview,
-        style = MaterialTheme.typography.titleMedium,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
-    )
-}
-
 @Composable
 private fun SheetAction(labelRes: Int, icon: ImageVector, onDismiss: () -> Unit, onAct: () -> Unit) {
     SettingsRow(

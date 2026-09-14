@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 
 /**
@@ -43,11 +44,18 @@ fun VmBottomSheet(
                 .navigationBarsPadding()
                 .padding(bottom = VmSpacing.sm),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
-            )
+            // Blank means no header at all rather than an empty band: a sheet opened on a voice
+            // message has nothing to quote. One line always — a title here can be a message
+            // preview, and the actions are what the sheet is for.
+            if (title.isNotBlank()) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
+                )
+            }
             content()
         }
     }

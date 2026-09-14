@@ -11,11 +11,8 @@ import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -27,6 +24,7 @@ import ir.vmessenger.core.designsystem.component.EmptyStateAction
 import ir.vmessenger.core.designsystem.component.SkeletonList
 import ir.vmessenger.core.designsystem.component.UiMessageSnackbarEffect
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmExtendedFab
 import ir.vmessenger.core.designsystem.component.VmSearchBar
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
@@ -71,12 +69,10 @@ fun ContactsRoute(
             }
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            VmExtendedFab(
+                icon = Icons.Default.PersonAdd,
+                text = stringResource(R.string.contacts_add),
                 onClick = navigation.onAddByHash,
-                icon = { Icon(imageVector = Icons.Default.PersonAdd, contentDescription = null) },
-                text = { Text(text = stringResource(R.string.contacts_add)) },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
             )
         },
         snackbarHost = { VmSnackbarHost(snackbarHost) },

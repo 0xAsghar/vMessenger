@@ -5,12 +5,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -21,6 +18,7 @@ import ir.vmessenger.core.designsystem.component.DeliveryTicksState
 import ir.vmessenger.core.designsystem.component.SectionHeader
 import ir.vmessenger.core.designsystem.component.SettingsRow
 import ir.vmessenger.core.designsystem.component.SettingsTrailing
+import ir.vmessenger.core.designsystem.component.VmBottomSheet
 import ir.vmessenger.core.designsystem.format.VmDateFormat
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSizes
@@ -50,24 +48,12 @@ internal fun MessageInfoSheet(
     info: MessageDeliveryInfo,
     onDismiss: () -> Unit,
 ) {
-    val sheetState = rememberModalBottomSheetState()
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding(),
-        ) {
-            Text(
-                text = stringResource(R.string.feature_chat_message_info),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
-            )
-            MessageFacts(info)
-            if (info.recipients.isNotEmpty()) {
-                SectionHeader(title = stringResource(R.string.feature_chat_info_recipients))
-                for (recipient in info.recipients) {
-                    RecipientRow(recipient)
-                }
+    VmBottomSheet(title = stringResource(R.string.feature_chat_message_info), onDismiss = onDismiss) {
+        MessageFacts(info)
+        if (info.recipients.isNotEmpty()) {
+            SectionHeader(title = stringResource(R.string.feature_chat_info_recipients))
+            for (recipient in info.recipients) {
+                RecipientRow(recipient)
             }
         }
     }

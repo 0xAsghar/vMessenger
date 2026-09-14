@@ -21,6 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.SectionHeader
 import ir.vmessenger.core.designsystem.component.UserHashText
+import ir.vmessenger.core.designsystem.component.VmListRow
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
@@ -78,35 +79,24 @@ private fun ContactRowItem(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .heightIn(min = VmSizes.listItemHeight)
-            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
-    ) {
-        Avatar(seed = contact.identityHash, name = contact.name)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = contact.name,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            contactSubtitle(contact)?.let { subtitle ->
+    val subtitle = contactSubtitle(contact)
+    VmListRow(
+        title = contact.name,
+        modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
+        subtitle = subtitle?.let {
+            {
                 Text(
-                    text = subtitle,
+                    text = it,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-        }
-        ContactRowTrailing(contact = contact)
-    }
+        },
+        trailing = { ContactRowTrailing(contact = contact) },
+        avatar = { Avatar(seed = contact.identityHash, name = contact.name) },
+    )
 }
 
 @Composable

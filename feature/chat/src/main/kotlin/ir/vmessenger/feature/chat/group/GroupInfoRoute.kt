@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,7 +37,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.Avatar
@@ -49,6 +47,7 @@ import ir.vmessenger.core.designsystem.component.SettingsRow
 import ir.vmessenger.core.designsystem.component.SettingsTrailing
 import ir.vmessenger.core.designsystem.component.SkeletonList
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmListRow
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
 import ir.vmessenger.core.designsystem.component.asText
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
@@ -249,29 +248,14 @@ private fun MemberRow(
 ) {
     val name = member.label(unknown)
     val contactId = member.contactId?.takeIf { !member.isMe }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (contactId != null) {
-                    Modifier.clickable { callbacks.onOpenContact(contactId) }
-                } else {
-                    Modifier
-                },
-            )
-            .heightIn(min = VmSizes.listItemHeight)
-            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
-    ) {
-        Avatar(seed = member.seed.bytes, name = name, size = VmSizes.avatarMd)
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+    VmListRow(
+        title = name,
+        modifier = if (contactId != null) {
+            Modifier.clickable { callbacks.onOpenContact(contactId) }
+        } else {
+            Modifier
+        },
+        subtitle = {
             Row(horizontalArrangement = Arrangement.spacedBy(VmSpacing.xs)) {
                 if (member.isCreator) {
                     MemberChip(label = stringResource(R.string.feature_chat_group_badge_creator))
@@ -283,9 +267,10 @@ private fun MemberRow(
                     MemberChip(label = stringResource(R.string.feature_chat_status_pending_out))
                 }
             }
-        }
-        MemberActions(member = member, canRemove = canRemove, callbacks = callbacks)
-    }
+        },
+        trailing = { MemberActions(member = member, canRemove = canRemove, callbacks = callbacks) },
+        avatar = { Avatar(seed = member.seed.bytes, name = name, size = VmSizes.avatarMd) },
+    )
 }
 
 @Composable
