@@ -1,8 +1,8 @@
 # vMessenger - Local Database
 
-The on-device store: Room over SQLCipher, **schema version 18**.
+The on-device store: Room over SQLCipher, **schema version 19**.
 
-Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/database/` and the exported schema `core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/18.json`.
+Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/database/` and the exported schema `core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/19.json`.
 
 ---
 
@@ -22,7 +22,7 @@ Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/d
 ```kotlin
 Room.databaseBuilder(context, VMessengerDatabase::class.java, "vmessenger.db")
     .openHelperFactory(SupportOpenHelperFactory(passphrase))   // net.zetetic SQLCipher
-    .addMigrations(MIGRATION_1_2 … MIGRATION_16_17)
+    .addMigrations(MIGRATION_1_2 … MIGRATION_18_19)
     .build()
 ```
 
@@ -30,7 +30,7 @@ Room.databaseBuilder(context, VMessengerDatabase::class.java, "vmessenger.db")
 - Passphrase: 32 random bytes, Keystore-wrapped, cached for the process lifetime by `DatabaseKeyProvider` under a mutex (see [Security.md](Security.md) §7.1).
 - `exportSchema = true`; schemas land in `core/database/schemas/`.
 - No `fallbackToDestructiveMigration` — every version step has an explicit migration.
-- 17 entities, 17 DAOs.
+- 20 entities, 19 DAOs.
 
 **Note on the `session` table.** It was declared but never used — sessions are connection-scoped and never persisted ([Protocol.md](Protocol.md) §6) — and was dropped in migration 17 → 18. Nothing references it any more.
 
@@ -98,6 +98,8 @@ Single row, `id = 0`.
 | `displayName` | TEXT | default `""` |
 | `x25519StaticPublic` | BLOB | static DH public key |
 | `createdAtUnixMs` | INTEGER | |
+| `avatarPath` | TEXT? | our own profile photo, in the `VMA1` container; null means the identicon |
+| `avatarRevision` | INTEGER | bumped on every change so a peer can tell a new photo from a re-send |
 
 ### 4.3 `key_material`
 
@@ -126,6 +128,8 @@ Wrapped private keys. Aliases: `identity-ed25519`, `identity-x25519-static`.
 | `lastSeenUnixMs` | INTEGER? | last inbound traffic |
 | `pendingX25519StaticPublic` | BLOB? | key the peer presented that differs from the pin; the handshake was **refused** |
 | `keyChangedAtUnixMs` | INTEGER? | when that happened |
+| `avatarPath` | TEXT? | the photo this contact sent, in the `VMA1` container |
+| `avatarRevision` | INTEGER | the revision that photo came with; 0 for a contact who has never sent one |
 
 ### 4.5 `contact_request`
 
@@ -188,6 +192,7 @@ The index on `groupId` is unique (one conversation per group). SQLite treats NUL
 | `caption` | TEXT? | text sent alongside an attachment |
 | `attachmentDurationMs` | INTEGER? | voice/video length, known before the file arrives |
 | `attachmentWaveform` | BLOB? | exactly 64 amplitude buckets (one byte each, 0..255) |
+| `editedAtUnixMs` | INTEGER? | when the sender last edited it; null for a message that never was |
 
 Indices:
 
@@ -334,6 +339,26 @@ Embedded-DHT record store (off by default).
 
 ---
 
+### 4.18 `pending_revoke`
+
+A contact we deleted who has not been told yet. **Deliberately has no foreign key to `contact`** —
+the row's whole purpose is to outlive the contact it is about, so a peer who was offline when they
+were deleted still finds out. It carries only what is needed to dial them once more.
+
+| Column | Type | Notes |
+|---|---|---|
+| `identityHash` | BLOB | PK |
+| `ed25519Public` | BLOB | needed to dial without the contact row |
+| `x25519StaticPublic` | BLOB? | null when it was never learned |
+| `requestId` | TEXT | the revoke's own id, so a replay is idempotent |
+| `createdAtUnixMs` | INTEGER | the row expires a week after this |
+| `attemptCount` | INTEGER | |
+| `nextAttemptUnixMs` | INTEGER | exponential backoff |
+
+Purged by the secure wipe along with everything else in the database.
+
+---
+
 ## 5. Enums and type converters
 
 `core/database/.../converter/EnumConverters.kt` stores every enum as `value.name` (TEXT) and reads it back with `valueOf`. An unknown stored value therefore **throws** rather than silently mapping to a default — except `NodeTrust`, which is stored as a plain `String` column and parsed by `NodeTrust.fromName`, falling back to `COMMUNITY`.
@@ -412,6 +437,22 @@ Three projection types keep the UI off N+1 queries:
 | 15 → 16 | **Protocol v2 batch** — see below |
 | 16 → 17 | `CREATE INDEX index_message_conv_created ON message(conversationId, createdAtUnixMs)` |
 | 17 → 18 | groups (`chat_group`, `chat_group_member`), per-recipient delivery (`message_recipient`, re-keyed `outbox`), group-aware `conversation`, voice/caption/sender columns on `message`; drops `session` |
+| 18 → 19 | message edit, profile photos, and the pending-revoke queue — see below |
+
+### 18 → 19 in detail
+
+Exported as `MIGRATION_18_19_STATEMENTS`, like 15 → 16, so a plain-SQLite test can replay it
+without Room. Entirely additive — five `ADD COLUMN`s and one `CREATE TABLE`, no table rewrite,
+because nothing about an existing row changes meaning:
+
+- `message.editedAtUnixMs`, null on every existing row, which is what "never edited" already was.
+- `contact.avatarPath` / `avatarRevision` and `identity.avatarPath` / `avatarRevision`. A contact
+  with no photo keeps a null path at revision 0, which is indistinguishable from a peer who has
+  never sent a profile update — so old rows need no back-fill.
+- `pending_revoke` (§4.18), with no foreign key, for the same reason the table exists at all.
+
+Delete-for-everyone needed no column: it is stored as a `MESSAGE_CONTROL` row and a `DELETED`
+content type on the message it refers to, both of which are enum names in existing columns.
 
 ### 15 → 16 in detail
 

@@ -47,7 +47,7 @@ No accounts, phone numbers or email addresses exist. Identity is an on-device Ed
 | Malicious or compromised relay/DHT node | Cannot read or forge message content, and cannot forge endpoint records (they are signed). It **does** see which identity hashes are online, who dials whom, and when. It can deny service. |
 | A peer you added | Can send you content you accepted by adding them. Cannot forge receipts for other conversations, cannot re-address a mailbox blob, cannot silently change their static key (§5). |
 | A stranger who reaches you | Can only deliver a contact request or response (§6). Everything else is dropped after decryption. |
-| Attacker with physical access to a locked device | Database and attachments are encrypted; the wrapping key is non-exportable and (where available) StrongBox-backed. **But** the Keystore key does not require device unlock (§7.3), so a full device compromise while the OS is running also compromises the data. |
+| Attacker with physical access to a locked device | Database and attachments are encrypted; the wrapping key is non-exportable and (where available) StrongBox-backed. **But** by default the Keystore key does not require device unlock (§7.3), so a full device compromise while the OS is running also compromises the data. The app lock's **strict mode** (§7.4) is the only configuration that changes this answer: it moves the database passphrase behind an authentication-required key and deletes the copy that is not. |
 | Attacker who compromises the device now | Can read past messages already in the database, and can follow any live session. Past *frames* of a live session are not recoverable, but there is no post-compromise security (§10). |
 
 ### 2.3 Trust boundaries
@@ -197,11 +197,54 @@ The passphrase is created on first use, wrapped by the Keystore master key and s
 | Hardware | StrongBox requested on API 28+; **any** failure (not just `StrongBoxUnavailableException`) falls back to the TEE-backed key, because many devices advertise the API without the hardware and refusing would make the app permanently unusable there |
 | Blob format | `0x02 || iv(12) || ciphertext` — the version byte makes the format self-describing; unversioned 0.x dev blobs are **rejected**, never guessed at |
 | Associated data | `"vmessenger:" + alias` — so a blob wrapped for the database cannot be unwrapped as an attachment key or an identity key |
-| Aliases | `db`, `attachments`, `identity-ed25519`, `identity-x25519-static` |
+| Aliases | `db`, `attachments`, `identity-ed25519`, `identity-x25519-static` — all under `vmessenger_master`. Strict mode adds a **separate** alias, `vmessenger_app_lock` (§7.4) |
 
 **Deliberate trade-off:** the master key is created **without** `setUserAuthenticationRequired` and **without** `setUnlockedDeviceRequired`. The network foreground service must open the encrypted database to receive messages while the screen is locked; requiring an unlocked device would stop delivery whenever the phone is in a pocket. At-rest protection therefore rests on the Keystore (and StrongBox where present), not on the lock state. The consequence is stated plainly in §10.
 
+That trade-off is the default, not the only option: §7.4 describes how strict mode reverses it, and what it costs.
+
 The boot receiver is intentionally **not** direct-boot aware (`app/src/main/AndroidManifest.xml`): the passphrase is only unwrapped after the user has unlocked the device at least once since boot.
+
+### 7.4 App lock
+
+`core/crypto/.../lock/PinVerifier.kt`, `StrictModeKeyManager.kt`, `data/.../lock/AppLockCoordinator.kt`.
+Added in 1.1; off until the user sets a PIN.
+
+**Default mode protects the screen, not the data,** and the settings copy says exactly that in
+Persian. Messages still arrive, the database is opened as before, and anyone who compromises the
+running OS — or holds the unlocked device — reads everything. The PIN is verified against an
+AEAD-sealed witness over a known constant, not a bare hash comparison, with Argon2id (ops 3,
+64 MiB, 16-byte salt) over the PIN. That is a constant factor, not a rate limit: a 4–6 digit
+keyspace is 10⁴–10⁶ and falls offline whatever the KDF costs. The attempt counter is therefore
+written **before** the attempt is checked, so force-stopping between the two cannot reset it, and
+the app wipes after ten consecutive failures with a warning from the third-from-last.
+
+**Strict mode is the configuration that changes the threat model.** It re-wraps the database
+passphrase under a second Keystore key created with `setUserAuthenticationRequired(true)` and
+`setUserAuthenticationParameters(…, AUTH_BIOMETRIC_STRONG or AUTH_DEVICE_CREDENTIAL)`, then
+**deletes the non-authenticating copy**. The retry limit is then enforced by the secure hardware
+rather than by this app. Three consequences, all deliberate:
+
+- It must not reuse `vmessenger_master`. The StrongBox fallback path calls
+  `deleteEntry(MASTER_KEY_ALIAS)`, so a StrongBox retry would destroy the only wrapping of the
+  passphrase. Hence the separate `vmessenger_app_lock` alias.
+- Device credential is accepted alongside biometrics. With
+  `setInvalidatedByBiometricEnrollment`, enrolling a new fingerprint destroys the key; without a
+  credential path that means an unopenable database and total data loss. Turning strict mode on
+  puts a confirmation in front of the user that names that loss and says to take a backup first.
+  It is a warning, not a gate — nothing records whether a backup was taken, so nothing can check
+  one, and saying otherwise would be claiming a control that does not exist.
+- **Background delivery stops while locked.** `DatabaseKeyProvider.lock()` closes the database and
+  makes `getPassphrase()` fail rather than silently re-unwrap, and the passphrase source refuses to
+  mint a fresh passphrase while a strict blob exists — minting there would abandon the real
+  database rather than open it. Every background entry point degrades instead of crashing.
+
+Note what the PIN is **not**: it does not wrap anything. The passphrase is wrapped under the
+Keystore key, and the PIN only gates the screen and drives the authentication that the hardware
+key requires. So changing the PIN rewrites the verifier and nothing else — there is no re-wrapping
+step to crash in the middle of. Enabling and disabling strict mode are the operations that move the
+passphrase, and both write the new copy before dropping the old one, so an interruption leaves an
+install that still opens rather than one that opens with neither key.
 
 ---
 
@@ -233,15 +276,16 @@ The boot receiver is intentionally **not** direct-boot aware (`app/src/main/Andr
 | 4 | `database` | `clearAllTables()` then `close()` |
 | 5 | `database-files` | delete `vmessenger.db` and its `-wal` / `-shm` / `-journal` siblings |
 | 6 | `files` | delete `files/attachments`, `files/logs` and everything in `cacheDir` |
-| 7 | `preferences` | clear all six DataStores (draft, security, privacy, p2p, discovery, theme) |
+| 7 | `preferences` | clear every DataStore: draft, security, privacy, p2p, discovery, theme, contact-retry, the updater store, and the app lock's own store |
 | 8 | `memory` | zeroize cached identity, DB passphrase and attachment key; clear log buffer, network path tracker, pinned relay IPs; reset `P2PConfig` |
-| 9 | `keystore` | `deleteMasterKey()` — **last**, because every earlier step may still need to decrypt |
+| 9 | `keystore` | delete **both** aliases — `vmessenger_master` and strict mode's `vmessenger_app_lock` — **last**, because every earlier step may still need to decrypt |
 
 Properties:
 
 - **Every step runs even if an earlier one throws.** Stopping at the first failure would leave data behind. The failed step names are logged.
 - **Cancellation is rethrown, not swallowed**, and the whole wipe runs under `NonCancellable` on the IO dispatcher — a half-done wipe that destroyed the Keystore key while the wrapped passphrase survived would leave an unopenable install with no way back.
 - Destroying the master key alone makes every leftover wrapped blob undecryptable, so even a failure in steps 4–7 still ends with unreadable data.
+- The app lock's store was added to step 7 in 1.1 after it was found to survive a wipe. Two things were left behind: the PIN verifier, which is an offline-crackable record of a 4–6 digit secret the user may reuse elsewhere; and, under strict mode, a wrapped passphrase whose presence makes the passphrase source refuse to mint a new one — so the next start threw on a database that no longer existed.
 - The process then exits and is relaunched by an inexact `AlarmManager` alarm ~300 ms later (the app does not request `SCHEDULE_EXACT_ALARM`).
 
 **Known limitation:** Android's background-activity-start restriction means the relaunch does not bring the app to the foreground. The data is destroyed and the service restarts, but the user has to tap the launcher icon, which then opens onboarding.
@@ -261,7 +305,7 @@ These are real, current gaps. None of them is hidden behind a "future work" labe
 | L4 | **Trust-on-first-use for contact keys** | QR pairing is in-person trust; User Hash pairing trusts whatever key answers for that hash prefix first. The contact detail screen shows the pair's safety number and a "verified" switch, so a comparison is *possible* — but nothing forces it, nothing warns that it has not happened, and the flag has no effect beyond a badge. |
 | L5 | **Nothing verifies that the user actually compared** | A key change is surfaced and can be accepted from the contact screen (§5), which is the honest minimum. It is still one tap: an unattentive user can accept a key change from an attacker exactly as easily as one from a friend who reinstalled. |
 | L6 | **Operator key is a placeholder** | `NetworkConfig.OPERATOR_ED25519_PUBLIC_KEY_HEX` is 64 zeros, so `operatorEd25519PublicKey()` returns null and **no** `SignedNodeRecord` can ever be `OFFICIAL`. This must be set before release, or the operator-trust tier is dead code. |
-| L7 | **Keystore key does not require device unlock** | Deliberate (§7.3) so the foreground service can decrypt while the screen is locked. An attacker who compromises the running OS also gets the data. |
+| L7 | **Keystore key does not require device unlock by default** | Deliberate (§7.3) so the foreground service can decrypt while the screen is locked. An attacker who compromises the running OS also gets the data. The app lock's strict mode (§7.4) opts out of this, at the cost of background delivery while locked; with the lock off, or on but not strict, this limitation stands unchanged. |
 | L8 | **No initiator identity hiding, no deniability** | The initiator's identity and static keys are sent in the clear in handshake step 3, and both sides sign the transcript. |
 | L9 | **Sender clock is untrusted but still displayed** | `MessageEnvelope.sent_at_unix_ms` is advisory. Receipt timestamps are clamped; message timestamps are not. |
 | L10 | **Relay availability is a denial-of-service surface** | The node enforces caps and per-IP rate limits, but a device behind NAT with no reachable relay simply cannot be reached. |

@@ -197,7 +197,9 @@ class AppLockCoordinator @Inject constructor(
      * Removing the ordinary copy is the point, and it is what separates this from security theatre:
      * leaving it in place would mean anything that can read the app's files still has the key, and
      * the hardware gate would protect nothing. The cost is that the Keystore becomes the only way
-     * back in, which is why enabling this is gated on a completed backup in the UI.
+     * back in, which is why the UI puts a confirmation in front of this that names the loss and
+     * says to take a backup first. It is a warning, not a gate: nothing records that a backup was
+     * actually taken, so nothing here can check one.
      */
     suspend fun enableStrictMode(validitySeconds: Int): Boolean {
         val passphrase = databaseKeyProvider.getPassphraseOrNull()

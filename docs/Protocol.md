@@ -324,6 +324,9 @@ message MessageEnvelope {
     AttachmentInfo attachment_info = 29;
     AttachmentChunk attachment_chunk = 30;
     GroupControl group_control = 31;
+    MessageEdit message_edit = 32;
+    MessageDelete message_delete = 33;
+    ProfileUpdate profile_update = 34;
   }
 }
 ```
@@ -334,7 +337,7 @@ Every envelope is classified and gated before it is dispatched (`data/.../networ
 
 | `InboundKind` | Required sender state |
 |---|---|
-| `CHAT`, `ATTACHMENT`, `LOCATION`, `CONTROL`, `RECEIPT`, `NETWORK_NODES`, `GROUP_CONTROL` | contact exists, not blocked, `relationshipStatus == APPROVED` |
+| `CHAT`, `ATTACHMENT`, `LOCATION`, `CONTROL`, `RECEIPT`, `NETWORK_NODES`, `GROUP_CONTROL`, `MESSAGE_REVISION`, `PROFILE_UPDATE` | contact exists, not blocked, `relationshipStatus == APPROVED` |
 | `CONTACT_REQUEST`, `CONTACT_RESPONSE` | sender not blocked (strangers and pending contacts may pass) |
 | mailbox / relay traffic | no `InboundKind`; authorized inside `MailboxProtocolService` / `PeerRelayForwarder` against the session peer |
 
@@ -437,6 +440,41 @@ Contact requests (`ContactRequest` / `ContactResponse`, fields 27–28) carry di
 - The `request_id` must be the deterministic id derived over `(requester hash, our hash)` — either our full hash or our 16-byte routing prefix — so a peer cannot overwrite another requester's pending row or dodge the reject cap.
 - The user hash shown on the approval card is derived from the proven identity, never taken from the payload.
 - A response is only applied when it comes from a contact we are actually waiting on and carries the request id we derived for them. `CONTACT_RESPONSE_REVOKE` marks the contact `REJECTED`.
+
+### 8.6 Message revision and profile updates
+
+Arms 32, 33 and 34, all added within major 2 (§15).
+
+```protobuf
+message MessageEdit   { bytes target_message_id = 1; string new_text = 2; int64 edited_at_unix_ms = 3; }
+message MessageDelete { bytes target_message_id = 1; int64 deleted_at_unix_ms = 2; }
+message ProfileUpdate {
+  string display_name = 1;
+  int64  updated_at_unix_ms = 2;
+  uint64 revision = 3;
+  bytes  avatar = 4;          // WebP, downscaled to fit the 64 KiB relay frame cap
+  string avatar_mime = 5;
+  bytes  avatar_sha256 = 6;
+}
+```
+
+**Authority is the session, never the payload.** The sender is taken from the authenticated session
+and an edit or delete is applied only to a message that sender sent, in a conversation they are in.
+A `target_message_id` naming someone else's message is dropped.
+
+**Delete is a request, not a command.** It renders a tombstone rather than removing the row: reply
+quotes stay resolvable, the unread count cannot be stranded by removing an unread message, and a
+peer that ignores the arm keeps its copy. Nothing here can verify that it did not — the wording in
+the app says so.
+
+**Both are idempotent on replay** and both enqueue a `DELIVERED` receipt. Without an ack the sender
+reopens a session every fifteen seconds forever (§8.2).
+
+A profile update is accepted only for a higher `revision` than the one already stored, and never
+overwrites a name the user typed for that contact themselves.
+
+A delete that arrives before the message it names, or during that message's attachment transfer,
+is stored as a tombstone and applied when the message lands.
 
 ---
 
@@ -754,6 +792,13 @@ Major 2 is a deliberate clean break, not an incremental change. Nothing on the w
 Two transitional exceptions exist on the **node** only, because a node serves whatever clients connect to it: `NodeEndpointRecordVerifier` still accepts `transcript_version == 0` endpoint records, and `ListenerHandler` still accepts `proof_version` 0/1 relay listener proofs. The app never produces either.
 
 Because there was no in-place upgrade path from 0.x anyway, no compatibility shim was built into the app: a 0.x install must be removed before installing a 2.x build.
+
+Message edit (`message_edit = 32`), delete-for-everyone (`message_delete = 33`) and profile
+updates (`profile_update = 34`) were added within major 2 in the 1.1 release, the same way. A
+1.0.x peer parses the envelope, finds no arm it knows, and drops the frame — an edit does not
+reach it and its copy keeps the original text, which is the honest outcome rather than a crash.
+The cost is measurable and was measured: the dropped frame is never acked, so the sender reopens
+a session for it until the outbox gives up.
 
 Groups and voice messages were added **within** major 2, additively: `MessageEnvelope.group_id = 5`, `group_control = 31`, `AttachmentKind.ATTACHMENT_KIND_AUDIO = 4` and `AttachmentInfo.duration_ms = 9` / `waveform = 10` are all new fields, so a peer that predates them parses the envelope and simply ignores what it does not know. The practical effect is graceful: such a peer treats a group message as a 1:1 message from its sender and a voice message as an unknown-kind file. No version bump was needed, and none is claimed.
 
