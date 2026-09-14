@@ -101,6 +101,8 @@ class FakeLocationAccessRepository : LocationAccessRepository {
     }
 
     override suspend fun grantedContactIds(): List<String> = granted.toList()
+
+    override suspend fun isGranted(contactId: String): Boolean = contactId in granted
 }
 
 class FakeLocationServiceControl : LocationServiceControl {

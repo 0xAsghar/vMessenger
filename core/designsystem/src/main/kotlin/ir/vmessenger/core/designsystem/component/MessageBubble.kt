@@ -29,11 +29,13 @@ import ir.vmessenger.core.designsystem.theme.VmTextStyles
  * `*BubbleContent` composable, and the trailing line is [BubbleMeta].
  */
 @Composable
+@Suppress("LongParameterList") // Compose slot API: shape, colours and sizing are each optional.
 fun MessageBubble(
     direction: BubbleDirection,
     modifier: Modifier = Modifier,
     shape: Shape = if (direction == BubbleDirection.Outgoing) VmShapes.bubbleOutgoing else VmShapes.bubbleIncoming,
     colors: MessageBubbleColors = MessageBubbleDefaults.colors(direction),
+    matchWidestChild: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val alignment = if (direction == BubbleDirection.Outgoing) Alignment.CenterEnd else Alignment.CenterStart
@@ -50,11 +52,13 @@ fun MessageBubble(
             modifier = Modifier.widthIn(max = maxWidth * VmSizes.bubbleMaxWidthFraction),
         ) {
             Column(
-                // Intrinsic width so a reply quote can fill the bubble instead of shrinking to
-                // its own ellipsised text, while the bubble still wraps its widest real child
-                // rather than stretching to the cap.
+                // Opt-in, because intrinsic measurement asks every child for a width it can
+                // report — and a Canvas cannot. A waveform or a still-loading image reports zero,
+                // which collapsed voice and media bubbles to a fraction of their size. It is only
+                // needed so a reply quote can fill the bubble instead of shrinking to its own
+                // ellipsised text, so only a bubble that has one asks for it.
                 modifier = Modifier
-                    .width(IntrinsicSize.Max)
+                    .then(if (matchWidestChild) Modifier.width(IntrinsicSize.Max) else Modifier)
                     .padding(VmSpacing.sm),
                 content = content,
             )

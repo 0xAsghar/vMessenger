@@ -29,4 +29,7 @@ class LocationAccessRepositoryImpl @Inject constructor(
 
     override suspend fun grantedContactIds(): List<String> =
         locationAccessDao.grantedContactIds()
+
+    override suspend fun isGranted(contactId: String): Boolean =
+        locationAccessDao.getByContactId(contactId)?.canSeeMyLocation == true
 }

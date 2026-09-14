@@ -32,6 +32,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -88,6 +91,16 @@ class LocationSharingCoordinator @Inject constructor(
     @Volatile
     private var started = false
 
+    /**
+     * Serialises the start and stop paths.
+     *
+     * Starting a share awaits a network send per contact, which can take seconds behind a relay.
+     * Without this, tapping the switch off during that window let `stopAllSharing` clear the map
+     * and stop the service while the start loop kept going — writing fresh active share rows and
+     * telling those peers a share had begun, with the UI reading "off" and the service down.
+     */
+    private val shareMutex = Mutex()
+
     private val grantReconciler = LocationGrantReconciler(
         locationAccessRepository,
         object : LocationGrantReconciler.Target {
@@ -103,6 +116,7 @@ class LocationSharingCoordinator @Inject constructor(
         if (started) return
         started = true
         scope.launch { grantReconciler.run() }
+        scope.launch { watchServiceLiveness() }
         scope.launch {
             restoreActiveOutgoingShares()
             LocationUpdateBus.updates.collect { update ->
@@ -158,24 +172,31 @@ class LocationSharingCoordinator @Inject constructor(
     suspend fun startSharingToGrantedContacts(): AppResult<Unit> {
         val granted = locationAccessRepository.grantedContactIds()
         if (granted.isEmpty()) return noContactSelectedError()
-        locationServiceControl.start()
-        val started = startSharesFor(granted)
-        return if (started == 0) {
-            // Nothing actually started (e.g. selected contacts not approved yet);
-            // report it instead of leaving the UI silently in the "off" state.
-            locationServiceControl.stop()
-            noContactSelectedError()
-        } else {
-            AppResult.Success(Unit)
-        }
+        val started = shareMutex.withLock { startSharesFor(granted) }
+        // Reported rather than left silently "off": the usual cause is that every ticked contact
+        // is still pending approval.
+        return if (started == 0) noContactSelectedError() else AppResult.Success(Unit)
     }
 
+    /**
+     * Caller must hold [shareMutex].
+     *
+     * Starts the foreground service itself, and only once a share actually exists. The service
+     * used to be started by the one caller that knew to, which meant the reconciler could create
+     * a share with nothing running behind it — the peer was told a share had begun and then never
+     * received a position. Starting it up front also risked a `startForegroundService` with no
+     * matching `startForeground` when every ticked contact turned out to be unapproved.
+     */
     private suspend fun startSharesFor(granted: List<String>): Int {
         var started = 0
         for (contactId in granted) {
             val contact = contactDao.getById(contactId)?.takeIf { it.canReceiveOurLocation() } ?: continue
+            // Re-read per contact rather than trusting the snapshot: un-ticking someone while the
+            // loop is still awaiting an earlier send must not still start a share for them.
+            if (!locationAccessRepository.isGranted(contactId)) continue
             when (val result = locationRepository.startSharing(contact.id)) {
                 is AppResult.Success -> {
+                    if (started == 0) locationServiceControl.start()
                     started++
                     outgoingShareIds[contact.id] = result.data
                     sendControl(contact.id, "loc-start-${result.data}", ControlType.CONTROL_TYPE_LOCATION_SHARE_START)
@@ -186,13 +207,33 @@ class LocationSharingCoordinator @Inject constructor(
         return started
     }
 
+    /**
+     * Brings the location service back if it dies under a live share.
+     *
+     * The service is deliberately START_NOT_STICKY, because a sticky restart used to re-register
+     * the GPS after a process kill even when the user had turned sharing off. That leaves the
+     * opposite gap: an OEM battery manager killing it mid-share would silently end delivery while
+     * the switch still read "on". Restarting is gated on a share actually being active, which is
+     * the distinction the sticky flag could not make.
+     */
+    private suspend fun watchServiceLiveness() {
+        LocationUpdateBus.serviceRunning.collect { running ->
+            if (running || outgoingShareIds.isEmpty()) return@collect
+            AppLogger.warn("Location", "service died under ${outgoingShareIds.size} active share(s); restarting")
+            runCatching { locationServiceControl.start() }
+                .onFailure { AppLogger.warn("Location", "service restart failed: ${it.message}") }
+        }
+    }
+
     private fun ContactEntity.canReceiveOurLocation(): Boolean =
         relationshipStatus == ContactRelationshipStatus.APPROVED && !blocked
 
     private fun noContactSelectedError(): AppResult<Unit> =
         AppResult.Error(AppError.Validation("هیچ مخاطبی انتخاب نشده"))
 
-    suspend fun stopAllSharing() {
+    suspend fun stopAllSharing() = shareMutex.withLock { stopAllSharingLocked() }
+
+    private suspend fun stopAllSharingLocked() {
         val shares = locationShareDao.observeActive().first()
             .filter { it.direction == MessageDirection.OUTGOING }
         AppLogger.info("Location", "stopAllSharing: ${shares.size} outgoing share(s)")
@@ -204,10 +245,16 @@ class LocationSharingCoordinator @Inject constructor(
         }
         outgoingShareIds.clear()
         locationServiceControl.stop()
-        for (share in shares) {
-            runCatching { sendShareStop(share.contactId, share.shareId) }
-                .onFailure { AppLogger.warn("Location", "share stop notify failed: ${it.message}") }
-        }
+        // Bounded as a whole: each notify dials a peer, and the notification's stop action runs
+        // this inside a broadcast receiver's goAsync window. Peers that cannot be reached in time
+        // learn the share ended from the final packet or its absence; blowing the budget would
+        // risk the process being killed before the earlier peers were told at all.
+        withTimeoutOrNull(STOP_NOTIFY_BUDGET_MS) {
+            for (share in shares) {
+                runCatching { sendShareStop(share.contactId, share.shareId) }
+                    .onFailure { AppLogger.warn("Location", "share stop notify failed: ${it.message}") }
+            }
+        } ?: AppLogger.warn("Location", "stop notifications timed out; shares are already inactive locally")
     }
 
     /**
@@ -403,6 +450,7 @@ class LocationSharingCoordinator @Inject constructor(
         const val MIN_SAMPLE_INTERVAL_MS = 3_000L
         const val RETENTION_WINDOW_MS = 24L * 60 * 60_000L
         const val MAX_SAMPLES_PER_SHARE = 500
+        private const val STOP_NOTIFY_BUDGET_MS = 8_000L
         private const val RETENTION_INTERVAL_MS = 60L * 60_000L
         private const val MAX_SHARE_ID_LENGTH = 64
         private const val MAX_LATITUDE = 90.0

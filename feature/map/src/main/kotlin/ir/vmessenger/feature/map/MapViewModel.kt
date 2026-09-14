@@ -127,6 +127,8 @@ class MapViewModel @Inject constructor(
 
     /** Selecting a row (or tapping its pin) centres that contact and hands the camera over. */
     fun select(contactId: String?) {
+        // Centring on someone else is not asking to be watched yourself.
+        myLocationRequested.value = false
         selected.value = contactId
         camera.update { CameraRequest(MapCameraMode.Free, it.token + 1, contactId) }
     }
@@ -148,8 +150,17 @@ class MapViewModel @Inject constructor(
         camera.update { CameraRequest(MapCameraMode.FollowMe, it.token + 1) }
     }
 
-    /** A pan or a pinch: the user owns the camera now, until a button says otherwise. */
+    /**
+     * A pan or a pinch: the user owns the camera now, until a button says otherwise — and with it
+     * the puck's request expires.
+     *
+     * Without that, one tap of "my location" pinned a live GPS registration on for the whole life
+     * of this view model, re-acquired on every return to the tab, with the sharing switch reading
+     * "off" and nothing anywhere to turn it back off. In an app whose pitch is that it does not
+     * watch you, a hold that only ever accumulates is the wrong default.
+     */
     fun onUserGesture() {
+        myLocationRequested.value = false
         camera.update { current ->
             if (current.mode == MapCameraMode.Free) current else CameraRequest(MapCameraMode.Free, current.token)
         }

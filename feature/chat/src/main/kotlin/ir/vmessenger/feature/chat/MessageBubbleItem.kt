@@ -73,6 +73,9 @@ internal fun MessageBubbleItem(
         MessageBubble(
             direction = direction,
             colors = base.copy(container = container),
+            // Only a reply bubble needs the quote to span its width; asking for it elsewhere
+            // shrinks any payload that cannot report an intrinsic width.
+            matchWidestChild = item.reply != null,
             // A raw long-press detector rather than combinedClickable: the bubble's row is
             // full width, so a click modifier would ripple across the empty half of it.
             modifier = Modifier
