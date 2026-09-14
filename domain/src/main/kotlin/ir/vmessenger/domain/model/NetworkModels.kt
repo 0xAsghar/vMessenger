@@ -15,6 +15,17 @@ data class ChatMessage(
     val text: String,
     val status: DeliveryStatus,
     val createdAtUnixMs: Long,
+    /**
+     * When delivery was actually confirmed — the moment the first tick appears — as opposed to
+     * [createdAtUnixMs], which is when the composer queued it. Null while a message is still
+     * queued or failed, and for anything predating per-recipient fan-out, so callers must fall
+     * back rather than render an empty slot.
+     *
+     * For an incoming message this is instead the *sender's* clock, clamped on arrival.
+     */
+    val sentAtUnixMs: Long? = null,
+    val deliveredAtUnixMs: Long? = null,
+    val readAtUnixMs: Long? = null,
     val replyToMessageId: String? = null,
     val attachment: ChatAttachment? = null,
     /** Preview of the quoted message, resolved by the DAO's reply JOIN; null when not a reply. */

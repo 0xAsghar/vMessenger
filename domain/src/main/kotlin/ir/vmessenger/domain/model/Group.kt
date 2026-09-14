@@ -50,6 +50,29 @@ data class RecipientDelivery(
     val identityHash: String,
     val displayName: String,
     val status: DeliveryStatus,
+    val sentAtUnixMs: Long?,
     val deliveredAtUnixMs: Long?,
     val readAtUnixMs: Long?,
+)
+
+/**
+ * Everything the app can honestly say about one message.
+ *
+ * [recipients] is empty for an incoming message — per-recipient rows only exist for what we sent —
+ * so the message-level block is what a 1:1 or incoming message has to show. Note the two meanings
+ * of [sentAtUnixMs]: our transport writing the frame for an outgoing message, and the sender's own
+ * clock (clamped on arrival) for an incoming one. The UI labels them differently for that reason.
+ *
+ * Deliberately absent, because nothing persists them: the route a message took (direct, relay or
+ * mailbox), the number of delivery attempts, and its size on the wire.
+ */
+data class MessageDeliveryInfo(
+    val outgoing: Boolean,
+    val createdAtUnixMs: Long,
+    val sentAtUnixMs: Long?,
+    val deliveredAtUnixMs: Long?,
+    val readAtUnixMs: Long?,
+    /** Attachment byte count, or the UTF-8 length of a text body. */
+    val sizeBytes: Long?,
+    val recipients: List<RecipientDelivery>,
 )

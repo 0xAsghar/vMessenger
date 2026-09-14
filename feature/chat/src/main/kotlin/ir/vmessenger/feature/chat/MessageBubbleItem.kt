@@ -1,5 +1,6 @@
 package ir.vmessenger.feature.chat
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -12,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,8 +29,11 @@ import ir.vmessenger.core.designsystem.component.DeliveryTicksState
 import ir.vmessenger.core.designsystem.component.FileBubbleContent
 import ir.vmessenger.core.designsystem.component.ImageBubbleContent
 import ir.vmessenger.core.designsystem.component.MessageBubble
+import ir.vmessenger.core.designsystem.component.MessageBubbleDefaults
 import ir.vmessenger.core.designsystem.component.ReplyQuote
 import ir.vmessenger.core.designsystem.component.TextBubbleContent
+import ir.vmessenger.core.designsystem.format.VmTextFormat
+import ir.vmessenger.core.designsystem.theme.VmMotion
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.vm
 import ir.vmessenger.domain.model.AttachmentProgress
@@ -52,12 +57,22 @@ internal fun MessageBubbleItem(
     actions: MessageActions,
     images: AttachmentImages,
     voice: VoiceBubbleHost,
+    highlighted: Boolean = false,
 ) {
     val direction = if (item.outgoing) BubbleDirection.Outgoing else BubbleDirection.Incoming
     val ticksLabel = item.ticks?.let { ticksLabel(it) }
+    val base = MessageBubbleDefaults.colors(direction)
+    // Animated in both directions, so the highlight fades out rather than snapping back when the
+    // two seconds are up. MessageBubble already takes a colors parameter; nothing new is needed.
+    val container by animateColorAsState(
+        targetValue = if (highlighted) MaterialTheme.vm.bubbleHighlight else base.container,
+        animationSpec = VmMotion.emphasis(),
+        label = "bubble-highlight",
+    )
     Column(modifier = Modifier.fillMaxWidth()) {
         MessageBubble(
             direction = direction,
+            colors = base.copy(container = container),
             // A raw long-press detector rather than combinedClickable: the bubble's row is
             // full width, so a click modifier would ripple across the empty half of it.
             modifier = Modifier
@@ -119,7 +134,9 @@ private fun BubbleBody(
         ReplyQuote(
             senderName = if (reply.senderIsMe) stringResource(R.string.feature_chat_reply_self) else contactName,
             preview = quotePreview(reply),
-            modifier = Modifier.padding(bottom = VmSpacing.xs),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = VmSpacing.xs),
             onClick = { actions.onJumpToQuoted(reply.messageId) },
         )
     }
@@ -225,7 +242,7 @@ private fun FailureLine(item: ChatItem.Message, onRetry: (String) -> Unit) {
 private fun quotePreview(reply: ReplyQuoteUi): String = when (reply.kind) {
     MessagePreviewKind.IMAGE -> stringResource(R.string.feature_chat_preview_image)
     MessagePreviewKind.VIDEO -> stringResource(R.string.feature_chat_preview_video)
-    MessagePreviewKind.FILE -> stringResource(R.string.feature_chat_preview_file, reply.preview)
+    MessagePreviewKind.FILE -> stringResource(R.string.feature_chat_preview_file, VmTextFormat.isolate(reply.preview))
     MessagePreviewKind.AUDIO -> stringResource(R.string.feature_chat_preview_audio)
     MessagePreviewKind.LOCATION -> stringResource(R.string.feature_chat_preview_location)
     MessagePreviewKind.GROUP_EVENT,

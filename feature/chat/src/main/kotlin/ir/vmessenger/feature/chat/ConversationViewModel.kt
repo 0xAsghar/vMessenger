@@ -8,6 +8,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.designsystem.format.VmDateFormat
+import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.notifications.ActiveConversationTracker
 import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.domain.model.AttachmentType
@@ -17,8 +18,8 @@ import ir.vmessenger.domain.model.ConversationSummary
 import ir.vmessenger.domain.model.DeliveryStatus
 import ir.vmessenger.domain.model.Group
 import ir.vmessenger.domain.model.GroupMember
+import ir.vmessenger.domain.model.MessageDeliveryInfo
 import ir.vmessenger.domain.model.MessageDirection
-import ir.vmessenger.domain.model.RecipientDelivery
 import ir.vmessenger.domain.repository.ConversationRepository
 import ir.vmessenger.domain.usecase.chat.DeleteMessageForMeUseCase
 import ir.vmessenger.domain.usecase.chat.MarkConversationReadUseCase
@@ -104,6 +105,8 @@ class ConversationViewModel @Inject constructor(
     private val typedText = MutableStateFlow<String?>(null)
     private val replyTo = MutableStateFlow<ReplyQuoteUi?>(null)
     private val scrollTarget = MutableStateFlow<String?>(null)
+    private val highlighted = MutableStateFlow<String?>(null)
+    private var highlightJob: Job? = null
     private var draftJob: Job? = null
     private var growingWindow = false
 
@@ -160,21 +163,25 @@ class ConversationViewModel @Inject constructor(
     private val progress: Flow<Map<String, AttachmentProgress>> =
         conversationRepository.observeAttachmentProgress(conversationId)
 
+    // combine() tops out at five typed flows, so the two plain ones pair up first.
+    private val listExtras = combine(hasMore, highlighted) { more, highlight -> more to highlight }
+
     val uiState: StateFlow<ConversationUiState> = combine(
         header,
         items,
         composer,
         progress,
-        hasMore,
-    ) { headerUi, loaded, composerState, transfers, more ->
+        listExtras,
+    ) { headerUi, loaded, composerState, transfers, extras ->
         ConversationUiState(
             header = headerUi,
             items = loaded ?: persistentListOf(),
             pendingIncoming = pendingIncoming(loaded, transfers),
             attachmentProgress = transfers.toImmutableMap(),
             composer = composerState.copy(enabled = !headerUi.blocked && !headerUi.closed),
-            hasMore = more,
+            hasMore = extras.first,
             loading = loaded == null,
+            highlightedMessageId = extras.second,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT_MS), ConversationUiState())
 
@@ -231,12 +238,12 @@ class ConversationViewModel @Inject constructor(
         replyTo.value = null
     }
 
-    /** Per-member delivery of one message, while its sheet is open; null when it is closed. */
-    val deliveryInfo: StateFlow<ImmutableList<RecipientDelivery>?> = MutableStateFlow(null)
+    /** Everything known about one message, while its sheet is open; null when it is closed. */
+    val deliveryInfo: StateFlow<MessageDeliveryInfo?> = MutableStateFlow(null)
 
     fun onShowInfo(messageId: String) {
         viewModelScope.launch {
-            (deliveryInfo as MutableStateFlow).value = observeDeliveryInfo(messageId).toImmutableList()
+            (deliveryInfo as MutableStateFlow).value = observeDeliveryInfo(messageId)
         }
     }
 
@@ -278,7 +285,24 @@ class ConversationViewModel @Inject constructor(
                     pageLimit.value = (index / PAGE_SIZE + 1) * PAGE_SIZE
                 }
                 scrollTarget.value = messageId
+                highlight(messageId)
             }
+        }
+    }
+
+    /**
+     * Marks a message for a couple of seconds. Separate from [scrollTarget], which the screen
+     * clears the instant the scroll finishes — far too early to have pointed anything out.
+     *
+     * The job is cancelled and restarted so a second tap re-arms the full window instead of
+     * inheriting the remains of the first.
+     */
+    private fun highlight(messageId: String) {
+        highlightJob?.cancel()
+        highlightJob = viewModelScope.launch {
+            highlighted.value = messageId
+            delay(HIGHLIGHT_DURATION_MS)
+            highlighted.value = null
         }
     }
 
@@ -336,9 +360,11 @@ class ConversationViewModel @Inject constructor(
             ),
             contactId = summary?.contactId ?: contact?.id,
             groupId = groupInfo?.id,
+            // Each name isolated, not the joined line: the separators sit between names that may
+            // run in opposite directions, and only per-name isolation keeps the commas in place.
             memberNames = groupState.members
                 .takeIf { it.isNotEmpty() }
-                ?.joinToString(NAME_SEPARATOR) { it.displayName },
+                ?.joinToString(NAME_SEPARATOR) { VmTextFormat.isolate(it.displayName) },
             closed = groupInfo?.closed == true,
             verified = contact?.verified == true,
             keyChangePending = contact?.keyChangePending == true,
@@ -352,6 +378,7 @@ class ConversationViewModel @Inject constructor(
     private companion object {
         const val PAGE_SIZE = 60
         const val SUBSCRIBE_TIMEOUT_MS = 5_000L
+        const val HIGHLIGHT_DURATION_MS = 2_000L
         const val DRAFT_DEBOUNCE_MS = 400L
 
         /** Persian comma: the separator a member list is written with. */
@@ -424,7 +451,11 @@ private fun ChatMessage.toItem(startsSenderRun: Boolean): ChatItem.Message {
         messageId = messageId,
         outgoing = outgoing,
         text = text,
-        time = VmDateFormat.time(createdAtUnixMs),
+        // The confirmation time, not the compose time: the label under the bubble should agree
+        // with the tick beside it. Falls back for a message still queued, one that failed, and
+        // anything stored before per-recipient fan-out existed — those have no sent time at all.
+        // Only the label moves; ordering, paging and day separators still key off createdAtUnixMs.
+        time = VmDateFormat.time(sentAtUnixMs ?: createdAtUnixMs),
         ticks = if (outgoing) status.toTicks() else null,
         attachment = attachment?.let {
             AttachmentUi(

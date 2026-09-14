@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Reply
@@ -16,12 +17,14 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +35,8 @@ import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.AvatarVariant
 import ir.vmessenger.core.designsystem.component.KeyChangeBanner
 import ir.vmessenger.core.designsystem.component.ReplyPreview
+import ir.vmessenger.core.designsystem.component.SettingsRow
+import ir.vmessenger.core.designsystem.component.SettingsTrailing
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 
@@ -178,49 +183,75 @@ internal fun rememberReplyPreview(reply: ReplyQuoteUi, contactName: String): Rep
     }
 }
 
-/** Long-press menu of a single message. Forwarding is a documented non-goal for 1.0. */
+/**
+ * Long-press menu of a single message. Forwarding is a documented non-goal for 1.0.
+ *
+ * Built to match `ContactActionsSheet`, which is the house pattern: an explicit sheet state, the
+ * navigation-bar inset rather than a fixed bottom pad (which was short on gesture-navigation
+ * devices), a header naming what is being acted on, design-system rows with a guaranteed touch
+ * target, and destructive actions tinted through `LocalContentColor`. It previously used raw
+ * `ListItem`s with none of that, so the same gesture produced two different-looking sheets.
+ *
+ * "Information" sits at the end, after the everyday actions and before the destructive one.
+ */
 @Suppress("LongParameterList") // one lambda per action the sheet offers
 @Composable
 internal fun MessageActionsSheet(
+    preview: String,
     canCopy: Boolean,
-    canShowInfo: Boolean,
     onReply: () -> Unit,
     onCopy: () -> Unit,
     onInfo: () -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(bottom = VmSpacing.xl)) {
-            ActionRow(Icons.AutoMirrored.Outlined.Reply, stringResource(R.string.feature_chat_reply)) {
-                onDismiss()
-                onReply()
-            }
-            if (canShowInfo) {
-                ActionRow(Icons.Outlined.Info, stringResource(R.string.feature_chat_message_info)) {
-                    onDismiss()
-                    onInfo()
-                }
-            }
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding(),
+        ) {
+            SheetHeader(preview)
+            SheetAction(R.string.feature_chat_reply, Icons.AutoMirrored.Outlined.Reply, onDismiss, onReply)
             if (canCopy) {
-                ActionRow(Icons.Outlined.ContentCopy, stringResource(R.string.feature_chat_copy)) {
-                    onDismiss()
-                    onCopy()
-                }
+                SheetAction(R.string.feature_chat_copy, Icons.Outlined.ContentCopy, onDismiss, onCopy)
             }
-            ActionRow(Icons.Outlined.DeleteOutline, stringResource(R.string.feature_chat_delete_message)) {
-                onDismiss()
-                onDelete()
+            SheetAction(R.string.feature_chat_message_info, Icons.Outlined.Info, onDismiss, onInfo)
+            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.error) {
+                SheetAction(
+                    R.string.feature_chat_delete_message,
+                    Icons.Outlined.DeleteOutline,
+                    onDismiss,
+                    onDelete,
+                )
             }
         }
     }
 }
 
+/** Names the message being acted on, the way the contact sheet names the contact. */
 @Composable
-private fun ActionRow(icon: ImageVector, label: String, onClick: () -> Unit) {
-    ListItem(
-        headlineContent = { Text(text = label) },
-        leadingContent = { Icon(imageVector = icon, contentDescription = null) },
-        modifier = Modifier.clickable(onClick = onClick),
+private fun SheetHeader(preview: String) {
+    if (preview.isBlank()) return
+    Text(
+        text = preview,
+        style = MaterialTheme.typography.titleMedium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
+    )
+}
+
+@Composable
+private fun SheetAction(labelRes: Int, icon: ImageVector, onDismiss: () -> Unit, onAct: () -> Unit) {
+    SettingsRow(
+        label = stringResource(labelRes),
+        icon = icon,
+        trailing = SettingsTrailing.None,
+        onClick = {
+            onDismiss()
+            onAct()
+        },
     )
 }

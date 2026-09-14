@@ -5,7 +5,7 @@ import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.model.Conversation
 import ir.vmessenger.domain.model.ConversationSummary
-import ir.vmessenger.domain.model.RecipientDelivery
+import ir.vmessenger.domain.model.MessageDeliveryInfo
 import kotlinx.coroutines.flow.Flow
 import java.io.InputStream
 
@@ -72,7 +72,7 @@ interface ConversationRepository {
      * Per-member delivery state of an outgoing message, creator-name-resolved. Empty for a
      * message that was never queued (an incoming one, or a system line).
      */
-    suspend fun deliveryInfo(messageId: String): List<RecipientDelivery>
+    suspend fun deliveryInfo(messageId: String): MessageDeliveryInfo?
 
     /** Removes the local copy only; nothing is sent to the peer and their copy stays. */
     suspend fun deleteMessageForMe(messageId: String)

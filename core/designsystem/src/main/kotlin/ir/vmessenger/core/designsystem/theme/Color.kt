@@ -204,6 +204,8 @@ class VmColors(
     val senderPalette: List<Color>,
     val recordingRed: Color,
     val keyChangeWarning: Color,
+    /** Briefly tints a bubble that was just jumped to, so the eye can find it. */
+    val bubbleHighlight: Color,
 ) {
     /** Stable colour for a sender, derived from its identity hash. */
     fun senderColor(seed: ByteArray): Color {
@@ -228,6 +230,7 @@ val VmLightColors = VmColors(
     senderPalette = LightSenderPalette,
     recordingRed = Color(0xFFD9534F),
     keyChangeWarning = LightTertiaryContainer,
+    bubbleHighlight = LightTertiaryContainer,
 )
 
 val VmDarkColors = VmColors(
@@ -242,6 +245,7 @@ val VmDarkColors = VmColors(
     senderPalette = DarkSenderPalette,
     recordingRed = Color(0xFFE57373),
     keyChangeWarning = DarkTertiaryContainer,
+    bubbleHighlight = DarkTertiaryContainer,
 )
 
 val LocalVmColors = staticCompositionLocalOf { VmLightColors }

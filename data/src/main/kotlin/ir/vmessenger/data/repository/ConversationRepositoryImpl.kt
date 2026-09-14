@@ -17,6 +17,7 @@ import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.domain.model.ChatMessage
 import ir.vmessenger.domain.model.Conversation
 import ir.vmessenger.domain.model.ConversationSummary
+import ir.vmessenger.domain.model.MessageDeliveryInfo
 import ir.vmessenger.domain.model.RecipientDelivery
 import ir.vmessenger.domain.repository.ConversationRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -180,22 +181,33 @@ class ConversationRepositoryImpl @Inject constructor(
      * the user calls someone beats what that person calls themselves — and fall back to a
      * short hash prefix for a member we have neither for.
      */
-    override suspend fun deliveryInfo(messageId: String): List<RecipientDelivery> {
-        val groupId = messageDao.getById(messageId)
-            ?.let { conversationDao.getById(it.conversationId) }
-            ?.groupId
+    override suspend fun deliveryInfo(messageId: String): MessageDeliveryInfo? {
+        val message = messageDao.getById(messageId) ?: return null
+        val groupId = conversationDao.getById(message.conversationId)?.groupId
         val members = groupId?.let { groupDao.activeMembers(it) }.orEmpty().associateBy { it.identityHash }
-        return recipientDao.forMessage(messageId).map { row ->
+        val recipients = recipientDao.forMessage(messageId).map { row ->
             RecipientDelivery(
                 identityHash = row.identityHash,
                 displayName = contactDao.getByRoutingKey(row.identityHash)?.displayName?.ifBlank { null }
                     ?: members[row.identityHash]?.displayName?.ifBlank { null }
                     ?: row.identityHash.take(HASH_PREFIX_CHARS),
                 status = row.status.toDomain(),
+                sentAtUnixMs = row.sentAtUnixMs,
                 deliveredAtUnixMs = row.deliveredAtUnixMs,
                 readAtUnixMs = row.readAtUnixMs,
             )
         }
+        return MessageDeliveryInfo(
+            outgoing = message.direction == DbMessageDirection.OUTGOING,
+            createdAtUnixMs = message.createdAtUnixMs,
+            sentAtUnixMs = message.sentAtUnixMs,
+            deliveredAtUnixMs = message.deliveredAtUnixMs,
+            readAtUnixMs = message.readAtUnixMs,
+            // No column stores a text message's size, and inventing one would be a migration for
+            // a label; the body's own UTF-8 length is the honest answer for a text bubble.
+            sizeBytes = message.attachmentSizeBytes ?: message.body?.toByteArray()?.size?.toLong(),
+            recipients = recipients,
+        )
     }
 
     override suspend fun deleteMessageForMe(messageId: String) = writer.deleteMessageForMe(messageId)

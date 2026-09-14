@@ -6,7 +6,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -113,7 +113,7 @@ internal fun ComposerMicButton(
     if (phase.value == MicPhase.Locked) {
         IconButton(onClick = gesture::send, modifier = modifier.size(VmSizes.touchTarget)) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.Send,
+                imageVector = Icons.Filled.ArrowUpward,
                 contentDescription = stringResource(R.string.feature_chat_voice_send),
                 tint = MaterialTheme.colorScheme.primary,
             )
@@ -150,8 +150,9 @@ private class MicGesture(
 
     /** True once the pointer stops mattering: the gesture has cancelled itself, or locked. */
     fun move(offset: Offset): Boolean {
-        // The text field is left of the mic in LTR and right of it in RTL; up is negative y.
-        val toward = if (rtl) offset.x else -offset.x
+        // The mic now leads the row, so the field sits toward the layout END: left of the mic in
+        // RTL, right of it in LTR — the opposite of when the mic was the last child. Up is -y.
+        val toward = if (rtl) -offset.x else offset.x
         val next = reduceMicDrag(phase.value, toward, -offset.y, limits)
         actions.value.onSlide(slideFraction(toward, limits.cancelPx))
         return when (next) {

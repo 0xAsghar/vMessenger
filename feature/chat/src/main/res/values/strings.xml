@@ -81,4 +81,12 @@
     <string name="feature_chat_image_viewer">نمایش تصویر</string>
     <string name="feature_chat_image_close">بستن</string>
     <string name="feature_chat_image_failed">تصویر باز نشد</string>
+    <string name="feature_chat_info_recipients">گیرندگان</string>
+    <string name="feature_chat_info_created">نوشته شد</string>
+    <string name="feature_chat_info_sent_at">ارسال شد</string>
+    <string name="feature_chat_info_sender_time">زمان ارسال فرستنده</string>
+    <string name="feature_chat_info_delivered_at">تحویل شد</string>
+    <string name="feature_chat_info_read_at">خوانده شد</string>
+    <string name="feature_chat_info_size">اندازه</string>
+    <string name="feature_chat_info_sent_short">ارسال %1$s</string>
 </resources>

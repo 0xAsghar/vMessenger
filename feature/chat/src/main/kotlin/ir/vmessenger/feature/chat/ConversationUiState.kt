@@ -143,6 +143,12 @@ data class ConversationUiState(
     val composer: ComposerUiState = ComposerUiState(),
     val hasMore: Boolean = false,
     val loading: Boolean = true,
+    /**
+     * The message a reply quote was just tapped through to. Held for a couple of seconds after
+     * the scroll lands so the target is findable — scrolling alone drops the user somewhere in a
+     * wall of bubbles with no clue which one they asked for.
+     */
+    val highlightedMessageId: String? = null,
 ) {
     val isEmpty: Boolean get() = !loading && items.isEmpty() && pendingIncoming.isEmpty()
 }

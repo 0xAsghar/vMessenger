@@ -47,8 +47,12 @@ private const val MIN_HINT_ALPHA = 0.2f
  * Once the gesture locks, that button turns itself into send, which is why there is no send
  * button here.
  *
- * The hint follows the finger through [slide] (0..1 of the way to the cancel threshold); the
- * `dp` offset is mirrored for RTL on its own, which is why the sign here is always negative.
+ * Children run from the mic outwards, because the mic leads the composer row: the lock hint sits
+ * next to the button it points at, and the delete button sits farthest from the finger.
+ *
+ * The hint follows the finger through [slide] (0..1 of the way to the cancel threshold). The `dp`
+ * offset is mirrored for RTL on its own, and the cancel direction is now toward the layout end,
+ * so the sign here is always positive.
  */
 @Composable
 internal fun RowScope.RecordingRow(
@@ -57,6 +61,13 @@ internal fun RowScope.RecordingRow(
     slide: Float,
     onCancel: () -> Unit,
 ) {
+    if (!locked) LockHint()
+    Hint(locked = locked, slide = slide, modifier = Modifier.weight(1f))
+    Text(
+        text = VmTextFormat.duration(state.elapsedMs),
+        style = MaterialTheme.typography.labelLarge,
+    )
+    AmplitudeDot(amplitude = state.amplitude)
     IconButton(onClick = onCancel, modifier = Modifier.size(VmSizes.touchTarget)) {
         Icon(
             imageVector = Icons.Outlined.Delete,
@@ -64,13 +75,6 @@ internal fun RowScope.RecordingRow(
             tint = MaterialTheme.colorScheme.error,
         )
     }
-    AmplitudeDot(amplitude = state.amplitude)
-    Text(
-        text = VmTextFormat.duration(state.elapsedMs),
-        style = MaterialTheme.typography.labelLarge,
-    )
-    Hint(locked = locked, slide = slide, modifier = Modifier.weight(1f))
-    if (!locked) LockHint()
 }
 
 /** The recording indicator, grown by the live level so a silent mic is visibly silent. */
@@ -95,7 +99,7 @@ private fun Hint(locked: Boolean, slide: Float, modifier: Modifier = Modifier) {
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
-            .offset(x = -(SlideTravel * progress))
+            .offset(x = SlideTravel * progress)
             .alpha(if (locked) 1f else maxOf(MIN_HINT_ALPHA, 1f - progress)),
     )
 }

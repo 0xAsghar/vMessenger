@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
@@ -22,7 +22,13 @@ private val QuoteBarWidth = 3.dp
 private val QuoteMinHeight = 36.dp
 private const val QUOTE_ALPHA = 0.12f
 
-/** The quoted message shown above a reply, both inside a bubble and in the composer strip. */
+/**
+ * The quoted message shown above a reply, both inside a bubble and in the composer strip.
+ *
+ * [QuoteMinHeight] is a minimum, not a fixed height — it was applied with `height()` despite the
+ * name, and the two Persian lines inside need more than it allows, so the descenders of the second
+ * line were sheared off. The accent bar still spans the full height because it fills, not measures.
+ */
 @Composable
 fun ReplyQuote(
     senderName: String,
@@ -34,7 +40,7 @@ fun ReplyQuote(
     Row(
         modifier = modifier
             .then(clickable)
-            .height(QuoteMinHeight)
+            .heightIn(min = QuoteMinHeight)
             .clip(MaterialTheme.shapes.extraSmall)
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = QUOTE_ALPHA)),
     ) {

@@ -4,9 +4,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -48,7 +50,12 @@ fun MessageBubble(
             modifier = Modifier.widthIn(max = maxWidth * VmSizes.bubbleMaxWidthFraction),
         ) {
             Column(
-                modifier = Modifier.padding(VmSpacing.sm),
+                // Intrinsic width so a reply quote can fill the bubble instead of shrinking to
+                // its own ellipsised text, while the bubble still wraps its widest real child
+                // rather than stretching to the cap.
+                modifier = Modifier
+                    .width(IntrinsicSize.Max)
+                    .padding(VmSpacing.sm),
                 content = content,
             )
         }

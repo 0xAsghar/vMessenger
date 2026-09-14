@@ -1,5 +1,6 @@
 package ir.vmessenger.core.designsystem.component
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -17,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -27,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.R
 import ir.vmessenger.core.designsystem.format.VmTextFormat
+import ir.vmessenger.core.designsystem.theme.VmMotion
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 
@@ -53,11 +56,16 @@ fun ChatListItem(
     selected: Boolean = false,
     avatar: @Composable () -> Unit,
 ) {
-    val background = if (selected) {
+    val targetBackground = if (selected) {
         MaterialTheme.colorScheme.primary.copy(alpha = SELECTED_ALPHA)
     } else {
         MaterialTheme.colorScheme.surface
     }
+    val background by animateColorAsState(
+        targetValue = targetBackground,
+        animationSpec = VmMotion.emphasis(),
+        label = "row-selection",
+    )
     Row(
         modifier = modifier
             .fillMaxWidth()

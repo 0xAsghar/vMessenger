@@ -1,5 +1,6 @@
 package ir.vmessenger.core.designsystem.component
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -9,9 +10,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.theme.VmMotion
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 
 private val IndicatorSize = 16.dp
@@ -46,8 +49,15 @@ fun ProgressPill(
                     modifier = Modifier.size(IndicatorSize),
                 )
             } else {
+                // A transfer reports once per chunk, so the raw value visibly steps; animating it
+                // makes the same data read as a transfer rather than a counter.
+                val animated by animateFloatAsState(
+                    targetValue = progress,
+                    animationSpec = VmMotion.emphasis(),
+                    label = "transfer-progress",
+                )
                 CircularProgressIndicator(
-                    progress = { progress },
+                    progress = { animated },
                     strokeWidth = IndicatorStroke,
                     color = MaterialTheme.colorScheme.inverseOnSurface,
                     modifier = Modifier.size(IndicatorSize),

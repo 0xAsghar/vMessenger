@@ -1,6 +1,7 @@
 package ir.vmessenger.core.designsystem.component
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -11,7 +12,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Close
@@ -36,9 +37,12 @@ import ir.vmessenger.core.designsystem.theme.VmSpacing
 private val FieldMaxHeight = 160.dp
 
 /**
- * Bottom bar of a conversation: attach button, growing text field and a send/mic button that
- * morphs with the draft. Window insets are handled here, so callers pass it straight to
+ * Bottom bar of a conversation: a send/mic button that morphs with the draft, a growing text
+ * field, and the attach button. Window insets are handled here, so callers pass it straight to
  * `Scaffold(bottomBar = ...)`.
+ *
+ * Reading order is layout-relative, so under the app's RTL locale the send/mic button sits at the
+ * **right** edge and attach at the left.
  *
  * The mic is a slot: the recording state machine (hold, lock, slide-to-cancel) belongs to the
  * chat feature, and so does the gesture that drives it. The default is a plain, inert icon, for
@@ -62,37 +66,53 @@ fun Composer(
     micButton: @Composable () -> Unit = { InertMicButton() },
     recordingContent: (@Composable RowScope.() -> Unit)? = null,
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        tonalElevation = VmElevation.bar,
+    // Insets first, visual margin second, and both on the outermost node: three separate comments
+    // (here, ConversationRoute and ChatGraph) pin this composable as the single owner of the
+    // conversation screen's bottom and IME inset. A margin applied before them, or by the caller,
+    // would double-pad or let the card slide under the navigation bar.
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .imePadding(),
+            .imePadding()
+            .padding(horizontal = VmSpacing.sm, vertical = VmSpacing.xs),
     ) {
-        Column(modifier = Modifier.padding(VmSpacing.sm)) {
-            if (recordingContent == null) ReplyStrip(replyTo = replyTo, onClearReply = onClearReply)
-            Row(
-                verticalAlignment = if (recordingContent == null) Alignment.Bottom else Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(VmSpacing.xs),
-            ) {
-                if (recordingContent != null) {
-                    recordingContent()
-                } else {
-                    IconButton(onClick = onAttach, enabled = state.enabled) {
-                        Icon(
-                            imageVector = Icons.Outlined.AttachFile,
-                            contentDescription = stringResource(R.string.vm_composer_attach),
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            // shadowElevation, not tonalElevation: VmElevation documents itself as shadow values,
+            // with tonal handled by the surfaceContainer* roles. This was its one contradiction.
+            shadowElevation = VmElevation.sheet,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            val recording = recordingContent != null
+            Column(modifier = Modifier.padding(VmSpacing.sm)) {
+                if (!recording) ReplyStrip(replyTo = replyTo, onClearReply = onClearReply)
+                Row(
+                    verticalAlignment = if (recording) Alignment.CenterVertically else Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(VmSpacing.xs),
+                ) {
+                    // ONE call site, outside the if/else below, and leading in both modes.
+                    // Composable identity is positional: duplicating this into each branch would
+                    // tear the mic down as recordingContent appears, the pointer loop would never
+                    // see the release, and the recording could never be ended.
+                    if (state.canSend && !recording) SendButton(onSend) else micButton()
+                    if (recordingContent != null) {
+                        recordingContent()
+                    } else {
+                        ComposerField(
+                            state = state,
+                            onTextChange = onTextChange,
+                            modifier = Modifier.weight(1f),
                         )
+                        IconButton(onClick = onAttach, enabled = state.enabled) {
+                            Icon(
+                                imageVector = Icons.Outlined.AttachFile,
+                                contentDescription = stringResource(R.string.vm_composer_attach),
+                            )
+                        }
                     }
-                    ComposerField(
-                        state = state,
-                        onTextChange = onTextChange,
-                        modifier = Modifier.weight(1f),
-                    )
                 }
-                // The mic keeps this position in both modes, so its gesture survives the switch.
-                if (state.canSend && recordingContent == null) SendButton(onSend) else micButton()
             }
         }
     }
@@ -151,7 +171,7 @@ private fun ReplyStrip(replyTo: ReplyPreview?, onClearReply: () -> Unit) {
 private fun SendButton(onSend: () -> Unit) {
     IconButton(onClick = onSend, modifier = Modifier.size(VmSizes.touchTarget)) {
         Icon(
-            imageVector = Icons.AutoMirrored.Filled.Send,
+            imageVector = Icons.Filled.ArrowUpward,
             contentDescription = stringResource(R.string.vm_composer_send),
             tint = MaterialTheme.colorScheme.primary,
         )

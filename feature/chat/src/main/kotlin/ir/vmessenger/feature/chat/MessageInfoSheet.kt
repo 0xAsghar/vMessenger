@@ -1,65 +1,125 @@
 package ir.vmessenger.feature.chat
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.DeliveryTicks
 import ir.vmessenger.core.designsystem.component.DeliveryTicksState
+import ir.vmessenger.core.designsystem.component.SectionHeader
+import ir.vmessenger.core.designsystem.component.SettingsRow
+import ir.vmessenger.core.designsystem.component.SettingsTrailing
 import ir.vmessenger.core.designsystem.format.VmDateFormat
+import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.domain.model.DeliveryStatus
+import ir.vmessenger.domain.model.MessageDeliveryInfo
 import ir.vmessenger.domain.model.RecipientDelivery
 import ir.vmessenger.feature.chat.group.hexToBytes
-import kotlinx.collections.immutable.ImmutableList
 
 /**
- * Who actually has this message.
+ * Everything the app can honestly say about one message.
+ *
+ * The message-level block is what a 1:1 or an incoming message has to show: per-recipient rows
+ * exist only for what we sent, so without it the sheet was empty everywhere except an outgoing
+ * group message, which is why it used to be gated to exactly that.
  *
  * A group message is N pairwise sends, so the one tick on the bubble is an aggregate — it turns
- * to "delivered" only once everybody has it. This sheet is where that collapses back into the
- * truth: one row per member, with the moment they received and read it.
+ * to "delivered" only once everybody has it. The rows below are where that collapses back into
+ * the truth: one per member, with the moment they received and read it.
+ *
+ * What is missing is missing on purpose. The route a message took, how many attempts it needed
+ * and its size on the wire are not persisted anywhere, and a plausible-looking guess at any of
+ * them would be worse than their absence.
  */
 @Composable
 internal fun MessageInfoSheet(
-    recipients: ImmutableList<RecipientDelivery>,
+    info: MessageDeliveryInfo,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(bottom = VmSpacing.xl)) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding(),
+        ) {
             Text(
                 text = stringResource(R.string.feature_chat_message_info),
                 style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = VmSpacing.md, vertical = VmSpacing.sm),
+                modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
             )
-            for (recipient in recipients) {
-                RecipientRow(recipient)
+            MessageFacts(info)
+            if (info.recipients.isNotEmpty()) {
+                SectionHeader(title = stringResource(R.string.feature_chat_info_recipients))
+                for (recipient in info.recipients) {
+                    RecipientRow(recipient)
+                }
             }
         }
     }
 }
 
+/** The message-level timeline, dropping every step that has not happened yet. */
+@Composable
+private fun MessageFacts(info: MessageDeliveryInfo) {
+    // "Sent" means our transport wrote the frame for a message we sent, and the sender's own
+    // clock for one we received — two different things that must not share a label.
+    val sentLabel = if (info.outgoing) R.string.feature_chat_info_sent_at else R.string.feature_chat_info_sender_time
+    val facts = buildList {
+        add(stringResource(R.string.feature_chat_info_created) to VmDateFormat.dayAndTime(info.createdAtUnixMs))
+        info.sentAtUnixMs?.let { add(stringResource(sentLabel) to VmDateFormat.dayAndTime(it)) }
+        info.deliveredAtUnixMs?.let {
+            add(stringResource(R.string.feature_chat_info_delivered_at) to VmDateFormat.dayAndTime(it))
+        }
+        info.readAtUnixMs?.let {
+            add(stringResource(R.string.feature_chat_info_read_at) to VmDateFormat.dayAndTime(it))
+        }
+        info.sizeBytes?.let { add(stringResource(R.string.feature_chat_info_size) to VmTextFormat.fileSize(it)) }
+    }
+    for ((label, value) in facts) {
+        SettingsRow(label = label, trailing = SettingsTrailing.Text(value))
+    }
+}
+
 @Composable
 private fun RecipientRow(recipient: RecipientDelivery) {
-    ListItem(
-        headlineContent = { Text(text = recipient.displayName) },
-        supportingContent = { Text(text = timestamps(recipient)) },
-        leadingContent = {
-            Avatar(
-                seed = hexToBytes(recipient.identityHash),
-                name = recipient.displayName,
-                size = VmSizes.avatarSm,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = VmSizes.touchTarget)
+            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
+    ) {
+        Avatar(
+            seed = hexToBytes(recipient.identityHash),
+            name = recipient.displayName,
+            size = VmSizes.avatarSm,
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = recipient.displayName, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = timestamps(recipient),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        },
-        trailingContent = { recipient.status.toRecipientTicks()?.let { DeliveryTicks(state = it) } },
-    )
+        }
+        recipient.status.toRecipientTicks()?.let { DeliveryTicks(state = it) }
+    }
 }
 
 /**
@@ -69,6 +129,9 @@ private fun RecipientRow(recipient: RecipientDelivery) {
 @Composable
 private fun timestamps(recipient: RecipientDelivery): String {
     val parts = buildList {
+        recipient.sentAtUnixMs?.let {
+            add(stringResource(R.string.feature_chat_info_sent_short, VmDateFormat.time(it)))
+        }
         recipient.deliveredAtUnixMs?.let {
             add(stringResource(R.string.feature_chat_info_delivered, VmDateFormat.time(it)))
         }
