@@ -11,9 +11,11 @@ import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.common.network.P2PConfig
 import ir.vmessenger.core.common.network.RelayDns
 import ir.vmessenger.core.crypto.keystore.KeyStoreKeyManager
+import ir.vmessenger.core.crypto.lock.StrictModeKeyManager
 import ir.vmessenger.core.database.DatabaseKeyProvider
 import ir.vmessenger.core.database.VMessengerDatabase
 import ir.vmessenger.core.database.di.DatabaseModule
+import ir.vmessenger.core.datastore.AppLockPreferences
 import ir.vmessenger.core.datastore.ContactRetryPreferences
 import ir.vmessenger.core.datastore.DiscoveryPreferences
 import ir.vmessenger.core.datastore.DraftPreferences
@@ -64,6 +66,8 @@ class SecureWipeCoordinator @Inject constructor(
     private val updateStore: UpdateStore,
     private val draftPreferences: DraftPreferences,
     private val keyStoreKeyManager: KeyStoreKeyManager,
+    private val strictModeKeyManager: StrictModeKeyManager,
+    private val appLockPreferences: AppLockPreferences,
     private val selfIdentityCache: SelfIdentityCache,
     private val databaseKeyProvider: DatabaseKeyProvider,
     private val attachmentKeyProvider: AttachmentKeyProvider,
@@ -124,6 +128,13 @@ class SecureWipeCoordinator @Inject constructor(
         themePreferences.clear()
         // Who this device was still dialling, and how hard.
         contactRetryPreferences.clear()
+        // The app lock's own store. Leaving it is not merely a leftover: `securityPreferences`
+        // above drops the ordinary wrapped passphrase, so a surviving strict blob would make
+        // every later `load()` refuse to mint one — an install that crashes on every start with
+        // no database left to protect. The PIN verifier is the other half: a salt and a sealed
+        // witness over a four-to-six digit secret is offline-crackable, and a wipe that keeps it
+        // hands over a PIN the user probably uses elsewhere.
+        appLockPreferences.clear()
         // The updater's store too: the last-checked stamp, the cached release and the version
         // the user waved away all outlive a wipe otherwise, and they say when this device was
         // last used and which build it was running.
@@ -141,7 +152,11 @@ class SecureWipeCoordinator @Inject constructor(
         AppLogger.clear()
     }
 
-    override fun deleteMasterKey() = keyStoreKeyManager.deleteMasterKey()
+    /** Both aliases: strict mode deliberately lives under its own, which [KeyStoreKeyManager] never touches. */
+    override fun deleteMasterKey() {
+        keyStoreKeyManager.deleteMasterKey()
+        strictModeKeyManager.deleteKey()
+    }
 
     /**
      * Books a launcher start ~300 ms out, then the process dies. `setExact`
