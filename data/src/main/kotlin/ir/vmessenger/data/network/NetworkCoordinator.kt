@@ -45,6 +45,7 @@ class NetworkCoordinator @Inject constructor(
     private val incomingMessageCollector: IncomingMessageCollector,
     private val outboxDispatcher: OutboxDispatcher,
     private val contactRequestRetryWorker: ContactRequestRetryWorker,
+    private val pendingRevokeWorker: PendingRevokeWorker,
     private val endpointAnnouncer: EndpointAnnouncer,
     private val identityRepository: IdentityRepository,
     private val selfIdentityCache: SelfIdentityCache,
@@ -135,6 +136,7 @@ class NetworkCoordinator @Inject constructor(
         incomingMessageCollector.start()
         outboxDispatcher.start()
         contactRequestRetryWorker.start()
+        pendingRevokeWorker.start()
         messagingService.startListening(listenPort)
         AppLogger.info("Network", "TCP listener started on $listenPort")
         if (ir.vmessenger.core.common.network.P2PConfig.dhtParticipationEnabled) {

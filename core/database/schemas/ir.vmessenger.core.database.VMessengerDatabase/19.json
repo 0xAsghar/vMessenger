@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 19,
-    "identityHash": "5ebc8ec3610359531a4742d4da728813",
+    "identityHash": "625d40ae0522e29313c5dcae4efff869",
     "entities": [
       {
         "tableName": "app_metadata",
@@ -320,6 +320,62 @@
             "createSql": "CREATE INDEX IF NOT EXISTS `index_contact_request_requesterIdentityHash` ON `${TABLE_NAME}` (`requesterIdentityHash`)"
           }
         ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "pending_revoke",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`identityHash` BLOB NOT NULL, `ed25519Public` BLOB NOT NULL, `x25519StaticPublic` BLOB, `requestId` TEXT NOT NULL, `createdAtUnixMs` INTEGER NOT NULL, `attemptCount` INTEGER NOT NULL, `nextAttemptUnixMs` INTEGER NOT NULL, PRIMARY KEY(`identityHash`))",
+        "fields": [
+          {
+            "fieldPath": "identityHash",
+            "columnName": "identityHash",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ed25519Public",
+            "columnName": "ed25519Public",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "x25519StaticPublic",
+            "columnName": "x25519StaticPublic",
+            "affinity": "BLOB",
+            "notNull": false
+          },
+          {
+            "fieldPath": "requestId",
+            "columnName": "requestId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtUnixMs",
+            "columnName": "createdAtUnixMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attemptCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextAttemptUnixMs",
+            "columnName": "nextAttemptUnixMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "identityHash"
+          ]
+        },
+        "indices": [],
         "foreignKeys": []
       },
       {
@@ -1471,7 +1527,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '5ebc8ec3610359531a4742d4da728813')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '625d40ae0522e29313c5dcae4efff869')"
     ]
   }
 }

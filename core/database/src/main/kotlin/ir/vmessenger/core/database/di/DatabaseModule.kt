@@ -26,6 +26,7 @@ import ir.vmessenger.core.database.dao.MailboxDao
 import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.dao.MessageRecipientDao
 import ir.vmessenger.core.database.dao.OutboxDao
+import ir.vmessenger.core.database.dao.PendingRevokeDao
 import ir.vmessenger.core.database.dao.RelayNodeDao
 import ir.vmessenger.core.database.migration.MIGRATION_10_11
 import ir.vmessenger.core.database.migration.MIGRATION_11_12
@@ -110,6 +111,9 @@ object DatabaseModule {
 
     @Provides
     fun provideContactRequestDao(database: VMessengerDatabase): ContactRequestDao = database.contactRequestDao()
+
+    @Provides
+    fun providePendingRevokeDao(database: VMessengerDatabase): PendingRevokeDao = database.pendingRevokeDao()
 
     @Provides
     fun provideLocationAccessDao(database: VMessengerDatabase): LocationAccessDao = database.locationAccessDao()

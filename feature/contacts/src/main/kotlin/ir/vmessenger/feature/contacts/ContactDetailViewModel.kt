@@ -36,8 +36,16 @@ data class ContactDetailUiState(
     /** The contact is gone (deleted here, or after the peer's revoke); the screen has to pop. */
     val notFound: Boolean get() = !loading && contact == null
 
+    /**
+     * Also offered after a rejection, which includes the peer having deleted us.
+     *
+     * Without it a rejected contact was a dead end: no button here, nothing owed by the retry
+     * worker, and re-adding them hit the duplicate-row bug. The receiver already declines silently
+     * after two refusals, so there is no way to use this to pester anyone.
+     */
     val canResendRequest: Boolean
-        get() = contact?.status == ContactRelationshipStatus.PENDING_OUT
+        get() = contact?.status == ContactRelationshipStatus.PENDING_OUT ||
+            contact?.status == ContactRelationshipStatus.REJECTED
 
     /** The safety number needs both keys; a hash-only contact has not proven one yet. */
     val safetyNumberKeys: Pair<ByteArray, ByteArray>?

@@ -22,6 +22,7 @@ import ir.vmessenger.core.database.dao.MailboxDao
 import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.dao.MessageRecipientDao
 import ir.vmessenger.core.database.dao.OutboxDao
+import ir.vmessenger.core.database.dao.PendingRevokeDao
 import ir.vmessenger.core.database.dao.RelayNodeDao
 import ir.vmessenger.core.database.entity.AppMetadataEntity
 import ir.vmessenger.core.database.entity.BootstrapNodeEntity
@@ -41,6 +42,7 @@ import ir.vmessenger.core.database.entity.MailboxBlobEntity
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.database.entity.MessageRecipientEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
+import ir.vmessenger.core.database.entity.PendingRevokeEntity
 import ir.vmessenger.core.database.entity.RelayNodeEntity
 @Database(
     entities = [
@@ -49,6 +51,7 @@ import ir.vmessenger.core.database.entity.RelayNodeEntity
         KeyMaterialEntity::class,
         ContactEntity::class,
         ContactRequestEntity::class,
+        PendingRevokeEntity::class,
         LocationAccessEntity::class,
         EndpointCacheEntity::class,
         BootstrapNodeEntity::class,
@@ -75,6 +78,8 @@ abstract class VMessengerDatabase : RoomDatabase() {
     abstract fun keyMaterialDao(): KeyMaterialDao
     abstract fun contactDao(): ContactDao
     abstract fun contactRequestDao(): ContactRequestDao
+
+    abstract fun pendingRevokeDao(): PendingRevokeDao
     abstract fun locationAccessDao(): LocationAccessDao
     abstract fun endpointCacheDao(): EndpointCacheDao
     abstract fun bootstrapNodeDao(): BootstrapNodeDao

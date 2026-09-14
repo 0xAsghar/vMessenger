@@ -6,9 +6,11 @@ import ir.vmessenger.core.crypto.LazysodiumCryptoEngine
 import ir.vmessenger.core.database.dao.ContactRequestDao
 import ir.vmessenger.core.database.dao.EndpointCacheDao
 import ir.vmessenger.core.database.dao.MailboxDao
+import ir.vmessenger.core.database.dao.PendingRevokeDao
 import ir.vmessenger.core.database.entity.ContactRequestEntity
 import ir.vmessenger.core.database.entity.EndpointCacheEntity
 import ir.vmessenger.core.database.entity.MailboxBlobEntity
+import ir.vmessenger.core.database.entity.PendingRevokeEntity
 import ir.vmessenger.data.attachment.AttachmentFileStore
 import ir.vmessenger.data.repository.FakeContactDao
 import ir.vmessenger.data.repository.FakeConversationDao
@@ -55,6 +57,27 @@ class FakeEndpointCacheDao : EndpointCacheDao {
 
     override suspend fun delete(hash: ByteArray) {
         entries.removeAll { it.identityHash.contentEquals(hash) }
+    }
+}
+
+class FakePendingRevokeDao : PendingRevokeDao {
+    val queued = mutableListOf<PendingRevokeEntity>()
+
+    override suspend fun upsert(revoke: PendingRevokeEntity) {
+        queued.removeAll { it.identityHash.contentEquals(revoke.identityHash) }
+        queued += revoke
+    }
+
+    override suspend fun update(revoke: PendingRevokeEntity) = upsert(revoke)
+
+    override suspend fun due(now: Long): List<PendingRevokeEntity> = queued.filter { it.nextAttemptUnixMs <= now }
+
+    override suspend fun delete(identityHash: ByteArray) {
+        queued.removeAll { it.identityHash.contentEquals(identityHash) }
+    }
+
+    override suspend fun purgeOlderThan(cutoff: Long) {
+        queued.removeAll { it.createdAtUnixMs < cutoff }
     }
 }
 
@@ -151,6 +174,7 @@ class CleanupHarness(val contactDao: FakeContactDao = FakeContactDao()) {
     val endpointCacheDao = FakeEndpointCacheDao()
     val mailboxDao = FakeMailboxDao()
     val contactRequestDao = FakeContactRequestDao()
+    val pendingRevokeDao = FakePendingRevokeDao()
     val messaging = FakeMessagingPort()
     val sessionCloser = FakeSessionCloser()
     val attachmentStore = FakeAttachmentFileStore()
@@ -189,6 +213,7 @@ class CleanupHarness(val contactDao: FakeContactDao = FakeContactDao()) {
         endpointCacheDao = endpointCacheDao,
         mailboxDao = mailboxDao,
         contactRequestDao = contactRequestDao,
+        pendingRevokeDao = pendingRevokeDao,
         draftStore = draftStore,
         ioDispatcher = Dispatchers.Unconfined,
     )

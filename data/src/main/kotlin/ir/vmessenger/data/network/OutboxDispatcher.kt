@@ -58,6 +58,9 @@ object OutboxError {
     const val CONTACT_MISSING = "contact_missing"
     const val CONTACT_BLOCKED = "contact_blocked"
     const val CONTACT_NOT_APPROVED = "contact_not_approved"
+
+    /** They approved us once and then removed us; not the same as never having accepted. */
+    const val CONTACT_REVOKED = "contact_revoked"
 }
 
 /**
@@ -204,6 +207,9 @@ class OutboxDispatcher @Inject constructor(
     private fun ContactEntity.sendRejection(): String? = when {
         // Never send to a blocked contact; the row stays queued so unblocking resumes delivery.
         blocked -> OutboxError.CONTACT_BLOCKED
+        // Told apart, because "they have not accepted you yet" and "they accepted you and then
+        // removed you" are different facts and the user was being given the first for both.
+        relationshipStatus == ContactRelationshipStatus.REJECTED -> OutboxError.CONTACT_REVOKED
         relationshipStatus != ContactRelationshipStatus.APPROVED -> OutboxError.CONTACT_NOT_APPROVED
         else -> null
     }
@@ -341,7 +347,16 @@ class OutboxDispatcher @Inject constructor(
         when (val result = attachmentSender.send(contactId, self, peer, message, file, groupId)) {
             is AppResult.Success -> {
                 markSent(item)
-                finish(item)
+                // Wait for the receipt, exactly as a chat message does. Finishing on the transport
+                // write alone meant a receiver that ran out of disk, refused the transfer on quota,
+                // or failed the SHA-256 check left the sender reading "sent" for a message that
+                // does not exist on the other side. The receiver already acks a completed transfer.
+                if (item.receiptWaitCount < MAX_RECEIPT_WAITS) {
+                    rescheduleForReceipt(item, item.receiptWaitCount + 1)
+                } else {
+                    finish(item)
+                    AppLogger.warn("Outbox", "attachment receipt never arrived messageId=${message.messageId}")
+                }
                 AppLogger.info("Outbox", "sent attachment messageId=${message.messageId}")
             }
             is AppResult.Error -> {
@@ -377,7 +392,13 @@ class OutboxDispatcher @Inject constructor(
         // Keep retrying (capped backoff) so a message to a temporarily offline
         // peer still delivers when they return; only give up after a long window
         // instead of dropping it after a handful of minutes.
-        val expired = createdAtUnixMs > 0 && System.currentTimeMillis() - createdAtUnixMs >= RETRY_WINDOW_MS
+        // Capped on attempts as well as age. The age is wall-clock arithmetic against the time the
+        // message was composed, so an NTP correction or a user changing the date by more than a day
+        // would otherwise mark every queued message failed at once — messages that were minutes
+        // old and perfectly deliverable.
+        val age = System.currentTimeMillis() - createdAtUnixMs
+        val plausiblyExpired = createdAtUnixMs > 0 && age in RETRY_WINDOW_MS..MAX_PLAUSIBLE_AGE_MS
+        val expired = plausiblyExpired || attempt >= MAX_ATTEMPTS_BEFORE_GIVING_UP
         if (expired) {
             // Only this recipient is given up on; the aggregate stays QUEUED/SENT
             // while other members still have a chance, and only turns FAILED when
@@ -421,6 +442,12 @@ class OutboxDispatcher @Inject constructor(
         // Keep retrying an undelivered message this long (capped backoff) so it
         // arrives when a temporarily-offline peer returns, before giving up.
         private const val RETRY_WINDOW_MS = 24 * 60 * 60_000L
+
+        /** Beyond this an "age" is a clock change, not a message that waited. */
+        private const val MAX_PLAUSIBLE_AGE_MS = 30L * 24 * 60 * 60 * 1000
+
+        /** The backstop for when the clock cannot be trusted: enough retries is enough. */
+        private const val MAX_ATTEMPTS_BEFORE_GIVING_UP = 200
     }
 }
 

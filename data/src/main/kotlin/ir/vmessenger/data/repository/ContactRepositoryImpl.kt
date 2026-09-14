@@ -39,6 +39,21 @@ class ContactRepositoryImpl @Inject constructor(
     override suspend fun getContactByIdentityHash(identityHash: ByteArray): Contact? =
         contactDao.getByIdentityHash(identityHash)?.toDomain()
 
+    /**
+     * Brings a contact we already have back into play.
+     *
+     * Re-adding someone who rejected us — or who deleted us, which lands as REJECTED — has to move
+     * them out of that state, or the add silently does nothing: the retry worker only owes a
+     * request to PENDING_OUT, and nothing else would ever ask again.
+     */
+    private suspend fun reinstate(existing: ContactEntity, status: EntityRelationshipStatus): ContactEntity {
+        if (existing.relationshipStatus != EntityRelationshipStatus.REJECTED) return existing
+        val revived = existing.copy(relationshipStatus = status, lastSeenUnixMs = null)
+        contactDao.update(revived)
+        AppLogger.info("Contact", "re-added a previously rejected contact id=${existing.id} as $status")
+        return revived
+    }
+
     override suspend fun addContactByDescriptor(
         descriptorBytes: ByteArray,
         alias: String?,
@@ -47,8 +62,10 @@ class ContactRepositoryImpl @Inject constructor(
         check(pairingDescriptorCodec.verify(descriptor)) { "امضای QR نامعتبر است" }
         val identityPub = descriptor.identityPub.toByteArray()
         val identityHash = UserHashEncoder.identityHashFromPublicKey(identityPub)
-        contactDao.getByIdentityHash(identityHash)?.let {
-            return@runCatching it.toDomain()
+        // Prefix-tolerant, because a contact added by hash holds a 16-byte prefix until its first
+        // handshake and the exact lookup would miss it — producing a second row for one person.
+        contactDao.findByIdentityHash(identityHash)?.let {
+            return@runCatching reinstate(it, EntityRelationshipStatus.APPROVED).toDomain()
         }
         val entity = ContactEntity(
             id = UUID.randomUUID().toString(),
@@ -78,7 +95,15 @@ class ContactRepositoryImpl @Inject constructor(
                     throw IllegalArgumentException("شناسه کاربری نامعتبر است")
                 }
             val identityHash = ByteArray(32).also { partialHash.copyInto(it, 0, 0, partialHash.size) }
-            contactDao.getByIdentityHash(identityHash)?.let { return@runCatching it.toDomain() }
+            // Exact byte equality used to be the test here, and it could never match a contact we
+            // had already handshaked with: that row holds the *full* 32-byte hash while this one is
+            // a zero-padded 16-byte prefix. So re-adding someone produced a second row, inbound
+            // traffic still resolved to the first, their acceptance failed its "was this awaited"
+            // check, and the new row sat in PENDING_OUT forever. A rejected contact was
+            // unrecoverable without deleting them first.
+            contactDao.findByIdentityHash(identityHash)?.let {
+                return@runCatching reinstate(it, EntityRelationshipStatus.PENDING_OUT).toDomain()
+            }
             val entity = ContactEntity(
                 id = UUID.randomUUID().toString(),
                 identityHash = identityHash,

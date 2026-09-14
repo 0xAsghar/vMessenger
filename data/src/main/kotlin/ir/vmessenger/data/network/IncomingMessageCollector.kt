@@ -218,6 +218,13 @@ class IncomingMessageCollector @Inject constructor(
      * we already hold is re-acknowledged (the sender never saw our receipt);
      * the same id in another conversation is a collision and is dropped
      * without an ack so a peer cannot probe or shadow other people's ids.
+     *
+     * Dropping rather than storing is forced by the schema, not chosen here: `messageId` is the
+     * primary key of `message`, so a colliding row cannot be written at all and acking one would
+     * claim we kept something we did not. Making this per-conversation would mean moving that
+     * primary key, which `message_recipient` and `outbox` are both keyed against. The exposure is
+     * small enough to leave: the id is a UUID, so suppressing a *future* message would mean
+     * predicting one, and replaying an id already seen only shadows a message that has arrived.
      */
     private suspend fun isDuplicate(
         contactId: String,

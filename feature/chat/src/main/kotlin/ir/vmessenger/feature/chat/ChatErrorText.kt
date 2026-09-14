@@ -19,6 +19,7 @@ internal fun sendErrorText(code: String?): String = stringResource(
         "contact_missing" -> R.string.feature_chat_error_contact_missing
         "contact_blocked" -> R.string.feature_chat_error_contact_blocked
         "contact_not_approved" -> R.string.feature_chat_error_contact_not_approved
+        "contact_revoked" -> R.string.feature_chat_error_contact_revoked
         else -> R.string.feature_chat_error_send_failed
     },
 )

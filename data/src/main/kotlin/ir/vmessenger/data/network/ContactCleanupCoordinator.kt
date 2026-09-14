@@ -13,7 +13,9 @@ import ir.vmessenger.core.database.dao.LocationShareDao
 import ir.vmessenger.core.database.dao.MailboxDao
 import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.dao.OutboxDao
+import ir.vmessenger.core.database.dao.PendingRevokeDao
 import ir.vmessenger.core.database.entity.ContactEntity
+import ir.vmessenger.core.database.entity.PendingRevokeEntity
 import ir.vmessenger.core.notifications.ActiveConversationTracker
 import ir.vmessenger.core.proto.app.v1.ContactResponseType
 import ir.vmessenger.data.attachment.AttachmentFileStore
@@ -74,6 +76,7 @@ class ContactCleanupCoordinator @Inject constructor(
     private val endpointCacheDao: EndpointCacheDao,
     private val mailboxDao: MailboxDao,
     private val contactRequestDao: ContactRequestDao,
+    private val pendingRevokeDao: PendingRevokeDao,
     private val draftStore: ConversationDraftStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
@@ -105,10 +108,18 @@ class ContactCleanupCoordinator @Inject constructor(
     }
 
     /**
-     * Tells the peer we removed them, once, bounded in time and never retried:
-     * they may simply be offline, and the deletion must not wait on them. Skipped
-     * for blocked contacts and for hash-only contacts we never handshaked with
-     * (no key to authenticate a session against).
+     * Tells the peer we removed them — now if they are reachable, and otherwise for as long as it
+     * takes.
+     *
+     * This used to be one attempt, bounded at ten seconds, never retried. People delete contacts
+     * they are *not* currently talking to, so the usual outcome was a peer who was offline and
+     * never found out: they kept us approved indefinitely, their messages were dropped by the
+     * inbound policy with only a log line, and their own outbox showed one tick forever. The
+     * deletion still does not wait on them — it is queued first, so the row can go — but the queue
+     * outlives the contact and [PendingRevokeWorker] keeps trying.
+     *
+     * Skipped for blocked contacts, and for hash-only contacts we never handshaked with: there is
+     * no key to authenticate a session against, so there is nobody to tell.
      */
     private suspend fun sendRevoke(contact: ContactEntity) {
         if (contact.blocked || IdentityHashMatcher.isPlaceholderPublicKey(contact.ed25519Public)) return
@@ -120,6 +131,15 @@ class ContactCleanupCoordinator @Inject constructor(
         )
         // The id of *their* request to us, which is what the receiver validates a response against.
         val requestId = ContactRequestService.deterministicRequestId(contact.identityHash, self.identityHash)
+        pendingRevokeDao.upsert(
+            PendingRevokeEntity(
+                identityHash = contact.identityHash,
+                ed25519Public = contact.ed25519Public,
+                x25519StaticPublic = contact.x25519StaticPublic,
+                requestId = requestId,
+                createdAtUnixMs = System.currentTimeMillis(),
+            ),
+        )
         val result = withTimeoutOrNull(REVOKE_TIMEOUT_MS) {
             contactRequestService.sendResponse(
                 contactId = contact.id,
@@ -129,9 +149,10 @@ class ContactCleanupCoordinator @Inject constructor(
             )
         }
         if (result is AppResult.Success) {
+            pendingRevokeDao.delete(contact.identityHash)
             AppLogger.info("Contact", "revoke sent contact=${contact.id}")
         } else {
-            AppLogger.warn("Contact", "revoke not delivered contact=${contact.id} (best effort, not retried)")
+            AppLogger.info("Contact", "revoke queued for retry contact=${contact.id}")
         }
     }
 

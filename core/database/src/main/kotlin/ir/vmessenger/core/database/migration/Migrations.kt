@@ -536,4 +536,19 @@ val MIGRATION_18_19_STATEMENTS: List<String> = listOf(
     "ALTER TABLE `contact` ADD COLUMN `avatarRevision` INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE `identity` ADD COLUMN `avatarPath` TEXT DEFAULT NULL",
     "ALTER TABLE `identity` ADD COLUMN `avatarRevision` INTEGER NOT NULL DEFAULT 0",
+
+    // Deliberately no foreign key to `contact`: this row's whole purpose is to outlive the contact
+    // it is about, so that a peer who was offline when they were deleted still finds out.
+    """
+    CREATE TABLE IF NOT EXISTS `pending_revoke` (
+        `identityHash` BLOB NOT NULL,
+        `ed25519Public` BLOB NOT NULL,
+        `x25519StaticPublic` BLOB,
+        `requestId` TEXT NOT NULL,
+        `createdAtUnixMs` INTEGER NOT NULL,
+        `attemptCount` INTEGER NOT NULL,
+        `nextAttemptUnixMs` INTEGER NOT NULL,
+        PRIMARY KEY(`identityHash`)
+    )
+    """.trimIndent(),
 )
