@@ -6,6 +6,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.ChatListItem
+import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.domain.model.MessagePreviewKind
 
@@ -43,7 +44,8 @@ private fun previewLine(row: ChatListRow): AnnotatedString {
     val text = when (row.previewKind) {
         MessagePreviewKind.IMAGE -> stringResource(R.string.feature_chat_preview_image)
         MessagePreviewKind.VIDEO -> stringResource(R.string.feature_chat_preview_video)
-        MessagePreviewKind.FILE -> stringResource(R.string.feature_chat_preview_file, row.preview.orEmpty())
+        MessagePreviewKind.FILE ->
+            stringResource(R.string.feature_chat_preview_file, VmTextFormat.isolate(row.preview.orEmpty()))
         MessagePreviewKind.AUDIO -> stringResource(R.string.feature_chat_preview_audio)
         MessagePreviewKind.LOCATION -> stringResource(R.string.feature_chat_preview_location)
         // A membership line is already a full sentence; the sender prefix would only repeat it.
@@ -52,6 +54,10 @@ private fun previewLine(row: ChatListRow): AnnotatedString {
         null -> stringResource(R.string.feature_chat_preview_empty)
     }
     val sender = row.senderName?.takeIf { row.previewKind != MessagePreviewKind.GROUP_EVENT }
-    val line = if (sender == null) text else stringResource(R.string.feature_chat_preview_sender, sender, text)
+    val line = if (sender == null) {
+        text
+    } else {
+        stringResource(R.string.feature_chat_preview_sender, VmTextFormat.isolate(sender), text)
+    }
     return remember(line) { AnnotatedString(line) }
 }

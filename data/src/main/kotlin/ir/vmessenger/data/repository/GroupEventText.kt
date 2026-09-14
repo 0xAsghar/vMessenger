@@ -1,5 +1,7 @@
 package ir.vmessenger.data.repository
 
+import ir.vmessenger.core.common.text.BidiText
+
 /**
  * The Persian system lines stored in a group's history.
  *
@@ -7,20 +9,28 @@ package ir.vmessenger.data.repository
  * layer: a membership line is *persisted* as a message body, so it needs a
  * concrete string at write time rather than a resource resolved at render time.
  * The app ships a single locale, so nothing here is ever re-rendered in another.
+ *
+ * The name is isolated here, at write time, precisely because these lines are stored: by the time
+ * one is rendered it is a finished sentence with no seam left to wrap. Three of the templates put
+ * the name first, so without this a Latin name would make the whole Persian line left-to-right.
+ * Rows written before this existed are covered instead by the renderer, which pins the paragraph
+ * direction for system lines.
  */
 object GroupEventText {
     const val REMOVED_ME = "شما از گروه حذف شدید"
     const val LEFT_BY_ME = "شما گروه را ترک کردید"
 
-    fun created(name: String): String = "گروه «$name» ساخته شد"
+    fun created(name: String): String = "گروه «${isolate(name)}» ساخته شد"
 
-    fun renamed(name: String): String = "نام گروه به «$name» تغییر کرد"
+    fun renamed(name: String): String = "نام گروه به «${isolate(name)}» تغییر کرد"
 
-    fun added(name: String): String = "$name به گروه اضافه شد"
+    fun added(name: String): String = "${isolate(name)} به گروه اضافه شد"
 
-    fun removed(name: String): String = "$name از گروه حذف شد"
+    fun removed(name: String): String = "${isolate(name)} از گروه حذف شد"
 
-    fun left(name: String): String = "$name گروه را ترک کرد"
+    fun left(name: String): String = "${isolate(name)} گروه را ترک کرد"
 
-    fun closed(name: String): String = "گروه «$name» بسته شد"
+    fun closed(name: String): String = "گروه «${isolate(name)}» بسته شد"
+
+    private fun isolate(name: String): String = BidiText.isolate(name)
 }

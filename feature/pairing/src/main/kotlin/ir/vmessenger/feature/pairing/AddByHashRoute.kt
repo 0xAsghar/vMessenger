@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -122,7 +123,11 @@ private fun HashField(
         onValueChange = onUserHashChange,
         modifier = Modifier.fillMaxWidth(),
         label = { Text(text = stringResource(R.string.add_by_hash_label)) },
-        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+        // Ltr: a hash is an opaque identifier and must not reorder as the user types it.
+        textStyle = MaterialTheme.typography.bodyLarge.copy(
+            fontFamily = FontFamily.Monospace,
+            textDirection = TextDirection.Ltr,
+        ),
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
         singleLine = false,
         minLines = 2,

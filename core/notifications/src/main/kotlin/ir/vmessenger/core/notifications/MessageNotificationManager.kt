@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
+import ir.vmessenger.core.common.text.BidiText
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -46,8 +47,11 @@ class MessageNotificationManager @Inject constructor(
         hideContent: Boolean,
     ) {
         val generic = context.getString(R.string.notification_new_message)
-        val title = if (hideContent) APP_TITLE else senderName
-        val text = if (hideContent) generic else preview
+        // Isolated because the shade is drawn by the system's own TextView, which follows the
+        // device locale rather than this app's forced RTL — no TextStyle of ours reaches it, and
+        // the direction differs between a Persian-locale phone and an English one.
+        val title = if (hideContent) APP_TITLE else BidiText.isolate(senderName)
+        val text = if (hideContent) generic else BidiText.isolate(preview)
         val notification = baseBuilder()
             .setContentIntent(conversationIntent(conversationId))
             .setContentTitle(title)

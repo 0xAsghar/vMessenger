@@ -1,5 +1,6 @@
 package ir.vmessenger.core.designsystem.format
 
+import ir.vmessenger.core.common.text.BidiText
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
@@ -39,6 +40,12 @@ object VmTextFormat {
     private const val PERCENT_SIGN = "٪"
     private const val SECONDS_PER_MINUTE = 60
     private const val MINUTES_PER_HOUR = 60
+
+    /**
+     * Wraps peer-supplied text — a name, a filename, a preview — so it cannot flip the Persian
+     * sentence it is substituted into. Delegates to [BidiText]; see there for why.
+     */
+    fun isolate(value: String): String = BidiText.isolate(value)
 
     /** Rewrites ASCII digits as Extended Arabic-Indic (Persian) digits; other characters pass through. */
     fun persianDigits(value: String): String = buildString(value.length) {
