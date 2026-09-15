@@ -90,7 +90,8 @@ class DatabaseKeyProvider @Inject constructor(
      * app's files, which is the whole thing strict mode exists to prevent.
      */
     fun provide(passphrase: ByteArray) {
-        cachedPassphrase?.fill(0)
+        // The outgoing array is dropped, never zeroed — see [lock] for the reason, which is the
+        // same one: SQLCipher is still holding it.
         cachedPassphrase = passphrase
         locked = false
     }
@@ -99,12 +100,28 @@ class DatabaseKeyProvider @Inject constructor(
      * Shuts the database until the user authenticates again (strict mode only).
      *
      * The caller must close the Room database first: SQLCipher holds the key inside its open
-     * connection, so zeroing this cache alone leaves an already-open handle reading and writing
+     * connection, so dropping this cache alone leaves an already-open handle reading and writing
      * perfectly well.
+     *
+     * **This drops the reference and deliberately does not zero the array.** The array handed to
+     * `DatabaseModule.provideDatabasePassphrase` is this same object, and it lives on inside
+     * SQLCipher's open helper for the life of the process — there is exactly one copy, not two.
+     * Zeroing it therefore does not remove the key from memory, it destroys the only key the
+     * process has: Room reopens the file on the next query after an unlock, hands SQLCipher
+     * thirty-two zero bytes, and the user's database comes back as
+     * `SQLiteNotADatabaseException: file is not a database`. That is what shipped, and it turned
+     * the first lock/unlock cycle under strict mode into a crash loop over intact data.
+     *
+     * So the in-memory key survives a strict lock, and [docs/Security.md] §7.4 says so. What
+     * strict mode protects is the key **at rest**: on disk the passphrase is wrapped under a
+     * Keystore key that will not unwrap without user authentication, so a cold start — a stolen
+     * device, a rebooted one, an app the system has killed — cannot open the database at all.
+     * Removing it from a *running* process as well would mean rebuilding the Room instance after
+     * every unlock, which its singleton DAOs cannot express, or ending the process on lock.
+     * Neither is a comment's decision to make.
      */
     fun lock() {
         locked = true
-        cachedPassphrase?.fill(0)
         cachedPassphrase = null
     }
 
@@ -151,7 +168,13 @@ class DatabaseKeyProvider @Inject constructor(
         }
     }
 
-    /** Forgets the cached passphrase (secure wipe); the next [initialize] loads again. */
+    /**
+     * Forgets the cached passphrase (secure wipe); the next [initialize] loads again.
+     *
+     * This one *does* zero, unlike [lock], and for a reason that only applies here: the wipe
+     * destroys the database file and the Keystore key and then ends the process, so there is no
+     * later reopen for a zeroed key to break.
+     */
     fun reset() {
         cachedPassphrase?.fill(0)
         cachedPassphrase = null

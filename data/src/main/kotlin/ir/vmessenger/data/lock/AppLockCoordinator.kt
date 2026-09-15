@@ -22,6 +22,18 @@ import javax.inject.Singleton
 
 /** Why the lock screen is up, or that it is not. */
 enum class LockState {
+    /**
+     * The starting value, before the preferences have been read.
+     *
+     * It exists because the alternative is a race the app cannot win: reading whether a lock is
+     * set is suspending, so for the first frames the answer is genuinely unknown, and starting at
+     * [Unlocked] meant the app composed its real content in that window — which under strict mode
+     * builds a DAO, opens the database, and crashes before the lock can be drawn. Everything
+     * treats "not [Unlocked]" as locked, so this fails closed by construction; the system splash
+     * covers it, and nothing is drawn until it resolves.
+     */
+    Undetermined,
+
     /** No PIN has been set, or the user has already authenticated. */
     Unlocked,
 
@@ -86,7 +98,7 @@ class AppLockCoordinator @Inject constructor(
     // strict mode forbids, and this class is built while the app is still locked.
     private val secureWipe: Provider<SecureWipeUseCase>,
 ) {
-    private val _state = MutableStateFlow(LockState.Unlocked)
+    private val _state = MutableStateFlow(LockState.Undetermined)
     val state: StateFlow<LockState> = _state.asStateFlow()
 
     val strictModeSupported: Boolean get() = strictKeys.isSupported

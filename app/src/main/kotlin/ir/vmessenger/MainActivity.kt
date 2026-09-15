@@ -43,7 +43,8 @@ class MainActivity : FragmentActivity() {
         // strict mode the route cannot be resolved until the user authenticates, so keeping the
         // system splash up would hide the lock screen behind a blank window forever.
         splashScreen.setKeepOnScreenCondition {
-            viewModel.startRoute.value == null && viewModel.lockState.value == LockState.Unlocked
+            viewModel.lockState.value == LockState.Undetermined ||
+                (viewModel.startRoute.value == null && viewModel.lockState.value == LockState.Unlocked)
         }
         enableEdgeToEdge()
         // Secure by default: the flag is set before any content is drawn so the
@@ -70,7 +71,10 @@ class MainActivity : FragmentActivity() {
                 pendingConversationId = pendingConversationId.takeIf { lockState == LockState.Unlocked },
                 onPendingConversationHandled = viewModel::consumePendingConversation,
                 locked = lockState != LockState.Unlocked,
-                lockContent = { AppLockScreen(onUnlocked = {}) },
+                // Nothing while the state is still [LockState.Undetermined]: the app content is
+                // already held back by `locked`, and drawing the lock there would flash a PIN
+                // screen at users who have never set one. The splash covers this window.
+                lockContent = { if (lockState != LockState.Undetermined) AppLockScreen(onUnlocked = {}) },
             )
         }
     }

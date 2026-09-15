@@ -8,6 +8,9 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -95,5 +98,54 @@ class DatabaseKeyProviderTest {
         const val CONCURRENT_CALLERS = 32
         const val PASSPHRASE_BYTES = 32
         const val SLOW_LOAD_MS = 20L
+    }
+
+    /**
+     * The array returned by [DatabaseKeyProvider.getPassphrase] is the one Hilt hands to
+     * `SupportOpenHelperFactory`, and SQLCipher keeps it for the life of the process. A strict
+     * lock must therefore drop its reference without zeroing it: zeroing destroys the only key
+     * the process has, and Room's next reopen after the unlock fails with
+     * "file is not a database" over a perfectly intact file.
+     */
+    @Test
+    fun lockLeavesTheHandedOutPassphraseIntactForSqlcipher() = runTest {
+        val source = CountingSource()
+        val provider = DatabaseKeyProvider(source)
+        provider.initialize()
+        val handedToSqlcipher = provider.getPassphrase()
+
+        provider.lock()
+
+        assertArrayEquals(ByteArray(PASSPHRASE_BYTES) { 1 }, handedToSqlcipher)
+        assertTrue(provider.isLocked)
+        assertNull(provider.getPassphraseOrNull())
+    }
+
+    /** Unlocking replaces the cache; the copy SQLCipher is still using must survive that too. */
+    @Test
+    fun provideLeavesTheHandedOutPassphraseIntact() = runTest {
+        val source = CountingSource()
+        val provider = DatabaseKeyProvider(source)
+        provider.initialize()
+        val handedToSqlcipher = provider.getPassphrase()
+        provider.lock()
+
+        provider.provide(ByteArray(PASSPHRASE_BYTES) { 1 })
+
+        assertArrayEquals(ByteArray(PASSPHRASE_BYTES) { 1 }, handedToSqlcipher)
+        assertFalse(provider.isLocked)
+    }
+
+    /** The wipe is the one place zeroing is right: the process ends before anything reopens. */
+    @Test
+    fun resetStillZeroesBecauseNothingReopensAfterAWipe() = runTest {
+        val source = CountingSource()
+        val provider = DatabaseKeyProvider(source)
+        provider.initialize()
+        val handedToSqlcipher = provider.getPassphrase()
+
+        provider.reset()
+
+        assertArrayEquals(ByteArray(PASSPHRASE_BYTES), handedToSqlcipher)
     }
 }
