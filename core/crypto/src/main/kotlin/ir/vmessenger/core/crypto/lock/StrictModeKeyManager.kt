@@ -21,17 +21,26 @@ import javax.inject.Singleton
  * *without* `setUserAuthenticationRequired`, so the network service can open the database while the
  * screen is locked — which also means a PIN checked in software adds nothing at rest. Re-wrapping
  * the database passphrase under a key the TEE or StrongBox refuses to use without a fresh
- * authentication moves the rate limiting into hardware, where a six-digit PIN or a fingerprint is
- * genuinely strong rather than a constant factor.
+ * authentication moves the *key* behind the hardware, where the device's own credential checking
+ * applies rather than a constant-factor KDF over a four-digit secret.
+ *
+ * Be precise about what that does and does not rate-limit. The hardware gates use of the key and
+ * applies its own throttling to device-credential attempts. It does **not** check this app's PIN —
+ * that is Argon2id in software, with the app's own backoff on top — so what strict mode buys is
+ * that the database key cannot be produced at all without a device authentication, not that the
+ * app's PIN is hardware-enforced.
  *
  * Two deliberate choices, both of which can cost a user their data if got wrong:
  *
  * - The alias is its own. It must never be [KeyStoreKeyManager]'s, whose StrongBox fallback path
  *   *deletes* its alias and regenerates — which would silently destroy this one.
- * - Authentication accepts the device credential as well as a strong biometric. With biometrics
- *   alone, `setInvalidatedByBiometricEnrollment` means enrolling a new fingerprint destroys the key,
- *   and with no other way to authenticate that is an unopenable database and total data loss.
- *   Enabling strict mode is additionally gated on a completed backup for the same reason.
+ * - Authentication accepts the device credential as well as a strong biometric. That is what makes
+ *   the key survive a new fingerprint enrolment: `setInvalidatedByBiometricEnrollment` only bites a
+ *   key that can be opened by biometrics alone, and with `AUTH_DEVICE_CREDENTIAL` in the allowed
+ *   set this one cannot be. What does destroy it is removing the device screen lock, which deletes
+ *   every authentication-bound key, or moving the app's data to another device, since Keystore keys
+ *   never travel. Both are unopenable-database territory, which is why turning strict mode on puts
+ *   a confirmation in front of the user telling them to take a backup first.
  */
 @Singleton
 class StrictModeKeyManager @Inject constructor() {

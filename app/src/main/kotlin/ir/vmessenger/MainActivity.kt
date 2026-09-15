@@ -129,7 +129,14 @@ class MainActivity : FragmentActivity() {
                 lifecycle.addObserver(
                     LifecycleEventObserver { _, event ->
                         when (event) {
-                            Lifecycle.Event.ON_STOP -> viewModel.onBackgrounded(SystemClock.elapsedRealtime())
+                            // Not while rotating. A configuration change stops and restarts the
+                            // activity, and with the auto-lock set to "immediately" that armed the
+                            // lock and then immediately found the timeout elapsed — so turning the
+                            // phone sideways asked for the PIN again.
+                            Lifecycle.Event.ON_STOP ->
+                                if (!isChangingConfigurations) {
+                                    viewModel.onBackgrounded(SystemClock.elapsedRealtime())
+                                }
                             Lifecycle.Event.ON_START -> viewModel.onForegrounded(SystemClock.elapsedRealtime())
                             else -> Unit
                         }

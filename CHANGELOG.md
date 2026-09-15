@@ -32,8 +32,10 @@ reach the other side — which turned up about twenty more defects nobody had re
   the network service goes down with the lock and comes back on the unlock, because closing the
   database alone does not stop anything — Room is already holding the key.
 - **Wrong PINs are rate-limited.** Four are free, then the wait doubles from five seconds and caps
-  at five minutes, timed against the monotonic clock so changing the device date does not defeat
-  it. The wipe-after-ten-failures trigger stays opt-in and off by default.
+  at five minutes. It is kept on disk and judged by two clocks, so neither force-stopping the app
+  nor winding the device date forward shortens it; across a reboot, which resets the monotonic
+  clock, the wall clock decides alone. The wipe-after-ten-failures trigger stays opt-in and off by
+  default, and counts consecutive failures — a correct PIN clears the count.
 - **The secure wipe now clears the app lock's own store and its Keystore alias.** It cleared
   neither. The PIN verifier is offline-crackable, and a surviving strict-mode blob left the app
   refusing to open a database that no longer existed — a crash on every start after a wipe.

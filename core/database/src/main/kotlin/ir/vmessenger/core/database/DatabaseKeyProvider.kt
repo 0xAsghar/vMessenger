@@ -85,7 +85,14 @@ class DatabaseKeyProvider @Inject constructor(
         // Locked is not "not loaded yet": loading is exactly what must not happen.
         if (locked || cachedPassphrase != null) return
         mutex.withLock {
-            if (!locked && cachedPassphrase == null) cachedPassphrase = loadOrRecordLocked()
+            if (!locked && cachedPassphrase == null) {
+                val loaded = loadOrRecordLocked()
+                // [lock] does not take this mutex — it must not, since it has to be able to shut
+                // the door while a load is in flight. So the door is checked again on the way out:
+                // without this, a load that started just before the lock put the key back in the
+                // cache just after it, and the database reopened underneath a lock screen.
+                if (locked) loaded.fill(0) else cachedPassphrase = loaded
+            }
         }
     }
 

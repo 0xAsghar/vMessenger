@@ -222,15 +222,19 @@ the app wipes after ten consecutive failures with a warning from the third-from-
 **Strict mode is the configuration that changes the threat model.** It re-wraps the database
 passphrase under a second Keystore key created with `setUserAuthenticationRequired(true)` and
 `setUserAuthenticationParameters(…, AUTH_BIOMETRIC_STRONG or AUTH_DEVICE_CREDENTIAL)`, then
-**deletes the non-authenticating copy**. The retry limit is then enforced by the secure hardware
-rather than by this app. Three consequences, all deliberate:
+**deletes the non-authenticating copy**, so the database key cannot be produced at all without a
+device authentication. Note what that does *not* mean: the hardware never checks this app's PIN.
+The PIN is Argon2id in software with the app's own backoff on top; what the hardware gates is the
+key, and what it throttles is device-credential attempts. Three consequences, all deliberate:
 
 - It must not reuse `vmessenger_master`. The StrongBox fallback path calls
   `deleteEntry(MASTER_KEY_ALIAS)`, so a StrongBox retry would destroy the only wrapping of the
   passphrase. Hence the separate `vmessenger_app_lock` alias.
-- Device credential is accepted alongside biometrics. With
-  `setInvalidatedByBiometricEnrollment`, enrolling a new fingerprint destroys the key; without a
-  credential path that means an unopenable database and total data loss. Turning strict mode on
+- Device credential is accepted alongside biometrics, and that is what makes the key survive a new
+  fingerprint enrolment: `setInvalidatedByBiometricEnrollment` only bites a key openable by
+  biometrics alone, which `AUTH_DEVICE_CREDENTIAL` stops this one from being. What does destroy it
+  is removing the device screen lock, which deletes every authentication-bound key, or moving the
+  app's data to another device, since Keystore keys never travel. Turning strict mode on
   puts a confirmation in front of the user that names that loss and says to take a backup first.
   It is a warning, not a gate — nothing records whether a backup was taken, so nothing can check
   one, and saying otherwise would be claiming a control that does not exist.

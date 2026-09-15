@@ -16,18 +16,26 @@ import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.data.lock.LockState
 
 /**
- * The biometric button, offered only where it does something.
+ * The biometric button, offered wherever it does something — which is both modes, for different
+ * reasons.
  *
- * That limit is deliberate rather than an omission. `AppLockCoordinator.unlock` is the one way out
- * of the lock and it takes a PIN, so no biometric result can open the soft lock — a button
- * promising otherwise would be a lie with a fingerprint on it. In strict mode the authentication
- * is real work: the Keystore key is bound to a recent one, and this is what gets it released, so
- * the PIN that came back as [UnlockFeedback.HardwareRefused] goes through on the next try.
+ * It used to be shown only in strict mode, on the argument that a PIN is the one way out of a soft
+ * lock. That was never true of the code beside it: `AppLockCoordinator.unlockWithBiometric` opens a
+ * soft lock outright and refuses a strict one, and it had no caller that could ever reach it, so
+ * the feature existed and nobody could use it. A soft lock covers the screen, and a fingerprint is
+ * a perfectly good way past a screen cover; making the user type a PIN after their fingerprint was
+ * accepted would be the theatre.
+ *
+ * In strict mode the authentication is different work: the Keystore key is bound to a recent one,
+ * and this is what gets it released, so the PIN that came back as
+ * [UnlockFeedback.HardwareRefused] goes through on the next try. The view model already tells the
+ * two apart by what `unlockWithBiometric` returns.
  */
 @Composable
 internal fun BiometricAction(state: AppLockUiState, onResult: (Boolean) -> Unit) {
     val authenticate = rememberBiometricAuthentication(onResult)
-    if (state.lockState == LockState.LockedStrict && authenticate != null) {
+    val locked = state.lockState == LockState.Locked || state.lockState == LockState.LockedStrict
+    if (locked && authenticate != null) {
         OutlinedButton(
             onClick = authenticate,
             enabled = !state.checking,

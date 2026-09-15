@@ -12,11 +12,19 @@ import ir.vmessenger.core.datastore.PinVerifierBlob
 import ir.vmessenger.core.datastore.PrivacyPreferences
 import ir.vmessenger.core.datastore.SecurityPreferences
 import ir.vmessenger.domain.usecase.settings.SecureWipeUseCase
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
@@ -101,7 +109,13 @@ object AppLockWipePolicy {
         val byWall = owedMs - (nowWallMs - lastWallMs)
         val rebooted = nowElapsedMs < lastElapsedMs
         val byElapsed = if (rebooted) byWall else owedMs - (nowElapsedMs - lastElapsedMs)
-        return maxOf(byWall, byElapsed).coerceAtLeast(0L)
+        // Clamped above as well as below. A *backward* jump in the wall clock — an RTC that resets
+        // to 1970, a user correcting a date they had set wrong, NTP pulling a fast clock back —
+        // makes `byWall` larger than the debt, and nothing decays it: the TooSoon branch runs
+        // before the PIN is checked, so the right PIN is never tested and the stamp is never
+        // cleared. The user is shut out of an intact database for the size of the jump, which can
+        // be decades. The debt can never exceed itself.
+        return maxOf(byWall, byElapsed).coerceIn(0L, owedMs)
     }
 }
 
@@ -151,6 +165,15 @@ class AppLockCoordinator @Inject constructor(
     // strict mode forbids, and this class is built while the app is still locked.
     private val secureWipe: Provider<SecureWipeUseCase>,
 ) {
+    /** Process-lived, unlike a view model's: see [onBackgrounded] for why that matters. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /** Monotonic stamp of when the app left the foreground; null while it is in front. */
+    @Volatile
+    private var awaySince: Long? = null
+
+    private var armJob: Job? = null
+
     private val _state = MutableStateFlow(LockState.Undetermined)
     val state: StateFlow<LockState> = _state.asStateFlow()
 
@@ -159,7 +182,11 @@ class AppLockCoordinator @Inject constructor(
     val wipeOnFailedAttempts: Flow<Boolean> = privacyPreferences.wipeOnFailedAttempts
 
     /** Called at startup and whenever the auto-lock timeout expires in the background. */
-    suspend fun lockIfEnabled() {
+    suspend fun lockIfEnabled() = withContext(Dispatchers.IO) {
+        lockIfEnabledInternal()
+    }
+
+    private suspend fun lockIfEnabledInternal() {
         if (!privacyPreferences.appLockEnabled.first()) {
             _state.value = LockState.Unlocked
             return
@@ -341,6 +368,45 @@ class AppLockCoordinator @Inject constructor(
      * for "we have not decided yet", and it leaves the navigation graph composed so nothing is
      * lost if the answer turns out to be "no lock needed".
      */
+    /**
+     * The app left the foreground: cover it, and start the clock that will lock it.
+     *
+     * The timer lives here, on a scope that lasts as long as the process, because it used to live
+     * in MainViewModel's — and `viewModelScope` dies with the *ViewModel*, not the process. Leaving
+     * the app with Back finishes the activity, which clears the view model store, which cancelled
+     * the timer mid-delay while the process carried on running as a foreground service. The lock
+     * then never armed at all: notifications kept showing the sender and the message to a phone
+     * whose owner had set a PIN, and under strict mode delivery simply continued.
+     *
+     * The wait is re-read from [SystemClock.elapsedRealtime] each time round rather than handed to
+     * a single `delay`. A coroutine delay is scheduled against uptime, which stops while the device
+     * is in deep sleep — a phone in a pocket, which is precisely the case the timer exists for.
+     */
+    fun onBackgrounded(elapsedRealtimeMs: Long) {
+        awaySince = elapsedRealtimeMs
+        armJob?.cancel()
+        armJob = scope.launch {
+            obscureIfEnabled()
+            val timeoutMs = privacyPreferences.autoLockMinutes.first() * MILLIS_PER_MINUTE
+            while (isActive) {
+                val since = awaySince ?: return@launch
+                val remaining = timeoutMs - (SystemClock.elapsedRealtime() - since)
+                if (remaining <= 0L) break
+                delay(remaining.coerceAtMost(ARM_POLL_MS))
+            }
+            lockIfEnabled()
+        }
+    }
+
+    /** The app came back: stop the clock, and decide whether it ran out while it was away. */
+    suspend fun onForegrounded(elapsedRealtimeMs: Long) {
+        armJob?.cancel()
+        val since = awaySince ?: return
+        awaySince = null
+        val timeoutMs = privacyPreferences.autoLockMinutes.first() * MILLIS_PER_MINUTE
+        if (elapsedRealtimeMs - since >= timeoutMs) lockIfEnabled() else revealIfObscured()
+    }
+
     suspend fun obscureIfEnabled() {
         if (_state.value != LockState.Unlocked) return
         if (privacyPreferences.appLockEnabled.first()) _state.value = LockState.Undetermined
@@ -451,6 +517,11 @@ class AppLockCoordinator @Inject constructor(
     }
 
     private companion object {
+        const val MILLIS_PER_MINUTE = 60_000L
+
+        /** How often the arming loop re-reads the monotonic clock while it waits. */
+        const val ARM_POLL_MS = 30_000L
+
         const val TAG = "AppLock"
     }
 }

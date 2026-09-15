@@ -16,14 +16,11 @@ import ir.vmessenger.data.lock.LockState
 import ir.vmessenger.domain.usecase.identity.HasIdentityUseCase
 import ir.vmessenger.navigation.VmRoute
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -83,12 +80,6 @@ class MainViewModel @Inject constructor(
     /** Conversation a tapped message notification asked for; consumed once by the NavHost. */
     val pendingConversationId: StateFlow<String?> = _pendingConversationId.asStateFlow()
 
-    /** Monotonic time the app was last backgrounded; null while it is in the foreground. */
-    private var awaySince: Long? = null
-
-    /** Covers the app and then locks it once the timeout passes, while it is still away. */
-    private var autoLockJob: Job? = null
-
     init {
         viewModelScope.launch {
             // The lock goes up first. Under strict mode the database cannot be opened until the
@@ -133,40 +124,18 @@ class MainViewModel @Inject constructor(
         if (ready) _startRoute.value = if (hasIdentity.get()()) VmRoute.Home else VmRoute.Onboarding
     }
 
-    fun onBackgrounded(elapsedRealtimeMs: Long) {
-        awaySince = elapsedRealtimeMs
-        autoLockJob?.cancel()
-        autoLockJob = viewModelScope.launch {
-            // Cover first, decide after: see AppLockCoordinator.obscureIfEnabled.
-            appLock.obscureIfEnabled()
-            // Then arm the real lock on a timer rather than on the user's return. Waiting for the
-            // return meant strict mode kept delivering, writing and notifying for however long the
-            // phone sat in a pocket — while its own settings copy says nothing arrives while it is
-            // locked. The timer runs in this scope, so it dies with the process; a process that
-            // died was not delivering anything either.
-            delay(privacyPreferences.autoLockMinutes.first() * MILLIS_PER_MINUTE)
-            appLock.lockIfEnabled()
-        }
-    }
-
     /**
-     * Re-arms the lock if the app has been away past the user's timeout.
+     * Forwarded to the coordinator, which owns both the clock and the scope.
      *
      * [elapsedRealtimeMs] is monotonic, deliberately: a timeout measured against the wall clock
      * could be defeated by changing the device date.
      */
+    fun onBackgrounded(elapsedRealtimeMs: Long) {
+        appLock.onBackgrounded(elapsedRealtimeMs)
+    }
+
     fun onForegrounded(elapsedRealtimeMs: Long) {
-        val since = awaySince ?: return
-        awaySince = null
-        autoLockJob?.cancel()
-        viewModelScope.launch {
-            val minutes = privacyPreferences.autoLockMinutes.first()
-            if (elapsedRealtimeMs - since >= minutes * MILLIS_PER_MINUTE) {
-                appLock.lockIfEnabled()
-            } else {
-                appLock.revealIfObscured()
-            }
-        }
+        viewModelScope.launch { appLock.onForegrounded(elapsedRealtimeMs) }
     }
 
     private companion object {
