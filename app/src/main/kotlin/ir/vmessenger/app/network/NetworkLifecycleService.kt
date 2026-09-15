@@ -122,17 +122,27 @@ class NetworkLifecycleService : Service() {
         // Stand down rather than crash. Under the strict app lock there is no passphrase to open
         // the database with, so there is nothing this service can usefully do; NOT_STICKY stops
         // the system bringing it straight back into the same wall. The unlock starts it again.
-        if (databaseKeyProvider.isLocked) {
+        //
+        // The flag alone is not enough and used to be the whole guard. `isLocked` is set when a
+        // process learns the key is behind the lock, and this service runs in processes that may
+        // not have learned it yet — the system's sticky restart and the keep-alive worker both
+        // get here with a warm-up still in flight. So the start itself is the test: building the
+        // coordinator provisions a DAO, which is precisely the thing that throws, and catching it
+        // covers both the flag and the race.
+        val refused = databaseKeyProvider.isLocked || runCatching {
+            networkCoordinator.get().start(
+                listenPort = listenPort,
+                directHost = directHost,
+                directPort = directPort,
+            )
+        }.onFailure { AppLogger.warn(TAG, "network start refused: ${it.message}") }.isFailure
+        return if (refused) {
             AppLogger.warn(TAG, "started while the app lock holds the database shut; standing down")
             stopSelf(startId)
-            return START_NOT_STICKY
+            START_NOT_STICKY
+        } else {
+            START_STICKY
         }
-        networkCoordinator.get().start(
-            listenPort = listenPort,
-            directHost = directHost,
-            directPort = directPort,
-        )
-        return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

@@ -16,6 +16,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.designsystem.LocalAppObscured
 import ir.vmessenger.core.designsystem.component.AttachmentSheet
 import ir.vmessenger.core.designsystem.component.Composer
 import ir.vmessenger.core.designsystem.component.ComposerState
@@ -249,8 +250,13 @@ private fun ConversationEffects(
     // Marks the thread read (and sends read receipts) while it is on screen, and silences its
     // notifications; re-runs on every new message so one arriving with the chat open is read
     // immediately rather than on the next visit.
-    LifecycleResumeEffect(newestId) {
-        viewModel.onVisible()
+    // Keyed on [LocalAppObscured] as well: this screen stays composed behind the app lock, and
+    // "visible" there would mean marking the conversation read, telling the notifier to stay quiet
+    // and sending the peer a read receipt for messages nobody has been shown. A read receipt cannot
+    // be retracted, and the unread state it clears is not recoverable either.
+    val obscured = LocalAppObscured.current
+    LifecycleResumeEffect(newestId, obscured) {
+        if (!obscured) viewModel.onVisible()
         onPauseOrDispose { viewModel.onHidden() }
     }
 }

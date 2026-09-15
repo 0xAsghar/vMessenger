@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Base64
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
@@ -15,6 +16,8 @@ private val PIN_NONCE = stringPreferencesKey("app_lock_nonce")
 private val PIN_VERIFIER = stringPreferencesKey("app_lock_verifier")
 private val STRICT_WRAPPED_DB = stringPreferencesKey("app_lock_strict_db")
 private val ATTEMPTS = intPreferencesKey("app_lock_attempts")
+private val LAST_FAIL_WALL = longPreferencesKey("app_lock_last_fail_wall")
+private val LAST_FAIL_ELAPSED = longPreferencesKey("app_lock_last_fail_elapsed")
 
 /** The PIN verifier, the strict-mode passphrase copy, and the failed-attempt count. */
 data class PinVerifierBlob(val salt: ByteArray, val nonce: ByteArray, val sealed: ByteArray) {
@@ -75,17 +78,37 @@ class AppLockPreferences @Inject constructor(
      * Write-ahead on purpose: incrementing only after a failed check lets someone force-stop the
      * app between the guess and the write and go on guessing with the counter never moving.
      */
-    suspend fun recordAttempt(): Int {
+    suspend fun recordAttempt(wallMs: Long, elapsedMs: Long): Int {
         var next = 0
         context.securityDataStore.edit {
             next = (it[ATTEMPTS] ?: 0) + 1
             it[ATTEMPTS] = next
+            it[LAST_FAIL_WALL] = wallMs
+            it[LAST_FAIL_ELAPSED] = elapsedMs
         }
         return next
     }
 
     suspend fun clearAttempts() {
-        context.securityDataStore.edit { it.remove(ATTEMPTS) }
+        context.securityDataStore.edit {
+            it.remove(ATTEMPTS)
+            it.remove(LAST_FAIL_WALL)
+            it.remove(LAST_FAIL_ELAPSED)
+        }
+    }
+
+    /**
+     * When the last attempt was made, by two clocks, or null if none has been.
+     *
+     * Both, because neither is enough alone. `elapsedRealtime` cannot be moved by changing the
+     * device date but resets on reboot; the wall clock survives a reboot but the person holding
+     * the phone can set it. Stored together, the wait is over only when both say so, and a reboot
+     * is detectable because the stored elapsed value lands in the future.
+     */
+    suspend fun lastFailure(): Pair<Long, Long>? {
+        val prefs = context.securityDataStore.data.first()
+        val wall = prefs[LAST_FAIL_WALL] ?: return null
+        return wall to (prefs[LAST_FAIL_ELAPSED] ?: 0L)
     }
 
     /** Removes the lock and leaves everything else in the store alone. */
@@ -96,6 +119,8 @@ class AppLockPreferences @Inject constructor(
             it.remove(PIN_VERIFIER)
             it.remove(STRICT_WRAPPED_DB)
             it.remove(ATTEMPTS)
+            it.remove(LAST_FAIL_WALL)
+            it.remove(LAST_FAIL_ELAPSED)
         }
     }
 }

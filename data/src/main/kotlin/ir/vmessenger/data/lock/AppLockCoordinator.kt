@@ -125,10 +125,6 @@ class AppLockCoordinator @Inject constructor(
     // strict mode forbids, and this class is built while the app is still locked.
     private val secureWipe: Provider<SecureWipeUseCase>,
 ) {
-    /** Monotonic stamp of the last wrong PIN; null until one is entered in this process. */
-    @Volatile
-    private var lastFailureElapsedMs: Long? = null
-
     private val _state = MutableStateFlow(LockState.Undetermined)
     val state: StateFlow<LockState> = _state.asStateFlow()
 
@@ -177,17 +173,14 @@ class AppLockCoordinator @Inject constructor(
     suspend fun unlock(pin: CharArray): UnlockResult {
         val blob = lockPreferences.getVerifier() ?: return noVerifierStored()
         val owed = backoffRemainingMs()
-        val attempt = if (owed == 0L) lockPreferences.recordAttempt() else 0
+        val attempt = if (owed == 0L) lockPreferences.recordAttempt(nowWall(), nowElapsed()) else 0
         val verifier = PinVerifier.Verifier(blob.salt, blob.nonce, blob.sealed)
         return when {
             // Checked before the PIN is, and before the attempt is recorded: a guess that is not
             // allowed yet must not cost the guesser an attempt, or holding the key down would
             // drive the count to the wipe threshold without ever testing a PIN.
             owed > 0L -> UnlockResult.TooSoon(owed)
-            !pinVerifier.matches(pin, verifier) -> {
-                lastFailureElapsedMs = SystemClock.elapsedRealtime()
-                wrongPin(attempt)
-            }
+            !pinVerifier.matches(pin, verifier) -> wrongPin(attempt)
             // The hardware refused: authenticated to us, but not recently enough for the Keystore.
             // The PIN was *right*, so the attempt is given back — otherwise a biometric
             // re-enrolment could march someone toward erasing their data through no fault of
@@ -217,7 +210,12 @@ class AppLockCoordinator @Inject constructor(
         return true
     }
 
-    private fun markUnlocked() {
+    private suspend fun markUnlocked() {
+        // The count is *consecutive* wrong PINs, and only getting one right says so. Without this
+        // it was a lifetime total: with the wipe armed, the tenth wrong PIN a user ever typed
+        // erased their account, months of correct unlocks in between counting for nothing — and
+        // the backoff grew on the same number, so a typo years ago still cost a wait today.
+        lockPreferences.clearAttempts()
         databaseKeyProvider.unlock()
         _state.value = LockState.Unlocked
     }
@@ -258,18 +256,29 @@ class AppLockCoordinator @Inject constructor(
     /**
      * How long is still owed before the next guess is allowed, or zero.
      *
-     * Measured on [SystemClock.elapsedRealtime] for the same reason the auto-lock is: a wait
-     * measured against the wall clock is defeated by changing the device date. It is held in
-     * memory rather than on disk, so a reboot forgives the wait currently being served — but not
-     * the count it was derived from, so the next one is just as long. Rebooting between guesses
-     * costs more than waiting.
+     * Persisted, and by two clocks. In memory it was worth nothing: force-stopping the app
+     * between guesses cleared the stamp and bought a free attempt every time, which is a thing the
+     * person guessing controls and can do in a second. On disk, and requiring *both* the wall
+     * clock and `elapsedRealtime` to have run out, it survives a kill; a reboot is detected
+     * (the stored elapsed value lands in the future) and falls back to the wall clock alone.
      */
     private suspend fun backoffRemainingMs(): Long {
-        val attempts = lockPreferences.failedAttempts()
-        val owed = AppLockWipePolicy.backoffMs(attempts)
-        val since = lastFailureElapsedMs ?: return 0L
-        return (owed - (SystemClock.elapsedRealtime() - since)).coerceAtLeast(0L)
+        val owed = AppLockWipePolicy.backoffMs(lockPreferences.failedAttempts())
+        val last = lockPreferences.lastFailure() ?: return 0L
+        val (wallAt, elapsedAt) = last
+        val byWall = owed - (nowWall() - wallAt)
+        // The stored elapsed value being in the future means the device rebooted, which resets
+        // that clock — fall back to the wall clock alone rather than trusting a difference across
+        // a boot. Otherwise take whichever says more time is owed: the wall clock can be wound
+        // forward by whoever is holding the phone, and elapsedRealtime cannot.
+        val nowElapsed = nowElapsed()
+        val byElapsed = if (nowElapsed < elapsedAt) byWall else owed - (nowElapsed - elapsedAt)
+        return maxOf(byWall, byElapsed).coerceAtLeast(0L)
     }
+
+    private fun nowWall(): Long = System.currentTimeMillis()
+
+    private fun nowElapsed(): Long = SystemClock.elapsedRealtime()
 
     /**
      * The lock is switched on with no PIN stored, so open it and switch it off.
@@ -292,6 +301,30 @@ class AppLockCoordinator @Inject constructor(
         databaseKeyProvider.unlock()
         _state.value = LockState.Unlocked
         return UnlockResult.NoLockSet
+    }
+
+    /**
+     * Covers the app the instant it leaves the foreground, before deciding whether to lock it.
+     *
+     * Separate from [lockIfEnabled] because the two answer different questions at different times.
+     * Whether to *demand a PIN* depends on how long the app stays away, which is not known yet.
+     * Whether to *stop showing the last screen* does not depend on anything: the recents thumbnail
+     * and the first frame on resume are both taken before any asynchronous decision can land, so a
+     * lock that resolves a few frames late shows whoever picked the phone up the conversation that
+     * was open — which is the entire thing the default mode exists to prevent.
+     *
+     * [LockState.Undetermined] draws neither the app nor the lock screen, which is exactly right
+     * for "we have not decided yet", and it leaves the navigation graph composed so nothing is
+     * lost if the answer turns out to be "no lock needed".
+     */
+    suspend fun obscureIfEnabled() {
+        if (_state.value != LockState.Unlocked) return
+        if (privacyPreferences.appLockEnabled.first()) _state.value = LockState.Undetermined
+    }
+
+    /** The app came back inside the auto-lock window: uncover it without asking for anything. */
+    fun revealIfObscured() {
+        if (_state.value == LockState.Undetermined) _state.value = LockState.Unlocked
     }
 
     /** Turns the screen gate on. Strict mode is a separate, deliberate step. */

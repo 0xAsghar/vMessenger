@@ -35,9 +35,7 @@ class KeystoreDatabasePassphraseSource @Inject constructor(
         // No ordinary copy is the *normal* state under strict app lock, and minting a fresh
         // passphrase here would abandon the real database rather than open it. This is the
         // single most destructive thing this class could do, so it refuses instead.
-        check(lockPreferences.getStrictWrappedPassphrase() == null) {
-            "the database passphrase is behind the app lock; authenticate before opening it"
-        }
+        if (lockPreferences.getStrictWrappedPassphrase() != null) throw DatabaseLockedException()
         val passphrase = keyStoreKeyManager.newDatabasePassphrase()
         securityPreferences.setWrappedDbPassphrase(
             keyStoreKeyManager.wrap(KeyStoreKeyManager.ALIAS_DATABASE, passphrase),
@@ -54,6 +52,16 @@ class KeystoreDatabasePassphraseSource @Inject constructor(
  * a race between the application's async warm-up and the splash screen can
  * never create two passphrases — which would leave the database unopenable.
  */
+/**
+ * The database cannot be opened because the strict app lock holds the only key.
+ *
+ * Typed rather than a bare `check`, so a caller can tell "you have to authenticate first" apart
+ * from a real failure, and so [DatabaseKeyProvider] can record it.
+ */
+class DatabaseLockedException : IllegalStateException(
+    "the database passphrase is behind the app lock; authenticate before opening it",
+)
+
 @Singleton
 class DatabaseKeyProvider @Inject constructor(
     private val source: DatabasePassphraseSource,
@@ -77,8 +85,25 @@ class DatabaseKeyProvider @Inject constructor(
         // Locked is not "not loaded yet": loading is exactly what must not happen.
         if (locked || cachedPassphrase != null) return
         mutex.withLock {
-            if (!locked && cachedPassphrase == null) cachedPassphrase = source.load()
+            if (!locked && cachedPassphrase == null) cachedPassphrase = loadOrRecordLocked()
         }
+    }
+
+    /**
+     * Loads, and if the answer is "the app lock has the key", remembers that.
+     *
+     * [locked] used to be set only by [lock], which only the lock screen's own view model calls —
+     * so in a process where the Activity never runs (the system restarting a sticky service, the
+     * keep-alive worker waking on its own) the flag read false while the key was very much behind
+     * an authentication. Every background stand-down guard that consulted [isLocked] was therefore
+     * dead in exactly the processes it was written for. The strict blob on disk is the durable
+     * truth; this is where a process that never saw the UI learns it.
+     */
+    private suspend fun loadOrRecordLocked(): ByteArray = try {
+        source.load()
+    } catch (e: DatabaseLockedException) {
+        locked = true
+        throw e
     }
 
     /**
@@ -160,7 +185,7 @@ class DatabaseKeyProvider @Inject constructor(
      * simply waited on rather than duplicated.
      */
     private fun loadBlocking(): ByteArray {
-        check(!locked) { "the database is locked; the user has not authenticated" }
+        if (locked) throw DatabaseLockedException()
         AppLogger.warn(TAG, "database passphrase needed before init finished; loading it synchronously")
         return runBlocking {
             initialize()

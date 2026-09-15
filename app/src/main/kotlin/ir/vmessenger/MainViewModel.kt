@@ -15,6 +15,8 @@ import ir.vmessenger.data.lock.LockState
 import ir.vmessenger.domain.usecase.identity.HasIdentityUseCase
 import ir.vmessenger.navigation.VmRoute
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -83,6 +85,9 @@ class MainViewModel @Inject constructor(
     /** Monotonic time the app was last backgrounded; null while it is in the foreground. */
     private var awaySince: Long? = null
 
+    /** Covers the app and then locks it once the timeout passes, while it is still away. */
+    private var autoLockJob: Job? = null
+
     init {
         viewModelScope.launch {
             // The lock goes up first. Under strict mode the database cannot be opened until the
@@ -119,6 +124,18 @@ class MainViewModel @Inject constructor(
 
     fun onBackgrounded(elapsedRealtimeMs: Long) {
         awaySince = elapsedRealtimeMs
+        autoLockJob?.cancel()
+        autoLockJob = viewModelScope.launch {
+            // Cover first, decide after: see AppLockCoordinator.obscureIfEnabled.
+            appLock.obscureIfEnabled()
+            // Then arm the real lock on a timer rather than on the user's return. Waiting for the
+            // return meant strict mode kept delivering, writing and notifying for however long the
+            // phone sat in a pocket — while its own settings copy says nothing arrives while it is
+            // locked. The timer runs in this scope, so it dies with the process; a process that
+            // died was not delivering anything either.
+            delay(privacyPreferences.autoLockMinutes.first() * MILLIS_PER_MINUTE)
+            appLock.lockIfEnabled()
+        }
     }
 
     /**
@@ -130,9 +147,14 @@ class MainViewModel @Inject constructor(
     fun onForegrounded(elapsedRealtimeMs: Long) {
         val since = awaySince ?: return
         awaySince = null
+        autoLockJob?.cancel()
         viewModelScope.launch {
             val minutes = privacyPreferences.autoLockMinutes.first()
-            if (elapsedRealtimeMs - since >= minutes * MILLIS_PER_MINUTE) appLock.lockIfEnabled()
+            if (elapsedRealtimeMs - since >= minutes * MILLIS_PER_MINUTE) {
+                appLock.lockIfEnabled()
+            } else {
+                appLock.revealIfObscured()
+            }
         }
     }
 
