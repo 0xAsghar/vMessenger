@@ -1,5 +1,6 @@
 package ir.vmessenger.data.lock
 
+import android.os.SystemClock
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.crypto.keystore.KeyStoreKeyManager
 import ir.vmessenger.core.crypto.lock.PinVerifier
@@ -53,10 +54,36 @@ enum class LockState {
 object AppLockWipePolicy {
     const val MAX_FAILED_ATTEMPTS = 10
     const val WARN_AT_REMAINING = 3
+
+    /**
+     * Wrong PINs tolerated at full speed before the wait starts, and how it grows.
+     *
+     * Argon2id already costs half a second to two seconds a guess, which is a real rate limit —
+     * a four-digit keyspace is hours rather than seconds. It is not a *bound*, though, and the
+     * wipe that would bound it is opt-in and off by default, so without this the shipped default
+     * left an unattended phone to be walked through ten thousand guesses. The wait doubles and
+     * caps, so a user who has genuinely forgotten which of their PINs this is loses seconds, and
+     * someone working through the keyspace loses the keyspace.
+     */
+    const val BACKOFF_AFTER_ATTEMPTS = 4
+    const val BACKOFF_BASE_MS = 5_000L
+    const val BACKOFF_MAX_MS = 5 * 60_000L
+
+    /** The wait owed after [attempts] consecutive wrong PINs. */
+    fun backoffMs(attempts: Int): Long {
+        if (attempts < BACKOFF_AFTER_ATTEMPTS) return 0L
+        val doublings = (attempts - BACKOFF_AFTER_ATTEMPTS).coerceAtMost(MAX_DOUBLINGS)
+        return (BACKOFF_BASE_MS shl doublings).coerceAtMost(BACKOFF_MAX_MS)
+    }
+
+    private const val MAX_DOUBLINGS = 16
 }
 
 sealed interface UnlockResult {
     data object Unlocked : UnlockResult
+
+    /** Too many wrong PINs too quickly; [waitMs] is how long is left before the next try. */
+    data class TooSoon(val waitMs: Long) : UnlockResult
     data object NoLockSet : UnlockResult
     data object HardwareRefused : UnlockResult
 
@@ -98,6 +125,10 @@ class AppLockCoordinator @Inject constructor(
     // strict mode forbids, and this class is built while the app is still locked.
     private val secureWipe: Provider<SecureWipeUseCase>,
 ) {
+    /** Monotonic stamp of the last wrong PIN; null until one is entered in this process. */
+    @Volatile
+    private var lastFailureElapsedMs: Long? = null
+
     private val _state = MutableStateFlow(LockState.Undetermined)
     val state: StateFlow<LockState> = _state.asStateFlow()
 
@@ -137,10 +168,18 @@ class AppLockCoordinator @Inject constructor(
      */
     suspend fun unlock(pin: CharArray): UnlockResult {
         val blob = lockPreferences.getVerifier() ?: return noVerifierStored()
-        val attempt = lockPreferences.recordAttempt()
+        val owed = backoffRemainingMs()
+        val attempt = if (owed == 0L) lockPreferences.recordAttempt() else 0
         val verifier = PinVerifier.Verifier(blob.salt, blob.nonce, blob.sealed)
         return when {
-            !pinVerifier.matches(pin, verifier) -> wrongPin(attempt)
+            // Checked before the PIN is, and before the attempt is recorded: a guess that is not
+            // allowed yet must not cost the guesser an attempt, or holding the key down would
+            // drive the count to the wipe threshold without ever testing a PIN.
+            owed > 0L -> UnlockResult.TooSoon(owed)
+            !pinVerifier.matches(pin, verifier) -> {
+                lastFailureElapsedMs = SystemClock.elapsedRealtime()
+                wrongPin(attempt)
+            }
             // The hardware refused: authenticated to us, but not recently enough for the Keystore.
             // The PIN was *right*, so the attempt is given back — otherwise a biometric
             // re-enrolment could march someone toward erasing their data through no fault of
@@ -206,6 +245,22 @@ class AppLockCoordinator @Inject constructor(
             AppLogger.warn(TAG, "strict mode was enabled without removing the ordinary key; removing it now")
             securityPreferences.clearWrappedDbPassphrase()
         }
+    }
+
+    /**
+     * How long is still owed before the next guess is allowed, or zero.
+     *
+     * Measured on [SystemClock.elapsedRealtime] for the same reason the auto-lock is: a wait
+     * measured against the wall clock is defeated by changing the device date. It is held in
+     * memory rather than on disk, so a reboot forgives the wait currently being served — but not
+     * the count it was derived from, so the next one is just as long. Rebooting between guesses
+     * costs more than waiting.
+     */
+    private suspend fun backoffRemainingMs(): Long {
+        val attempts = lockPreferences.failedAttempts()
+        val owed = AppLockWipePolicy.backoffMs(attempts)
+        val since = lastFailureElapsedMs ?: return 0L
+        return (owed - (SystemClock.elapsedRealtime() - since)).coerceAtLeast(0L)
     }
 
     /**

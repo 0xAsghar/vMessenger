@@ -39,6 +39,9 @@ import ir.vmessenger.data.lock.LockState
 
 private val LockIconSize = 40.dp
 
+/** The wait is reported in whole seconds, rounded up, so it never reads as zero while it lasts. */
+private const val MILLIS_PER_SECOND = 1_000L
+
 /** The keypad against the screen edges would be a row of keys that are hard to miss by accident. */
 private const val KEYPAD_WIDTH_FRACTION = 0.88f
 
@@ -194,6 +197,10 @@ private fun CheckingRow() {
 private fun FeedbackText(feedback: UnlockFeedback, wipeArmed: Boolean) {
     val text = when (feedback) {
         is UnlockFeedback.Wrong -> wrongText(attempt = feedback.attempt, wipeArmed = wipeArmed)
+        is UnlockFeedback.TooSoon -> stringResource(
+            R.string.app_lock_too_soon,
+            VmTextFormat.persianDigits(((feedback.waitMs + MILLIS_PER_SECOND - 1) / MILLIS_PER_SECOND).toString()),
+        )
         UnlockFeedback.HardwareRefused -> stringResource(R.string.app_lock_hardware_refused)
         UnlockFeedback.BiometricDone -> stringResource(R.string.app_lock_biometric_done)
         UnlockFeedback.BiometricFailed -> stringResource(R.string.app_lock_biometric_failed)

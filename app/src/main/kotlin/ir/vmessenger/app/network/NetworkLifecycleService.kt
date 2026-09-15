@@ -49,6 +49,9 @@ class NetworkLifecycleService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+    /** Whether `startForeground()` has run; see [enterForeground]. */
+    private var foregroundStarted = false
+
     override fun onCreate() {
         super.onCreate()
         isRunning = true
@@ -61,6 +64,13 @@ class NetworkLifecycleService : Service() {
             appLock.get().state.collect { state ->
                 if (state == LockState.LockedStrict) {
                     AppLogger.info(TAG, "strict app lock engaged; stopping the network service")
+                    // The notification first, even though this service is about to die. Android
+                    // gives a service started with startForegroundService() five seconds to call
+                    // startForeground(), and killing it inside that window is
+                    // ForegroundServiceDidNotStartInTimeException — which is how this fix first
+                    // announced itself. enterForeground() is idempotent, so the ordinary path
+                    // having already run costs nothing.
+                    enterForeground()
                     stopSelf()
                 }
             }
@@ -73,7 +83,15 @@ class NetworkLifecycleService : Service() {
         super.onDestroy()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    /**
+     * Satisfies the foreground-service contract, once.
+     *
+     * Both the ordinary start and the lock-engaged stop go through here, because whichever of
+     * them happens first has to be the one that calls `startForeground()`.
+     */
+    private fun enterForeground() {
+        if (foregroundStarted) return
+        foregroundStarted = true
         val notification = networkNotificationManager.buildForegroundNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
@@ -84,6 +102,10 @@ class NetworkLifecycleService : Service() {
         } else {
             startForeground(NetworkNotificationManager.NOTIFICATION_ID_NETWORK, notification)
         }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        enterForeground()
         val listenPort = intent?.getIntExtra(EXTRA_LISTEN_PORT, DEFAULT_LISTEN_PORT) ?: DEFAULT_LISTEN_PORT
         val forwardPort = intent?.getIntExtra(EXTRA_FORWARD_PORT, listenPort) ?: listenPort
         val useDevBootstrap = intent?.getBooleanExtra(EXTRA_USE_DEV_BOOTSTRAP, false) ?: false

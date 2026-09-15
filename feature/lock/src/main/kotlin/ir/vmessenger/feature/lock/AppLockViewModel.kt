@@ -25,6 +25,9 @@ sealed interface UnlockFeedback {
     /** [attempt] is the coordinator's running total, which survives a force-stop. */
     data class Wrong(val attempt: Int) : UnlockFeedback
 
+    /** Too many wrong PINs too quickly; [waitMs] is what is left of the wait. */
+    data class TooSoon(val waitMs: Long) : UnlockFeedback
+
     /** The PIN was right and the hardware still would not release the key. Not a wrong PIN. */
     data object HardwareRefused : UnlockFeedback
     data object BiometricDone : UnlockFeedback
@@ -112,6 +115,7 @@ class AppLockViewModel @Inject constructor(
 
     private fun UnlockResult.feedback(): UnlockFeedback? = when (this) {
         is UnlockResult.Wrong -> UnlockFeedback.Wrong(attempt)
+        is UnlockResult.TooSoon -> UnlockFeedback.TooSoon(waitMs)
         UnlockResult.HardwareRefused -> UnlockFeedback.HardwareRefused
         // Wiped never reaches a frame: the wipe tears the process down. Reporting it as some
         // other failure would only be wrong in the case where something went wrong.
