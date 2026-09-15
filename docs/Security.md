@@ -238,8 +238,10 @@ key, and what it throttles is device-credential attempts. Three consequences, al
   puts a confirmation in front of the user that names that loss and says to take a backup first.
   It is a warning, not a gate — nothing records whether a backup was taken, so nothing can check
   one, and saying otherwise would be claiming a control that does not exist.
-- **Background delivery stops while locked.** `DatabaseKeyProvider.lock()` closes the database and
-  makes `getPassphrase()` fail rather than silently re-unwrap, and the passphrase source refuses to
+- **Background delivery stops while locked.** `AppLockCoordinator` stops the network stack and
+  closes the database, then `DatabaseKeyProvider.lock()` makes `getPassphrase()` fail rather than
+  silently re-unwrap — it drops the key, it does not close anything itself, and its own KDoc says
+  the caller must close first. The passphrase source refuses to
   mint a fresh passphrase while a strict blob exists — minting there would abandon the real
   database rather than open it. Every background entry point degrades instead of crashing.
 - **What strict mode protects is the key at rest, not the key in a running process.** A cold start

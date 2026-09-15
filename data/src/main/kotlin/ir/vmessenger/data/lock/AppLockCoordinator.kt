@@ -147,8 +147,9 @@ sealed interface UnlockResult {
  * stops the person who picked your phone up, and it adds nothing at rest, because the ordinary
  * Keystore key is deliberately usable without authentication so the network service can decrypt
  * while the screen is off. Strict mode re-wraps the database passphrase under a second key the
- * hardware refuses to use until the user authenticates — which is what moves the rate limiting into
- * the TEE, where a short PIN is genuinely strong — and pays for it by stopping delivery while
+ * hardware refuses to use until the user authenticates — so the database key cannot be produced at
+ * all without one, which is a different and stronger claim than the app's PIN being checked in
+ * hardware; it is not, and never was — and pays for it by stopping delivery while
  * locked.
  *
  * The Room database is injected through a [Provider] because locking has to *close* it: SQLCipher
@@ -375,20 +376,6 @@ class AppLockCoordinator @Inject constructor(
     }
 
     /**
-     * Covers the app the instant it leaves the foreground, before deciding whether to lock it.
-     *
-     * Separate from [lockIfEnabled] because the two answer different questions at different times.
-     * Whether to *demand a PIN* depends on how long the app stays away, which is not known yet.
-     * Whether to *stop showing the last screen* does not depend on anything: the recents thumbnail
-     * and the first frame on resume are both taken before any asynchronous decision can land, so a
-     * lock that resolves a few frames late shows whoever picked the phone up the conversation that
-     * was open — which is the entire thing the default mode exists to prevent.
-     *
-     * [LockState.Undetermined] draws neither the app nor the lock screen, which is exactly right
-     * for "we have not decided yet", and it leaves the navigation graph composed so nothing is
-     * lost if the answer turns out to be "no lock needed".
-     */
-    /**
      * The app left the foreground: cover it, and start the clock that will lock it.
      *
      * The timer lives here, on a scope that lasts as long as the process, because it used to live
@@ -461,8 +448,9 @@ class AppLockCoordinator @Inject constructor(
     /**
      * Removes the lock entirely.
      *
-     * Refuses while strict mode still holds the key, because clearing the lock would otherwise
-     * delete the only way to open the database. The caller turns strict mode off first.
+     * Turns strict mode off first when it is on, because clearing the lock wipes the store the
+     * strict blob lives in and that would delete the only way to open the database. If that fails,
+     * so does this — better a switch that refuses than an install that cannot be opened.
      */
     suspend fun clearLock(): Boolean {
         val blocked = (privacyPreferences.strictLockEnabled.first() && !disableStrictMode()) ||

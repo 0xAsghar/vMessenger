@@ -45,14 +45,6 @@ class KeystoreDatabasePassphraseSource @Inject constructor(
 }
 
 /**
- * Caches the unwrapped SQLCipher passphrase for the process lifetime.
- *
- * [initialize] is idempotent and safe to call concurrently: the first caller
- * unwraps (or creates) the passphrase under [mutex] while the others wait, so
- * a race between the application's async warm-up and the splash screen can
- * never create two passphrases — which would leave the database unopenable.
- */
-/**
  * The database cannot be opened because the strict app lock holds the only key.
  *
  * Typed rather than a bare `check`, so a caller can tell "you have to authenticate first" apart
@@ -62,6 +54,14 @@ class DatabaseLockedException : IllegalStateException(
     "the database passphrase is behind the app lock; authenticate before opening it",
 )
 
+/**
+ * Caches the unwrapped SQLCipher passphrase for the process lifetime.
+ *
+ * [initialize] is idempotent and safe to call concurrently: the first caller
+ * unwraps (or creates) the passphrase under [mutex] while the others wait, so
+ * a race between the application's async warm-up and the splash screen can
+ * never create two passphrases — which would leave the database unopenable.
+ */
 @Singleton
 class DatabaseKeyProvider @Inject constructor(
     private val source: DatabasePassphraseSource,
