@@ -473,6 +473,11 @@ reopens a session every fifteen seconds forever (§8.2).
 A profile update is accepted only for a higher `revision` than the one already stored, and never
 overwrites a name the user typed for that contact themselves.
 
+**The app currently only ever sends the display name.** The avatar fields are carried, and the
+receiving side stores and renders a photo a peer sends, but nothing in the app lets a user choose
+one — so in practice no vMessenger client produces them. The wire format is ready; the picker is
+not written.
+
 A delete that arrives before the message it names, or during that message's attachment transfer,
 is stored as a tombstone and applied when the message lands.
 
