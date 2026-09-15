@@ -81,7 +81,10 @@ class AppLockCoordinator @Inject constructor(
     private val keyStoreKeyManager: KeyStoreKeyManager,
     private val databaseKeyProvider: DatabaseKeyProvider,
     private val database: Provider<VMessengerDatabase>,
-    private val secureWipe: SecureWipeUseCase,
+    // Provider for the same reason as [database] above: the wipe coordinator holds the database
+    // directly, so injecting it eagerly opens the database at construction — which is exactly what
+    // strict mode forbids, and this class is built while the app is still locked.
+    private val secureWipe: Provider<SecureWipeUseCase>,
 ) {
     private val _state = MutableStateFlow(LockState.Unlocked)
     val state: StateFlow<LockState> = _state.asStateFlow()
@@ -162,7 +165,7 @@ class AppLockCoordinator @Inject constructor(
         val armed = privacyPreferences.wipeOnFailedAttempts.first()
         if (!armed || attempt < AppLockWipePolicy.MAX_FAILED_ATTEMPTS) return UnlockResult.Wrong(attempt)
         AppLogger.warn(TAG, "failed attempt limit reached; wiping")
-        secureWipe()
+        secureWipe.get()()
         return UnlockResult.Wiped
     }
 

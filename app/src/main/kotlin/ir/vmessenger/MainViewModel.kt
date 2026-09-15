@@ -22,13 +22,18 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import javax.inject.Provider
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
     themePreferences: ThemePreferences,
     privacyPreferences: PrivacyPreferences,
     private val privacy: PrivacyPreferences,
-    private val hasIdentity: HasIdentityUseCase,
+    // Provider, not the use case itself: resolving it builds the identity repository, which
+    // builds the encrypted database, which asks for a passphrase that strict mode keeps behind
+    // the lock. Injecting it directly crashed the activity before it could draw the lock screen
+    // to unlock with — an install nobody could open. It is only ever called after unlock.
+    private val hasIdentity: Provider<HasIdentityUseCase>,
     private val databaseKeyProvider: DatabaseKeyProvider,
     private val appLock: AppLockCoordinator,
 ) : ViewModel() {
@@ -81,7 +86,7 @@ class MainViewModel @Inject constructor(
         // The application starts this off the main thread; the splash waits for it (the call is
         // idempotent) because the identity lookup opens the encrypted database.
         withContext(Dispatchers.IO) { databaseKeyProvider.initialize() }
-        _startRoute.value = if (hasIdentity()) VmRoute.Home else VmRoute.Onboarding
+        _startRoute.value = if (hasIdentity.get()()) VmRoute.Home else VmRoute.Onboarding
     }
 
     fun onBackgrounded(elapsedRealtimeMs: Long) {

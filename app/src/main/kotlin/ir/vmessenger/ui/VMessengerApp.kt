@@ -54,19 +54,26 @@ fun VMessengerApp(
                 color = MaterialTheme.colorScheme.background,
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    NotificationPermissionEffect()
-                    ContactRequestOverlay()
-                    if (startRoute != null) {
-                        VMessengerNavHost(
-                            startRoute = startRoute,
-                            pendingConversationId = pendingConversationId,
-                            onPendingConversationHandled = onPendingConversationHandled,
-                        )
+                    // Nothing but the lock composes while locked, and that is a correctness
+                    // requirement rather than a tidiness one. These siblings of the NavHost own
+                    // view models that reach a DAO, and under strict app lock building a DAO
+                    // builds the database, whose passphrase is behind an authentication that has
+                    // not happened yet — it threw, and the activity died before it could draw the
+                    // very screen the user needed to authenticate with. Drawing them over the lock
+                    // would also have shown incoming contact requests to whoever picked the phone
+                    // up, which is why they are siblings and not a navigation destination.
+                    if (!locked) {
+                        NotificationPermissionEffect()
+                        ContactRequestOverlay()
+                        if (startRoute != null) {
+                            VMessengerNavHost(
+                                startRoute = startRoute,
+                                pendingConversationId = pendingConversationId,
+                                onPendingConversationHandled = onPendingConversationHandled,
+                            )
+                        }
+                        AppAlertBanner(modifier = Modifier.align(Alignment.TopCenter))
                     }
-                    AppAlertBanner(modifier = Modifier.align(Alignment.TopCenter))
-                    // LAST child of the root Box, not a navigation destination. The contact-request
-                    // overlay and the alert banner above are siblings of the NavHost, so a
-                    // route-level gate would have shown incoming contact requests over the lock.
                     if (locked) lockContent()
                 }
             }
