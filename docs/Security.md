@@ -238,6 +238,16 @@ rather than by this app. Three consequences, all deliberate:
   makes `getPassphrase()` fail rather than silently re-unwrap, and the passphrase source refuses to
   mint a fresh passphrase while a strict blob exists — minting there would abandon the real
   database rather than open it. Every background entry point degrades instead of crashing.
+- **What strict mode protects is the key at rest, not the key in a running process.** A cold start
+  — a stolen device, a rebooted one, an app the system has killed — cannot open the database
+  without authentication, and that is the property the mode exists for. A *locked but still
+  running* app is weaker: the passphrase stays in memory inside SQLCipher's open helper for the
+  life of the process, and `lock()` deliberately does not zero it. The first version did, and
+  because Hilt hands that one array straight to `SupportOpenHelperFactory` there was only ever one
+  copy — zeroing it destroyed the process's only key instead of hiding it, and the first unlock
+  came back as `file is not a database` over completely intact data. Scrubbing memory as well
+  needs a rebuildable Room instance or ending the process on lock; neither is done, and claiming
+  the property without doing it would be worse than the gap.
 
 Note what the PIN is **not**: it does not wrap anything. The passphrase is wrapped under the
 Keystore key, and the PIN only gates the screen and drives the authentication that the hardware
@@ -305,7 +315,8 @@ These are real, current gaps. None of them is hidden behind a "future work" labe
 | L4 | **Trust-on-first-use for contact keys** | QR pairing is in-person trust; User Hash pairing trusts whatever key answers for that hash prefix first. The contact detail screen shows the pair's safety number and a "verified" switch, so a comparison is *possible* — but nothing forces it, nothing warns that it has not happened, and the flag has no effect beyond a badge. |
 | L5 | **Nothing verifies that the user actually compared** | A key change is surfaced and can be accepted from the contact screen (§5), which is the honest minimum. It is still one tap: an unattentive user can accept a key change from an attacker exactly as easily as one from a friend who reinstalled. |
 | L6 | **Operator key is a placeholder** | `NetworkConfig.OPERATOR_ED25519_PUBLIC_KEY_HEX` is 64 zeros, so `operatorEd25519PublicKey()` returns null and **no** `SignedNodeRecord` can ever be `OFFICIAL`. This must be set before release, or the operator-trust tier is dead code. |
-| L7 | **Keystore key does not require device unlock by default** | Deliberate (§7.3) so the foreground service can decrypt while the screen is locked. An attacker who compromises the running OS also gets the data. The app lock's strict mode (§7.4) opts out of this, at the cost of background delivery while locked; with the lock off, or on but not strict, this limitation stands unchanged. |
+| L7 | **Keystore key does not require device unlock by default** | Deliberate (§7.3) so the foreground service can decrypt while the screen is locked. An attacker who compromises the running OS also gets the data. The app lock's strict mode (§7.4) opts out of this for the key *at rest*, at the cost of background delivery while locked; with the lock off, or on but not strict, this limitation stands unchanged. |
+| L16 | **A locked app still holds its database key in memory** | Strict mode (§7.4) shuts the database and refuses to reopen it, but the passphrase remains inside SQLCipher's open helper until the process ends, because Hilt hands out one array and zeroing it destroys the process's only key rather than concealing it. So the lock resists someone picking up a running phone, and resists a cold start completely; it does not resist reading the memory of the running process. |
 | L8 | **No initiator identity hiding, no deniability** | The initiator's identity and static keys are sent in the clear in handshake step 3, and both sides sign the transcript. |
 | L9 | **Sender clock is untrusted but still displayed** | `MessageEnvelope.sent_at_unix_ms` is advisory. Receipt timestamps are clamped; message timestamps are not. |
 | L10 | **Relay availability is a denial-of-service surface** | The node enforces caps and per-IP rate limits, but a device behind NAT with no reachable relay simply cannot be reached. |
