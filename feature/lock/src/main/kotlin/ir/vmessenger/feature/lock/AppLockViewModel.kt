@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.data.lock.AppLockCoordinator
 import ir.vmessenger.data.lock.LockState
 import ir.vmessenger.data.lock.UnlockResult
@@ -80,7 +81,15 @@ class AppLockViewModel @Inject constructor(
             val result = try {
                 // Argon2id is half a second to two of CPU. On the main thread that is a keypad
                 // that stops answering, which reads as a broken app rather than a slow check.
+                //
+                // Caught, not just finally'd: this is the one screen a locked user has, and it
+                // reaches the Keystore and the database. Anything thrown here used to take the
+                // process down from inside viewModelScope, leaving them with a crash loop instead
+                // of a message on the one surface that could have told them what happened.
                 withContext(Dispatchers.Default) { coordinator.unlock(pin) }
+            } catch (@Suppress("TooGenericExceptionCaught") error: Exception) {
+                AppLogger.warn(TAG, "unlock failed: ${error.message}")
+                UnlockResult.HardwareRefused
             } finally {
                 pin.fill(ZEROED)
             }
@@ -128,4 +137,8 @@ class AppLockViewModel @Inject constructor(
         val noLockSet: Boolean = false,
         val feedback: UnlockFeedback? = null,
     )
+
+    private companion object {
+        const val TAG = "AppLock"
+    }
 }

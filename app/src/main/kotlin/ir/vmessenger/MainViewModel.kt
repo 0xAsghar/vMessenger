@@ -85,7 +85,7 @@ class MainViewModel @Inject constructor(
             // The lock goes up first. Under strict mode the database cannot be opened until the
             // user authenticates, so resolving the start destination — which asks whether an
             // identity exists — has to wait for it rather than the other way round.
-            appLock.lockIfEnabled()
+            appLock.lockIfUndetermined()
             appLock.state.collect { if (it == LockState.Unlocked) onUnlocked() }
         }
     }
@@ -117,9 +117,12 @@ class MainViewModel @Inject constructor(
         // unlock tries again, which is the right answer for a key that is temporarily unavailable
         // and no worse than a crash for one that is not.
         val ready = withContext(Dispatchers.IO) {
+            // Not throwing is not the same as being ready: initialize() returns early for a locked
+            // provider, because loading is exactly what it must not do. That is the mistake the
+            // boot receiver made, found two rounds ago, and this call had the same shape.
             runCatching { databaseKeyProvider.initialize() }
                 .onFailure { AppLogger.warn(TAG, "start destination deferred: ${it.message}") }
-                .isSuccess
+                .isSuccess && !databaseKeyProvider.isLocked
         }
         if (ready) _startRoute.value = if (hasIdentity.get()()) VmRoute.Home else VmRoute.Onboarding
     }

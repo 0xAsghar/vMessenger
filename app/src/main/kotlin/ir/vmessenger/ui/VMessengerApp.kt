@@ -80,7 +80,21 @@ fun VMessengerApp(
                         // never looks up, including the one whose onCleared zeroes a staged backup
                         // passphrase. Hoisting it also means the back stack comes back.
                         val navController = rememberNavController()
-                        if (startRoute != null && lockState != LockState.LockedStrict) {
+                        // Nothing of the app composes while it is locked — not "nothing that reads
+                        // the database", nothing at all.
+                        //
+                        // The previous shape kept the graph alive through a soft lock and guarded
+                        // the three shared dialog wrappers instead. That was whack-a-mole, and it
+                        // lost: eight dialogs and sheets never went through those wrappers, each
+                        // one its own window above the activity's content and so above the lock
+                        // overlay too. One of them was the PIN-setup dialog — whoever held the
+                        // phone could set a new PIN on top of the lock screen and then walk in
+                        // through the lock screen underneath with it. A guard that has to be
+                        // remembered at every call site is not a lock.
+                        //
+                        // The user's place survives anyway: the NavController above this gate owns
+                        // the back stack, and the host leaving composition does not pop it.
+                        if (startRoute != null && lockState == LockState.Unlocked) {
                             VMessengerNavHost(
                                 startRoute = startRoute,
                                 pendingConversationId = pendingConversationId,

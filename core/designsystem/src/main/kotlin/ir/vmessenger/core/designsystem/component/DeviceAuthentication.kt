@@ -9,6 +9,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.fragment.app.FragmentActivity
 
 /**
@@ -28,6 +29,12 @@ private val CANCELLED = setOf(
 /**
  * A system authentication prompt, or null when there is nothing to show it with.
  *
+ * [allowDeviceCredential] is a security decision, not a convenience. An auth-bound Keystore key is
+ * bound to both, so releasing one needs it true. The *soft* app lock is not a Keystore key at all —
+ * it is a second gate in front of a phone the holder has already unlocked — so accepting the device
+ * credential there would let the screen-lock PIN open the app lock, and the second factor would
+ * collapse into the first for anyone who had been handed the unlocked phone.
+ *
  * Here rather than in one feature because two of them need the same prompt for the same reason:
  * an auth-bound Keystore key refuses to be *used* unless the device was authenticated recently.
  * The lock screen needs it to get the database key released; the settings screen needs it to put
@@ -41,22 +48,29 @@ private val CANCELLED = setOf(
 fun rememberDeviceAuthentication(
     title: String,
     subtitle: String,
+    allowDeviceCredential: Boolean,
     onResult: (Boolean) -> Unit,
 ): (() -> Unit)? {
+    val allowed = if (allowDeviceCredential) AUTHENTICATORS else BiometricManager.Authenticators.BIOMETRIC_STRONG
     val context = LocalContext.current
+    val cancelLabel = stringResource(android.R.string.cancel)
     val latest = rememberUpdatedState(onResult)
     val activity = remember(context) { context.findFragmentActivity() }
-    val prompt = remember(activity) {
+    val prompt = remember(activity, allowed) {
         activity
-            ?.takeIf { BiometricManager.from(it).canAuthenticate(AUTHENTICATORS) == BiometricManager.BIOMETRIC_SUCCESS }
+            ?.takeIf { BiometricManager.from(it).canAuthenticate(allowed) == BiometricManager.BIOMETRIC_SUCCESS }
             ?.let { BiometricPrompt(it, PromptCallback(latest)) }
     }
-    val info = remember(title, subtitle) {
+    val info = remember(title, subtitle, allowed) {
         BiometricPrompt.PromptInfo.Builder()
             .setTitle(title)
             .setSubtitle(subtitle)
-            // No negative button: with DEVICE_CREDENTIAL allowed, the prompt supplies its own.
-            .setAllowedAuthenticators(AUTHENTICATORS)
+            .setAllowedAuthenticators(allowed)
+            .apply {
+                // The prompt supplies its own negative button when the device credential is in the
+                // allowed set, and demands one when it is not.
+                if (!allowDeviceCredential) setNegativeButtonText(cancelLabel)
+            }
             .build()
     }
     if (prompt == null) return null

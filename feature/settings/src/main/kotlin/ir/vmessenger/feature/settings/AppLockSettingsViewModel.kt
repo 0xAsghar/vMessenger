@@ -7,6 +7,7 @@ import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.datastore.PrivacyPreferences
 import ir.vmessenger.core.designsystem.component.UiMessage
 import ir.vmessenger.data.lock.AppLockCoordinator
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 private const val SUBSCRIPTION_TIMEOUT_MS = 5_000L
@@ -87,7 +89,10 @@ class AppLockSettingsViewModel @Inject constructor(
      * already gone wrong were the two that took the process down with them.
      */
     private suspend fun guarded(what: String, block: suspend () -> Boolean) {
-        val succeeded = runCatching { block() }
+        // Off the main thread like lockIfEnabled: these reach the Keystore and close a SQLCipher
+        // database, and doing that on the frame the user tapped a switch is how a settings screen
+        // stutters.
+        val succeeded = runCatching { withContext(Dispatchers.IO) { block() } }
             .getOrElse { error ->
                 AppLogger.warn(TAG, "$what failed: ${error.message}")
                 false
@@ -109,7 +114,9 @@ class AppLockSettingsViewModel @Inject constructor(
      * when it fails: the coordinator gives up before it touches the old key.
      */
     private suspend fun enableStrictMode() {
-        val succeeded = runCatching { appLock.enableStrictMode(STRICT_AUTH_WINDOW_SECONDS) }
+        val succeeded = runCatching {
+            withContext(Dispatchers.IO) { appLock.enableStrictMode(STRICT_AUTH_WINDOW_SECONDS) }
+        }
             .getOrElse { error ->
                 AppLogger.warn(TAG, "enabling strict mode failed: ${error.message}")
                 false

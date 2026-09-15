@@ -15,6 +15,7 @@
     <string name="app_lock_hardware_refused">رمز درست بود، اما سخت‌افزار کلید را آزاد نکرد. با دکمهٔ زیر هویت خود را تأیید کنید و دوباره رمز را وارد کنید. اگر رمز صفحهٔ دستگاه را برداشته‌اید یا داده‌ها را به دستگاه دیگری منتقل کرده‌اید، کلید از بین رفته است و تنها راه، بازگرداندن از فایل پشتیبان است.</string>
     <string name="app_lock_biometric_action">تأیید هویت با اثر انگشت یا رمز دستگاه</string>
     <string name="app_lock_biometric_title">تأیید هویت</string>
+    <string name="app_lock_biometric_subtitle_soft">برای باز کردن قفل برنامه، اثر انگشت خود را ثبت کنید.</string>
     <string name="app_lock_biometric_subtitle">برای آزاد شدن کلید پایگاه داده، هویت خود را تأیید کنید.</string>
     <string name="app_lock_biometric_done">هویت شما تأیید شد؛ اکنون رمز عددی را وارد کنید.</string>
     <string name="app_lock_biometric_failed">تأیید هویت انجام نشد.</string>

@@ -98,4 +98,50 @@ class AppLockWipePolicyTest {
         )
         assertEquals(0L, left)
     }
+
+    /**
+     * The case the first version of this function got wrong, and the case its tests did not have.
+     *
+     * A backward wall clock makes the debt look larger than it ever was, and nothing decays it:
+     * the too-soon branch runs before the PIN is checked, so the right PIN is never tested and the
+     * stamp is never cleared. Clamping the number bounded what the screen printed and left the
+     * user locked out just the same; the clock that moved has to be discarded instead.
+     */
+    @Test
+    fun `a wall clock that moved backwards is discarded, not trusted`() {
+        val left = AppLockWipePolicy.remainingWaitMs(
+            owedMs = 60_000L,
+            // The RTC reset to 1970: the stamp is decades in the future by this clock.
+            lastWallMs = 1_700_000_000_000L,
+            nowWallMs = 1_000L,
+            lastElapsedMs = 500L,
+            nowElapsedMs = 90_500L,
+        )
+        assertEquals(0L, left)
+    }
+
+    @Test
+    fun `with both clocks unusable there is no debt to serve`() {
+        val left = AppLockWipePolicy.remainingWaitMs(
+            owedMs = 60_000L,
+            lastWallMs = 1_700_000_000_000L,
+            nowWallMs = 1_000L,
+            lastElapsedMs = 900_000L,
+            nowElapsedMs = 4_000L,
+        )
+        assertEquals(0L, left)
+    }
+
+    /** A backward wall clock must not rescue someone the monotonic clock still owes time. */
+    @Test
+    fun `the surviving clock still holds the line`() {
+        val left = AppLockWipePolicy.remainingWaitMs(
+            owedMs = 60_000L,
+            lastWallMs = 1_700_000_000_000L,
+            nowWallMs = 1_000L,
+            lastElapsedMs = 500L,
+            nowElapsedMs = 20_500L,
+        )
+        assertEquals(40_000L, left)
+    }
 }

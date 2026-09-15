@@ -33,7 +33,8 @@ import ir.vmessenger.data.lock.LockState
  */
 @Composable
 internal fun BiometricAction(state: AppLockUiState, onResult: (Boolean) -> Unit) {
-    val authenticate = rememberBiometricAuthentication(onResult)
+    val strict = state.lockState == LockState.LockedStrict
+    val authenticate = rememberBiometricAuthentication(strict, onResult)
     val locked = state.lockState == LockState.Locked || state.lockState == LockState.LockedStrict
     if (locked && authenticate != null) {
         OutlinedButton(
@@ -51,9 +52,17 @@ internal fun BiometricAction(state: AppLockUiState, onResult: (Boolean) -> Unit)
 }
 
 @Composable
-private fun rememberBiometricAuthentication(onResult: (Boolean) -> Unit): (() -> Unit)? =
+private fun rememberBiometricAuthentication(strict: Boolean, onResult: (Boolean) -> Unit): (() -> Unit)? =
     rememberDeviceAuthentication(
         title = stringResource(R.string.app_lock_biometric_title),
-        subtitle = stringResource(R.string.app_lock_biometric_subtitle),
+        // Strict mode needs the Keystore key released and says so. A soft lock is only uncovering
+        // a screen, and promising to release a database key there would be a claim about the wrong
+        // thing.
+        subtitle = stringResource(
+            if (strict) R.string.app_lock_biometric_subtitle else R.string.app_lock_biometric_subtitle_soft,
+        ),
+        // Only strict mode accepts the device credential, because only its Keystore key requires
+        // one. Accepting it for the soft lock would mean the phone's own PIN opens the app lock.
+        allowDeviceCredential = strict,
         onResult = onResult,
     )

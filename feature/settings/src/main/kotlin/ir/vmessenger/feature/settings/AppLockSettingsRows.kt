@@ -103,6 +103,8 @@ private fun StrictModeRow(state: AppLockSettings) {
     val authenticate = rememberDeviceAuthentication(
         title = stringResource(R.string.settings_app_lock_strict_auth_title),
         subtitle = stringResource(R.string.settings_app_lock_strict_auth_subtitle),
+        // The key being created here requires both, so the prompt has to offer both.
+        allowDeviceCredential = true,
         onResult = { authenticated -> if (authenticated) state.onStrictMode(true) },
     )
     SettingsRow(

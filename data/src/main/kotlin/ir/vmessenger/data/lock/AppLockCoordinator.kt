@@ -1,6 +1,7 @@
 package ir.vmessenger.data.lock
 
 import android.os.SystemClock
+import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.crypto.keystore.KeyStoreKeyManager
 import ir.vmessenger.core.crypto.lock.PinVerifier
@@ -24,6 +25,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Provider
@@ -106,16 +109,19 @@ object AppLockWipePolicy {
         lastElapsedMs: Long,
         nowElapsedMs: Long,
     ): Long {
-        val byWall = owedMs - (nowWallMs - lastWallMs)
-        val rebooted = nowElapsedMs < lastElapsedMs
-        val byElapsed = if (rebooted) byWall else owedMs - (nowElapsedMs - lastElapsedMs)
-        // Clamped above as well as below. A *backward* jump in the wall clock — an RTC that resets
-        // to 1970, a user correcting a date they had set wrong, NTP pulling a fast clock back —
-        // makes `byWall` larger than the debt, and nothing decays it: the TooSoon branch runs
-        // before the PIN is checked, so the right PIN is never tested and the stamp is never
-        // cleared. The user is shut out of an intact database for the size of the jump, which can
-        // be decades. The debt can never exceed itself.
-        return maxOf(byWall, byElapsed).coerceIn(0L, owedMs)
+        // A stamp that lies in the *future* on one of these clocks means that clock moved
+        // backwards under us, and it can no longer measure this debt at all. Judging by it anyway
+        // inflates the wait and nothing ever decays it — the too-soon branch runs before the PIN
+        // is checked, so the right PIN is never tested and the stamp is never cleared, and the
+        // user is shut out of an intact database until the clock climbs back. For an RTC that has
+        // reset to 1970 that is decades.
+        //
+        // Clamping the result, which is what this did before, bounded the number on screen and
+        // changed nothing about being locked out. Discarding the unusable clock is the fix: the
+        // other one still holds the line, and if neither can measure it there is no debt to serve.
+        val byWall = (owedMs - (nowWallMs - lastWallMs)).takeIf { nowWallMs >= lastWallMs }
+        val byElapsed = (owedMs - (nowElapsedMs - lastElapsedMs)).takeIf { nowElapsedMs >= lastElapsedMs }
+        return (listOfNotNull(byWall, byElapsed).maxOrNull() ?: 0L).coerceIn(0L, owedMs)
     }
 }
 
@@ -166,13 +172,27 @@ class AppLockCoordinator @Inject constructor(
     private val secureWipe: Provider<SecureWipeUseCase>,
 ) {
     /** Process-lived, unlike a view model's: see [onBackgrounded] for why that matters. */
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Default + loggingExceptionHandler(TAG))
 
     /** Monotonic stamp of when the app left the foreground; null while it is in front. */
     @Volatile
     private var awaySince: Long? = null
 
     private var armJob: Job? = null
+
+    /**
+     * Serialises everything that moves the passphrase or publishes a lock state.
+     *
+     * Two races made it necessary. `completeInterruptedEnable()` runs on every `lockIfEnabled` and
+     * deletes the ordinary wrapped copy when it sees a strict flag beside one — which is exactly
+     * the half-written state `disableStrictMode()` passes through, so an auto-lock landing in that
+     * window deleted the copy the disable had just written and left the strict blob it was about
+     * to drop. And `revealIfObscured()` checked the state and set it in two steps while
+     * `lockIfEnabled()` now writes it from an IO thread, so a return could reveal an app that had
+     * just locked.
+     */
+    private val transition = Mutex()
 
     private val _state = MutableStateFlow(LockState.Undetermined)
     val state: StateFlow<LockState> = _state.asStateFlow()
@@ -186,7 +206,7 @@ class AppLockCoordinator @Inject constructor(
         lockIfEnabledInternal()
     }
 
-    private suspend fun lockIfEnabledInternal() {
+    private suspend fun lockIfEnabledInternal() = transition.withLock {
         if (!privacyPreferences.appLockEnabled.first()) {
             _state.value = LockState.Unlocked
             return
@@ -398,6 +418,19 @@ class AppLockCoordinator @Inject constructor(
         }
     }
 
+    /**
+     * Locks on start, but only in a process that has not decided anything yet.
+     *
+     * The activity's view model runs this in its `init`, and it used to lock unconditionally — so
+     * leaving with Back and coming straight back built a new view model, which locked, and the
+     * grace period the user had configured was simply not honoured. (Rotation escaped only because
+     * a configuration change keeps the view model store, so `init` never re-ran.) A live process
+     * already knows whether it is locked; only [LockState.Undetermined] is a question.
+     */
+    suspend fun lockIfUndetermined() {
+        if (_state.value == LockState.Undetermined) lockIfEnabled()
+    }
+
     /** The app came back: stop the clock, and decide whether it ran out while it was away. */
     suspend fun onForegrounded(elapsedRealtimeMs: Long) {
         armJob?.cancel()
@@ -407,13 +440,13 @@ class AppLockCoordinator @Inject constructor(
         if (elapsedRealtimeMs - since >= timeoutMs) lockIfEnabled() else revealIfObscured()
     }
 
-    suspend fun obscureIfEnabled() {
+    suspend fun obscureIfEnabled() = transition.withLock {
         if (_state.value != LockState.Unlocked) return
         if (privacyPreferences.appLockEnabled.first()) _state.value = LockState.Undetermined
     }
 
     /** The app came back inside the auto-lock window: uncover it without asking for anything. */
-    fun revealIfObscured() {
+    suspend fun revealIfObscured() = transition.withLock {
         if (_state.value == LockState.Undetermined) _state.value = LockState.Unlocked
     }
 
@@ -468,7 +501,7 @@ class AppLockCoordinator @Inject constructor(
      * says to take a backup first. It is a warning, not a gate: nothing records that a backup was
      * actually taken, so nothing here can check one.
      */
-    suspend fun enableStrictMode(validitySeconds: Int): Boolean {
+    suspend fun enableStrictMode(validitySeconds: Int): Boolean = transition.withLock {
         val passphrase = databaseKeyProvider.getPassphraseOrNull()
         if (!strictKeys.isSupported || passphrase == null) return false
         strictKeys.createKey(validitySeconds)
@@ -491,7 +524,7 @@ class AppLockCoordinator @Inject constructor(
      * and the ordinary copy has to be written *before* the strict one is dropped, or turning the
      * setting off would lock the user out of their own database.
      */
-    suspend fun disableStrictMode(): Boolean {
+    suspend fun disableStrictMode(): Boolean = transition.withLock {
         val passphrase = databaseKeyProvider.getPassphraseOrNull() ?: return false
         securityPreferences.setWrappedDbPassphrase(
             keyStoreKeyManager.wrap(KeyStoreKeyManager.ALIAS_DATABASE, passphrase),
