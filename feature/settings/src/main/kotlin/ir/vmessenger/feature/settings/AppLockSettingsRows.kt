@@ -30,6 +30,7 @@ import ir.vmessenger.core.designsystem.component.ConfirmDialog
 import ir.vmessenger.core.designsystem.component.SettingsDivider
 import ir.vmessenger.core.designsystem.component.SettingsRow
 import ir.vmessenger.core.designsystem.component.SettingsTrailing
+import ir.vmessenger.core.designsystem.component.rememberDeviceAuthentication
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
@@ -94,6 +95,16 @@ internal fun AppLockRows(state: AppLockSettings) {
 @Composable
 private fun StrictModeRow(state: AppLockSettings) {
     var confirming by remember { mutableStateOf(false) }
+    // Authenticate, *then* enable. Wrapping the passphrase uses the auth-bound Keystore key, and
+    // the Keystore refuses to use it unless the device was authenticated in the last few minutes —
+    // so turning strict mode on failed with "User not authenticated" for anyone who had walked to
+    // this screen rather than arriving at it straight off the lock screen. The prompt is the thing
+    // that makes the switch work; without it the feature's front door was closed most of the time.
+    val authenticate = rememberDeviceAuthentication(
+        title = stringResource(R.string.settings_app_lock_strict_auth_title),
+        subtitle = stringResource(R.string.settings_app_lock_strict_auth_subtitle),
+        onResult = { authenticated -> if (authenticated) state.onStrictMode(true) },
+    )
     SettingsRow(
         label = stringResource(R.string.settings_app_lock_strict),
         icon = Icons.Outlined.EnhancedEncryption,
@@ -118,7 +129,11 @@ private fun StrictModeRow(state: AppLockSettings) {
             confirmLabel = stringResource(R.string.settings_app_lock_strict_confirm_action),
             onConfirm = {
                 confirming = false
-                state.onStrictMode(true)
+                // No prompt available (no secure lock screen, or a host that is not a
+                // FragmentActivity): try anyway rather than dead-ending. It succeeds when the
+                // device happens to have been authenticated recently, and reports the failure
+                // honestly when it has not.
+                authenticate?.invoke() ?: state.onStrictMode(true)
             },
             onDismiss = { confirming = false },
         )
