@@ -111,6 +111,7 @@ class AppLockCoordinator @Inject constructor(
             _state.value = LockState.Unlocked
             return
         }
+        completeInterruptedEnable()
         val strict = privacyPreferences.strictLockEnabled.first() && strictKeys.hasKey()
         if (strict) {
             // Order matters: the open connection holds the key, so it goes first — but only when
@@ -188,6 +189,25 @@ class AppLockCoordinator @Inject constructor(
         return UnlockResult.Wiped
     }
 
+    /**
+     * Finishes an [enableStrictMode] that was interrupted between writing the flag and deleting
+     * the ordinary copy.
+     *
+     * That interruption is deliberately survivable — see [enableStrictMode] — but what it leaves
+     * behind is strict mode that protects nothing, because the non-authenticating copy of the
+     * passphrase is still on disk. Removing it here is the second half of the same operation.
+     */
+    private suspend fun completeInterruptedEnable() {
+        val halfDone = privacyPreferences.strictLockEnabled.first() &&
+            strictKeys.hasKey() &&
+            lockPreferences.getStrictWrappedPassphrase() != null &&
+            securityPreferences.getWrappedDbPassphrase() != null
+        if (halfDone) {
+            AppLogger.warn(TAG, "strict mode was enabled without removing the ordinary key; removing it now")
+            securityPreferences.clearWrappedDbPassphrase()
+        }
+    }
+
     /** Turns the screen gate on. Strict mode is a separate, deliberate step. */
     suspend fun setPin(pin: CharArray) {
         val created = pinVerifier.create(pin)
@@ -203,11 +223,27 @@ class AppLockCoordinator @Inject constructor(
      * delete the only way to open the database. The caller turns strict mode off first.
      */
     suspend fun clearLock(): Boolean {
-        if (privacyPreferences.strictLockEnabled.first() && !disableStrictMode()) return false
+        val blocked = (privacyPreferences.strictLockEnabled.first() && !disableStrictMode()) ||
+            strictBlobIsTheOnlyKey()
+        if (blocked) return false
         lockPreferences.clear()
         privacyPreferences.setAppLockEnabled(false)
         _state.value = LockState.Unlocked
         return true
+    }
+
+    /**
+     * True when the lock store holds the only wrapping of the database passphrase.
+     *
+     * [clearLock] wipes that store, so it has to ask the files rather than the flag: a strict blob
+     * with no ordinary copy beside it is load-bearing whatever `strictLockEnabled` happens to say,
+     * and clearing it would leave an encrypted database with no key anywhere.
+     */
+    private suspend fun strictBlobIsTheOnlyKey(): Boolean {
+        val onlyKey = lockPreferences.getStrictWrappedPassphrase() != null &&
+            securityPreferences.getWrappedDbPassphrase() == null
+        if (onlyKey) AppLogger.warn(TAG, "refusing to clear the lock: the strict key is the only way in")
+        return onlyKey
     }
 
     /**
@@ -228,8 +264,14 @@ class AppLockCoordinator @Inject constructor(
         if (!strictKeys.isSupported || passphrase == null) return false
         strictKeys.createKey(validitySeconds)
         lockPreferences.setStrictWrappedPassphrase(strictKeys.wrap(passphrase))
-        securityPreferences.clearWrappedDbPassphrase()
+        // The flag goes before the deletion, and that order is the whole safety property. The
+        // other way round, a crash between the two left the ordinary copy gone and the flag still
+        // false: nothing locked, so nothing ever authenticated, and `load()` then refused to mint
+        // a replacement because a strict blob existed — an install that threw on every start over
+        // an intact database. This way the interruption leaves both copies and a strict flag,
+        // which opens, and [completeInterruptedEnable] tidies the leftover on the next start.
         privacyPreferences.setStrictLockEnabled(true)
+        securityPreferences.clearWrappedDbPassphrase()
         return true
     }
 
@@ -245,9 +287,13 @@ class AppLockCoordinator @Inject constructor(
         securityPreferences.setWrappedDbPassphrase(
             keyStoreKeyManager.wrap(KeyStoreKeyManager.ALIAS_DATABASE, passphrase),
         )
+        // Flag first, then the blob. Dropping the blob while the flag was still true left the
+        // lock asking for an authentication that could no longer unwrap anything, with the
+        // ordinary copy sitting right there unused — the user shut out of their own database by
+        // the act of turning the protection off.
+        privacyPreferences.setStrictLockEnabled(false)
         lockPreferences.clearStrictPassphrase()
         strictKeys.deleteKey()
-        privacyPreferences.setStrictLockEnabled(false)
         databaseKeyProvider.unlock()
         return true
     }
