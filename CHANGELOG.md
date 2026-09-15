@@ -28,7 +28,12 @@ reach the other side — which turned up about twenty more defects nobody had re
   authentication, and the ordinary copy is deleted, so the retry limit is enforced by the device's
   secure hardware rather than by this app. Device credential is always accepted alongside
   biometrics — enrolling a new fingerprint invalidates the key, and without that fallback it would
-  mean an unopenable database. Background delivery stops while locked; that is the cost.
+  mean an unopenable database. Background delivery really does stop while strict mode is locked:
+  the network service goes down with the lock and comes back on the unlock, because closing the
+  database alone does not stop anything — Room is already holding the key.
+- **Wrong PINs are rate-limited.** Four are free, then the wait doubles from five seconds and caps
+  at five minutes, timed against the monotonic clock so changing the device date does not defeat
+  it. The wipe-after-ten-failures trigger stays opt-in and off by default.
 - **The secure wipe now clears the app lock's own store and its Keystore alias.** It cleared
   neither. The PIN verifier is offline-crackable, and a surviving strict-mode blob left the app
   refusing to open a database that no longer existed — a crash on every start after a wipe.
