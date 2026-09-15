@@ -64,6 +64,13 @@ class NetworkLifecycleService : Service() {
             appLock.get().state.collect { state ->
                 if (state == LockState.LockedStrict) {
                     AppLogger.info(TAG, "strict app lock engaged; stopping the network service")
+                    // The coordinator explicitly, not just the service. onDestroy() only clears
+                    // `isRunning` and cancels this scope — it has never stopped the network — so
+                    // the relay listener, the outbox drain and the retry loops would carry on in
+                    // the process with the database reopening under them, and "nothing is
+                    // delivered while locked" would be a caption over a running stack.
+                    runCatching { networkCoordinator.get().stop() }
+                        .onFailure { AppLogger.warn(TAG, "stopping the network for the lock failed: ${it.message}") }
                     // The notification first, even though this service is about to die. Android
                     // gives a service started with startForegroundService() five seconds to call
                     // startForeground(), and killing it inside that window is
