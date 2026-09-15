@@ -1,8 +1,11 @@
 package ir.vmessenger
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import ir.vmessenger.app.network.startNetworkService
 import ir.vmessenger.core.database.DatabaseKeyProvider
 import ir.vmessenger.core.datastore.PrivacyPreferences
 import ir.vmessenger.core.datastore.ThemeMode
@@ -26,9 +29,9 @@ import javax.inject.Provider
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     themePreferences: ThemePreferences,
-    privacyPreferences: PrivacyPreferences,
-    private val privacy: PrivacyPreferences,
+    private val privacyPreferences: PrivacyPreferences,
     // Provider, not the use case itself: resolving it builds the identity repository, which
     // builds the encrypted database, which asks for a passphrase that strict mode keeps behind
     // the lock. Injecting it directly crashed the activity before it could draw the lock screen
@@ -77,7 +80,23 @@ class MainViewModel @Inject constructor(
             // user authenticates, so resolving the start destination — which asks whether an
             // identity exists — has to wait for it rather than the other way round.
             appLock.lockIfEnabled()
-            appLock.state.collect { if (it == LockState.Unlocked) resolveStartRoute() }
+            appLock.state.collect { if (it == LockState.Unlocked) onUnlocked() }
+        }
+    }
+
+    /**
+     * Every unlock, not only the first: the start destination is decided once, but the network
+     * service is not.
+     *
+     * A strict lock stops the service — that is what makes "nothing is delivered while locked"
+     * true rather than a caption — so something has to bring it back, and this is the only place
+     * that knows the app is both unlocked and in the foreground, which is where starting a
+     * foreground service is allowed.
+     */
+    private suspend fun onUnlocked() {
+        resolveStartRoute()
+        if (!databaseKeyProvider.isLocked) {
+            withContext(Dispatchers.Main) { startNetworkService(context, reason = "unlock") }
         }
     }
 
@@ -103,7 +122,7 @@ class MainViewModel @Inject constructor(
         val since = awaySince ?: return
         awaySince = null
         viewModelScope.launch {
-            val minutes = privacy.autoLockMinutes.first()
+            val minutes = privacyPreferences.autoLockMinutes.first()
             if (elapsedRealtimeMs - since >= minutes * MILLIS_PER_MINUTE) appLock.lockIfEnabled()
         }
     }

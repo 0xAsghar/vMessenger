@@ -11,7 +11,14 @@ import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.database.DatabaseKeyProvider
 import ir.vmessenger.core.notifications.NetworkNotificationManager
+import ir.vmessenger.data.lock.AppLockCoordinator
+import ir.vmessenger.data.lock.LockState
 import ir.vmessenger.data.network.NetworkCoordinator
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Provider
 
@@ -33,13 +40,36 @@ class NetworkLifecycleService : Service() {
     @Inject
     lateinit var databaseKeyProvider: DatabaseKeyProvider
 
+    /**
+     * Lazy like the coordinator, and for the same reason — though this one only reaches the
+     * database through providers of its own, so resolving it does not open anything.
+     */
+    @Inject
+    lateinit var appLock: Provider<AppLockCoordinator>
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     override fun onCreate() {
         super.onCreate()
         isRunning = true
+        // Strict mode promises that nothing is delivered while the app is locked, and the settings
+        // screen says so in as many words. Closing the database does not deliver on that by
+        // itself: Room is already holding the key inside its open connection, so the outbox and
+        // the relay simply reopen it seconds later. This is what makes the promise true — the
+        // stack goes down with the lock, and MainViewModel brings it back on the unlock.
+        scope.launch {
+            appLock.get().state.collect { state ->
+                if (state == LockState.LockedStrict) {
+                    AppLogger.info(TAG, "strict app lock engaged; stopping the network service")
+                    stopSelf()
+                }
+            }
+        }
     }
 
     override fun onDestroy() {
         isRunning = false
+        scope.cancel()
         super.onDestroy()
     }
 

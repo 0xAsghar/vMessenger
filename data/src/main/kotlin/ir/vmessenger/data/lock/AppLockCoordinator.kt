@@ -136,7 +136,7 @@ class AppLockCoordinator @Inject constructor(
      * force-stop between the guess and the write cannot reset the count.
      */
     suspend fun unlock(pin: CharArray): UnlockResult {
-        val blob = lockPreferences.getVerifier() ?: return UnlockResult.NoLockSet
+        val blob = lockPreferences.getVerifier() ?: return noVerifierStored()
         val attempt = lockPreferences.recordAttempt()
         val verifier = PinVerifier.Verifier(blob.salt, blob.nonce, blob.sealed)
         return when {
@@ -206,6 +206,26 @@ class AppLockCoordinator @Inject constructor(
             AppLogger.warn(TAG, "strict mode was enabled without removing the ordinary key; removing it now")
             securityPreferences.clearWrappedDbPassphrase()
         }
+    }
+
+    /**
+     * The lock is switched on with no PIN stored, so open it and switch it off.
+     *
+     * Reachable: [clearLock] wipes the lock store and *then* clears the flag, so an interruption
+     * between the two leaves exactly this. Refusing to open protects nothing — there is no secret
+     * to check — and it strands the user behind a screen that can never accept anything, since the
+     * only other way out is reinstalling and losing the database.
+     *
+     * It does not open when a strict blob is still there: the screen would come down onto a
+     * database that has no key in memory. [clearLock] refuses to create that combination, so this
+     * is the belt to its braces.
+     */
+    private suspend fun noVerifierStored(): UnlockResult {
+        if (lockPreferences.getStrictWrappedPassphrase() != null) return UnlockResult.NoLockSet
+        AppLogger.warn(TAG, "the app lock is on with no PIN stored; finishing the clear that was interrupted")
+        privacyPreferences.setAppLockEnabled(false)
+        _state.value = LockState.Unlocked
+        return UnlockResult.NoLockSet
     }
 
     /** Turns the screen gate on. Strict mode is a separate, deliberate step. */
