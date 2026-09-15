@@ -11,11 +11,14 @@ Two version numbers move independently of this file and are stated where they ma
 protocol major** (currently 2, [docs/Protocol.md](docs/Protocol.md)) and the **database schema
 version** (currently 19, [docs/Database.md](docs/Database.md)).
 
-## [1.1.0] - 2026-09-15
+## [1.1.1] - 2026-09-15
 
 The first release after 1.0.1 was used in anger. Eleven reported interface bugs, four reported
 technical ones, three new features, and an audit of what a peer-to-peer app does when it cannot
 reach the other side — which turned up about twenty more defects nobody had reported yet.
+
+*1.1.0 was prepared and never published: its build was pulled when testing the app lock on a real
+device turned up a defect that would have destroyed data. Everything below reaches users here.*
 
 **Database schema 18 → 19.** Migration included; no action needed.
 
@@ -49,6 +52,11 @@ reach the other side — which turned up about twenty more defects nobody had re
   recents thumbnail cannot leak the last unlocked screen.
 
 ### Added
+
+- **Swipe a conversation left-to-right to go back.** Left to right because the app is
+  right-to-left: content advances leftward, so returning is the reverse — and the opposite
+  direction from the swipe that replies to a message, which is why the two do not collide. An
+  open reply is cleared first, exactly as pressing back does.
 
 - **Edit and delete for everyone.** Both are additive to wire protocol 2, so a 1.0.x peer ignores
   them rather than breaking. Delete renders a tombstone rather than removing the row, and is worded
@@ -309,4 +317,4 @@ before a 1.x build is installed**, and identity and contacts do not survive that
 - **The reference node was hardened**: connection and record limits, listener-proof freshness and
   replay rejection, record expiry, and rejection counters on `/healthz?verbose=1`.
 
-[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v1.1.1...HEAD
