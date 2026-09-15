@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import ir.vmessenger.core.designsystem.theme.RtlLayout
 import ir.vmessenger.core.designsystem.theme.VMessengerTheme
+import ir.vmessenger.data.lock.LockState
 import ir.vmessenger.navigation.VMessengerNavHost
 import ir.vmessenger.navigation.VmRoute
 import ir.vmessenger.ui.contact.ContactRequestOverlay
@@ -41,7 +42,7 @@ fun VMessengerApp(
     startRoute: VmRoute?,
     pendingConversationId: String?,
     onPendingConversationHandled: () -> Unit,
-    locked: Boolean = false,
+    lockState: LockState = LockState.Unlocked,
     lockContent: @Composable () -> Unit = {},
 ) {
     RtlLayout {
@@ -54,27 +55,28 @@ fun VMessengerApp(
                 color = MaterialTheme.colorScheme.background,
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    // Nothing but the lock composes while locked, and that is a correctness
-                    // requirement rather than a tidiness one. These siblings of the NavHost own
-                    // view models that reach a DAO, and under strict app lock building a DAO
-                    // builds the database, whose passphrase is behind an authentication that has
-                    // not happened yet — it threw, and the activity died before it could draw the
-                    // very screen the user needed to authenticate with. Drawing them over the lock
-                    // would also have shown incoming contact requests to whoever picked the phone
-                    // up, which is why they are siblings and not a navigation destination.
-                    if (!locked) {
-                        NotificationPermissionEffect()
-                        ContactRequestOverlay()
-                        if (startRoute != null) {
-                            VMessengerNavHost(
-                                startRoute = startRoute,
-                                pendingConversationId = pendingConversationId,
-                                onPendingConversationHandled = onPendingConversationHandled,
-                            )
-                        }
-                        AppAlertBanner(modifier = Modifier.align(Alignment.TopCenter))
+                    NotificationPermissionEffect()
+                    // The contact-request overlay is the one sibling of the NavHost whose view
+                    // model reaches a DAO, and building a DAO while the lock holds the passphrase
+                    // is what crashed the activity before it could draw the lock. It is also the
+                    // one nobody should see over a lock screen, which is why it is a sibling and
+                    // not a route — so the same line answers both.
+                    if (lockState == LockState.Unlocked) ContactRequestOverlay()
+                    // A soft lock keeps the graph: it covers the screen, and tearing the NavHost
+                    // down would throw away the user's place, an unsaved draft and every view
+                    // model behind them, to protect a database that a soft lock never shuts. A
+                    // strict lock does shut it, and its screens read from it, so there the graph
+                    // goes. On a cold start this is moot — startRoute stays null until the unlock
+                    // resolves it, so nothing composes either way.
+                    if (startRoute != null && lockState != LockState.LockedStrict) {
+                        VMessengerNavHost(
+                            startRoute = startRoute,
+                            pendingConversationId = pendingConversationId,
+                            onPendingConversationHandled = onPendingConversationHandled,
+                        )
                     }
-                    if (locked) lockContent()
+                    AppAlertBanner(modifier = Modifier.align(Alignment.TopCenter))
+                    if (lockState != LockState.Unlocked) lockContent()
                 }
             }
         }

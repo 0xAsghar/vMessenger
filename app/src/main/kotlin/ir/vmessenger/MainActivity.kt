@@ -70,7 +70,7 @@ class MainActivity : FragmentActivity() {
                 // easiest to walk around.
                 pendingConversationId = pendingConversationId.takeIf { lockState == LockState.Unlocked },
                 onPendingConversationHandled = viewModel::consumePendingConversation,
-                locked = lockState != LockState.Unlocked,
+                lockState = lockState,
                 // Nothing while the state is still [LockState.Undetermined]: the app content is
                 // already held back by `locked`, and drawing the lock there would flash a PIN
                 // screen at users who have never set one. The splash covers this window.

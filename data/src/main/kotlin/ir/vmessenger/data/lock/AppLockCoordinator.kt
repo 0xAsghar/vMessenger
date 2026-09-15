@@ -143,7 +143,15 @@ class AppLockCoordinator @Inject constructor(
             return
         }
         completeInterruptedEnable()
-        val strict = privacyPreferences.strictLockEnabled.first() && strictKeys.hasKey()
+        // The flag alone, deliberately not `&& strictKeys.hasKey()`. Enabling strict mode deleted
+        // the ordinary wrapped copy, so if the Keystore entry has since vanished — data restored
+        // onto another device, the device screen lock removed, a Keystore reset — the database
+        // cannot be opened by anything, and treating that as a *soft* lock told the app it could.
+        // It then accepted the right PIN, tried to load a passphrase that no longer exists, and
+        // crashed on every launch with nothing said. Staying strict means the unlock path runs,
+        // fails to unwrap, and shows the message that already exists for exactly this: the PIN
+        // was right, the hardware would not release the key, restore from a backup.
+        val strict = privacyPreferences.strictLockEnabled.first()
         if (strict) {
             // Order matters: the open connection holds the key, so it goes first — but only when
             // there is something to close. On a cold start under strict mode the passphrase was
@@ -279,6 +287,9 @@ class AppLockCoordinator @Inject constructor(
         if (lockPreferences.getStrictWrappedPassphrase() != null) return UnlockResult.NoLockSet
         AppLogger.warn(TAG, "the app lock is on with no PIN stored; finishing the clear that was interrupted")
         privacyPreferences.setAppLockEnabled(false)
+        // Before publishing Unlocked, exactly as [markUnlocked] does: the collector that watches
+        // this state resolves the start route the moment it flips, and that reaches the database.
+        databaseKeyProvider.unlock()
         _state.value = LockState.Unlocked
         return UnlockResult.NoLockSet
     }

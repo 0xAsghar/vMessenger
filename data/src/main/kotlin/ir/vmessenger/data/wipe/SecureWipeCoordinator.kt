@@ -36,6 +36,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.system.exitProcess
 /**
@@ -53,10 +54,16 @@ import kotlin.system.exitProcess
 @Suppress("LongParameterList", "TooManyFunctions") // One collaborator and one method per wipe stage.
 class SecureWipeCoordinator @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val networkCoordinator: NetworkCoordinator,
+    // Providers, all three. Each of these reaches the database at construction, so resolving
+    // SecureWipeCoordinator opened it — and the one moment the wipe is most needed is a
+    // strict-locked install on a stolen phone, where opening it is exactly what cannot happen.
+    // The wipe still works from there: SecureWipePlan guards every step, so the one that cannot
+    // close a database that was never open does not stop the file deletion, the preferences or
+    // the Keystore key.
+    private val networkCoordinator: Provider<NetworkCoordinator>,
     private val locationServiceControl: LocationServiceControl,
     private val messageNotificationManager: MessageNotificationManager,
-    private val database: VMessengerDatabase,
+    private val database: Provider<VMessengerDatabase>,
     private val securityPreferences: SecurityPreferences,
     private val privacyPreferences: PrivacyPreferences,
     private val p2pPreferences: P2PPreferences,
@@ -68,7 +75,7 @@ class SecureWipeCoordinator @Inject constructor(
     private val keyStoreKeyManager: KeyStoreKeyManager,
     private val strictModeKeyManager: StrictModeKeyManager,
     private val appLockPreferences: AppLockPreferences,
-    private val selfIdentityCache: SelfIdentityCache,
+    private val selfIdentityCache: Provider<SelfIdentityCache>,
     private val databaseKeyProvider: DatabaseKeyProvider,
     private val attachmentKeyProvider: AttachmentKeyProvider,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -95,15 +102,15 @@ class SecureWipeCoordinator @Inject constructor(
         exitProcess(0)
     }
 
-    override suspend fun stopNetwork() = networkCoordinator.stop()
+    override suspend fun stopNetwork() = networkCoordinator.get().stop()
 
     override fun stopLocationSharing() = locationServiceControl.stop()
 
     override fun cancelNotifications() = messageNotificationManager.cancelAll()
 
     override suspend fun clearAndCloseDatabase() {
-        database.clearAllTables()
-        database.close()
+        database.get().clearAllTables()
+        database.get().close()
     }
 
     override fun deleteDatabaseFiles() {
@@ -142,7 +149,7 @@ class SecureWipeCoordinator @Inject constructor(
     }
 
     override fun resetInMemoryState() {
-        selfIdentityCache.clear()
+        selfIdentityCache.get().clear()
         databaseKeyProvider.reset()
         attachmentKeyProvider.reset()
         NetworkPathTracker.clear()
