@@ -77,6 +77,32 @@ object AppLockWipePolicy {
     }
 
     private const val MAX_DOUBLINGS = 16
+
+    /**
+     * How much of [owedMs] is still owed, judged by both clocks.
+     *
+     * Neither clock alone is enough. The wall clock survives a process kill and a reboot, but the
+     * person holding the phone can wind it forward. `elapsedRealtime` cannot be wound, but it
+     * resets at boot — and a value stored before the boot lands in the *future* relative to the
+     * new one, which is how a reboot is recognised here rather than silently producing a negative
+     * age that would forgive the wait.
+     *
+     * So: across a reboot, the wall clock decides alone. Otherwise whichever clock says more time
+     * is owed decides, which means winding the date forward buys nothing while the device stays up.
+     */
+    @Suppress("LongParameterList") // two clocks, two readings each, plus the debt they are judging
+    fun remainingWaitMs(
+        owedMs: Long,
+        lastWallMs: Long,
+        nowWallMs: Long,
+        lastElapsedMs: Long,
+        nowElapsedMs: Long,
+    ): Long {
+        val byWall = owedMs - (nowWallMs - lastWallMs)
+        val rebooted = nowElapsedMs < lastElapsedMs
+        val byElapsed = if (rebooted) byWall else owedMs - (nowElapsedMs - lastElapsedMs)
+        return maxOf(byWall, byElapsed).coerceAtLeast(0L)
+    }
 }
 
 sealed interface UnlockResult {
@@ -264,16 +290,14 @@ class AppLockCoordinator @Inject constructor(
      */
     private suspend fun backoffRemainingMs(): Long {
         val owed = AppLockWipePolicy.backoffMs(lockPreferences.failedAttempts())
-        val last = lockPreferences.lastFailure() ?: return 0L
-        val (wallAt, elapsedAt) = last
-        val byWall = owed - (nowWall() - wallAt)
-        // The stored elapsed value being in the future means the device rebooted, which resets
-        // that clock — fall back to the wall clock alone rather than trusting a difference across
-        // a boot. Otherwise take whichever says more time is owed: the wall clock can be wound
-        // forward by whoever is holding the phone, and elapsedRealtime cannot.
-        val nowElapsed = nowElapsed()
-        val byElapsed = if (nowElapsed < elapsedAt) byWall else owed - (nowElapsed - elapsedAt)
-        return maxOf(byWall, byElapsed).coerceAtLeast(0L)
+        val (wallAt, elapsedAt) = lockPreferences.lastFailure() ?: return 0L
+        return AppLockWipePolicy.remainingWaitMs(
+            owedMs = owed,
+            lastWallMs = wallAt,
+            nowWallMs = nowWall(),
+            lastElapsedMs = elapsedAt,
+            nowElapsedMs = nowElapsed(),
+        )
     }
 
     private fun nowWall(): Long = System.currentTimeMillis()
