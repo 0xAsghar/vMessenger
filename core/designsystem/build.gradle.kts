@@ -10,6 +10,7 @@ android {
 dependencies {
     api(project(":core:common"))
     implementation(libs.androidx.core.ktx)
+    api(libs.androidx.activity.compose)
     api(libs.androidx.biometric)
     implementation(libs.javax.inject)
     implementation(libs.compose.material.icons.extended)

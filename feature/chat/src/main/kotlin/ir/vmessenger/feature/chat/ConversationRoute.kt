@@ -24,6 +24,7 @@ import ir.vmessenger.core.designsystem.component.EmptyState
 import ir.vmessenger.core.designsystem.component.ReplyPreview
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
+import ir.vmessenger.core.designsystem.gesture.swipeToGoBack
 import ir.vmessenger.feature.chat.voice.ComposerMicButton
 import ir.vmessenger.feature.chat.voice.RecordingRow
 import kotlinx.coroutines.launch
@@ -94,7 +95,10 @@ private fun ConversationScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                // On the content, not the scaffold: a horizontal drag that starts in the composer
+                // belongs to the composer, where the mic's slide-to-cancel lives.
+                .swipeToGoBack(),
         ) {
             ConversationBanners(header = state.header, onOpenContact = navigation.onOpenContact)
             if (state.isEmpty) {
