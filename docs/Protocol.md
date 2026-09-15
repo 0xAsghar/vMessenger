@@ -797,8 +797,13 @@ Message edit (`message_edit = 32`), delete-for-everyone (`message_delete = 33`) 
 updates (`profile_update = 34`) were added within major 2 in the 1.1 release, the same way. A
 1.0.x peer parses the envelope, finds no arm it knows, and drops the frame — an edit does not
 reach it and its copy keeps the original text, which is the honest outcome rather than a crash.
-The cost is measurable and was measured: the dropped frame is never acked, so the sender reopens
-a session for it until the outbox gives up.
+
+Measured against the published 1.0.1 release rather than assumed: paired over the relay, a message
+delivered, then an edit and a delete-for-everyone sent at it. The 1.0.1 client went on showing the
+original text through both, with no crash and nothing logged at error level. On the sending side
+the dropped frames are never acked, so the outbox re-establishes a session for each and then stops:
+one `receipt wait exhausted … left as sent`, and nothing marked FAILED. The cost is a handful of
+extra handshakes per control frame, bounded by the receipt wait — not an indefinite retry.
 
 Groups and voice messages were added **within** major 2, additively: `MessageEnvelope.group_id = 5`, `group_control = 31`, `AttachmentKind.ATTACHMENT_KIND_AUDIO = 4` and `AttachmentInfo.duration_ms = 9` / `waveform = 10` are all new fields, so a peer that predates them parses the envelope and simply ignores what it does not know. The practical effect is graceful: such a peer treats a group message as a 1:1 message from its sender and a voice message as an unknown-kind file. No version bump was needed, and none is claimed.
 
