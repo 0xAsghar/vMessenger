@@ -41,7 +41,9 @@ enum class LockState {
      * [Unlocked] meant the app composed its real content in that window — which under strict mode
      * builds a DAO, opens the database, and crashes before the lock can be drawn. Everything
      * treats "not [Unlocked]" as locked, so this fails closed by construction; the system splash
-     * covers it, and nothing is drawn until it resolves.
+     * covers it on a cold start. It is also republished on every backgrounding, long after the
+     * splash is gone; there the opaque surface in `VMessengerApp` is what covers the app, and no
+     * lock screen is drawn for it, because nothing has been decided yet.
      */
     Undetermined,
 
@@ -181,7 +183,13 @@ class AppLockCoordinator @Inject constructor(
     private var armJob: Job? = null
 
     /**
-     * Serialises everything that moves the passphrase or publishes a lock state.
+     * Serialises the *automatic* transitions — the ones that can land at any moment from the arm
+     * timer or a lifecycle callback.
+     *
+     * Not every writer of `_state` takes it, and the KDoc used to claim otherwise. `unlock`,
+     * `unlockWithBiometric`, `clearLock`, `setPin` and `noVerifierStored` are all driven by a user
+     * tapping something on a screen that exists only in one of these states, so they cannot race
+     * each other; what they could race is the background arming, and that is what this covers.
      *
      * Two races made it necessary. `completeInterruptedEnable()` runs on every `lockIfEnabled` and
      * deletes the ordinary wrapped copy when it sees a strict flag beside one — which is exactly

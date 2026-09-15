@@ -254,8 +254,9 @@ private fun ConversationEffects(
     // anything destroyed the voice message, silently, as if the press had ended. Re-reading is
     // its own effect below.
     //
-    // Keyed on [LocalAppObscured]: this screen stays composed behind the app lock, and "visible"
-    // there would mean marking the conversation read, telling the notifier to stay quiet and
+    // Keyed on [LocalAppObscured]: this screen stays composed while the app is covered but not
+    // yet locked, and "visible" there would mean marking the conversation read, telling the
+    // notifier to stay quiet and
     // sending the peer a read receipt for messages nobody has been shown. A read receipt cannot
     // be retracted, and the unread state it clears is not recoverable either.
     val obscured = LocalAppObscured.current

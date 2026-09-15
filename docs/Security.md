@@ -215,9 +215,14 @@ Persian. Messages still arrive, the database is opened as before, and anyone who
 running OS — or holds the unlocked device — reads everything. The PIN is verified against an
 AEAD-sealed witness over a known constant, not a bare hash comparison, with Argon2id (ops 3,
 64 MiB, 16-byte salt) over the PIN. That is a constant factor, not a rate limit: a 4–6 digit
-keyspace is 10⁴–10⁶ and falls offline whatever the KDF costs. The attempt counter is therefore
-written **before** the attempt is checked, so force-stopping between the two cannot reset it, and
-the app wipes after ten consecutive failures with a warning from the third-from-last.
+keyspace is 10⁴–10⁶ and falls offline whatever the KDF costs. So the default mode does rate-limit,
+in software and always: four wrong PINs are free, then the wait doubles from five seconds to a
+five-minute cap, kept on disk and judged by two clocks so that neither force-stopping the app nor
+moving the device date shortens it. The attempt counter is written **before** the attempt is
+checked, so a force-stop between the two cannot reset it, and a correct PIN clears it — the count
+is consecutive failures, not a lifetime total. Wiping after ten of them is **opt-in and off by
+default**: it is an irreversible destruction trigger reachable by anyone holding the phone, so it
+is the user's choice to arm, not ours.
 
 **Strict mode is the configuration that changes the threat model.** It re-wraps the database
 passphrase under a second Keystore key created with `setUserAuthenticationRequired(true)` and

@@ -198,6 +198,12 @@ class DatabaseKeyProvider @Inject constructor(
         AppLogger.warn(TAG, "database passphrase needed before init finished; loading it synchronously")
         return runBlocking {
             initialize()
+            // Checked again, and as a lock rather than a failure: [lock] deliberately does not take
+            // the mutex, so it can land while initialize() is inside its critical section, and the
+            // post-check there leaves the cache empty on purpose. Reporting that as "the passphrase
+            // source returned nothing" blames the source for the app being locked, which is the one
+            // distinction DatabaseLockedException exists to make.
+            if (locked) throw DatabaseLockedException()
             requireNotNull(cachedPassphrase) { "passphrase source returned nothing" }
         }
     }

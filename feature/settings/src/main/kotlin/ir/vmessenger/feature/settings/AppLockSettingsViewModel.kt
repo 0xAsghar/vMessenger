@@ -53,7 +53,6 @@ class AppLockSettingsViewModel @Inject constructor(
     private val localMessages = Channel<UiMessage>(Channel.BUFFERED)
     val messages: Flow<UiMessage> = localMessages.receiveAsFlow()
 
-    /** Turning the lock *on* needs a PIN and happens in the lock module; only turning it off lands here. */
     /**
      * Sets or replaces the PIN, taking ownership of [pin] and zeroing it either way.
      *

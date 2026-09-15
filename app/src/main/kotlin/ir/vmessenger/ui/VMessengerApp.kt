@@ -36,7 +36,8 @@ import ir.vmessenger.ui.network.AppAlertBanner
  * `WindowInsets(0)` and pad their floating controls with `safeDrawingPadding()`.
  *
  * [startRoute] is `null` only while the start destination is still being resolved;
- * the system splash screen covers that window, so nothing is drawn in its place.
+ * the splash covers that window only while the app is unlocked — under a strict lock the route
+ * never resolves, and what is drawn is the lock screen.
  */
 @Composable
 @Suppress("LongParameterList") // the app root: one parameter per thing the whole window depends on
@@ -59,6 +60,9 @@ fun VMessengerApp(
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     NotificationPermissionEffect()
+                    // Provided around everything, deliberately. Inside the gate below it could
+                    // only ever be observed as false — the subtree is composed only when unlocked —
+                    // so the four guards that read it were dead code that looked live.
                     CompositionLocalProvider(LocalAppObscured provides (lockState != LockState.Unlocked)) {
                         // The contact-request overlay is the one sibling of the NavHost whose view
                         // model reaches a DAO, and building a DAO while the lock holds the passphrase
@@ -66,22 +70,14 @@ fun VMessengerApp(
                         // one nobody should see over a lock screen, which is why it is a sibling and
                         // not a route — so the same line answers both.
                         if (lockState == LockState.Unlocked) ContactRequestOverlay()
-                        // A soft lock keeps the graph: it covers the screen, and tearing the NavHost
-                        // down would throw away the user's place, an unsaved draft and every view
-                        // model behind them, to protect a database that a soft lock never shuts. A
-                        // strict lock does shut it, and its screens read from it, so there the graph
-                        // goes. On a cold start this is moot — startRoute stays null until the unlock
-                        // resolves it, so nothing composes either way.
-                        // The controller is remembered out here, above the gate that removes the
-                        // host. Left as the host's own default it was discarded with it, and
-                        // navigation-compose does not pop or destroy the entries on dispose — so
-                        // every strict lock/unlock cycle left another graph's worth of view model
-                        // stores registered against the activity under ids the new controller
-                        // never looks up, including the one whose onCleared zeroes a staged backup
-                        // passphrase. Hoisting it also means the back stack comes back.
-                        val navController = rememberNavController()
-                        // Nothing of the app composes while it is locked — not "nothing that reads
-                        // the database", nothing at all.
+                        // Nothing of the app composes while it is *locked* — not "nothing that
+                        // reads the database", nothing at all. [LockState.Undetermined] is not a
+                        // lock, though: it is the cover thrown up the moment the app leaves the
+                        // foreground, before the timeout has decided anything, and tearing the
+                        // graph down for it meant every home-press rebuilt every screen and threw
+                        // away scroll positions, open pickers and half-typed input. The opaque
+                        // Surface below covers that case, and a dialog cannot be interacted with
+                        // through it in the moment before the answer lands.
                         //
                         // The previous shape kept the graph alive through a soft lock and guarded
                         // the three shared dialog wrappers instead. That was whack-a-mole, and it
@@ -92,9 +88,16 @@ fun VMessengerApp(
                         // through the lock screen underneath with it. A guard that has to be
                         // remembered at every call site is not a lock.
                         //
-                        // The user's place survives anyway: the NavController above this gate owns
-                        // the back stack, and the host leaving composition does not pop it.
-                        if (startRoute != null && lockState == LockState.Unlocked) {
+                        // The user's place survives anyway: this NavController is remembered above
+                        // the gate and owns the back stack, so the host leaving composition does
+                        // not pop it. Left as the host's own default parameter it was discarded
+                        // with the host, and navigation-compose destroys nothing on dispose — so
+                        // every lock cycle abandoned a graph's worth of ViewModelStores, including
+                        // the one whose onCleared zeroes a staged backup passphrase.
+                        val navController = rememberNavController()
+                        val locked =
+                            lockState == LockState.Locked || lockState == LockState.LockedStrict
+                        if (startRoute != null && !locked) {
                             VMessengerNavHost(
                                 startRoute = startRoute,
                                 pendingConversationId = pendingConversationId,

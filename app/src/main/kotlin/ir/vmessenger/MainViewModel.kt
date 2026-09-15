@@ -69,7 +69,10 @@ class MainViewModel @Inject constructor(
 
     /**
      * Where the navigation graph starts, or `null` while it is still being
-     * decided. The system splash screen is held on screen for exactly as long as
+     * decided. The splash is held while this is null *and* the app is unlocked — MainActivity
+     * explains the other half: under a strict lock this never resolves, so holding the splash on
+     * null alone would hide the lock screen behind a blank window for good. Otherwise held as
+     * long as
      * this is `null`, which replaces the old in-app splash and its fixed delay:
      * the first frame the user sees is already the right destination.
      */
@@ -143,7 +146,6 @@ class MainViewModel @Inject constructor(
 
     private companion object {
         const val TAG = "AppLock"
-        const val MILLIS_PER_MINUTE = 60_000L
     }
 
     /** Called from `onCreate`/`onNewIntent` with the notification's conversation id, if any. */
