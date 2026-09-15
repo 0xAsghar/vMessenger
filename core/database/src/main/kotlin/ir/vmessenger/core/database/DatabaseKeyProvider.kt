@@ -131,9 +131,11 @@ class DatabaseKeyProvider @Inject constructor(
     /**
      * Shuts the database until the user authenticates again (strict mode only).
      *
-     * The caller must close the Room database first: SQLCipher holds the key inside its open
-     * connection, so dropping this cache alone leaves an already-open handle reading and writing
-     * perfectly well.
+     * The caller deliberately does **not** close the Room database, so an already-open handle goes
+     * on reading and writing — see `AppLockCoordinator.lockIfEnabled` for why closing it is worse
+     * than not: `RoomDatabase.close()` cannot be undone for a singleton, and the lock was leaving
+     * a permanently broken database behind. What this gates is a *new* open, which is the one that
+     * matters: a cold start cannot produce the passphrase at all.
      *
      * **This drops the reference and deliberately does not zero the array.** The array handed to
      * `DatabaseModule.provideDatabasePassphrase` is this same object, and it lives on inside

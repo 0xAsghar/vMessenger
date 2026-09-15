@@ -7,7 +7,6 @@ import ir.vmessenger.core.crypto.keystore.KeyStoreKeyManager
 import ir.vmessenger.core.crypto.lock.PinVerifier
 import ir.vmessenger.core.crypto.lock.StrictModeKeyManager
 import ir.vmessenger.core.database.DatabaseKeyProvider
-import ir.vmessenger.core.database.VMessengerDatabase
 import ir.vmessenger.core.datastore.AppLockPreferences
 import ir.vmessenger.core.datastore.PinVerifierBlob
 import ir.vmessenger.core.datastore.PrivacyPreferences
@@ -166,7 +165,6 @@ class AppLockCoordinator @Inject constructor(
     private val strictKeys: StrictModeKeyManager,
     private val keyStoreKeyManager: KeyStoreKeyManager,
     private val databaseKeyProvider: DatabaseKeyProvider,
-    private val database: Provider<VMessengerDatabase>,
     // Provider for the same reason as [database] above: the wipe coordinator holds the database
     // directly, so injecting it eagerly opens the database at construction — which is exactly what
     // strict mode forbids, and this class is built while the app is still locked.
@@ -223,16 +221,24 @@ class AppLockCoordinator @Inject constructor(
         // was right, the hardware would not release the key, restore from a backup.
         val strict = privacyPreferences.strictLockEnabled.first()
         if (strict) {
-            // Order matters: the open connection holds the key, so it goes first — but only when
-            // there is something to close. On a cold start under strict mode the passphrase was
-            // never in memory, and asking Hilt for the database purely to close it *builds* it,
-            // which asks for the passphrase, which throws. runCatching caught that, so it was
-            // only ever noise in the log — but it was Keystore and DataStore work on the main
-            // thread to reach a conclusion already known.
-            if (databaseKeyProvider.getPassphraseOrNull() != null) {
-                runCatching { database.get().close() }
-                    .onFailure { AppLogger.warn(TAG, "closing the database to lock failed: ${it.message}") }
-            }
+            // The database is deliberately NOT closed, and that reversal is the most expensive
+            // thing this class learned.
+            //
+            // `RoomDatabase.close()` is a one-way door for a singleton instance: it closes the
+            // SQLCipher connection pool, and nothing reopens it. A real end-to-end run turned up
+            // 836 failures from one lock — "Cannot perform this operation because the connection
+            // pool has been closed", 823 of them the pending-revoke pass retrying every thirty
+            // seconds — and they did not stop when the user unlocked, because there is no path
+            // back. Strict mode was breaking the database it exists to protect.
+            //
+            // What actually has to stop is delivery, and that is the network stack, which the
+            // service does on this state. What strict mode protects is the key *at rest*: the
+            // ordinary wrapped copy is gone and [DatabaseKeyProvider.lock] refuses to produce the
+            // passphrase, so a cold start — a stolen device, a rebooted one, a process the system
+            // killed — cannot open the database at all. A live process keeps the handle it already
+            // had, which docs/Security.md L16 states plainly. Taking that away too needs the
+            // process to end on lock, or a database that can be rebuilt; it does not need, and
+            // cannot survive, closing this one.
             databaseKeyProvider.lock()
         }
         _state.value = if (strict) LockState.LockedStrict else LockState.Locked
