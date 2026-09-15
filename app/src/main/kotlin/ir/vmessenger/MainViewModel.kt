@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -42,9 +43,17 @@ class MainViewModel @Inject constructor(
 ) : ViewModel() {
     val lockState: StateFlow<LockState> = appLock.state
 
-    /** Drives `FLAG_SECURE` on the activity window; starts secure until the store answers. */
-    val screenSecurityEnabled: StateFlow<Boolean> = privacyPreferences.screenSecurityEnabled
-        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    /**
+     * Drives `FLAG_SECURE` on the activity window; starts secure until the store answers.
+     *
+     * Either the user asked for screen security, or they set an app lock — which is the same ask
+     * about a different surface. Keyed on the lock being *configured*, not on it being engaged:
+     * the lock arms when the app comes back, and the recents thumbnail was taken when it left.
+     */
+    val screenSecurityEnabled: StateFlow<Boolean> =
+        combine(privacyPreferences.screenSecurityEnabled, privacyPreferences.appLockEnabled) { secure, locked ->
+            secure || locked
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     val darkTheme: StateFlow<Boolean?> = themePreferences.themeMode
         .map { mode ->
