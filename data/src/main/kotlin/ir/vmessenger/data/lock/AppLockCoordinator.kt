@@ -180,6 +180,10 @@ class AppLockCoordinator @Inject constructor(
     @Volatile
     private var awaySince: Long? = null
 
+    /** Whether this process has ever settled the question; see [lockIfUndetermined]. */
+    @Volatile
+    private var decided = false
+
     private var armJob: Job? = null
 
     /**
@@ -215,6 +219,7 @@ class AppLockCoordinator @Inject constructor(
 
     private suspend fun lockIfEnabledInternal() = transition.withLock {
         if (!privacyPreferences.appLockEnabled.first()) {
+            decided = true
             _state.value = LockState.Unlocked
             return
         }
@@ -249,6 +254,7 @@ class AppLockCoordinator @Inject constructor(
             // cannot survive, closing this one.
             databaseKeyProvider.lock()
         }
+        decided = true
         _state.value = if (strict) LockState.LockedStrict else LockState.Locked
     }
 
@@ -298,7 +304,8 @@ class AppLockCoordinator @Inject constructor(
         return true
     }
 
-    private suspend fun markUnlocked() {
+    private suspend fun markUnlocked() = transition.withLock {
+        decided = true
         // The count is *consecutive* wrong PINs, and only getting one right says so. Without this
         // it was a lifetime total: with the wipe armed, the tenth wrong PIN a user ever typed
         // erased their account, months of correct unlocks in between counting for nothing — and
@@ -426,10 +433,17 @@ class AppLockCoordinator @Inject constructor(
      * leaving with Back and coming straight back built a new view model, which locked, and the
      * grace period the user had configured was simply not honoured. (Rotation escaped only because
      * a configuration change keeps the view model store, so `init` never re-ran.) A live process
-     * already knows whether it is locked; only [LockState.Undetermined] is a question.
+     * already knows whether it is locked; only a process that has decided nothing is a question.
+     *
+     * It asks a flag rather than the state, and that distinction is the whole fix. `Undetermined`
+     * means two different things — "nothing decided yet" on a cold start, and "covered while we
+     * work out whether to lock" on every backgrounding — and reading the state could not tell them
+     * apart. Leaving the app with Back and coming straight back finishes the activity, so a new
+     * view model runs this during onCreate, saw the cover, and locked: the grace period the user
+     * configured was ignored for the one exit this function was written to fix.
      */
     suspend fun lockIfUndetermined() {
-        if (_state.value == LockState.Undetermined) lockIfEnabled()
+        if (!decided) lockIfEnabled()
     }
 
     /** The app came back: stop the clock, and decide whether it ran out while it was away. */

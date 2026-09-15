@@ -13,6 +13,7 @@
     <string name="app_lock_wrong_wipe_close">رمز نادرست است. تنها %1$s تلاش تا پاک شدن همهٔ داده‌های برنامه باقی مانده است.</string>
     <string name="app_lock_too_soon">تلاش‌های ناموفق پشت سر هم زیاد بوده است. %1$s ثانیه دیگر دوباره امتحان کنید.</string>
     <string name="app_lock_hardware_refused">رمز درست بود، اما سخت‌افزار کلید را آزاد نکرد. با دکمهٔ زیر هویت خود را تأیید کنید و دوباره رمز را وارد کنید. اگر رمز صفحهٔ دستگاه را برداشته‌اید یا داده‌ها را به دستگاه دیگری منتقل کرده‌اید، کلید از بین رفته است و تنها راه، بازگرداندن از فایل پشتیبان است.</string>
+    <string name="app_lock_biometric_action_soft">باز کردن با اثر انگشت</string>
     <string name="app_lock_biometric_action">تأیید هویت با اثر انگشت یا رمز دستگاه</string>
     <string name="app_lock_biometric_title">تأیید هویت</string>
     <string name="app_lock_biometric_subtitle_soft">برای باز کردن قفل برنامه، اثر انگشت خود را ثبت کنید.</string>

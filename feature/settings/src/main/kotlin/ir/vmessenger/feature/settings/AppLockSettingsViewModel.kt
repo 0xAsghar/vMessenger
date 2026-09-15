@@ -62,7 +62,14 @@ class AppLockSettingsViewModel @Inject constructor(
     fun setPin(pin: CharArray) {
         viewModelScope.launch {
             try {
-                appLock.setPin(pin)
+                // Off the main thread and guarded, like every other lock write. Argon2id is half a
+                // second to two of CPU, so this ran it on the frame the user tapped Save; and it
+                // was the one app-lock write whose Keystore and DataStore work could still take
+                // the process down.
+                guarded("setting the PIN") {
+                    withContext(Dispatchers.Default) { appLock.setPin(pin) }
+                    true
+                }
             } finally {
                 pin.fill('\u0000')
             }

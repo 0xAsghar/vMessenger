@@ -68,8 +68,23 @@ class VoiceSession(
     fun toggleSpeed() = playback.toggleSpeed()
 
     /** Stops playback when the conversation leaves the screen; a cancelled recording goes with it. */
+    /**
+     * The screen is going away: stop playing, and stop recording *unless* the user locked the mic.
+     *
+     * A hands-free recording is the one the user explicitly committed to — they dragged up so they
+     * could stop holding the button — and `ComposerMicButton` has an ON_STOP handler written to
+     * send it when the app is backgrounded. ON_PAUSE always arrives first, so cancelling here
+     * deleted the file before that handler could read it, and the recording vanished with the
+     * composer simply returning to idle. Whoever backgrounds the app is not asking to throw it
+     * away; the mic button's own handler decides.
+     */
+    /** Told by the composer when the drag-up lock is taken; see [detach]. */
+    fun markHandsFree() {
+        recorder.markHandsFree()
+    }
+
     fun detach() {
-        recorder.cancel()
+        if (!recorder.isHandsFree) recorder.cancel()
         playback.stop()
     }
 

@@ -44,7 +44,11 @@ internal fun BiometricAction(state: AppLockUiState, onResult: (Boolean) -> Unit)
         ) {
             Icon(imageVector = Icons.Filled.Fingerprint, contentDescription = null)
             Text(
-                text = stringResource(R.string.app_lock_biometric_action),
+                // Strict mode's prompt takes the device credential too; the soft one is narrowed
+                // to a biometric on purpose, so it must not offer the device PIN in its label.
+                text = stringResource(
+                    if (strict) R.string.app_lock_biometric_action else R.string.app_lock_biometric_action_soft,
+                ),
                 modifier = Modifier.padding(start = VmSpacing.sm),
             )
         }

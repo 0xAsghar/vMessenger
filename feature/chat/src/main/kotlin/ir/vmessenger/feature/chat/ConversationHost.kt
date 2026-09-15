@@ -162,7 +162,13 @@ private fun rememberMicHost(viewModel: ConversationViewModel, snackbar: Snackbar
             onStart = { permission.ensureGranted() && viewModel.voice.startRecording() },
             onCancel = cancel,
             onSend = send,
-            onLocked = { locked.value = true },
+            onLocked = {
+                locked.value = true
+                // The recorder is told too: it decides whether backgrounding the app throws the
+                // recording away, and a locked one must survive to the ON_STOP handler that sends
+                // it. See VoiceSession.detach.
+                viewModel.voice.markHandsFree()
+            },
             onSlide = { slide.floatValue = it },
         )
     }

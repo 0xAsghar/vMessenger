@@ -119,15 +119,25 @@ class MainViewModel @Inject constructor(
         // it out into viewModelScope, where nothing catches it. Deferring instead means the next
         // unlock tries again, which is the right answer for a key that is temporarily unavailable
         // and no worse than a crash for one that is not.
-        val ready = withContext(Dispatchers.IO) {
+        val route = withContext(Dispatchers.IO) {
             // Not throwing is not the same as being ready: initialize() returns early for a locked
             // provider, because loading is exactly what it must not do. That is the mistake the
             // boot receiver made, found two rounds ago, and this call had the same shape.
-            runCatching { databaseKeyProvider.initialize() }
+            runCatching {
+                databaseKeyProvider.initialize()
+                // Not throwing is not the same as being ready: initialize() returns early for a
+                // locked provider, because loading is exactly what it must not do.
+                check(!databaseKeyProvider.isLocked) { "the app lock holds the database" }
+                if (hasIdentity.get()()) VmRoute.Home else VmRoute.Onboarding
+            }
                 .onFailure { AppLogger.warn(TAG, "start destination deferred: ${it.message}") }
-                .isSuccess && !databaseKeyProvider.isLocked
+                .getOrNull()
         }
-        if (ready) _startRoute.value = if (hasIdentity.get()()) VmRoute.Home else VmRoute.Onboarding
+        // Resolved inside the same guarded block, not after it. Provider.get() builds the identity
+        // repository and with it the database, so it is the call that throws — doing it out here,
+        // on the main thread, put the one throw this function exists to avoid outside the
+        // runCatching that was written for it, in a scope with no handler.
+        _startRoute.value = route ?: return
     }
 
     /**

@@ -76,6 +76,23 @@ class VoiceRecorder(context: Context, private val scope: CoroutineScope) {
     private var recorder: MediaRecorder? = null
     private var outputFile: File? = null
     private var startedAtMs = 0L
+
+    /**
+     * True once the user dragged up to record hands-free.
+     *
+     * The recorder needs to know because backgrounding the app means two different things to the
+     * two gestures: a held recording ends when the finger leaves, so losing it with the screen is
+     * expected, while a locked one was explicitly committed to and is sent by
+     * `ComposerMicButton`'s ON_STOP handler. See `VoiceSession.detach`.
+     */
+    @Volatile
+    var isHandsFree: Boolean = false
+        private set
+
+    /** Called when the drag-up lock is taken; cleared by [start] and by the paths that end it. */
+    fun markHandsFree() {
+        isHandsFree = true
+    }
     private var pollJob: Job? = null
     private val samples = ArrayList<Int>()
 
@@ -88,6 +105,7 @@ class VoiceRecorder(context: Context, private val scope: CoroutineScope) {
      * [onMaxDuration] fires with the finished message once [MAX_RECORDING_MS] is reached.
      */
     fun start(onMaxDuration: (VoiceRecording) -> Unit = {}): Boolean {
+        isHandsFree = false
         if (recorder != null) return false
         val file = newOutputFile()
         val media = runCatching {
@@ -110,6 +128,7 @@ class VoiceRecorder(context: Context, private val scope: CoroutineScope) {
      * [MIN_RECORDING_MS] — the file is deleted in that case, so a mis-tap leaves nothing.
      */
     fun stop(): VoiceRecording? {
+        isHandsFree = false
         val file = outputFile
         outputFile = null
         val elapsed = finish()
@@ -124,6 +143,7 @@ class VoiceRecorder(context: Context, private val scope: CoroutineScope) {
 
     /** Abandons the recording: the encoder is released and the file never reaches the caller. */
     fun cancel() {
+        isHandsFree = false
         val file = outputFile
         outputFile = null
         finish()
