@@ -25,12 +25,18 @@ reach the other side — which turned up about twenty more defects nobody had re
   screen and says so in as many words — messages still arrive, storage is unchanged, and anyone
   holding your unlocked phone reads everything regardless. **Strict mode** is the one that changes
   anything: the database passphrase is re-wrapped under a second Keystore key that requires
-  authentication, and the ordinary copy is deleted, so the retry limit is enforced by the device's
-  secure hardware rather than by this app. Device credential is always accepted alongside
-  biometrics — enrolling a new fingerprint invalidates the key, and without that fallback it would
-  mean an unopenable database. Background delivery really does stop while strict mode is locked:
-  the network service goes down with the lock and comes back on the unlock, because closing the
-  database alone does not stop anything — Room is already holding the key.
+  authentication, and the ordinary copy is deleted, so the database key cannot be produced at all
+  without a device authentication. That is not the same as the retry limit being hardware-enforced
+  — the PIN is still checked in software, with this app's own rate limit on top; what the hardware
+  gates is the key. Device credential is accepted alongside biometrics, which is what keeps the key
+  alive across a new fingerprint enrolment; removing the device screen lock, or moving the app's
+  data to another device, does destroy it, and there is no way back except a backup file, which the
+  confirmation says before you turn it on. Background delivery really does stop while strict mode
+  is locked: the network stack goes down with the lock and comes back on the unlock, because
+  closing the database alone stops nothing — Room is already holding the key.
+- **The lock arms while the app is away, not when you come back**, so the promise holds for a phone
+  sitting in a pocket rather than only from the moment you look at it. Notifications go
+  content-free while it is engaged, and a dialog or sheet left open no longer draws over it.
 - **Wrong PINs are rate-limited.** Four are free, then the wait doubles from five seconds and caps
   at five minutes. It is kept on disk and judged by two clocks, so neither force-stopping the app
   nor winding the device date forward shortens it; across a reboot, which resets the monotonic
