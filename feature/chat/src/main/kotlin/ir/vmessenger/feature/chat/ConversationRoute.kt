@@ -247,16 +247,26 @@ private fun ConversationEffects(
         }
     }
 
-    // Marks the thread read (and sends read receipts) while it is on screen, and silences its
-    // notifications; re-runs on every new message so one arriving with the chat open is read
-    // immediately rather than on the next visit.
-    // Keyed on [LocalAppObscured] as well: this screen stays composed behind the app lock, and
-    // "visible" there would mean marking the conversation read, telling the notifier to stay quiet
-    // and sending the peer a read receipt for messages nobody has been shown. A read receipt cannot
+    // Attach and detach follow the *lifecycle*, and nothing else. This used to be keyed on
+    // newestId so a message arriving with the chat open was read immediately — but a key change
+    // runs the dispose half first, and onHidden() detaches the voice session, which cancels an
+    // in-progress recording and deletes its file. Holding the mic while the other person sent
+    // anything destroyed the voice message, silently, as if the press had ended. Re-reading is
+    // its own effect below.
+    //
+    // Keyed on [LocalAppObscured]: this screen stays composed behind the app lock, and "visible"
+    // there would mean marking the conversation read, telling the notifier to stay quiet and
+    // sending the peer a read receipt for messages nobody has been shown. A read receipt cannot
     // be retracted, and the unread state it clears is not recoverable either.
     val obscured = LocalAppObscured.current
-    LifecycleResumeEffect(newestId, obscured) {
+    LifecycleResumeEffect(obscured) {
         if (!obscured) viewModel.onVisible()
         onPauseOrDispose { viewModel.onHidden() }
+    }
+
+    // A message arriving with the chat open is read now rather than on the next visit. Separate
+    // from the effect above so that it cannot detach anything: this only ever marks.
+    LaunchedEffect(newestId, obscured) {
+        if (!obscured) viewModel.onVisible()
     }
 }

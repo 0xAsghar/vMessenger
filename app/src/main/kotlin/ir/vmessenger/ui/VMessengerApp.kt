@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.navigation.compose.rememberNavController
 import ir.vmessenger.core.designsystem.LocalAppObscured
 import ir.vmessenger.core.designsystem.theme.RtlLayout
 import ir.vmessenger.core.designsystem.theme.VMessengerTheme
@@ -71,11 +72,20 @@ fun VMessengerApp(
                         // strict lock does shut it, and its screens read from it, so there the graph
                         // goes. On a cold start this is moot — startRoute stays null until the unlock
                         // resolves it, so nothing composes either way.
+                        // The controller is remembered out here, above the gate that removes the
+                        // host. Left as the host's own default it was discarded with it, and
+                        // navigation-compose does not pop or destroy the entries on dispose — so
+                        // every strict lock/unlock cycle left another graph's worth of view model
+                        // stores registered against the activity under ids the new controller
+                        // never looks up, including the one whose onCleared zeroes a staged backup
+                        // passphrase. Hoisting it also means the back stack comes back.
+                        val navController = rememberNavController()
                         if (startRoute != null && lockState != LockState.LockedStrict) {
                             VMessengerNavHost(
                                 startRoute = startRoute,
                                 pendingConversationId = pendingConversationId,
                                 onPendingConversationHandled = onPendingConversationHandled,
+                                navController = navController,
                             )
                         }
                     }
