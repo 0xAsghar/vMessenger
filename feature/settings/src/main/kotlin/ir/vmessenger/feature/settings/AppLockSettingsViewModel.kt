@@ -69,13 +69,30 @@ class AppLockSettingsViewModel @Inject constructor(
     }
 
     fun disableLock() {
-        viewModelScope.launch { appLock.clearLock() }
+        viewModelScope.launch { guarded("clearing the lock") { appLock.clearLock() } }
     }
 
     fun setStrictMode(strict: Boolean) {
         viewModelScope.launch {
-            if (strict) enableStrictMode() else appLock.disableStrictMode()
+            if (strict) enableStrictMode() else guarded("disabling strict mode") { appLock.disableStrictMode() }
         }
+    }
+
+    /**
+     * Runs a lock change that touches the Keystore, and reports rather than dies.
+     *
+     * Enabling strict mode has been guarded since it was written, because wrapping is the obvious
+     * place for the Keystore to refuse. Turning it *off* and clearing the lock outright were not,
+     * and they reach the same hardware — so the two switches a user reaches for when something has
+     * already gone wrong were the two that took the process down with them.
+     */
+    private suspend fun guarded(what: String, block: suspend () -> Boolean) {
+        val succeeded = runCatching { block() }
+            .getOrElse { error ->
+                AppLogger.warn(TAG, "$what failed: ${error.message}")
+                false
+            }
+        if (!succeeded) localMessages.send(UiMessage.Text(R.string.settings_app_lock_change_failed))
     }
 
     fun setAutoLockMinutes(minutes: Int) {

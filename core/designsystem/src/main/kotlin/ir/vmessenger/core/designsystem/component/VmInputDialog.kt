@@ -10,6 +10,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import ir.vmessenger.core.designsystem.LocalAppObscured
 import ir.vmessenger.core.designsystem.R
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 
@@ -35,6 +36,12 @@ fun VmInputDialog(
     dismissLabel: String? = stringResource(R.string.vm_cancel),
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // Nothing above the lock. A dialog and a modal sheet each live in their own window, so the
+    // lock overlay — which is a composable inside the app's own window — does not cover them: a
+    // sheet left open when the app locked stayed on top of the lock screen and stayed fully
+    // interactive, which is a way past a lock rather than a cosmetic flaw. Not composing rather
+    // than dismissing, so it is still there when the user comes back.
+    if (LocalAppObscured.current) return
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(text = title, style = MaterialTheme.typography.titleMedium) },

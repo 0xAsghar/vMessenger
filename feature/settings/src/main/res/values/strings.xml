@@ -13,6 +13,7 @@
     <string name="settings_app_lock_strict">حالت سخت‌گیرانه</string>
     <string name="settings_app_lock_strict_body">کلید پایگاه‌داده پشت سخت‌افزار دستگاه نگه داشته می‌شود و تا وقتی هویت خود را به دستگاه ثابت نکنید بیرون نمی‌آید؛ این محافظت واقعی روی داده‌های ذخیره‌شده است. در عوض تا وقتی برنامه قفل است هیچ پیامی دریافت نمی‌شود — نه اعلانی می‌آید و نه چیزی در پس‌زمینه ذخیره می‌شود.</string>
     <string name="settings_app_lock_strict_unsupported">اندروید این دستگاه قدیمی‌تر از %1$s است و نمی‌تواند کلید را پشت سخت‌افزار نگه دارد.</string>
+    <string name="settings_app_lock_change_failed">تغییر تنظیمات قفل انجام نشد. دستگاه را باز کنید و دوباره تلاش کنید.</string>
     <string name="settings_app_lock_strict_auth_title">تأیید هویت</string>
     <string name="settings_app_lock_strict_auth_subtitle">برای سپردن کلید پایگاه‌داده به سخت‌افزار دستگاه، هویت خود را تأیید کنید.</string>
     <string name="settings_app_lock_strict_confirm_title">حالت سخت‌گیرانه روشن شود؟</string>

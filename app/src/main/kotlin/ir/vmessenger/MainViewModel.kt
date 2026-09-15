@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import ir.vmessenger.app.network.startNetworkService
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.DatabaseKeyProvider
 import ir.vmessenger.core.datastore.PrivacyPreferences
 import ir.vmessenger.core.datastore.ThemeMode
@@ -118,8 +119,18 @@ class MainViewModel @Inject constructor(
         if (_startRoute.value != null) return
         // The application starts this off the main thread; the splash waits for it (the call is
         // idempotent) because the identity lookup opens the encrypted database.
-        withContext(Dispatchers.IO) { databaseKeyProvider.initialize() }
-        _startRoute.value = if (hasIdentity.get()()) VmRoute.Home else VmRoute.Onboarding
+        //
+        // Guarded, and it was the one initialize() caller that was not. Every other one — the
+        // application warm-up, the boot receiver — treats a refusal as "stay down"; this one let
+        // it out into viewModelScope, where nothing catches it. Deferring instead means the next
+        // unlock tries again, which is the right answer for a key that is temporarily unavailable
+        // and no worse than a crash for one that is not.
+        val ready = withContext(Dispatchers.IO) {
+            runCatching { databaseKeyProvider.initialize() }
+                .onFailure { AppLogger.warn(TAG, "start destination deferred: ${it.message}") }
+                .isSuccess
+        }
+        if (ready) _startRoute.value = if (hasIdentity.get()()) VmRoute.Home else VmRoute.Onboarding
     }
 
     fun onBackgrounded(elapsedRealtimeMs: Long) {
@@ -159,6 +170,7 @@ class MainViewModel @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "AppLock"
         const val MILLIS_PER_MINUTE = 60_000L
     }
 
