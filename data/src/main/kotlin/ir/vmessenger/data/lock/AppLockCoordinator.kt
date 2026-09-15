@@ -113,9 +113,16 @@ class AppLockCoordinator @Inject constructor(
         }
         val strict = privacyPreferences.strictLockEnabled.first() && strictKeys.hasKey()
         if (strict) {
-            // Order matters: the open connection holds the key, so it goes first.
-            runCatching { database.get().close() }
-                .onFailure { AppLogger.warn(TAG, "closing the database to lock failed: ${it.message}") }
+            // Order matters: the open connection holds the key, so it goes first — but only when
+            // there is something to close. On a cold start under strict mode the passphrase was
+            // never in memory, and asking Hilt for the database purely to close it *builds* it,
+            // which asks for the passphrase, which throws. runCatching caught that, so it was
+            // only ever noise in the log — but it was Keystore and DataStore work on the main
+            // thread to reach a conclusion already known.
+            if (databaseKeyProvider.getPassphraseOrNull() != null) {
+                runCatching { database.get().close() }
+                    .onFailure { AppLogger.warn(TAG, "closing the database to lock failed: ${it.message}") }
+            }
             databaseKeyProvider.lock()
         }
         _state.value = if (strict) LockState.LockedStrict else LockState.Locked

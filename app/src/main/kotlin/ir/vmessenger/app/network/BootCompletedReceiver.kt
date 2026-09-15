@@ -46,7 +46,14 @@ class BootCompletedReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         scope.launch {
             try {
-                runCatching { keyProvider.initialize() }
+                runCatching {
+                    keyProvider.initialize()
+                    // initialize() returns normally for a *locked* provider — loading is exactly
+                    // what it must not do — so "did not throw" is not "the key is ready". Without
+                    // this the receiver starts the service, which injects the database, which
+                    // throws in onCreate.
+                    check(!keyProvider.isLocked) { "the app lock is holding the database shut" }
+                }
                     .onSuccess { startNetworkService(appContext, reason = "boot") }
                     .onFailure { AppLogger.error(TAG, "database key init failed, service not started: $it") }
             } finally {

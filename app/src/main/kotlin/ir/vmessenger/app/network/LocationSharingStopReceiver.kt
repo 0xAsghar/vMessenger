@@ -38,13 +38,19 @@ class LocationSharingStopReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != LocationService.ACTION_STOP_SHARING) return
         AppLogger.info(TAG, "stop requested from the notification")
-        val coordinator = EntryPointAccessors
-            .fromApplication(context.applicationContext, CoordinatorEntryPoint::class.java)
-            .locationSharingCoordinator()
+        val appContext = context.applicationContext
         val pendingResult = goAsync()
+        // Resolved inside the async window and inside runCatching, not on the main thread above
+        // it: the coordinator holds the database, so under the strict app lock building it throws
+        // — and a broadcast receiver that throws in onReceive takes the process with it.
         scope.launch {
             try {
-                coordinator.stopAllSharing()
+                runCatching {
+                    EntryPointAccessors
+                        .fromApplication(appContext, CoordinatorEntryPoint::class.java)
+                        .locationSharingCoordinator()
+                        .stopAllSharing()
+                }.onFailure { AppLogger.warn(TAG, "stop from the notification failed: ${it.message}") }
             } finally {
                 pendingResult.finish()
             }

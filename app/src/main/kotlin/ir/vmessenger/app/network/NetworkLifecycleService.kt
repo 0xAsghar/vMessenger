@@ -7,18 +7,31 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import dagger.hilt.android.AndroidEntryPoint
+import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NetworkConfig
+import ir.vmessenger.core.database.DatabaseKeyProvider
 import ir.vmessenger.core.notifications.NetworkNotificationManager
 import ir.vmessenger.data.network.NetworkCoordinator
 import javax.inject.Inject
+import javax.inject.Provider
 
 @AndroidEntryPoint
 class NetworkLifecycleService : Service() {
+    /**
+     * Provider, not the coordinator: resolving it builds the database, and this service is
+     * restarted by the system (it returns `START_STICKY`) at moments nobody chose — including
+     * while the strict app lock is holding the passphrase behind an authentication. Field
+     * injection happens before `onCreate` runs, so taking it by value crashed the service
+     * during creation, and `START_STICKY` then restarted it into the same crash, forever.
+     */
     @Inject
-    lateinit var networkCoordinator: NetworkCoordinator
+    lateinit var networkCoordinator: Provider<NetworkCoordinator>
 
     @Inject
     lateinit var networkNotificationManager: NetworkNotificationManager
+
+    @Inject
+    lateinit var databaseKeyProvider: DatabaseKeyProvider
 
     override fun onCreate() {
         super.onCreate()
@@ -47,7 +60,15 @@ class NetworkLifecycleService : Service() {
         NetworkConfig.useDevBootstrap = useDevBootstrap
         val directHost = if (useDevBootstrap) DEV_EMULATOR_HOST else null
         val directPort = if (useDevBootstrap) forwardPort else null
-        networkCoordinator.start(
+        // Stand down rather than crash. Under the strict app lock there is no passphrase to open
+        // the database with, so there is nothing this service can usefully do; NOT_STICKY stops
+        // the system bringing it straight back into the same wall. The unlock starts it again.
+        if (databaseKeyProvider.isLocked) {
+            AppLogger.warn(TAG, "started while the app lock holds the database shut; standing down")
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        networkCoordinator.get().start(
             listenPort = listenPort,
             directHost = directHost,
             directPort = directPort,
@@ -75,6 +96,7 @@ class NetworkLifecycleService : Service() {
         const val EXTRA_USE_DEV_BOOTSTRAP = "use_dev_bootstrap"
         const val DEFAULT_LISTEN_PORT = 48555
         private const val DEV_EMULATOR_HOST = "10.0.2.2"
+        private const val TAG = "Network"
 
         /**
          * Whether an instance is alive right now. Read from other processes'
