@@ -68,10 +68,13 @@ data class RecipientDelivery(
  */
 data class MessageDeliveryInfo(
     val outgoing: Boolean,
-    val createdAtUnixMs: Long,
     val sentAtUnixMs: Long?,
     val deliveredAtUnixMs: Long?,
     val readAtUnixMs: Long?,
+    /** When its text was last edited; null for a message never edited. */
+    val editedAtUnixMs: Long? = null,
+    /** When it was deleted for everyone; null for one that was not, or deleted before this was kept. */
+    val deletedAtUnixMs: Long? = null,
     /** Attachment byte count, or the UTF-8 length of a text body. */
     val sizeBytes: Long?,
     val recipients: List<RecipientDelivery>,

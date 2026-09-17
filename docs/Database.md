@@ -1,8 +1,8 @@
 # vMessenger - Local Database
 
-The on-device store: Room over SQLCipher, **schema version 19**.
+The on-device store: Room over SQLCipher, **schema version 20**.
 
-Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/database/` and the exported schema `core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/19.json`.
+Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/database/` and the exported schema `core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/20.json`.
 
 ---
 
@@ -22,7 +22,7 @@ Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/d
 ```kotlin
 Room.databaseBuilder(context, VMessengerDatabase::class.java, "vmessenger.db")
     .openHelperFactory(SupportOpenHelperFactory(passphrase))   // net.zetetic SQLCipher
-    .addMigrations(MIGRATION_1_2 … MIGRATION_18_19)
+    .addMigrations(MIGRATION_1_2 … MIGRATION_19_20)
     .build()
 ```
 
@@ -193,6 +193,7 @@ The index on `groupId` is unique (one conversation per group). SQLite treats NUL
 | `attachmentDurationMs` | INTEGER? | voice/video length, known before the file arrives |
 | `attachmentWaveform` | BLOB? | exactly 64 amplitude buckets (one byte each, 0..255) |
 | `editedAtUnixMs` | INTEGER? | when the sender last edited it; null for a message that never was |
+| `deletedAtUnixMs` | INTEGER? | when the sender deleted it for everyone (their clock, as the delete carried it); null otherwise, and for tombstones from before schema 20 |
 
 Indices:
 
@@ -438,6 +439,7 @@ Three projection types keep the UI off N+1 queries:
 | 16 → 17 | `CREATE INDEX index_message_conv_created ON message(conversationId, createdAtUnixMs)` |
 | 17 → 18 | groups (`chat_group`, `chat_group_member`), per-recipient delivery (`message_recipient`, re-keyed `outbox`), group-aware `conversation`, voice/caption/sender columns on `message`; drops `session` |
 | 18 → 19 | message edit, profile photos, and the pending-revoke queue — see below |
+| 19 → 20 | `message.deletedAtUnixMs` |
 
 ### 18 → 19 in detail
 
@@ -451,8 +453,16 @@ because nothing about an existing row changes meaning:
   never sent a profile update — so old rows need no back-fill.
 - `pending_revoke` (§4.18), with no foreign key, for the same reason the table exists at all.
 
-Delete-for-everyone needed no column: it is stored as a `MESSAGE_CONTROL` row and a `DELETED`
-content type on the message it refers to, both of which are enum names in existing columns.
+Delete-for-everyone needed no column here: it is stored as a `MESSAGE_CONTROL` row and a `DELETED`
+content type on the message it refers to, both of which are enum names in existing columns. Its
+time did not survive, which is what 19 → 20 adds.
+
+### 19 → 20 in detail
+
+Exported as `MIGRATION_19_20_STATEMENTS`. One `ADD COLUMN`, `message.deletedAtUnixMs`, so the
+message info sheet can show when a message was deleted for everyone next to when it was edited.
+The delete always carried the time on the wire; it simply was not kept. Existing tombstones stay
+null — "not known", which the sheet leaves out rather than showing an invented date.
 
 ### 15 → 16 in detail
 

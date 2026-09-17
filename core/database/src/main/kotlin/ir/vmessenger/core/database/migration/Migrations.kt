@@ -552,3 +552,21 @@ val MIGRATION_18_19_STATEMENTS: List<String> = listOf(
     )
     """.trimIndent(),
 )
+
+val MIGRATION_19_20 = object : Migration(19, 20) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_19_20_STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/**
+ * When a message was deleted for everyone.
+ *
+ * The delete always carried its time on the wire and nothing kept it, so the message info sheet
+ * could say a message had been edited and when, but of a deleted one only that it was gone.
+ * Additive: every existing tombstone keeps a null time, which the sheet reads as "not known" and
+ * leaves out rather than guessing.
+ */
+val MIGRATION_19_20_STATEMENTS: List<String> = listOf(
+    "ALTER TABLE `message` ADD COLUMN `deletedAtUnixMs` INTEGER DEFAULT NULL",
+)

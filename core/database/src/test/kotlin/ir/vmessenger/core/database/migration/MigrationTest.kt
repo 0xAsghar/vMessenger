@@ -8,7 +8,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Every migration up to 17, in order; [UP_TO_18] and [UP_TO_19] add the later ones. */
+/** Every migration up to 17, in order; [UP_TO_18], [UP_TO_19] and [UP_TO_20] add the later ones. */
 internal val UP_TO_17 = listOf(
     MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
     MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
@@ -19,6 +19,8 @@ internal val UP_TO_17 = listOf(
 internal val UP_TO_18 = UP_TO_17 + MIGRATION_17_18
 
 internal val UP_TO_19 = UP_TO_18 + MIGRATION_18_19
+
+internal val UP_TO_20 = UP_TO_19 + MIGRATION_19_20
 
 /**
  * Replays every migration on a real SQLite engine (JDBC, in memory), because a
@@ -56,6 +58,28 @@ class MigrationTest {
         assertContains(database.columns("contact"), "avatarRevision")
         assertContains(database.columns("identity"), "avatarPath")
         assertContains(database.columns("identity"), "avatarRevision")
+    }
+
+    @Test
+    fun `a tombstone from before 20 survives with its deletion time unknown`() {
+        migrateTo19()
+        database.db.execSQL(
+            """
+            INSERT INTO `message` (
+                `messageId`, `conversationId`, `direction`, `contentType`, `body`,
+                `replyToMessageId`, `status`, `createdAtUnixMs`, `sentAtUnixMs`,
+                `deliveredAtUnixMs`, `readAtUnixMs`, `attachmentEncrypted`, `editedAtUnixMs`
+            ) VALUES ('m1', 'c1', 'INCOMING', 'DELETED', NULL, NULL, 'DELIVERED', 1, 1, 1, NULL, 0, 7)
+            """.trimIndent(),
+        )
+
+        MIGRATION_19_20.migrate(database.db)
+
+        // Unknown rather than epoch zero, and the edit time it already had is untouched.
+        val times = database.query("SELECT `editedAtUnixMs`, `deletedAtUnixMs` FROM `message`") {
+            it.getString("editedAtUnixMs") to it.getString("deletedAtUnixMs")
+        }
+        assertEquals(listOf<Pair<String?, String?>>("7" to null), times)
     }
 
     @Test

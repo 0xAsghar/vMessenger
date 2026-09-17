@@ -66,7 +66,7 @@ class MessageRevisionSender @Inject constructor(
             ?: return AppResult.Error(AppError.Validation(NOT_OURS))
         val now = System.currentTimeMillis()
         message.attachmentPath?.let(attachmentFiles::delete)
-        messageDao.update(tombstone(message))
+        messageDao.update(tombstone(message, deletedAtUnixMs = now))
         fanOut(message.conversationId) {
             setMessageDelete(
                 MessageDelete.newBuilder()
@@ -84,8 +84,9 @@ class MessageRevisionSender @Inject constructor(
                 (it.contentType == MessageContentType.TEXT || it.caption != null)
         }
 
-    private fun tombstone(message: MessageEntity) = message.copy(
+    private fun tombstone(message: MessageEntity, deletedAtUnixMs: Long) = message.copy(
         contentType = MessageContentType.DELETED,
+        deletedAtUnixMs = deletedAtUnixMs,
         body = null,
         caption = null,
         replyToMessageId = null,

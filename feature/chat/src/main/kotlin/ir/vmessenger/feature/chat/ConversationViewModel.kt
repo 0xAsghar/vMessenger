@@ -502,7 +502,9 @@ private fun ChatMessage.toItem(startsSenderRun: Boolean): ChatItem.Message {
         // sender's clock is shown where it is labelled as such, in the Information sheet.
         time = VmDateFormat.time(if (outgoing) sentAtUnixMs ?: createdAtUnixMs else createdAtUnixMs),
         ticks = if (outgoing) status.toTicks() else null,
-        edited = editedAtUnixMs != null,
+        // Not on a tombstone: "edited" under «این پیام حذف شد» describes text that is gone. When it
+        // was edited, and when deleted, are both in the Information sheet.
+        edited = editedAtUnixMs != null && !deleted,
         deleted = deleted,
         attachment = attachment?.let {
             AttachmentUi(

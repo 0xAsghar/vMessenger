@@ -59,20 +59,32 @@ internal fun MessageInfoSheet(
     }
 }
 
-/** The message-level timeline, dropping every step that has not happened yet. */
+/**
+ * The message-level timeline, dropping every step that has not happened yet.
+ *
+ * There is no "written" row. It was the moment the row was created on this device — for a message
+ * we received, the moment it arrived — which read as a second, slightly different "sent" and said
+ * nothing the other rows do not. An edit and a delete-for-everyone, which do change what the
+ * bubble shows, get rows of their own.
+ */
 @Composable
 private fun MessageFacts(info: MessageDeliveryInfo) {
     // "Sent" means our transport wrote the frame for a message we sent, and the sender's own
     // clock for one we received — two different things that must not share a label.
     val sentLabel = if (info.outgoing) R.string.feature_chat_info_sent_at else R.string.feature_chat_info_sender_time
     val facts = buildList {
-        add(stringResource(R.string.feature_chat_info_created) to VmDateFormat.dayAndTime(info.createdAtUnixMs))
         info.sentAtUnixMs?.let { add(stringResource(sentLabel) to VmDateFormat.dayAndTime(it)) }
         info.deliveredAtUnixMs?.let {
             add(stringResource(R.string.feature_chat_info_delivered_at) to VmDateFormat.dayAndTime(it))
         }
         info.readAtUnixMs?.let {
             add(stringResource(R.string.feature_chat_info_read_at) to VmDateFormat.dayAndTime(it))
+        }
+        info.editedAtUnixMs?.let {
+            add(stringResource(R.string.feature_chat_info_edited_at) to VmDateFormat.dayAndTime(it))
+        }
+        info.deletedAtUnixMs?.let {
+            add(stringResource(R.string.feature_chat_info_deleted_at) to VmDateFormat.dayAndTime(it))
         }
         info.sizeBytes?.let { add(stringResource(R.string.feature_chat_info_size) to VmTextFormat.fileSize(it)) }
     }

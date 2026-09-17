@@ -62,14 +62,15 @@ class MessageRevisionHandler @Inject constructor(
     private suspend fun applyDelete(conversationId: String, contactId: String, envelope: MessageEnvelope) {
         val targetId = envelope.messageDelete.targetMessageId.toStringUtf8()
         if (!targetId.isUsableId()) return
+        val deletedAt = envelope.messageDelete.deletedAtUnixMs
         val existing = messageDao.getByIdInConversation(targetId, conversationId)
         if (existing == null) {
-            insertEarlyTombstone(conversationId, targetId, envelope.messageDelete.deletedAtUnixMs)
+            insertEarlyTombstone(conversationId, targetId, deletedAt)
             return
         }
         if (isOwnedBy(existing, contactId)) {
             existing.attachmentPath?.let { attachmentFiles.delete(it) }
-            messageDao.update(tombstone(existing))
+            messageDao.update(tombstone(existing, deletedAt))
         }
     }
 
@@ -98,8 +99,10 @@ class MessageRevisionHandler @Inject constructor(
 
     private fun String.isUsableId(): Boolean = isNotBlank() && length <= MAX_MESSAGE_ID_CHARS
 
-    private fun tombstone(target: MessageEntity) = target.copy(
+    /** [deletedAtUnixMs] is the sender's, as the delete carried it; 0 from a sender that set none. */
+    private fun tombstone(target: MessageEntity, deletedAtUnixMs: Long) = target.copy(
         contentType = MessageContentType.DELETED,
+        deletedAtUnixMs = deletedAtUnixMs.takeIf { it > 0 },
         body = null,
         caption = null,
         replyToMessageId = null,
@@ -127,6 +130,7 @@ class MessageRevisionHandler @Inject constructor(
                 sentAtUnixMs = deletedAtUnixMs,
                 deliveredAtUnixMs = deletedAtUnixMs,
                 readAtUnixMs = null,
+                deletedAtUnixMs = deletedAtUnixMs.takeIf { it > 0 },
             ),
         )
     }

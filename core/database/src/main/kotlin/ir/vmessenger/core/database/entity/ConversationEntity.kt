@@ -101,6 +101,11 @@ data class MessageEntity(
     val attachmentPlayedAtUnixMs: Long? = null,
     /** When the sender last revised this message's text; null for one never edited. */
     val editedAtUnixMs: Long? = null,
+    /**
+     * When the sender deleted it for everyone, by the sender's clock, as the delete carried it;
+     * null for a message that was not. Set together with the `DELETED` content type.
+     */
+    val deletedAtUnixMs: Long? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -140,6 +145,7 @@ data class MessageEntity(
         attachmentDurationMs,
         attachmentPlayedAtUnixMs,
         editedAtUnixMs,
+        deletedAtUnixMs,
     )
 
     private companion object {

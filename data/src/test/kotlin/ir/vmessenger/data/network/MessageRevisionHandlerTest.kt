@@ -97,6 +97,20 @@ class MessageRevisionHandlerTest {
         val stored = harness.messageDao.messages.single()
         assertEquals(MessageContentType.DELETED, stored.contentType)
         assertNull(stored.body)
+        // Kept for the message info sheet, by the sender's clock as the delete carried it.
+        assertEquals(500L, stored.deletedAtUnixMs)
+    }
+
+    @Test
+    fun `an edited message that is then deleted keeps both times`() = runTest {
+        harness.messageDao.messages += incoming("m1", "first")
+        handler.handle("a", edit("m1", "second", at = 100))
+
+        handler.handle("a", delete("m1"))
+
+        val stored = harness.messageDao.messages.single()
+        assertEquals(100L, stored.editedAtUnixMs)
+        assertEquals(500L, stored.deletedAtUnixMs)
     }
 
     @Test
@@ -106,6 +120,7 @@ class MessageRevisionHandlerTest {
         val stored = harness.messageDao.messages.single()
         assertEquals("m-future", stored.messageId)
         assertEquals(MessageContentType.DELETED, stored.contentType)
+        assertEquals(500L, stored.deletedAtUnixMs)
         // The collector's per-conversation dedup then drops the original when it lands.
         assertNotNull(harness.messageDao.getByIdInConversation("m-future", CONVERSATION))
     }

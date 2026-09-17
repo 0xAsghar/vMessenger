@@ -201,10 +201,11 @@ class ConversationRepositoryImpl @Inject constructor(
         }
         return MessageDeliveryInfo(
             outgoing = message.direction == DbMessageDirection.OUTGOING,
-            createdAtUnixMs = message.createdAtUnixMs,
             sentAtUnixMs = message.sentAtUnixMs,
             deliveredAtUnixMs = message.deliveredAtUnixMs,
             readAtUnixMs = message.readAtUnixMs,
+            editedAtUnixMs = message.editedAtUnixMs,
+            deletedAtUnixMs = message.deletedAtUnixMs,
             // No column stores a text message's size, and inventing one would be a migration for
             // a label; the body's own UTF-8 length is the honest answer for a text bubble.
             sizeBytes = message.attachmentSizeBytes ?: message.body?.toByteArray()?.size?.toLong(),

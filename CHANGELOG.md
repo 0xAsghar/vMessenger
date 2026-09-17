@@ -9,12 +9,14 @@ GitHub Releases; they were never tracked here and are not reconstructed.
 
 Two version numbers move independently of this file and are stated where they matter: the **wire
 protocol major** (currently 2, [docs/Protocol.md](docs/Protocol.md)) and the **database schema
-version** (currently 19, [docs/Database.md](docs/Database.md)).
+version** (currently 20, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
 
 Ten bugs reported against 1.1.1, each reproduced on two emulators before it was fixed and checked
 there again after, plus one defect found on the way.
+
+**Database schema 19 → 20.** Migration included; no action needed.
 
 ### Fixed
 
@@ -52,6 +54,9 @@ there again after, plus one defect found on the way.
 
 ### Changed
 
+- **Message info** no longer has a «نوشته شد» row. An edited message shows «ویرایش شد» and a
+  message deleted for everyone shows «حذف شد», each with its date and time. Messages deleted
+  before this version show no deletion time, because none was kept.
 - **App lock settings** no longer carry paragraphs under the switches; each explanation appears in
   the dialog that turning the switch on opens.
 
