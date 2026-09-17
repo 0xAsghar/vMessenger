@@ -2,6 +2,7 @@ package ir.vmessenger.data.network
 
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.PendingRevokeDao
 import ir.vmessenger.core.database.entity.PendingRevokeEntity
@@ -83,9 +84,12 @@ class PendingRevokeWorker @Inject constructor(
         )
         val result = runCatching {
             contactRequestService.sendResponse(
-                // The contact row is gone by now, which is the point of this table; the service
-                // only needs an id for logging at this stage.
-                contactId = "revoked",
+                // One slot per peer. The contact row is gone by now, which is the point of this
+                // table, so there is no real contact id — but a shared placeholder was worse than
+                // none: the messaging layer reuses an open session by this id without looking at
+                // who is on the other end, so the second revoke of a pass went down the session
+                // opened for the first, reached the wrong peer, and left the queue as delivered.
+                contactId = SLOT_PREFIX + IdentityHashMatcher.routingKeyHex(pending.identityHash),
                 peer = peer,
                 requestId = pending.requestId,
                 type = ContactResponseType.CONTACT_RESPONSE_REVOKE,
@@ -102,6 +106,7 @@ class PendingRevokeWorker @Inject constructor(
 
     private companion object {
         const val TAG = "Contact"
+        const val SLOT_PREFIX = "revoked:"
         const val POLL_INTERVAL_MS = 30_000L
         const val BASE_BACKOFF_MS = 30_000L
         const val MAX_BACKOFF_MS = 15 * 60_000L

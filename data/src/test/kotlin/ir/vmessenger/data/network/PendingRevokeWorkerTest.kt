@@ -26,6 +26,23 @@ class PendingRevokeWorkerTest {
         assertTrue(dao.queued.isEmpty())
     }
 
+    /**
+     * Two peers deleted while offline, both back by the next pass. Sent under one shared id, the
+     * second revoke reused the session dialled for the first and never reached its own peer.
+     */
+    @Test
+    fun `each revoke goes out under its own peer's slot`() = runTest {
+        val harness = InboundHarness()
+        dao.upsert(pending(createdAt = 0, nextAttempt = 0))
+        dao.upsert(pending(createdAt = 0, nextAttempt = 0, peerByte = 0x0D))
+
+        worker(harness).runPass(now = 1_000)
+
+        val slots = harness.messaging.sent.map { it.first }
+        assertEquals(2, slots.size)
+        assertEquals(2, slots.toSet().size)
+    }
+
     @Test
     fun `a revoke older than the give-up window is purged`() = runTest {
         dao.upsert(pending(createdAt = 0, nextAttempt = 0))
@@ -45,9 +62,8 @@ class PendingRevokeWorkerTest {
         assertEquals(1, dao.due(now = 10_000).size)
     }
 
-    private fun worker(): PendingRevokeWorker {
-        val harness = InboundHarness()
-        return PendingRevokeWorker(
+    private fun worker(harness: InboundHarness = InboundHarness()): PendingRevokeWorker =
+        PendingRevokeWorker(
             pendingRevokeDao = dao,
             contactRequestService = ContactRequestService(
                 harness.identityRepository,
@@ -57,12 +73,11 @@ class PendingRevokeWorkerTest {
                 Dispatchers.Unconfined,
             ),
             selfIdentityCache = harness.selfIdentityCache,
-            ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,
+            ioDispatcher = Dispatchers.Unconfined,
         )
-    }
 
-    private fun pending(createdAt: Long, nextAttempt: Long) = PendingRevokeEntity(
-        identityHash = ByteArray(32) { 0x0A },
+    private fun pending(createdAt: Long, nextAttempt: Long, peerByte: Byte = 0x0A) = PendingRevokeEntity(
+        identityHash = ByteArray(32) { peerByte },
         ed25519Public = ByteArray(32) { 0x0B },
         x25519StaticPublic = ByteArray(32) { 0x0C },
         requestId = "cr-abc",
