@@ -251,8 +251,15 @@ class ConversationViewModel @Inject constructor(
         typedText.value = ""
     }
 
-    fun onAttachmentPicked(uri: String) {
-        viewModelScope.launch { conversationRepository.sendAttachment(conversationId, uri) }
+    /**
+     * One message per item, sent one after another in the order they were picked: launched side by
+     * side, a large photo still encrypting would land after the small one picked after it.
+     */
+    fun onAttachmentsPicked(uris: List<String>) {
+        if (uris.isEmpty()) return
+        viewModelScope.launch {
+            for (uri in uris) conversationRepository.sendAttachment(conversationId, uri)
+        }
     }
 
     fun onReply(messageId: String) {

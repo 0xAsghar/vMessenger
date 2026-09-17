@@ -30,6 +30,9 @@ import kotlinx.coroutines.launch
 
 private const val ANY_MIME = "*/*"
 
+/** Per pick, like the other messengers' albums; the system picker enforces it in its own UI. */
+private const val MAX_PICKED_MEDIA = 10
+
 /** Where the conversation can navigate to; bundled to keep the screen's parameter list short. */
 @Stable
 internal class ConversationNavigation(
@@ -214,7 +217,7 @@ private fun rememberSheetState(
     val clipboard = LocalClipboardManager.current
     val copied = stringResource(R.string.feature_chat_copied)
     val attachOpen = rememberSaveable { mutableStateOf(false) }
-    val picker = rememberAttachmentPicker(viewModel::onAttachmentPicked)
+    val picker = rememberAttachmentPicker(viewModel::onAttachmentsPicked)
     return remember(picker) {
         ConversationSheetState(
             attachOpen = attachOpen,
@@ -231,17 +234,17 @@ private fun rememberSheetState(
 /**
  * Photos and video go through the system Photo Picker, which needs no storage permission
  * and never shows the app the rest of the gallery; anything else goes through `OpenDocument`.
+ *
+ * All three take several items at once. The single-item contracts closed the picker on the first
+ * tap, so sending an album meant reopening it once per photo.
  */
 @Composable
-private fun rememberAttachmentPicker(onPicked: (String) -> Unit): AttachmentPicker {
-    val photo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { onPicked(it.toString()) }
-    }
-    val video = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { onPicked(it.toString()) }
-    }
-    val file = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { onPicked(it.toString()) }
+private fun rememberAttachmentPicker(onPicked: (List<String>) -> Unit): AttachmentPicker {
+    val media = remember { ActivityResultContracts.PickMultipleVisualMedia(MAX_PICKED_MEDIA) }
+    val photo = rememberLauncherForActivityResult(media) { uris -> onPicked(uris.map { it.toString() }) }
+    val video = rememberLauncherForActivityResult(media) { uris -> onPicked(uris.map { it.toString() }) }
+    val file = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        onPicked(uris.map { it.toString() })
     }
     return remember(photo, video, file) {
         AttachmentPicker(
