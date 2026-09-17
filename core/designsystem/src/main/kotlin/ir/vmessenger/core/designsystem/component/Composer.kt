@@ -95,8 +95,11 @@ fun Composer(
                     // ONE call site, outside the if/else below, and leading in both modes.
                     // Composable identity is positional: duplicating this into each branch would
                     // tear the mic down as recordingContent appears, the pointer loop would never
-                    // see the release, and the recording could never be ended.
-                    if (state.canSend && !recording) SendButton(onSend) else micButton()
+                    // see the release, and the recording could never be ended. The slot around it
+                    // is unconditional for the same reason.
+                    FieldHeightSlot {
+                        if (state.canSend && !recording) SendButton(onSend) else micButton()
+                    }
                     if (recordingContent != null) {
                         recordingContent()
                     } else {
@@ -105,16 +108,35 @@ fun Composer(
                             onTextChange = onTextChange,
                             modifier = Modifier.weight(1f),
                         )
-                        IconButton(onClick = onAttach, enabled = state.enabled) {
-                            Icon(
-                                imageVector = Icons.Outlined.AttachFile,
-                                contentDescription = stringResource(R.string.vm_composer_attach),
-                            )
+                        FieldHeightSlot {
+                            IconButton(onClick = onAttach, enabled = state.enabled) {
+                                Icon(
+                                    imageVector = Icons.Outlined.AttachFile,
+                                    contentDescription = stringResource(R.string.vm_composer_attach),
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * Holds a composer button in a box as tall as a one-line field, centred.
+ *
+ * The row aligns to the bottom so the buttons stay by the last line of a long draft. On its own
+ * that put a 48dp button on the bottom edge of the 56dp field, visibly low against a single line;
+ * centred in a field-high box it is level with one line, and still sits at the bottom of several.
+ */
+@Composable
+private fun FieldHeightSlot(content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier.heightIn(min = TextFieldDefaults.MinHeight),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
     }
 }
 
