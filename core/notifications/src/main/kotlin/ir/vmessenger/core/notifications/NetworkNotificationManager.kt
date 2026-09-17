@@ -39,6 +39,8 @@ class NetworkNotificationManager @Inject constructor(
 
     companion object {
         const val CHANNEL_NETWORK = "network"
+
+        /** Unique among foreground notifications: LocationService's is 2002, and sharing an id merges them. */
         const val NOTIFICATION_ID_NETWORK = 2001
     }
 }

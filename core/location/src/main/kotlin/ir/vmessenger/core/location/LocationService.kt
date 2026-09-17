@@ -124,7 +124,14 @@ class LocationService : Service(), LocationListener {
         /** Handled in :app, which can reach the sharing coordinator this module must not depend on. */
         const val ACTION_STOP_SHARING = "ir.vmessenger.location.STOP_SHARING"
         private const val CHANNEL_ID = "location_sharing"
-        private const val NOTIFICATION_ID = 2001
+
+        /**
+         * Not 2001: that is `NetworkNotificationManager.NOTIFICATION_ID_NETWORK`, the always-on
+         * network service's notification. Sharing one id, starting this service overwrote that
+         * notification with this one, and stopping it left the network service showing «اشتراک
+         * موقعیت فعال است» — GPS off, share over, notification still claiming otherwise.
+         */
+        private const val NOTIFICATION_ID = 2002
         private const val INTERVAL_MS = 15_000L
 
         // 0 so a stationary device still receives periodic updates; with a
