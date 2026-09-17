@@ -97,10 +97,11 @@ internal fun buildContactDetailState(
     val contact = data.contact
     return ContactDetailUiState(
         loading = false,
-        contact = contact?.toRow(shared = null, myLocation = null),
+        contact = contact?.toRow(shared = data.sharedLocation, myLocation = null),
         localPublicKey = data.localPublicKey,
         remotePublicKey = contact?.ed25519PublicKey,
         canSeeMyLocation = data.canSeeMyLocation,
+        location = contact?.let { data.sharedLocation?.toContactLocation(it) },
         dialog = dialogFor(action, contact?.displayName),
     )
 }

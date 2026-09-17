@@ -1,13 +1,16 @@
 package ir.vmessenger.feature.contacts
 
 import ir.vmessenger.domain.model.Contact
+import ir.vmessenger.domain.model.LocationSample
 import ir.vmessenger.domain.repository.ContactRepository
 import ir.vmessenger.domain.repository.LocationAccessRepository
+import ir.vmessenger.domain.repository.LocationRepository
 import ir.vmessenger.domain.usecase.contact.ObserveContactsUseCase
 import ir.vmessenger.domain.usecase.identity.GetIdentityUseCase
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
 /** Everything the detail screen renders about one contact, gathered in a single emission. */
@@ -15,6 +18,8 @@ internal data class ContactDetailData(
     val contact: Contact?,
     val canSeeMyLocation: Boolean,
     val localPublicKey: ByteArray?,
+    /** Their latest position while they share it with us; null when they do not. */
+    val sharedLocation: LocationSample? = null,
 )
 
 /**
@@ -28,6 +33,7 @@ class ContactDetailSource @Inject constructor(
     private val observeContacts: ObserveContactsUseCase,
     private val contactRepository: ContactRepository,
     private val locationAccess: LocationAccessRepository,
+    private val locationRepository: LocationRepository,
     private val getIdentity: GetIdentityUseCase,
 ) {
     private val localPublicKey: Flow<ByteArray?> = flow { emit(getIdentity()?.ed25519PublicKey) }
@@ -36,11 +42,13 @@ class ContactDetailSource @Inject constructor(
         observeContacts(),
         locationAccess.observeAll(),
         localPublicKey,
-    ) { contacts, access, identityKey ->
+        locationRepository.observeIncomingLocations().map { it[contactId] },
+    ) { contacts, access, identityKey, location ->
         ContactDetailData(
             contact = contacts.firstOrNull { it.id == contactId } ?: contactRepository.getContact(contactId),
             canSeeMyLocation = access[contactId] == true,
             localPublicKey = identityKey,
+            sharedLocation = location,
         )
     }
 

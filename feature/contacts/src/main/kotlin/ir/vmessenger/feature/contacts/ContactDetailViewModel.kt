@@ -31,6 +31,8 @@ data class ContactDetailUiState(
     val localPublicKey: ByteArray? = null,
     val remotePublicKey: ByteArray? = null,
     val canSeeMyLocation: Boolean = false,
+    /** Where they are, while they share their position with us. */
+    val location: ContactLocation? = null,
     val dialog: ContactDialog = ContactDialog.None,
 ) {
     /** The contact is gone (deleted here, or after the peer's revoke); the screen has to pop. */
