@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.format.VmDateFormat
 import ir.vmessenger.core.designsystem.format.VmTextFormat
@@ -34,27 +35,35 @@ internal fun distanceLabel(meters: Double): String = if (meters >= METERS_PER_KM
     stringResource(R.string.contacts_distance_meters, VmTextFormat.persianDigits(meters.toInt().toString()))
 }
 
+/** Between the distance and the last-heard time on one line; reads the same in either direction. */
+private const val SUBTITLE_SEPARATOR = " · "
+
 /**
- * The second line of a contact row.
+ * The text of a contact row's second line: how far away they are, when they share their position,
+ * and when we last heard from them — both, not one in place of the other.
  *
  * It used to be the user hash, which is unreadable, identical in shape for everyone, and already
- * available on the detail screen and its share row. The priority is what is most alive: a distance
- * if they are sharing a position, otherwise when we last heard from them, otherwise nothing.
+ * available on the detail screen and its share row. Then it became a priority chain in which a
+ * distance *replaced* the last-heard time, so a sharing contact lost the one thing that says whether
+ * that distance is current.
  *
- * "Last heard from", not "last seen" — the underlying column is touched by any inbound frame,
- * receipts and control packets included, so calling it presence would overstate it. It is null for
- * a contact who has never sent one and for every contact after a backup restore, which is why the
- * pending case has its own line rather than an empty one.
+ * "Last heard from", not "last seen" — the underlying column is touched by anything the contact
+ * addresses to us, receipts and control packets included, so calling it presence would overstate
+ * it. It is null for a contact who has never sent anything and for every contact after a backup
+ * restore, which is why the pending case has its own words rather than an empty line.
  */
 @Composable
-internal fun contactSubtitle(contact: ContactRow): String? = when {
-    contact.sharesLocation && contact.distanceMeters != null -> distanceLabel(contact.distanceMeters)
-    contact.lastSeenUnixMs != null -> stringResource(
-        R.string.contacts_last_heard,
-        VmDateFormat.relative(contact.lastSeenUnixMs),
-    )
-    contact.status == ContactRelationshipStatus.PENDING_OUT -> stringResource(R.string.contacts_never_heard)
-    else -> null
+internal fun contactSubtitle(contact: ContactRow): String? {
+    val distance = contact.distanceMeters?.takeIf { contact.sharesLocation }?.let { distanceLabel(it) }
+    val heard = when {
+        contact.lastSeenUnixMs != null -> stringResource(
+            R.string.contacts_last_heard,
+            VmDateFormat.relative(contact.lastSeenUnixMs),
+        )
+        contact.status == ContactRelationshipStatus.PENDING_OUT -> stringResource(R.string.contacts_never_heard)
+        else -> null
+    }
+    return listOfNotNull(distance, heard).joinToString(SUBTITLE_SEPARATOR).ifEmpty { null }
 }
 
 @Composable
@@ -85,10 +94,17 @@ internal fun ContactStatusChip(
     }
 }
 
-/** The contact is sharing their live location with us; the distance is shown when we have a fix. */
+/**
+ * A contact row's second line, [text] from [contactSubtitle], led by a pin while the contact shares
+ * their live location with us.
+ *
+ * The distance used to be drawn twice — here, and again as a badge at the far end of the row — so
+ * the pin now lives on this line only, next to the number it explains.
+ */
 @Composable
-internal fun DistanceBadge(
-    distanceMeters: Double?,
+internal fun ContactSubtitle(
+    text: String?,
+    sharesLocation: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -96,17 +112,21 @@ internal fun DistanceBadge(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.xxs),
     ) {
-        Icon(
-            imageVector = Icons.Outlined.LocationOn,
-            contentDescription = stringResource(R.string.contacts_location_shared),
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(BadgeIconSize),
-        )
-        if (distanceMeters != null) {
+        if (sharesLocation) {
+            Icon(
+                imageVector = Icons.Outlined.LocationOn,
+                contentDescription = stringResource(R.string.contacts_location_shared),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(BadgeIconSize),
+            )
+        }
+        if (text != null) {
             Text(
-                text = distanceLabel(distanceMeters),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

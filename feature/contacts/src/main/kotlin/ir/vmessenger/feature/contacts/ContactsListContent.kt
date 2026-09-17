@@ -31,8 +31,8 @@ import ir.vmessenger.domain.model.ContactRelationshipStatus
  * Requests first — they are the only rows that expire if ignored — then contacts by name.
  *
  * The contact row is built here rather than from `ChatListItem` because it needs a trailing
- * cluster (distance, status, key-change shield) that the chat row has no slot for; the metrics
- * and tokens are the same, so the two lists still line up.
+ * cluster (status, key-change shield) that the chat row has no slot for; the metrics and tokens
+ * are the same, so the two lists still line up.
  */
 @Composable
 internal fun ContactsList(
@@ -83,16 +83,10 @@ private fun ContactRowItem(
     VmListRow(
         title = contact.name,
         modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),
-        subtitle = subtitle?.let {
-            {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+        subtitle = if (subtitle != null || contact.sharesLocation) {
+            { ContactSubtitle(text = subtitle, sharesLocation = contact.sharesLocation) }
+        } else {
+            null
         },
         trailing = { ContactRowTrailing(contact = contact) },
         avatar = { Avatar(seed = contact.identityHash, name = contact.name) },
@@ -107,9 +101,6 @@ private fun ContactRowTrailing(contact: ContactRow) {
     ) {
         if (contact.keyChangePending) {
             KeyChangeShield()
-        }
-        if (contact.sharesLocation) {
-            DistanceBadge(distanceMeters = contact.distanceMeters)
         }
         if (contact.status != ContactRelationshipStatus.APPROVED) {
             ContactStatusChip(status = contact.status)
