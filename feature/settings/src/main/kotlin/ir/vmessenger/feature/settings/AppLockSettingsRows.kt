@@ -38,6 +38,8 @@ import ir.vmessenger.core.designsystem.theme.VmSpacing
 /** Android 11 is where the Keystore learned to hold a key behind a recent authentication. */
 private const val STRICT_MODE_MIN_ANDROID = "11"
 
+private const val PARAGRAPH_BREAK = "\n\n"
+
 /**
  * What the app-lock rows show and what they call.
  *
@@ -61,18 +63,34 @@ internal data class AppLockSettings(
 /**
  * The app-lock block of the privacy section. Everything under the first switch only has meaning
  * once there is a lock, so those rows appear and disappear as a group.
+ *
+ * The switches carry no paragraphs of their own. What each one does, and what it costs, is said in
+ * the dialog that turning it on opens — the one moment it is being decided — instead of sitting
+ * under the row as a wall of text on every visit to settings.
  */
 @Composable
 internal fun AppLockRows(state: AppLockSettings) {
+    var explaining by remember { mutableStateOf(false) }
     SettingsRow(
         label = stringResource(R.string.settings_app_lock),
         icon = Icons.Outlined.Lock,
-        supporting = stringResource(R.string.settings_app_lock_body),
         trailing = SettingsTrailing.Switch(
             checked = state.enabled,
-            onCheckedChange = { on -> if (on) state.onSetUp() else state.onDisable() },
+            onCheckedChange = { on -> if (on) explaining = true else state.onDisable() },
         ),
     )
+    if (explaining) {
+        ConfirmDialog(
+            title = stringResource(R.string.settings_app_lock_confirm_title),
+            body = stringResource(R.string.settings_app_lock_body),
+            confirmLabel = stringResource(R.string.settings_app_lock_confirm_action),
+            onConfirm = {
+                explaining = false
+                state.onSetUp()
+            },
+            onDismiss = { explaining = false },
+        )
+    }
     if (!state.enabled) return
     SettingsDivider()
     SettingsRow(
@@ -110,8 +128,9 @@ private fun StrictModeRow(state: AppLockSettings) {
     SettingsRow(
         label = stringResource(R.string.settings_app_lock_strict),
         icon = Icons.Outlined.EnhancedEncryption,
+        // Only the reason it cannot be used; what it does is explained on the way on.
         supporting = if (state.strictSupported) {
-            stringResource(R.string.settings_app_lock_strict_body)
+            null
         } else {
             stringResource(
                 R.string.settings_app_lock_strict_unsupported,
@@ -127,7 +146,9 @@ private fun StrictModeRow(state: AppLockSettings) {
     if (confirming) {
         ConfirmDialog(
             title = stringResource(R.string.settings_app_lock_strict_confirm_title),
-            body = stringResource(R.string.settings_app_lock_strict_confirm_body),
+            body = stringResource(R.string.settings_app_lock_strict_body) +
+                PARAGRAPH_BREAK +
+                stringResource(R.string.settings_app_lock_strict_confirm_body),
             confirmLabel = stringResource(R.string.settings_app_lock_strict_confirm_action),
             onConfirm = {
                 confirming = false
@@ -174,7 +195,6 @@ private fun WipeAfterFailuresRow(state: AppLockSettings) {
     SettingsRow(
         label = stringResource(R.string.settings_app_lock_wipe),
         icon = Icons.Outlined.DeleteForever,
-        supporting = stringResource(R.string.settings_app_lock_wipe_body),
         trailing = SettingsTrailing.Switch(
             checked = state.wipeOnFailedAttempts,
             onCheckedChange = { on -> if (on) confirming = true else state.onWipeOnFailedAttempts(false) },

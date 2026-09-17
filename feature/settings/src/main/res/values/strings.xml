@@ -9,6 +9,8 @@
     <string name="settings_screen_security">امنیت صفحه</string>
     <string name="settings_app_lock">قفل برنامه</string>
     <string name="settings_app_lock_body">برای باز کردن برنامه رمز عددی خواسته می‌شود. این قفل فقط جلوی صفحه را می‌گیرد: پیام‌ها مثل همیشه دریافت و ذخیره می‌شوند و چیزی به رمزنگاری داده‌ها اضافه نمی‌شود. کسی که دستگاهِ باز شما، دسترسی روت یا ابزار فارنزیک داشته باشد، با این قفل یا بدون آن به همان اندازه داده‌ها را می‌خواند.</string>
+    <string name="settings_app_lock_confirm_title">قفل برنامه روشن شود؟</string>
+    <string name="settings_app_lock_confirm_action">ادامه</string>
     <string name="settings_app_lock_change_pin">تغییر رمز قفل</string>
     <string name="settings_app_lock_strict">حالت سخت‌گیرانه</string>
     <string name="settings_app_lock_strict_body">کلید پایگاه‌داده پشت سخت‌افزار دستگاه نگه داشته می‌شود و تا وقتی هویت خود را به دستگاه ثابت نکنید بیرون نمی‌آید؛ این محافظت واقعی روی داده‌های ذخیره‌شده است. در عوض تا وقتی برنامه قفل است هیچ پیامی دریافت نمی‌شود — نه اعلانی می‌آید و نه چیزی در پس‌زمینه ذخیره می‌شود.</string>
@@ -27,7 +29,6 @@
     <string name="settings_app_lock_timeout_minutes">%1$s دقیقه</string>
     <string name="settings_app_lock_timeout_close">بستن</string>
     <string name="settings_app_lock_wipe">پاک‌کردن داده‌ها پس از رمزهای اشتباه</string>
-    <string name="settings_app_lock_wipe_body">پس از چند بار رمز اشتباه، همهٔ داده‌های برنامه پاک می‌شود. این کار برگشت‌پذیر نیست و هر کسی که گوشی را در دست داشته باشد می‌تواند آن را راه بیندازد.</string>
     <string name="settings_app_lock_wipe_confirm_title">پاک‌کردن داده‌ها پس از رمزهای اشتباه روشن شود؟</string>
     <string name="settings_app_lock_wipe_confirm_body">با چند بار وارد کردن رمز اشتباه، هویت، کلیدها و همهٔ گفتگوها پاک می‌شوند. این کار برگشت‌پذیر نیست و برای راه‌انداختنش فقط داشتن گوشی کافی است؛ کودکی که بازی می‌کند یا کسی که بخواهد داده‌های شما را از بین ببرد هم می‌تواند آن را راه بیندازد. اگر فایل پشتیبان ندارید، اول پشتیبان بگیرید.</string>
     <string name="settings_app_lock_wipe_confirm_action">روشن‌کردن</string>
