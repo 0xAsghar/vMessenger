@@ -119,7 +119,7 @@ Hash-only adds are **not** instant contacts. They initiate a contact-request pro
 | 5 | On `ACCEPT`: status → `APPROVED`, keys learned | On approve: `Contact` inserted as `APPROVED` |
 | 6 | Chat and location enabled | Chat and location enabled |
 
-QR pairing (Section 4) remains **instant** (`APPROVED` immediately) because it is an in-person, signed descriptor exchange.
+QR pairing (Section 4) runs the same protocol from step 2, with the peer's real key in place of a placeholder: the signed descriptor proves who they are, not that they consent. (Up to 1.1.1 a scan was `APPROVED` immediately, which left a one-sided contact whose messages the peer silently dropped.)
 
 Until approval, only `contact_request` / `contact_response` frames are accepted from the stranger; chat and location are rejected. See [Protocol.md](Protocol.md) §8.1 and [Security.md](Security.md) §11.1.
 

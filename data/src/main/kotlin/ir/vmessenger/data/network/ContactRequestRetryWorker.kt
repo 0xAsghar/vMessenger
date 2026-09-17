@@ -69,16 +69,22 @@ class ContactRequestRetryBudget @Inject constructor(
  * Re-sends contact requests until the peer answers.
  *
  * Two cases both need a durable outbound request:
- *  - hash-added contacts (PENDING_OUT): usable only after the peer approves;
- *  - QR-added contacts (APPROVED locally): the peer still has to learn about us,
- *    so we owe them a request too until they respond — but only for
- *    [QR_WINDOW_MS] after the add; after that the peer is simply gone.
+ *  - contacts we added (PENDING_OUT, by QR or by hash): usable only after the
+ *    peer approves;
+ *  - contacts approved here that the peer has never confirmed (APPROVED, never
+ *    heard from): the peer may still have to learn about us, so we owe them a
+ *    request too until they respond — but only for [QR_WINDOW_MS] after the
+ *    add; after that the peer is simply gone.
  *
- * A contact is considered "answered" once we have received anything from it
- * (lastSeenUnixMs set), so retries stop as soon as the peer responds. Every
- * contact gets [MAX_ATTEMPTS_PER_CONTACT] automatic sends; past the cap the
- * worker only knocks once a day ([CAPPED_REPEAT_MS]) so an abandoned request
- * cannot keep dialing forever. A manual re-send by the user resets the budget.
+ * A contact is considered "answered" once it has sent us something only a peer
+ * who has us would send (lastSeenUnixMs set — see `InboundKind.provesPeerHasUs`),
+ * so retries stop as soon as the peer responds. Every contact gets
+ * [MAX_ATTEMPTS_PER_CONTACT] automatic sends. Past the cap a peer that answered
+ * the dial but not the request is knocked on once a day ([CAPPED_REPEAT_MS]); one
+ * that is still unreachable is tried hourly for the first week
+ * ([CAPPED_UNREACHABLE_REPEAT_MS]) — being offline for half a day is ordinary, and
+ * a daily knock meant the request could reach them a day after they came back —
+ * and daily after that. A manual re-send by the user resets the budget.
  * Request ids are deterministic per (requester, target) pair, so the receiver
  * dedupes repeated deliveries.
  */
@@ -131,10 +137,11 @@ class ContactRequestRetryWorker @Inject constructor(
     }
 
     /**
-     * PENDING_OUT: hash-added, waiting for approval. APPROVED + never heard
-     * from: QR-added (or an unacknowledged add) — the peer still needs our
-     * request, but only within the QR window. Once they respond,
-     * lastSeenUnixMs is set and we stop.
+     * PENDING_OUT: added by us (QR or hash), waiting for approval. APPROVED +
+     * never heard from: approved before the other side confirmed it — a QR add
+     * from before QR adds waited for approval, or an approval whose response may
+     * have been lost — so the peer may still need our request, but only within
+     * the window. Once they respond, lastSeenUnixMs is set and we stop.
      */
     private fun ContactEntity.owesRequest(now: Long): Boolean =
         !blocked && when (relationshipStatus) {
@@ -147,7 +154,11 @@ class ContactRequestRetryWorker @Inject constructor(
         val previous = budget.state(contactId)
         val attempts = (previous?.attempts ?: 0) + 1
         val capped = attempts >= MAX_ATTEMPTS_PER_CONTACT
-        when (val result = contactRequestService.deliverRequest(contact)) {
+        // Always a fresh dial. Nothing acknowledges a request until the peer decides, so a write into
+        // a session whose peer had silently gone — killed, or off the network, with the relay still
+        // holding the circuit — reported "sent", and the next knock was a heartbeat away: the request
+        // reached them five minutes after they were back instead of on the next pass.
+        when (val result = contactRequestService.deliverRequest(contact, forceReconnect = true)) {
             is AppResult.Success -> {
                 // Delivered; keep a slow heartbeat until the peer answers so a
                 // lost response still heals (receiver auto-accepts duplicates).
@@ -157,10 +168,10 @@ class ContactRequestRetryWorker @Inject constructor(
             }
             is AppResult.Error -> {
                 val failures = (previous?.failures ?: 0) + 1
-                val backoff = if (capped) {
-                    CAPPED_REPEAT_MS
-                } else {
-                    (BASE_BACKOFF_MS shl minOf(failures, MAX_SHIFT)).coerceAtMost(MAX_BACKOFF_MS)
+                val backoff = when {
+                    !capped -> (BASE_BACKOFF_MS shl minOf(failures, MAX_SHIFT)).coerceAtMost(MAX_BACKOFF_MS)
+                    now - contact.createdAtUnixMs < QR_WINDOW_MS -> CAPPED_UNREACHABLE_REPEAT_MS
+                    else -> CAPPED_REPEAT_MS
                 }
                 budget.record(contactId, ContactRequestRetryBudget.State(attempts, failures, now + backoff))
                 AppLogger.info(
@@ -175,10 +186,15 @@ class ContactRequestRetryWorker @Inject constructor(
         const val MAX_ATTEMPTS_PER_CONTACT = 48
         const val QR_WINDOW_MS = 7L * 24 * 60 * 60_000L
         const val CAPPED_REPEAT_MS = 24L * 60 * 60_000L
+        const val CAPPED_UNREACHABLE_REPEAT_MS = 60 * 60_000L
         const val DELIVERED_REPEAT_MS = 5 * 60_000L
         private const val POLL_INTERVAL_MS = 30_000L
         private const val BASE_BACKOFF_MS = 30_000L
-        private const val MAX_BACKOFF_MS = 15 * 60_000L
+
+        // Five minutes, not fifteen: "they came online and my request only reached them a quarter
+        // of an hour later" reads as the request never being sent. A pending contact is rare and a
+        // failed dial costs a few seconds of radio, so the shorter wait is cheap.
+        private const val MAX_BACKOFF_MS = 5 * 60_000L
         private const val MAX_SHIFT = 5
     }
 }

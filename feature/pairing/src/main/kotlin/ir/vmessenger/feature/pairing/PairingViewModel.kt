@@ -131,7 +131,13 @@ class QrScanViewModel @Inject constructor(
             _uiState.value = AddContactUiState.Saving
             when (val result = addByQr(descriptorBytes)) {
                 is AppResult.Success -> {
-                    messageBus.send(UiMessage.Text(R.string.add_contact_success))
+                    // Re-scanning someone already in the list must not claim they have to approve us again.
+                    val text = if (result.data.isApproved) {
+                        R.string.add_contact_already_approved
+                    } else {
+                        R.string.add_contact_success
+                    }
+                    messageBus.send(UiMessage.Text(text))
                     _uiState.value = AddContactUiState.Success
                 }
                 is AppResult.Error -> fail(result.error)

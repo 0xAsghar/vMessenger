@@ -3,16 +3,22 @@ package ir.vmessenger.data.network
 import com.google.protobuf.ByteString
 import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.proto.app.v1.ContactRequest
 import ir.vmessenger.core.proto.app.v1.ContactResponse
 import ir.vmessenger.core.proto.app.v1.ContactResponseType
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
+import ir.vmessenger.data.di.IoDispatcher
 import ir.vmessenger.domain.model.Contact
 import ir.vmessenger.domain.model.Identity
 import ir.vmessenger.domain.repository.ContactRequestSender
 import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.network.messaging.PeerIdentity
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,15 +29,31 @@ class ContactRequestService @Inject constructor(
     private val selfIdentityCache: SelfIdentityCache,
     private val messagingService: MessagingPort,
     private val retryBudget: ContactRequestRetryBudget,
+    @IoDispatcher ioDispatcher: CoroutineDispatcher,
 ) : ContactRequestSender {
+    /** Outlives the screen that added the contact, which is usually gone before the send settles. */
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher + loggingExceptionHandler("Contact"))
+
     /** The user's own (re)send: also gives the automatic retry worker a fresh budget for this contact. */
     override suspend fun sendRequest(contact: Contact): AppResult<Unit> {
         retryBudget.reset(contact.id)
         return deliverRequest(contact)
     }
 
-    /** One request send without touching the retry budget (used by the retry worker itself). */
-    suspend fun deliverRequest(contact: Contact): AppResult<Unit> {
+    override fun sendRequestInBackground(contact: Contact) {
+        scope.launch {
+            val result = sendRequest(contact)
+            if (result is AppResult.Error) {
+                AppLogger.info("Contact", "first request to ${contact.userHash} not delivered; retry worker takes over")
+            }
+        }
+    }
+
+    /**
+     * One request send without touching the retry budget (used by the retry worker itself).
+     * [forceReconnect] as in [MessagingPort.send].
+     */
+    suspend fun deliverRequest(contact: Contact, forceReconnect: Boolean = false): AppResult<Unit> {
         val (identity, self) = selfOrNull() ?: return identityMissing()
         val peer = PeerIdentity(
             identityHash = contact.identityHash,
@@ -56,7 +78,7 @@ class ContactRequestService @Inject constructor(
                     .setRequestId(ByteString.copyFromUtf8(requestId)),
             )
             .build()
-        return when (val result = messagingService.send(contact.id, self, peer, envelope)) {
+        return when (val result = messagingService.send(contact.id, self, peer, envelope, forceReconnect)) {
             is AppResult.Success -> {
                 AppLogger.info("Contact", "contact request sent to ${contact.userHash}")
                 AppResult.Success(Unit)

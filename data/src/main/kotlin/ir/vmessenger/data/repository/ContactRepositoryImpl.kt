@@ -62,10 +62,11 @@ class ContactRepositoryImpl @Inject constructor(
         check(pairingDescriptorCodec.verify(descriptor)) { "امضای QR نامعتبر است" }
         val identityPub = descriptor.identityPub.toByteArray()
         val identityHash = UserHashEncoder.identityHashFromPublicKey(identityPub)
+        cleanupCoordinator.cancelPendingRevoke(identityHash)
         // Prefix-tolerant, because a contact added by hash holds a 16-byte prefix until its first
         // handshake and the exact lookup would miss it — producing a second row for one person.
         contactDao.findByIdentityHash(identityHash)?.let {
-            return@runCatching reinstate(it, EntityRelationshipStatus.APPROVED).toDomain()
+            return@runCatching reinstate(it, EntityRelationshipStatus.PENDING_OUT).toDomain()
         }
         val entity = ContactEntity(
             id = UUID.randomUUID().toString(),
@@ -75,7 +76,10 @@ class ContactRepositoryImpl @Inject constructor(
             displayName = alias?.takeIf { it.isNotBlank() } ?: descriptor.displayLabel.ifBlank { descriptor.userHash },
             verified = false,
             blocked = false,
-            relationshipStatus = EntityRelationshipStatus.APPROVED,
+            // Pending, not approved: the QR proves who they are, not that they want us. Approving on
+            // the spot showed a working contact whose every message the peer silently dropped, and
+            // left nothing on screen to say the request had not reached them yet.
+            relationshipStatus = EntityRelationshipStatus.PENDING_OUT,
             createdAtUnixMs = System.currentTimeMillis(),
             lastSeenUnixMs = null,
         )
@@ -95,6 +99,7 @@ class ContactRepositoryImpl @Inject constructor(
                     throw IllegalArgumentException("شناسه کاربری نامعتبر است")
                 }
             val identityHash = ByteArray(32).also { partialHash.copyInto(it, 0, 0, partialHash.size) }
+            cleanupCoordinator.cancelPendingRevoke(identityHash)
             // Exact byte equality used to be the test here, and it could never match a contact we
             // had already handshaked with: that row holds the *full* 32-byte hash while this one is
             // a zero-padded 16-byte prefix. So re-adding someone produced a second row, inbound
@@ -130,6 +135,7 @@ class ContactRepositoryImpl @Inject constructor(
         userHash: String,
         displayName: String,
     ): AppResult<Contact> = runCatching {
+        cleanupCoordinator.cancelPendingRevoke(identityHash)
         contactDao.findByIdentityHash(identityHash)?.let { existing ->
             val updated = approveExisting(existing, identityHash, ed25519Public, x25519StaticPublic, displayName)
             contactDao.update(updated)

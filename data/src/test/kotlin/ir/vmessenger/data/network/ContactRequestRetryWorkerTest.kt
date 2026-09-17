@@ -17,6 +17,9 @@ class ContactRequestRetryWorkerTest {
     private val peerA = InboundFixtures.peer(0x0A)
     private val t0 = 1_700_000_000_000L
 
+    /** At least the worker's longest backoff below the cap, so passes this far apart always find the contact due. */
+    private val maxBackoffMs = 15 * 60_000L
+
     private lateinit var contactDao: FakeContactDao
     private lateinit var messaging: FakeMessagingPort
     private lateinit var service: ContactRequestService
@@ -40,7 +43,7 @@ class ContactRequestRetryWorkerTest {
     /** A worker over a fresh budget but the same disk: what a process restart gives. */
     private fun newWorker(): ContactRequestRetryWorker {
         val budget = ContactRequestRetryBudget(store)
-        service = ContactRequestService(identityRepository, identityCache, messaging, budget)
+        service = ContactRequestService(identityRepository, identityCache, messaging, budget, Dispatchers.Unconfined)
         return ContactRequestRetryWorker(
             contactDao = contactDao,
             contactRepository = FakeContactRepository(contactDao),
@@ -122,6 +125,55 @@ class ContactRequestRetryWorkerTest {
 
         worker.runPass(t0 + 15 * 60_000L)
         assertEquals(1, requestsSent())
+    }
+
+    /** A reused session can be a dead one that still accepts writes; a retry must not trust it. */
+    @Test
+    fun retriesDialFreshRatherThanReuseAnOpenSession() = runTest {
+        contactDao.contacts += InboundFixtures.contact("a", peerA, status = ContactRelationshipStatus.PENDING_OUT)
+
+        worker.runPass(t0)
+
+        assertEquals(listOf("a"), messaging.reconnectsForced)
+    }
+
+    /**
+     * Being offline for half a day is ordinary. Past the cap an unreachable contact used to be
+     * knocked on once a day, so the request could reach them a day after they came back.
+     */
+    @Test
+    fun pastTheCapAnUnreachableContactIsTriedHourlyInItsFirstWeek() = runTest {
+        val lastAttempt = exhaustBudgetWhileUnreachable(createdAtUnixMs = t0)
+        val hourly = ContactRequestRetryWorker.CAPPED_UNREACHABLE_REPEAT_MS
+
+        worker.runPass(lastAttempt + hourly - 1)
+        assertEquals(0, requestsSent())
+        worker.runPass(lastAttempt + hourly)
+        assertEquals(1, requestsSent())
+    }
+
+    @Test
+    fun pastTheCapAnUnreachableContactOlderThanAWeekIsTriedDaily() = runTest {
+        val lastAttempt = exhaustBudgetWhileUnreachable(createdAtUnixMs = t0 - ContactRequestRetryWorker.QR_WINDOW_MS)
+
+        worker.runPass(lastAttempt + ContactRequestRetryWorker.CAPPED_UNREACHABLE_REPEAT_MS)
+        assertEquals(0, requestsSent())
+        worker.runPass(lastAttempt + ContactRequestRetryWorker.CAPPED_REPEAT_MS)
+        assertEquals(1, requestsSent())
+    }
+
+    /** Spends every automatic attempt on a peer that never answers; returns when the last one ran. */
+    private suspend fun exhaustBudgetWhileUnreachable(createdAtUnixMs: Long): Long {
+        contactDao.contacts += InboundFixtures.contact("a", peerA, status = ContactRelationshipStatus.PENDING_OUT)
+            .copy(createdAtUnixMs = createdAtUnixMs)
+        messaging.sendError = AppError.Network("offline")
+        var now = t0
+        repeat(ContactRequestRetryWorker.MAX_ATTEMPTS_PER_CONTACT) {
+            worker.runPass(now)
+            now += maxBackoffMs
+        }
+        messaging.sendError = null
+        return now - maxBackoffMs
     }
 
     /**

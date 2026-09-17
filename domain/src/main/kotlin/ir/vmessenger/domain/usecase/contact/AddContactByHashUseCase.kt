@@ -12,7 +12,8 @@ class AddContactByHashUseCase @Inject constructor(
     suspend operator fun invoke(userHash: String, alias: String? = null): AppResult<Contact> =
         when (val result = contactRepository.addContactByUserHash(userHash, alias)) {
             is AppResult.Success -> {
-                sendContactRequestUseCase(result.data)
+                // Not awaited: the contact is added the moment the row exists, reachable or not.
+                sendContactRequestUseCase.startInBackground(result.data)
                 result
             }
             is AppResult.Error -> result

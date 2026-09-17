@@ -10,4 +10,7 @@ class SendContactRequestUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(contact: Contact): AppResult<Unit> =
         contactRequestSender.sendRequest(contact)
+
+    /** Starts the send and returns at once; see [ContactRequestSender.sendRequestInBackground]. */
+    fun startInBackground(contact: Contact) = contactRequestSender.sendRequestInBackground(contact)
 }

@@ -157,6 +157,37 @@ class IncomingMessageCollectorTest {
     }
 
     @Test
+    fun aChatCountsAsHearingFromTheContact() = runTest {
+        contactDao.contacts += InboundFixtures.contact("a", peerA)
+
+        deliver("a", InboundFixtures.chatEnvelope("m1"))
+
+        assertNotNull(contactDao.getById("a")!!.lastSeenUnixMs)
+    }
+
+    /**
+     * Node hints follow every handshake, to strangers too. Counting them told the request-retry
+     * worker a peer who had never seen our request had answered it, and it stopped asking.
+     */
+    @Test
+    fun nodeExchangeDoesNotCountAsHearingFromTheContact() = runTest {
+        contactDao.contacts += InboundFixtures.contact("a", peerA)
+
+        deliver("a", InboundFixtures.networkNodesEnvelope())
+
+        assertNull(contactDao.getById("a")!!.lastSeenUnixMs)
+    }
+
+    @Test
+    fun aRefusedFrameDoesNotCountAsHearingFromTheContact() = runTest {
+        contactDao.contacts += InboundFixtures.contact("p", peerA, status = ContactRelationshipStatus.PENDING_OUT)
+
+        deliver("p", InboundFixtures.chatEnvelope("m1"))
+
+        assertNull(contactDao.getById("p")!!.lastSeenUnixMs)
+    }
+
+    @Test
     fun receiptForIncomingMessageIgnored() = runTest {
         contactDao.contacts += InboundFixtures.contact("a", peerA)
         conversationDao.conversations += conversation("conv-a", "a")

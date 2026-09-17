@@ -1,8 +1,13 @@
 package ir.vmessenger.feature.pairing
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -26,7 +31,8 @@ fun QrScannerRoute(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // Keyed on the state so a second outcome re-fires; onDone is idempotent (it pops once).
+    // Keyed on the state so a second outcome re-fires. The graph pops this entry only while it is
+    // still on top, so a repeat cannot take the contacts tab underneath with it.
     LaunchedEffect(uiState) {
         if (uiState is AddContactUiState.Success || uiState is AddContactUiState.Error) onDone()
     }
@@ -39,6 +45,15 @@ fun QrScannerRoute(
         // barcodes at a ViewModel whose screen is on its way out.
         scanPaused = !uiState.acceptsScan || uiState is AddContactUiState.Error,
         onQrScanned = viewModel::onQrScanned,
-        overlay = {},
+        // Saving is a database write now — the request goes out in the background — but the camera
+        // has already stopped, so say something is happening rather than show an empty frame.
+        overlay = { if (uiState is AddContactUiState.Saving) SavingIndicator() },
     )
+}
+
+@Composable
+private fun SavingIndicator() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
+    }
 }

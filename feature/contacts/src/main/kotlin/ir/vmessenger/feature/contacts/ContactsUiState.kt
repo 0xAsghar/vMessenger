@@ -24,9 +24,10 @@ data class ContactRow(
     val sharesLocation: Boolean,
     val distanceMeters: Double?,
     /**
-     * When we last heard anything from this contact — not a presence beacon. The column is touched
-     * by any inbound frame, receipts and control packets included, and it is null for a contact who
-     * has never sent one and for every contact after a backup restore.
+     * When we last heard from this contact — not a presence beacon. The column is touched by anything
+     * they address to us, receipts and control packets included (node exchange is not: it goes to
+     * strangers too), and it is null for a contact who has never sent anything and for every contact
+     * after a backup restore.
      */
     val lastSeenUnixMs: Long?,
 ) {

@@ -130,7 +130,7 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 - Depends on: `domain`, `core:designsystem`, `core:common`.
 
 ### feature:pairing
-- My QR Code, QR Scanner, Add by User Hash screens and their ViewModels. Hash add creates `PENDING_OUT` contact and sends `ContactRequest`.
+- My QR Code, QR Scanner, Add by User Hash screens and their ViewModels. Both QR and hash adds create a `PENDING_OUT` contact and send a `ContactRequest`.
 - Depends on: `domain`, `core:designsystem`.
 
 ### feature:contacts

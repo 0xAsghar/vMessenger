@@ -113,15 +113,17 @@ class IncomingMessageCollector @Inject constructor(
             AppLogger.warn("Messaging", "blocked contact frame dropped contact=$contactId")
             return
         }
-        // Any inbound frame from a known contact proves the peer is reachable and
-        // has us, so the request-retry worker can stop re-sending to them.
-        if (contact != null) {
-            runCatching { contactDao.touchLastSeen(contactId, System.currentTimeMillis()) }
-        }
         val kind = InboundKind.of(envelope)
         if (kind != null && !InboundPolicy.allows(contact, kind)) {
             AppLogger.warn("Messaging", "rejected ${kind.name} from non-approved contact=$contactId")
             return
+        }
+        // Tells the request-retry worker the peer has us, so it can stop re-sending. Only a frame
+        // meant for us proves that: node exchange and mailbox sync follow every handshake, strangers
+        // included, and counting them marked a contact as answered the first time anything reached
+        // them — so a request that had not been delivered yet never was.
+        if (contact != null && kind?.provesPeerHasUs == true) {
+            runCatching { contactDao.touchLastSeen(contactId, System.currentTimeMillis()) }
         }
         dispatch(kind, incoming)
     }

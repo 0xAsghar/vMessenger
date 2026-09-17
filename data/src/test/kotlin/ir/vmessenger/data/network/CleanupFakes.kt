@@ -2,6 +2,7 @@ package ir.vmessenger.data.network
 
 import com.goterl.lazysodium.LazySodiumJava
 import com.goterl.lazysodium.SodiumJava
+import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.crypto.LazysodiumCryptoEngine
 import ir.vmessenger.core.database.dao.ContactRequestDao
 import ir.vmessenger.core.database.dao.EndpointCacheDao
@@ -74,6 +75,10 @@ class FakePendingRevokeDao : PendingRevokeDao {
 
     override suspend fun delete(identityHash: ByteArray) {
         queued.removeAll { it.identityHash.contentEquals(identityHash) }
+    }
+
+    override suspend fun deleteByRoutingKey(routingKeyHex: String) {
+        queued.removeAll { IdentityHashMatcher.routingKeyHex(it.identityHash) == routingKeyHex }
     }
 
     override suspend fun purgeOlderThan(cutoff: Long) {
@@ -200,6 +205,7 @@ class CleanupHarness(val contactDao: FakeContactDao = FakeContactDao()) {
             selfIdentityCache,
             messaging,
             ContactRequestRetryBudget(ContactRequestRetryStore.Transient),
+            Dispatchers.Unconfined,
         ),
         locationSharingCoordinator = locationSharing,
         attachmentFileStore = attachmentStore,

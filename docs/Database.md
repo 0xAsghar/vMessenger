@@ -125,7 +125,7 @@ Wrapped private keys. Aliases: `identity-ed25519`, `identity-x25519-static`.
 | `blocked` | INTEGER | boolean |
 | `relationshipStatus` | TEXT | `ContactRelationshipStatus` name |
 | `createdAtUnixMs` | INTEGER | |
-| `lastSeenUnixMs` | INTEGER? | last inbound traffic |
+| `lastSeenUnixMs` | INTEGER? | last frame the contact addressed to us (node exchange excluded — it goes to strangers too) |
 | `pendingX25519StaticPublic` | BLOB? | key the peer presented that differs from the pin; the handshake was **refused** |
 | `keyChangedAtUnixMs` | INTEGER? | when that happened |
 | `avatarPath` | TEXT? | the photo this contact sent, in the `VMA1` container |

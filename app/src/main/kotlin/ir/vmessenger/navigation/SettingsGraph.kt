@@ -17,42 +17,42 @@ import ir.vmessenger.feature.settings.NodesRoute
 import ir.vmessenger.feature.settings.update.UpdateRoute
 /** Everything reachable from the settings tab, as full screens outside the tab shell. */
 internal fun NavGraphBuilder.settingsGraph(navController: NavHostController) {
-    composable<VmRoute.Identity> {
-        IdentityRoute(onNavigateBack = { navController.popBackStack() })
+    composable<VmRoute.Identity> { entry ->
+        IdentityRoute(onNavigateBack = { navController.popIfCurrent(entry) })
     }
-    composable<VmRoute.About> {
-        AboutRoute(onNavigateBack = { navController.popBackStack() })
+    composable<VmRoute.About> { entry ->
+        AboutRoute(onNavigateBack = { navController.popIfCurrent(entry) })
     }
-    composable<VmRoute.Nodes> {
+    composable<VmRoute.Nodes> { entry ->
         NodesRoute(
-            onNavigateBack = { navController.popBackStack() },
+            onNavigateBack = { navController.popIfCurrent(entry) },
             onNavigateToScan = { navController.navigate(VmRoute.NodesScan) },
         )
     }
-    composable<VmRoute.NodesScan> {
+    composable<VmRoute.NodesScan> { entry ->
         NodeQrScannerRoute(
-            onDone = { navController.popBackStack() },
-            onNavigateBack = { navController.popBackStack() },
+            onDone = { navController.popIfCurrent(entry) },
+            onNavigateBack = { navController.popIfCurrent(entry) },
         )
     }
-    composable<VmRoute.Update> {
-        UpdateRoute(onBack = { navController.popBackStack() })
+    composable<VmRoute.Update> { entry ->
+        UpdateRoute(onBack = { navController.popIfCurrent(entry) })
     }
 }
 
 /** Debug and Logs, gated so they cannot be reached unless developer mode is on. */
 internal fun NavGraphBuilder.developerToolsGraph(navController: NavHostController) {
-    composable<VmRoute.Debug> {
-        DeveloperToolsGate(onDenied = { navController.popBackStack() }) {
+    composable<VmRoute.Debug> { entry ->
+        DeveloperToolsGate(onDenied = { navController.popIfCurrent(entry) }) {
             DebugRoute(
-                onNavigateBack = { navController.popBackStack() },
+                onNavigateBack = { navController.popIfCurrent(entry) },
                 onNavigateToLogs = { navController.navigate(VmRoute.Logs) },
             )
         }
     }
-    composable<VmRoute.Logs> {
-        DeveloperToolsGate(onDenied = { navController.popBackStack() }) {
-            LogsRoute(onNavigateBack = { navController.popBackStack() })
+    composable<VmRoute.Logs> { entry ->
+        DeveloperToolsGate(onDenied = { navController.popIfCurrent(entry) }) {
+            LogsRoute(onNavigateBack = { navController.popIfCurrent(entry) })
         }
     }
 }

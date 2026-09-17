@@ -7,10 +7,12 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.crypto.CryptoEngine
+import ir.vmessenger.core.crypto.KeyPair
 import ir.vmessenger.core.crypto.LazysodiumCryptoEngine
 import ir.vmessenger.core.crypto.pairing.PairingDescriptorCodec
 import ir.vmessenger.core.database.entity.ContactEntity
 import ir.vmessenger.core.database.entity.ContactRelationshipStatus
+import ir.vmessenger.core.database.entity.PendingRevokeEntity
 import ir.vmessenger.data.network.CleanupHarness
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
@@ -24,17 +26,64 @@ import org.junit.Test
 class ContactRepositoryImplTest {
     private lateinit var cryptoEngine: CryptoEngine
     private lateinit var contactDao: FakeContactDao
+    private lateinit var cleanup: CleanupHarness
     private lateinit var repository: ContactRepositoryImpl
 
     @Before
     fun setUp() {
         cryptoEngine = LazysodiumCryptoEngine(LazySodiumJava(SodiumJava()))
         contactDao = FakeContactDao()
+        cleanup = CleanupHarness(contactDao)
         repository = ContactRepositoryImpl(
             contactDao,
             PairingDescriptorCodec(cryptoEngine),
-            CleanupHarness(contactDao).coordinator,
+            cleanup.coordinator,
         )
+    }
+
+    @Test
+    fun aScannedContactWaitsForTheirApproval() = runTest {
+        val result = repository.addContactByDescriptor(signedDescriptor(cryptoEngine.generateEd25519KeyPair()), null)
+
+        assertTrue(result is AppResult.Success)
+        assertEquals(ContactRelationshipStatus.PENDING_OUT, contactDao.contacts.single().relationshipStatus)
+    }
+
+    @Test
+    fun rescanningSomeoneWhoRejectedUsAsksThemAgain() = runTest {
+        val keys = cryptoEngine.generateEd25519KeyPair()
+        repository.addContactByDescriptor(signedDescriptor(keys), null)
+        val id = contactDao.contacts.single().id
+        contactDao.update(contactDao.getById(id)!!.copy(relationshipStatus = ContactRelationshipStatus.REJECTED))
+
+        repository.addContactByDescriptor(signedDescriptor(keys), null)
+
+        assertEquals(ContactRelationshipStatus.PENDING_OUT, contactDao.getById(id)!!.relationshipStatus)
+    }
+
+    @Test
+    fun reAddingSomeoneWeDeletedWithdrawsTheRevokeStillOwedToThem() = runTest {
+        val fullHash = UserHashEncoder.identityHashFromPublicKey(cryptoEngine.generateEd25519KeyPair().publicKey)
+        val otherHash = UserHashEncoder.identityHashFromPublicKey(cryptoEngine.generateEd25519KeyPair().publicKey)
+        cleanup.pendingRevokeDao.upsert(revokeFor(fullHash))
+        cleanup.pendingRevokeDao.upsert(revokeFor(otherHash))
+
+        // By user hash, which carries only the 16-byte routing prefix of the hash the revoke was queued under.
+        repository.addContactByUserHash(UserHashEncoder.encode(IdentityHashMatcher.routingHash(fullHash)), null)
+
+        assertEquals(1, cleanup.pendingRevokeDao.queued.size)
+        assertArrayEquals(otherHash, cleanup.pendingRevokeDao.queued.single().identityHash)
+    }
+
+    @Test
+    fun approvingARequestFromSomeoneWeDeletedWithdrawsTheRevoke() = runTest {
+        val keys = cryptoEngine.generateEd25519KeyPair()
+        val fullHash = UserHashEncoder.identityHashFromPublicKey(keys.publicKey)
+        cleanup.pendingRevokeDao.upsert(revokeFor(fullHash))
+
+        repository.addApprovedContact(fullHash, keys.publicKey, null, UserHashEncoder.encode(fullHash), "Sara")
+
+        assertTrue(cleanup.pendingRevokeDao.queued.isEmpty())
     }
 
     @Test
@@ -143,6 +192,21 @@ class ContactRepositoryImplTest {
         assertEquals(UserHashEncoder.encode(fullHash), updated.userHash)
         assertEquals("Sara", updated.displayName)
     }
+
+    private fun signedDescriptor(keys: KeyPair): ByteArray {
+        val hash = UserHashEncoder.identityHashFromPublicKey(keys.publicKey)
+        return PairingDescriptorCodec(cryptoEngine)
+            .createSigned(keys.publicKey, UserHashEncoder.encode(hash), "Sara", keys.privateKey)
+            .toByteArray()
+    }
+
+    private fun revokeFor(identityHash: ByteArray) = PendingRevokeEntity(
+        identityHash = identityHash,
+        ed25519Public = ByteArray(32) { 1 },
+        x25519StaticPublic = null,
+        requestId = "cr-test",
+        createdAtUnixMs = 0L,
+    )
 
     private fun contact(id: String, staticPub: ByteArray?): ContactEntity {
         val ed25519 = cryptoEngine.generateEd25519KeyPair().publicKey

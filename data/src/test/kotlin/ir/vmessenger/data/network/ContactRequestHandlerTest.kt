@@ -9,6 +9,7 @@ import ir.vmessenger.core.database.entity.ContactRelationshipStatus
 import ir.vmessenger.core.proto.app.v1.ContactResponseType
 import ir.vmessenger.data.repository.FakeContactDao
 import ir.vmessenger.data.repository.FakeIdentityRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -42,6 +43,7 @@ class ContactRequestHandlerTest {
                 SelfIdentityCache(identityRepository, cryptoEngine),
                 FakeMessagingPort(),
                 ContactRequestRetryBudget(ContactRequestRetryStore.Transient),
+                Dispatchers.Unconfined,
             ),
             contactDao = contactDao,
             identityRepository = identityRepository,

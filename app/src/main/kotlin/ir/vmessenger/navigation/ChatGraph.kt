@@ -18,9 +18,9 @@ import ir.vmessenger.feature.chat.group.NewGroupRoute
  * single source of bottom inset for the screen.
  */
 internal fun NavGraphBuilder.chatGraph(navController: NavHostController) {
-    composable<VmRoute.Conversation> {
+    composable<VmRoute.Conversation> { entry ->
         ConversationRoute(
-            onBack = { navController.popBackStack() },
+            onBack = { navController.popIfCurrent(entry) },
             onOpenContact = { contactId ->
                 navController.navigate(VmRoute.ContactDetail(contactId)) { launchSingleTop = true }
             },
@@ -32,9 +32,9 @@ internal fun NavGraphBuilder.chatGraph(navController: NavHostController) {
             },
         )
     }
-    composable<VmRoute.NewChat> {
+    composable<VmRoute.NewChat> { entry ->
         NewChatRoute(
-            onBack = { navController.popBackStack() },
+            onBack = { navController.popIfCurrent(entry) },
             onNewGroup = { navController.navigate(VmRoute.NewGroup) },
             // The picker is a step on the way to the chat, not a place to come back to.
             onOpenConversation = { conversationId ->
@@ -45,9 +45,9 @@ internal fun NavGraphBuilder.chatGraph(navController: NavHostController) {
             },
         )
     }
-    composable<VmRoute.NewGroup> {
+    composable<VmRoute.NewGroup> { entry ->
         NewGroupRoute(
-            onBack = { navController.popBackStack() },
+            onBack = { navController.popIfCurrent(entry) },
             // Like the contact picker: a step on the way to the chat, not a place to come back to.
             onGroupCreated = { conversationId ->
                 navController.navigate(VmRoute.Conversation(conversationId)) {
@@ -57,19 +57,19 @@ internal fun NavGraphBuilder.chatGraph(navController: NavHostController) {
             },
         )
     }
-    composable<VmRoute.GroupInfo> {
+    composable<VmRoute.GroupInfo> { entry ->
         // The screen pops itself once the group is gone (left or closed), so there
         // is no leave/close result to handle here.
         GroupInfoRoute(
-            onBack = { navController.popBackStack() },
+            onBack = { navController.popIfCurrent(entry) },
             onOpenContact = { contactId ->
                 navController.navigate(VmRoute.ContactDetail(contactId)) { launchSingleTop = true }
             },
         )
     }
-    composable<VmRoute.ImageViewer> {
+    composable<VmRoute.ImageViewer> { entry ->
         // Full-bleed by contract: the viewer draws behind the system bars and pads its
         // own close button with safeDrawingPadding().
-        ImageViewerRoute(onBack = { navController.popBackStack() })
+        ImageViewerRoute(onBack = { navController.popIfCurrent(entry) })
     }
 }

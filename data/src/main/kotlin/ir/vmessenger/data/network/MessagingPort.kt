@@ -25,11 +25,17 @@ interface MessagingPort {
     /** Installs the consumer called from each session's read loop; `null` uninstalls it. */
     fun setIncomingSink(sink: (suspend (IncomingEnvelope) -> Unit)?)
 
+    /**
+     * [forceReconnect] dials a fresh session instead of reusing the open one. For a retry that is
+     * waiting on an answer: a session whose peer vanished without closing it still accepts writes,
+     * so reusing it reports "sent" for frames nobody will ever read.
+     */
     suspend fun send(
         contactId: String,
         self: PeerIdentity,
         peer: PeerIdentity,
         envelope: MessageEnvelope,
+        forceReconnect: Boolean = false,
     ): AppResult<Unit>
 
     /** Writes on the already-open outbound session to [contactId] without dialing; false when there is none. */
@@ -51,7 +57,8 @@ class MessagingServicePort @Inject constructor(
         self: PeerIdentity,
         peer: PeerIdentity,
         envelope: MessageEnvelope,
-    ): AppResult<Unit> = messagingService.send(contactId, self, peer, envelope)
+        forceReconnect: Boolean,
+    ): AppResult<Unit> = messagingService.send(contactId, self, peer, envelope, forceReconnect)
 
     override suspend fun sendOnExistingSession(contactId: String, envelope: MessageEnvelope): Boolean =
         messagingService.sendOnExistingSession(contactId, envelope)

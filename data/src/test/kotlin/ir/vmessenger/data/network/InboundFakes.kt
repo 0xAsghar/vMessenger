@@ -40,6 +40,9 @@ class FakeMessagingPort : MessagingPort {
     /** Contacts that currently have an open outbound session. */
     val existingSessionContacts = mutableSetOf<String>()
 
+    /** Contacts a send was told to dial fresh for rather than reuse an open session, in order. */
+    val reconnectsForced = mutableListOf<String>()
+
     /** When set, [send] fails with this error instead of succeeding. */
     var sendError: AppError? = null
 
@@ -58,7 +61,9 @@ class FakeMessagingPort : MessagingPort {
         self: PeerIdentity,
         peer: PeerIdentity,
         envelope: MessageEnvelope,
+        forceReconnect: Boolean,
     ): AppResult<Unit> {
+        if (forceReconnect) reconnectsForced += contactId
         sendError?.let { return AppResult.Error(it) }
         sent += contactId to envelope
         return AppResult.Success(Unit)

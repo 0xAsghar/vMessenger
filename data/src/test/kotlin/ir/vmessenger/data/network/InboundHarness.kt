@@ -91,6 +91,7 @@ class InboundHarness(
                 selfIdentityCache,
                 messaging,
                 ContactRequestRetryBudget(ContactRequestRetryStore.Transient),
+                Dispatchers.Unconfined,
             ),
             contactDao = contactDao,
             identityRepository = identityRepository,

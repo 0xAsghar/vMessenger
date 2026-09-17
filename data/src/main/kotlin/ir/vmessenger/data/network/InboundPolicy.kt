@@ -27,6 +27,12 @@ enum class InboundKind {
     PROFILE_UPDATE,
     ;
 
+    /**
+     * Whether the peer only sends this to someone they have as a contact (or whose request they are
+     * answering). Node hints go to every peer a session is opened with, so they prove nothing.
+     */
+    val provesPeerHasUs: Boolean get() = this != NETWORK_NODES
+
     companion object {
         /** The policy-relevant kind of [envelope], or null for infrastructure traffic (mailbox, relay). */
         fun of(envelope: MessageEnvelope): InboundKind? = conversational(envelope) ?: management(envelope)

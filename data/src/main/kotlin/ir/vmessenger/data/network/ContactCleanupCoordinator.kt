@@ -101,6 +101,18 @@ class ContactCleanupCoordinator @Inject constructor(
         AppLogger.info("Contact", "deleted contact=$contactId")
     }
 
+    /**
+     * Forgets a revoke still waiting to reach this peer, because the user has just taken them back.
+     *
+     * Left queued, it raced the new contact request once the peer came online. When the request won,
+     * the peer auto-accepted it and only *then* processed the revoke: we showed them as approved,
+     * they had us as rejected, and neither side would ever ask again. Matched on the routing prefix,
+     * since a contact re-added by user hash knows no more than that.
+     */
+    suspend fun cancelPendingRevoke(identityHash: ByteArray) = withContext(ioDispatcher) {
+        pendingRevokeDao.deleteByRoutingKey(IdentityHashMatcher.routingKeyHex(identityHash))
+    }
+
     suspend fun onBlocked(contactId: String) = withContext(ioDispatcher) {
         sessionCloser.closeSessions(contactId)
         locationSharingCoordinator.stopSharingWith(contactId)

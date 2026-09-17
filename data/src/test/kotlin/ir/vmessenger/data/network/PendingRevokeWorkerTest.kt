@@ -1,6 +1,7 @@
 package ir.vmessenger.data.network
 
 import ir.vmessenger.core.database.entity.PendingRevokeEntity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -53,6 +54,7 @@ class PendingRevokeWorkerTest {
                 harness.selfIdentityCache,
                 harness.messaging,
                 ContactRequestRetryBudget(ContactRequestRetryStore.Transient),
+                Dispatchers.Unconfined,
             ),
             selfIdentityCache = harness.selfIdentityCache,
             ioDispatcher = kotlinx.coroutines.Dispatchers.Unconfined,

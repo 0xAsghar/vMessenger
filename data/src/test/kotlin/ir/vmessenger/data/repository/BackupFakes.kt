@@ -120,7 +120,9 @@ class FakeContactDao : ContactDao {
 
     override suspend fun getAll(): List<ContactEntity> = contacts.toList()
 
-    override suspend fun touchLastSeen(id: String, ts: Long) = Unit
+    override suspend fun touchLastSeen(id: String, ts: Long) {
+        contacts.replaceAll { if (it.id == id) it.copy(lastSeenUnixMs = ts) else it }
+    }
 
     override suspend fun recordPendingKeyChange(id: String, staticPub: ByteArray, ts: Long) {
         contacts.replaceAll {

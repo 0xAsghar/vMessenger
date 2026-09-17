@@ -11,7 +11,7 @@ Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Securi
 ### 1.1 Functional requirements (MVP)
 
 - FR-1 Identity: generate an Ed25519 keypair on-device; choose a display name (2–32 characters); derive a permanent identity hash and a human-readable User Hash.
-- FR-2 Pairing: add a contact by scanning a QR code (instant, in-person trust) or by entering a User Hash (sends a `ContactRequest`; requires mutual approval). No pairing depends on a server.
+- FR-2 Pairing: add a contact by scanning a QR code (proves their key in person) or by entering a User Hash; either way a `ContactRequest` is sent and the contact stays pending until the other side approves. No pairing depends on a server.
 - FR-3 Discovery: become reachable by publishing a signed endpoint record into a minimal DHT; resolve a contact's current endpoint by DHT lookup.
 - FR-4 Messaging: send and receive end-to-end encrypted 1:1 text messages.
 - FR-5 Delivery semantics: track per-message status (queued, sent, delivered, read, failed).
@@ -253,11 +253,11 @@ vMessenger is built on Kotlin Coroutines and Flow with structured concurrency.
 
 ### 10.2 Add a contact (QR or User Hash)
 
-**QR (instant):**
+**QR (key proven in person, approval still required):**
 
 1. The user scans a QR. The payload carries the contact's Ed25519 public key plus metadata; see [Discovery.md](Discovery.md) and [Protocol.md](Protocol.md).
-2. `AddContactByQrUseCase` validates the descriptor signature, derives the identity hash, and stores a `Contact` with `relationshipStatus = APPROVED`.
-3. No network call is required; pairing is purely a local identity exchange.
+2. `AddContactByQrUseCase` validates the descriptor signature, derives the identity hash, and stores a `Contact` with `relationshipStatus = PENDING_OUT` and the real key (no placeholder).
+3. It then sends a `ContactRequest` exactly as a User Hash add does (steps 2–5 below). The QR proves *who* the contact is, not that they want us: up to 1.1.1 a scan approved on the spot, which showed a working contact whose every message the peer dropped. If the peer has already added us, their side auto-accepts and the contact becomes `APPROVED` within one round trip.
 
 **User Hash (mutual approval, v0.2.0):**
 
@@ -266,6 +266,7 @@ vMessenger is built on Kotlin Coroutines and Flow with structured concurrency.
 3. The recipient's `IncomingMessageCollector` accepts the request from a stranger peer, persists it to `contact_request`, and shows `ContactRequestOverlay`.
 4. On approve: recipient inserts/updates an `APPROVED` contact and sends `ContactResponse ACCEPT`; sender upgrades `PENDING_OUT` → `APPROVED`. Chat and location are gated until both sides are `APPROVED`.
 5. On reject: recipient sends `ContactResponse REJECT`; sender may mark `REJECTED`.
+6. An undelivered request is retried by `ContactRequestRetryWorker` (backoff to 5 min, 48 attempts, then hourly for the first week while the peer stays unreachable and daily after). It stops once the peer sends something only a peer who has us would send — node-exchange frames, which follow every handshake to strangers too, do not count. Re-adding someone we deleted withdraws the revoke still queued for them in `pending_revoke`, or the two raced when the peer came online.
 
 Strangers may complete a handshake, but only `ContactRequest` / `ContactResponse` envelopes are accepted from them; chat, attachments, location, control, receipts and node hints from a non-approved contact are dropped by `InboundPolicy`. See [Security.md](Security.md) "Inbound authorization".
 

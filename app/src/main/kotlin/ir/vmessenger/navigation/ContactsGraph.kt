@@ -13,15 +13,15 @@ import ir.vmessenger.feature.settings.BlockedContactsRoute
  * list instead of leaving the tab, and so the screen survives rotation and process death.
  */
 internal fun NavGraphBuilder.contactsGraph(navController: NavHostController) {
-    composable<VmRoute.ContactDetail> {
+    composable<VmRoute.ContactDetail> { entry ->
         ContactDetailRoute(
-            onNavigateBack = { navController.popBackStack() },
+            onNavigateBack = { navController.popIfCurrent(entry) },
             onOpenConversation = { conversationId ->
                 navController.navigate(VmRoute.Conversation(conversationId)) { launchSingleTop = true }
             },
         )
     }
-    composable<VmRoute.BlockedContacts> {
-        BlockedContactsRoute(onNavigateBack = { navController.popBackStack() })
+    composable<VmRoute.BlockedContacts> { entry ->
+        BlockedContactsRoute(onNavigateBack = { navController.popIfCurrent(entry) })
     }
 }
