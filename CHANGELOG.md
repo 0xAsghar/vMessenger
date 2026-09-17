@@ -11,7 +11,7 @@ Two version numbers move independently of this file and are stated where they ma
 protocol major** (currently 2, [docs/Protocol.md](docs/Protocol.md)) and the **database schema
 version** (currently 20, [docs/Database.md](docs/Database.md)).
 
-## [Unreleased]
+## [1.1.2] - 2026-09-17
 
 Ten bugs reported against 1.1.1, each reproduced on two emulators before it was fixed and checked
 there again after, plus one defect found on the way.
