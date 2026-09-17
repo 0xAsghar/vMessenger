@@ -11,6 +11,50 @@ Two version numbers move independently of this file and are stated where they ma
 protocol major** (currently 2, [docs/Protocol.md](docs/Protocol.md)) and the **database schema
 version** (currently 19, [docs/Database.md](docs/Database.md)).
 
+## [Unreleased]
+
+Ten bugs reported against 1.1.1, each reproduced on two emulators before it was fixed and checked
+there again after, plus one defect found on the way.
+
+### Fixed
+
+- **Scanning a contact's QR code left a blank white screen.** The scanner waited for the contact
+  request to go out before closing — up to a minute against an offline peer — with the camera
+  already off, and a result landing during its exit animation could pop the contacts tab too and
+  empty the app. The request now goes out in the background, the scanner closes as soon as the
+  contact is saved, and no screen can close anything but itself.
+- **A contact added while they were offline never received the request.** Four causes: a QR add
+  was approved on the spot instead of waiting for them; node-exchange traffic after any handshake
+  counted as the peer having answered, which stopped the retries; deleting someone while they were
+  offline queued a "you were removed" that re-adding them did not cancel, and the two raced when
+  they came back; and retries wrote into sessions whose peer had silently gone. Contacts you add
+  now show «در انتظار تأیید» until the other side accepts, retries dial fresh every time, the wait
+  between them is at most five minutes (hourly after that, for a week), and a re-add withdraws the
+  pending removal. *A contact QR-added while offline on 1.1.1 may still be stuck as approved on
+  your side only: delete and add them again.*
+- **Swiping down on a photo turned the app black.** The viewer closed itself on every frame of the
+  swipe, popping screen after screen. It now closes once, on release, swiping up as well as down;
+  a short drag springs back.
+- **«اشتراک موقعیت فعال است» stayed after sharing was turned off.** The location notification
+  shared its id with the network service's, which kept showing it. They are separate now.
+- **Several photos could not be sent at once.** The photo, video and file pickers now take up to
+  ten items per pick, sent in the order chosen.
+- **A sharing contact's distance showed twice, and replaced when you last heard from them.** The
+  row now reads distance and last activity together, under the name.
+- **Composer buttons sat low beside a one-line message.** They are centred on one line and move to
+  the bottom as the message grows.
+- **Queued removals to two contacts at once could reach only the first**, and be dropped as
+  delivered for the second.
+
+### Added
+
+- **A contact's screen shows where they are on a map** while they share their location with you.
+
+### Changed
+
+- **App lock settings** no longer carry paragraphs under the switches; each explanation appears in
+  the dialog that turning the switch on opens.
+
 ## [1.1.1] - 2026-09-15
 
 The first release after 1.0.1 was used in anger. Eleven reported interface bugs, four reported
