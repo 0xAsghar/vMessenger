@@ -3,6 +3,7 @@ package ir.vmessenger.core.map
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 
 /**
  * One contact pin on the map.
@@ -38,6 +39,11 @@ data class MapContent(
     val camera: CameraRequest = CameraRequest(),
     /** This device's own position. Never drawn — the puck does that — but included in a fit. */
     val self: MapCoordinate? = null,
+    /**
+     * The route a contact shared during one sharing session, drawn as a line under the pins. Empty
+     * when nobody is selected, or when the samples that were shared no longer exist.
+     */
+    val path: ImmutableList<MapCoordinate> = persistentListOf(),
 )
 
 /** A bare coordinate, for camera work that must include a point no marker is drawn for. */

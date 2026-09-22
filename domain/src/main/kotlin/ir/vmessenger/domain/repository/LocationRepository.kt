@@ -35,4 +35,14 @@ interface LocationRepository {
         batteryPct: Int?,
     )
     suspend fun getActiveOutgoingShareIds(): List<String>
+
+    /**
+     * Every position a contact shared with us during their most recent sharing session, oldest
+     * first — a read-only replay of what they chose to send while the share was open.
+     *
+     * Bounded by the same retention that bounds the samples themselves, so it thins out and then
+     * empties as a session ages. Nothing is inferred from it: it is the route, not a history of
+     * where someone tends to be.
+     */
+    suspend fun sharedPath(contactId: String): List<LocationSample>
 }

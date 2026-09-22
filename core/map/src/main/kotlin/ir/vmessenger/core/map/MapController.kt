@@ -9,11 +9,13 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 
 /**
- * The one owner of a MapLibre surface: style, markers, camera and puck.
+ * The one owner of a MapLibre surface: style, markers, the shared route, camera and puck.
  *
  * Everything here is imperative and lives outside composition on purpose. [VmMapView] only feeds
  * it from keyed effects, so a recomposition alone never touches the map.
  */
+// One function per thing the surface owns; splitting them would only move the lifecycle apart.
+@Suppress("TooManyFunctions")
 internal class MapController(
     private val context: Context,
     private val mapView: MapView,
@@ -25,6 +27,7 @@ internal class MapController(
     var callbacks: VmMapCallbacks = VmMapCallbacks()
 
     private val layer = MarkerLayer(bitmaps)
+    private val path = PathLayer(bitmaps.chrome)
     private val puck = MapPuck(context, engine, scope)
     private val tapSlop = TAP_SLOP_DP * context.resources.displayMetrics.density
 
@@ -39,6 +42,8 @@ internal class MapController(
     private var onStyleReady: () -> Unit = {}
 
     private val styleLoadedListener = Style.OnStyleLoaded { style ->
+        // Before the markers, so the shared route is drawn under the pins rather than over them.
+        path.attach(style)
         layer.attach(style)
         styleGeneration++
         onStyleReady()
@@ -79,6 +84,7 @@ internal class MapController(
         map?.removeOnMapClickListener(clickListener)
         puck.disable(map)
         layer.detach()
+        path.detach()
         map = null
     }
 
@@ -95,6 +101,10 @@ internal class MapController(
 
     fun setMarkers(markers: List<MapMarker>) {
         layer.setMarkers(markers)
+    }
+
+    fun setPath(points: List<MapCoordinate>) {
+        path.setPath(points)
     }
 
     fun updateMyLocation(show: Boolean, follow: Boolean) {

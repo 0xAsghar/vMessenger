@@ -10,6 +10,7 @@ import ir.vmessenger.core.location.DeviceLocationProvider
 import ir.vmessenger.core.location.LocationUpdate
 import ir.vmessenger.core.map.CameraRequest
 import ir.vmessenger.core.map.MapCameraMode
+import ir.vmessenger.core.map.MapCoordinate
 import ir.vmessenger.data.network.LocationSharingCoordinator
 import ir.vmessenger.domain.model.Contact
 import ir.vmessenger.domain.model.LocationSample
@@ -17,7 +18,9 @@ import ir.vmessenger.domain.repository.ContactRepository
 import ir.vmessenger.domain.repository.LocationAccessRepository
 import ir.vmessenger.domain.repository.LocationRepository
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -77,6 +80,8 @@ class MapViewModel @Inject constructor(
     private val selected = MutableStateFlow<String?>(null)
     private val tiles = MutableStateFlow(TilesState())
     private val hint = MutableStateFlow<MapHint?>(null)
+    private val selectedPath = MutableStateFlow<ImmutableList<MapCoordinate>>(persistentListOf())
+    private var pathJob: Job? = null
 
     // The puck is not a free consequence of holding the permission: drawing it means registering
     // for live fixes. It appears while we are sharing, or once the user has asked to see it.
@@ -104,7 +109,7 @@ class MapViewModel @Inject constructor(
         ScreenSlice(p, c, s, t, extras.hint, extras.myLocationRequested)
     }
 
-    val uiState: StateFlow<MapUiState> = combine(sharingSlice, liveSlice, screenSlice, ::buildState)
+    val uiState: StateFlow<MapUiState> = combine(sharingSlice, liveSlice, screenSlice, selectedPath, ::buildState)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT_MS), MapUiState())
 
     fun setAccess(contactId: String, granted: Boolean) {
@@ -132,6 +137,24 @@ class MapViewModel @Inject constructor(
         myLocationRequested.value = false
         selected.value = contactId
         camera.update { CameraRequest(MapCameraMode.Free, it.token + 1, contactId) }
+        loadPath(contactId)
+    }
+
+    /**
+     * Reads back the route the selected contact shared during their last session, so the map can
+     * draw where they went while the share was open rather than only where they are now.
+     */
+    private fun loadPath(contactId: String?) {
+        pathJob?.cancel()
+        if (contactId == null) {
+            selectedPath.value = persistentListOf()
+            return
+        }
+        pathJob = viewModelScope.launch {
+            selectedPath.value = locationRepository.sharedPath(contactId)
+                .map { MapCoordinate(it.latitude, it.longitude) }
+                .toImmutableList()
+        }
     }
 
     /**
@@ -184,7 +207,12 @@ class MapViewModel @Inject constructor(
     }
 }
 
-private fun buildState(sharing: SharingSlice, live: LiveSlice, screen: ScreenSlice): MapUiState {
+private fun buildState(
+    sharing: SharingSlice,
+    live: LiveSlice,
+    screen: ScreenSlice,
+    path: ImmutableList<MapCoordinate>,
+): MapUiState {
     val approved = sharing.contacts.filter { it.isApproved && !it.blocked }
     val byId = approved.associateBy { it.id }
     val markers = live.incoming
@@ -203,6 +231,7 @@ private fun buildState(sharing: SharingSlice, live: LiveSlice, screen: ScreenSli
             (sharing.active || screen.myLocationRequested),
         camera = screen.camera,
         selectedContactId = screen.selectedContactId.takeIf { id -> markers.any { it.contactId == id } },
+        selectedPath = path,
         tilesError = screen.tiles.error,
         styleToken = screen.tiles.token,
         hint = screen.hint,

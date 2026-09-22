@@ -109,6 +109,7 @@ private fun MapEffects(
     }
     LaunchedEffect(controller, options.interactive) { controller.setInteractive(options.interactive) }
     LaunchedEffect(controller, styleGeneration, markers) { controller.setMarkers(markers) }
+    LaunchedEffect(controller, styleGeneration, content.path) { controller.setPath(content.path) }
     LaunchedEffect(controller, styleGeneration, options.showMyLocation, camera.mode) {
         controller.updateMyLocation(options.showMyLocation, camera.mode == MapCameraMode.FollowMe)
     }

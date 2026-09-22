@@ -156,7 +156,9 @@ private fun rememberMapContent(state: MapUiState): MapContent {
         }.toImmutableList()
     }
     val self = state.myLocation?.let { MapCoordinate(it.latitude, it.longitude) }
-    return remember(markers, state.camera, self) { MapContent(markers, state.camera, self) }
+    return remember(markers, state.camera, self, state.selectedPath) {
+        MapContent(markers, state.camera, self, state.selectedPath)
+    }
 }
 
 @Composable

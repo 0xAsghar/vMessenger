@@ -2,6 +2,7 @@ package ir.vmessenger.feature.map
 
 import androidx.compose.runtime.Immutable
 import ir.vmessenger.core.map.CameraRequest
+import ir.vmessenger.core.map.MapCoordinate
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 
@@ -79,6 +80,8 @@ data class MapUiState(
     val showMyLocation: Boolean = false,
     val camera: CameraRequest = CameraRequest(),
     val selectedContactId: String? = null,
+    /** The route the selected contact shared, oldest point first; empty when nobody is selected. */
+    val selectedPath: ImmutableList<MapCoordinate> = persistentListOf(),
     val tilesError: Boolean = false,
     /** Bumped by "try again" on the offline banner; forces the style to be fetched afresh. */
     val styleToken: Int = 0,

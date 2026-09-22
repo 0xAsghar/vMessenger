@@ -167,6 +167,12 @@ class LocationRepositoryImpl @Inject constructor(
             .filter { it.direction == MessageDirection.OUTGOING }
             .map { it.shareId }
 
+    override suspend fun sharedPath(contactId: String): List<LocationSample> {
+        val share = locationShareDao.latestByContactAndDirection(contactId, MessageDirection.INCOMING)
+            ?: return emptyList()
+        return locationSampleDao.samplesForShare(share.shareId).map { it.toDomain() }
+    }
+
     private fun LocationSampleEntity.toDomain() = LocationSample(
         shareId = shareId,
         latitude = latitude,

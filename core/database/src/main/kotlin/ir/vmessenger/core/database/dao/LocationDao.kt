@@ -27,6 +27,13 @@ interface LocationShareDao {
     @Query("SELECT * FROM location_share WHERE contactId = :contactId AND direction = :direction AND active = 1 LIMIT 1")
     suspend fun getActiveByContactAndDirection(contactId: String, direction: MessageDirection): LocationShareEntity?
 
+    /** Most recent session in one direction, ended or still running, for replaying what was shared. */
+    @Query(
+        "SELECT * FROM location_share WHERE contactId = :contactId AND direction = :direction " +
+            "ORDER BY startedAtUnixMs DESC LIMIT 1",
+    )
+    suspend fun latestByContactAndDirection(contactId: String, direction: MessageDirection): LocationShareEntity?
+
     @Update
     suspend fun update(entity: LocationShareEntity)
 
@@ -53,6 +60,10 @@ interface LocationSampleDao {
 
     @Query("SELECT * FROM location_sample WHERE shareId = :shareId ORDER BY sampledAtUnixMs DESC LIMIT 1")
     suspend fun getLatest(shareId: String): LocationSampleEntity?
+
+    /** Every sample of one session, oldest first: the route as it was shared. */
+    @Query("SELECT * FROM location_sample WHERE shareId = :shareId ORDER BY sampledAtUnixMs ASC")
+    suspend fun samplesForShare(shareId: String): List<LocationSampleEntity>
 
     /**
      * Latest sample per share, reactive on the sample table so the map refreshes

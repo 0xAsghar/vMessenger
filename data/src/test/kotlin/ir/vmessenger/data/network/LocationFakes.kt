@@ -36,6 +36,13 @@ class FakeLocationShareDao : LocationShareDao {
         direction: MessageDirection,
     ): LocationShareEntity? = shares.firstOrNull { it.contactId == contactId && it.direction == direction && it.active }
 
+    override suspend fun latestByContactAndDirection(
+        contactId: String,
+        direction: MessageDirection,
+    ): LocationShareEntity? = shares
+        .filter { it.contactId == contactId && it.direction == direction }
+        .maxByOrNull { it.startedAtUnixMs }
+
     override suspend fun update(entity: LocationShareEntity) {
         shares.replaceAll { if (it.shareId == entity.shareId) entity else it }
     }
@@ -68,6 +75,9 @@ class FakeLocationSampleDao : LocationSampleDao {
     override fun observeLatest(shareId: String): Flow<LocationSampleEntity?> = flowOf(getLatestSync(shareId))
 
     override suspend fun getLatest(shareId: String): LocationSampleEntity? = getLatestSync(shareId)
+
+    override suspend fun samplesForShare(shareId: String): List<LocationSampleEntity> =
+        samples.filter { it.shareId == shareId }.sortedBy { it.sampledAtUnixMs }
 
     override fun observeLatestPerShare(): Flow<List<LocationSampleEntity>> =
         flowOf(samples.groupBy { it.shareId }.values.map { group -> group.maxBy { it.id } })
