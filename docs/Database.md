@@ -1,8 +1,8 @@
 # vMessenger - Local Database
 
-The on-device store: Room over SQLCipher, **schema version 20**.
+The on-device store: Room over SQLCipher, **schema version 24**.
 
-Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/database/` and the exported schema `core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/20.json`.
+Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/database/` and the exported schema `core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/24.json`.
 
 ---
 
@@ -22,7 +22,7 @@ Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/d
 ```kotlin
 Room.databaseBuilder(context, VMessengerDatabase::class.java, "vmessenger.db")
     .openHelperFactory(SupportOpenHelperFactory(passphrase))   // net.zetetic SQLCipher
-    .addMigrations(MIGRATION_1_2 … MIGRATION_19_20)
+    .addMigrations(MIGRATION_1_2 … MIGRATION_23_24)
     .build()
 ```
 
@@ -30,7 +30,7 @@ Room.databaseBuilder(context, VMessengerDatabase::class.java, "vmessenger.db")
 - Passphrase: 32 random bytes, Keystore-wrapped, cached for the process lifetime by `DatabaseKeyProvider` under a mutex (see [Security.md](Security.md) §7.1).
 - `exportSchema = true`; schemas land in `core/database/schemas/`.
 - No `fallbackToDestructiveMigration` — every version step has an explicit migration.
-- 20 entities, 19 DAOs.
+- 22 entities, 21 DAOs.
 
 **Note on the `session` table.** It was declared but never used — sessions are connection-scoped and never persisted ([Protocol.md](Protocol.md) §6) — and was dropped in migration 17 → 18. Nothing references it any more.
 
@@ -49,6 +49,7 @@ erDiagram
   contact ||--o| location_access : "grant"
   conversation ||--o{ message : "cascade"
   message ||--o{ message_recipient : "cascade"
+  message ||--o{ message_edit_history : "cascade, group audit only"
   message ||--o{ outbox : "queued sends, one per recipient (no FK)"
   location_share ||--o{ location_sample : "cascade"
   contact_request }o--|| contact : "becomes on approval (no FK)"
@@ -56,7 +57,7 @@ erDiagram
 
 A conversation is 1:1 **or** group: exactly one of `contactId` and `groupId` is set. SQLite has no sum type, so both columns are nullable and the invariant is enforced where conversations are created; every read path branches on which one is present.
 
-Seven foreign keys exist (all `ON DELETE CASCADE`, `ON UPDATE NO ACTION`):
+Eight foreign keys exist (all `ON DELETE CASCADE`, `ON UPDATE NO ACTION`):
 
 | Child | Parent | Effect |
 |---|---|---|
@@ -65,10 +66,13 @@ Seven foreign keys exist (all `ON DELETE CASCADE`, `ON UPDATE NO ACTION`):
 | `chat_group_member.groupId` | `chat_group.id` | deleting a group deletes its membership |
 | `message.conversationId` | `conversation.id` | deleting a conversation deletes its messages |
 | `message_recipient.messageId` | `message.messageId` | deleting a message deletes its delivery rows |
+| `message_edit_history.messageId` | `message.messageId` | deleting a message — or purging an expired one — deletes its captured revisions |
 | `location_access.contactId` | `contact.id` | deleting a contact revokes the grant |
 | `location_sample.shareId` | `location_share.shareId` | deleting a share deletes its samples |
 
 `outbox` has **no** foreign key on purpose, so deleting a conversation does not silently drop queued rows — callers must call `OutboxDao.removeByConversation` explicitly, otherwise the dispatcher keeps retrying orphans (documented on `ConversationDao.deleteById`).
+
+`activity_log` (§4.20) has none either, for its own reason: it records events, and an event does not stop having happened because the contact or node it mentioned was since deleted — a cascade would quietly remove the evidence of exactly the changes a user might be checking.
 
 A second trap is documented on `ConversationDao.update`: never use `upsert` to modify an existing conversation. `@Insert(REPLACE)` is `INSERT OR REPLACE`, which deletes the old row first and cascades away every message in the conversation.
 
@@ -76,7 +80,7 @@ A second trap is documented on `ConversationDao.update`: never use `upsert` to m
 
 ## 4. Entities
 
-Types below are the SQLite affinities from `17.json`. `?` marks a nullable column.
+Types below are the SQLite affinities from `24.json`. `?` marks a nullable column.
 
 ### 4.1 `app_metadata`
 
@@ -192,8 +196,12 @@ The index on `groupId` is unique (one conversation per group). SQLite treats NUL
 | `caption` | TEXT? | text sent alongside an attachment |
 | `attachmentDurationMs` | INTEGER? | voice/video length, known before the file arrives |
 | `attachmentWaveform` | BLOB? | exactly 64 amplitude buckets (one byte each, 0..255) |
+| `attachmentPlayedAtUnixMs` | INTEGER? | when a voice message was first listened to; null shows the "unplayed" dot, persisted so it survives a restart |
 | `editedAtUnixMs` | INTEGER? | when the sender last edited it; null for a message that never was |
 | `deletedAtUnixMs` | INTEGER? | when the sender deleted it for everyone (their clock, as the delete carried it); null otherwise, and for tombstones from before schema 20 |
+| `expiresAtUnixMs` | INTEGER? | when a self-destructing message should vanish: an absolute time stamped by the sender and carried on the envelope; null for a message with no timer. Enforced on each recipient device, so it is best-effort against an honest client rather than a guarantee |
+| `albumId` | TEXT? | every image picked together in a multi-image send shares one album id; null for a standalone message |
+| `albumIndex` | INTEGER? | order within the album, so the chat can render one grid |
 
 Indices:
 
@@ -249,6 +257,9 @@ Per-recipient delivery state of an outgoing message.
 | `version` | INTEGER | creator-assigned revision of the membership |
 | `closed` | INTEGER | boolean: creator closed it, we left, or we were removed |
 | `avatarSeed` | TEXT | identicon seed, derived from `id` at creation |
+| `auditRetention` | INTEGER | boolean, default 0: whether admins may review this group's edited and deleted messages (§4.19) |
+
+`auditRetention` is creator-authored and carried in every membership snapshot, so a member's copy is whatever the creator last said rather than a local preference that could diverge between devices. It is never set on a 1:1 conversation, which has no creator and no admins.
 
 ### 4.12 `chat_group_member`
 
@@ -259,7 +270,7 @@ Per-recipient delivery state of an outgoing message.
 | `identityPub` | BLOB | Ed25519 identity key, so fan-out can reach a non-contact |
 | `x25519StaticPub` | BLOB? | |
 | `displayName` | TEXT | name from the group snapshot; the user's own contact name wins when they have one |
-| `role` | TEXT | `GroupMemberRole` name (`CREATOR`/`MEMBER`) |
+| `role` | TEXT | `GroupMemberRole` name (`CREATOR`/`ADMIN`/`MEMBER`); `ADMIN` is designated only by the creator, through a version-gated control, so every device records the same admin set from the same snapshot |
 | `joinedAtUnixMs` | INTEGER | |
 | `removedAtUnixMs` | INTEGER? | tombstone: non-null means no longer active |
 
@@ -360,6 +371,54 @@ Purged by the secure wipe along with everything else in the database.
 
 ---
 
+### 4.19 `message_edit_history`
+
+What a group message said before its sender changed or withdrew it. It reverses a privacy property the
+app otherwise has — a delete really does erase the text locally — so it is written **only** for a group
+whose creator switched `auditRetention` on, never for a 1:1 conversation, and every member of such a
+group is told so by a banner they cannot dismiss.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER | PK, autogenerated |
+| `messageId` | TEXT | FK → `message.messageId` CASCADE, index |
+| `groupId` | TEXT | the group whose policy caused the capture; an audit is always scoped to one group |
+| `authorIdentityHash` | TEXT? | routing key of whoever wrote the message; null for our own |
+| `revision` | TEXT | `MessageRevisionKind` name |
+| `body` | TEXT? | the text as it stood before the revision |
+| `caption` | TEXT? | |
+| `attachmentName` | TEXT? | |
+| `attachmentPath` | TEXT? | the file is kept while retention is on, so this still resolves; with retention off the file goes and nothing is captured at all |
+| `capturedAtUnixMs` | INTEGER | this device's clock — when it saw the revision, not when the sender made it |
+
+| Index | Columns | Purpose |
+|---|---|---|
+| `index_message_edit_history_messageId` | `messageId` | FK support |
+| `index_history_group_time` | `groupId, capturedAtUnixMs` | the newest-first review window |
+
+Only messages that were **actually sent** and later revised are here. A draft never leaves the composer
+and is recorded nowhere.
+
+### 4.20 `activity_log`
+
+What the user did to this app. The line it holds to, and the reason it is safe to export: it records
+the user's own actions on their own installation, **not who they communicated with** — no message
+bodies, and never the other party to a call or a conversation, which would turn a diagnostics record
+into a contact graph the moment it left the device.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER | PK, autogenerated |
+| `kind` | TEXT | `ActivityKind` name |
+| `detail` | TEXT? | one short, non-sensitive particular — a node address, a permission name, a contact's display name, an error code; capped at 120 characters by `ActivityLogger` so one entry cannot become a place to store things |
+| `atUnixMs` | INTEGER | index `index_activity_log_atUnixMs`; ordering and retention key |
+
+A contact's name appears only for an action the user took deliberately on someone already in their own
+contacts — adding or blocking them. `ActivityLogger.record` is fire-and-forget and never throws: an
+audit trail that can take the app down with it is worse than one with a gap.
+
+---
+
 ## 5. Enums and type converters
 
 `core/database/.../converter/EnumConverters.kt` stores every enum as `value.name` (TEXT) and reads it back with `valueOf`. An unknown stored value therefore **throws** rather than silently mapping to a default — except `NodeTrust`, which is stored as a plain `String` column and parsed by `NodeTrust.fromName`, falling back to `COMMUNITY`.
@@ -371,7 +430,9 @@ Purged by the secure wipe along with everything else in the database.
 | `DeliveryStatus` | `QUEUED`, `SENT`, `DELIVERED`, `READ`, `FAILED` | `message.status` |
 | `ContactRelationshipStatus` | `APPROVED`, `PENDING_OUT`, `PENDING_IN`, `REJECTED` | `contact.relationshipStatus` |
 | `ContactRequestStatus` | `PENDING`, `ACCEPTED`, `REJECTED` | `contact_request.status` |
-| `GroupMemberRole` | `CREATOR`, `MEMBER` | `chat_group_member.role` |
+| `GroupMemberRole` | `CREATOR`, `ADMIN`, `MEMBER` | `chat_group_member.role` |
+| `MessageRevisionKind` | `EDIT`, `DELETE` | `message_edit_history.revision` |
+| `ActivityKind` | `IdentityCreated`, `AppUnlocked`, `AppLocked`, `NodeAdded`, `NodeRemoved`, `NetworkConnected`, `NetworkDisconnected`, `PermissionGranted`, `PermissionDenied`, `LocationSharingStarted`, `LocationSharingStopped`, `CallPlaced`, `CallReceived`, `CallEnded`, `ContactAdded`, `ContactBlocked`, `AccountWiped`, `Failure` | `activity_log.kind` |
 | `NodeTrust` (not a converter) | `BUILT_IN`, `USER`, `OFFICIAL`, `COMMUNITY` | `relay_node.trust`, `bootstrap_node.trust` |
 
 Several queries hard-code the stored names (`WHERE status = 'PENDING'`, `direction = 'INCOMING'`, `status != 'READ'`), so renaming an enum constant requires a migration.
@@ -380,7 +441,7 @@ Several queries hard-code the stored names (`WHERE status = 'PENDING'`, `directi
 
 ## 6. DAO surface
 
-Eighteen DAOs, all in `core/database/.../dao/`. Suspend functions for one-shot work, `Flow` for anything the UI observes.
+Twenty-one DAOs, all in `core/database/.../dao/`. Suspend functions for one-shot work, `Flow` for anything the UI observes.
 
 | DAO | Notable operations |
 |---|---|
@@ -394,6 +455,8 @@ Eighteen DAOs, all in `core/database/.../dao/`. Suspend functions for one-shot w
 | `MessageDao` | `insert` (IGNORE on conflict), `observeConversation(cid)`, `observeConversation(cid, limit)`, `markSent`/`markDelivered`/`markRead`/`updateStatus`, `getById`, `getByIdInConversation`, `selectUnreadIncomingIds`, `selectUnreadIncoming`, `markIncomingRead`, `countForConversation`, `indexOf`, `latestMessageId`, `attachmentPaths`, `deleteById`, `deleteByConversation` |
 | `OutboxDao` | `enqueue`, `due(now)`, `remove(messageId, recipient)`, `removeAll(messageId)`, `removeByConversation`, `forMessage`, `pendingRecipients`, `resetBackoff`, `resetBackoffFor`, `update` |
 | `MessageRecipientDao` | `insertAll`, `forMessage`, `advance` (monotonic), `markFailed`, `deleteForMessage` |
+| `MessageEditHistoryDao` | `insert`, `forGroup(limit)`, `observeForGroup(limit)`, `forMessage`, `countForGroup`, `deleteForGroup`, `purgeOlderThan`. Append-only: there is no update, because a record of what was said cannot sensibly be amended, and both group reads are limit-bounded so a review is a window rather than a dump |
+| `ActivityLogDao` | `insert`, `observe(limit)`, `recent(limit)` — the export reads through `recent`, so what leaves the device is the same window the screen shows — `purgeOlderThan`, `clear` |
 | `GroupDao` | `upsert`, `getById`, `observe`, `setName`, `setVersion`, `setClosed`, `upsertMembers`, `observeActiveMembers`, `activeMembers`, `member`, `markRemoved`, `replaceMembers`, `deleteById` |
 | `EndpointCacheDao` | `upsert`, `get`, `purgeExpired`, `delete` |
 | `BootstrapNodeDao` / `RelayNodeDao` | `upsert`, `observeAll`, `observeEnabled` (bootstrap only), `getEnabled` (unordered), `getAll`, `getByAddress`, `markOk`, `markFail`, `setEnabled`, `deleteByAddress` |
@@ -417,7 +480,7 @@ Three projection types keep the UI off N+1 queries:
 
 ## 7. Migrations
 
-`core/database/.../migration/Migrations.kt`; all seventeen are registered in `DatabaseModule`.
+`core/database/.../migration/Migrations.kt`; all twenty-three are registered in `DatabaseModule`.
 
 | Step | Adds |
 |---|---|
@@ -440,6 +503,39 @@ Three projection types keep the UI off N+1 queries:
 | 17 → 18 | groups (`chat_group`, `chat_group_member`), per-recipient delivery (`message_recipient`, re-keyed `outbox`), group-aware `conversation`, voice/caption/sender columns on `message`; drops `session` |
 | 18 → 19 | message edit, profile photos, and the pending-revoke queue — see below |
 | 19 → 20 | `message.deletedAtUnixMs` |
+| 20 → 21 | `message.expiresAtUnixMs` |
+| 21 → 22 | `message.albumId` / `albumIndex` |
+| 22 → 23 | `chat_group.auditRetention`; new `message_edit_history` table (+ its two indices); the `ADMIN` role |
+| 23 → 24 | new `activity_log` table (+ index on `atUnixMs`) |
+
+### 20 → 21 in detail
+
+Exported as `MIGRATION_20_21_STATEMENTS`. One `ADD COLUMN`, `message.expiresAtUnixMs`. Every existing
+message keeps a null expiry and never vanishes. Expiry is enforced on each recipient device, because a
+P2P mesh has no server to withhold an expired message.
+
+### 21 → 22 in detail
+
+Exported as `MIGRATION_21_22_STATEMENTS`. Two `ADD COLUMN`s, `message.albumId` and `albumIndex`, so a
+multi-image send renders as one grid. Every existing message keeps a null album and stays a standalone
+bubble.
+
+### 22 → 23 in detail
+
+Exported as `MIGRATION_22_23_STATEMENTS`. Two additive changes and one new table. `auditRetention`
+defaults to 0, so **every existing group keeps today's behaviour** — an edit overwrites, a delete
+erases, nothing is captured — and it can only become 1 through a control the group's creator authored.
+`message_edit_history` (§4.19) CASCADEs from `message`, which matters in both directions: a conversation
+delete takes its captures with it, and so does an expiry purge, because an audit row that outlived a
+self-destructing message would quietly defeat the timer that was the point. The new `ADMIN` role needs
+no statement here — `chat_group_member.role` is a TEXT enum, so a new value is a new string in an
+existing column.
+
+### 23 → 24 in detail
+
+Exported as `MIGRATION_23_24_STATEMENTS`. One `CREATE TABLE` and one index for `activity_log` (§4.20),
+with no foreign key (§3). Nothing existing changes meaning, so there is no back-fill: a device that
+upgrades simply starts logging from then on.
 
 ### 18 → 19 in detail
 
@@ -492,7 +588,7 @@ The largest step so far, and the only one that recreates tables. SQLite cannot r
 
 ### Gaps in the exported schema history
 
-`core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/` contains `1, 2, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18.json`. **Versions 3, 4, 5 and 11 have no exported JSON** because they were never committed as released database versions — the migrations exist (and run) but the intermediate schema was folded into the next commit before export. The gap is expected and is not a missing-file bug. Room only validates against the *current* version's JSON, and the migration chain is continuous, so upgrades from any shipped version still work.
+`core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/` contains `1, 2, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24.json`. **Versions 3, 4, 5 and 11 have no exported JSON** because they were never committed as released database versions — the migrations exist (and run) but the intermediate schema was folded into the next commit before export. The gap is expected and is not a missing-file bug. Room only validates against the *current* version's JSON, and the migration chain is continuous, so upgrades from any shipped version still work.
 
 ---
 
@@ -511,12 +607,18 @@ The chat list is a single `observeChatList()` flow, so adding a contact, receivi
 | Delete one message | `MessageDao.deleteById` — local copy only, nothing is sent to the peer; its `message_recipient` rows cascade and the caller drops its `outbox` rows with `removeAll` |
 | Delete a conversation | `ConversationDao.deleteById` cascades messages (and their `message_recipient` rows); the caller must also `OutboxDao.removeByConversation` and erase files listed by `MessageDao.attachmentPaths` |
 | Delete a contact | cascades the 1:1 `conversation` (and therefore its `message` rows) and `location_access`; `MailboxDao.deleteForRecipient` and `ContactRequestDao.deleteByRequesterHash` clean up the rest. Group membership is **not** touched: the group is creator-authoritative, so deleting a contact removes our ability to reach them, not their membership |
+| Group edit history | `MessageEditHistoryDao.purgeOlderThan` bounds captures to 90 days (`MessageAuditRecorder.RETENTION_MS`), swept on every capture; `deleteForGroup` erases a group's captures when the creator switches retention off. The FK to `message` means a conversation delete — or the expiry purge of a self-destructing message — takes its captures with it, so a capture cannot outlive the message it came from |
+| Activity log | `ActivityLogDao.purgeOlderThan` bounds it to 90 days (`ActivityLogger.RETENTION_MS`), swept on every write; no foreign key, so nothing else cascades into it. `clear()` erases it outright on a wipe rather than purging, since there is no account left to keep a log for |
 | Location retention | `LocationSampleDao.purgeOlderThan` (window) and `deleteExcessForShare` (cap per share); `LocationShareDao.deleteEndedBefore` removes finished shares and cascades their samples |
 | Endpoint cache | `purgeExpired(now)` |
 | Mailbox | `purgeExpired(now)`; per-sender quota via `countBySenderSince` |
 | DHT records | `purgeExpired(now)` plus `evictOldest(excess)` by `storedAtUnixMs` |
 | Leave / close a group | sets `chat_group.closed`; the history stays readable. Nothing deletes `chat_group`, so a closed group is never silently emptied |
 | Secure wipe | `clearAllTables()` → `close()` → delete `vmessenger.db` and its journal siblings → destroy the Keystore master key ([Security.md](Security.md) §9) |
+
+Neither `message_edit_history` nor `activity_log` is backed up — like everything else in this database
+(§1), and pointedly so: a backup is portable, and content retained under one group's disclosed policy
+should not travel off the device that recorded it.
 
 ---
 

@@ -24,7 +24,7 @@ class GroupStateTest {
     }
 
     @Test
-    fun `the thirty-second other member is refused rather than trimmed later`() {
+    fun `one member past the cap is refused rather than trimmed later`() {
         val full = (1..GroupLimits.MAX_OTHER_MEMBERS).map { "c$it" }.toPersistentSet()
         val after = full.toggleWithin(GroupLimits.MAX_OTHER_MEMBERS, "one-too-many")
         assertEquals(GroupLimits.MAX_OTHER_MEMBERS, after.size)
@@ -36,7 +36,10 @@ class GroupStateTest {
         val state = picker(selected = (1..GroupLimits.MAX_OTHER_MEMBERS).map { "c$it" })
         assertTrue(state.atCapacity)
         assertTrue(state.canSelect("c1"))
-        assertFalse(state.canSelect("c99"))
+        // Named so it cannot be one of the generated ids at any cap. It was "c99" until the cap
+        // was raised to 100, at which point the id the test meant as "someone else" became a
+        // member of the very selection it was testing against.
+        assertFalse(state.canSelect("not-selected"))
     }
 
     @Test

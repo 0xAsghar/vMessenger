@@ -1,6 +1,6 @@
 # vMessenger - Security and Cryptography
 
-This document describes the security design as implemented: threat model, what the relay can and cannot see, the guarantees the v2 handshake provides, key pinning and re-verification, inbound authorization, encryption at rest, the secure wipe, and an honest list of what is **not** protected.
+This document describes the security design as implemented: threat model, what the relay can and cannot see, the guarantees the v2 handshake provides, key pinning and re-verification, inbound authorization, encryption at rest, the secure wipe, an honest list of what is **not** protected, and the properties of the features that touch a microphone, a location or a record of what was said — voice calls, group audit retention, the activity log and location requests.
 
 Wire formats and exact transcripts are in [Protocol.md](Protocol.md). Every claim here cites the file that implements it.
 
@@ -16,6 +16,7 @@ Wire formats and exact transcripts are in [Protocol.md](Protocol.md). Every clai
 | No server able to read message content | Implemented (relay forwards opaque frames; DHT stores only signed endpoint records) |
 | Replay resistance | Implemented (bounded skipped-key store, counter bound into the AEAD AD) |
 | Encryption at rest for the database and attachments | Implemented (SQLCipher + `VMA1` container, keys wrapped in the Android Keystore) |
+| Confidentiality and integrity of voice-call audio | Implemented (per-call forward-secret key, XChaCha20-Poly1305 per frame — §13) |
 | Post-compromise security (Double Ratchet) | **Not implemented** — see §10 |
 | Metadata privacy from the relay | **Not implemented** — see §10 |
 
@@ -146,16 +147,22 @@ Decryption is not authorization. Every decrypted envelope passes `data/.../netwo
 
 | Kind | Allowed from |
 |---|---|
-| `CHAT`, `ATTACHMENT`, `LOCATION`, `CONTROL`, `RECEIPT`, `NETWORK_NODES`, `GROUP_CONTROL` | an existing, non-blocked, `APPROVED` contact |
+| `CHAT`, `ATTACHMENT`, `LOCATION`, `CONTROL`, `RECEIPT`, `NETWORK_NODES`, `GROUP_CONTROL`, `MESSAGE_REVISION`, `PROFILE_UPDATE`, `CALL_SIGNAL` | an existing, non-blocked, `APPROVED` contact |
+| `GPS_BUZZER` | the same **and** `contact.verified` — the only kind that requires a confirmed safety number |
 | `CONTACT_REQUEST`, `CONTACT_RESPONSE` | anyone not blocked (so strangers can introduce themselves and pending contacts can answer) |
 
 This is the last line, not the only one: blocked contacts are also refused at the handshake and skipped by the outbox.
+
+It fails **open**, though, and that is worth knowing: the policy is only consulted for an envelope `InboundKind.of` recognised, so a content arm added to the proto and not added to `InboundKind` would skip the check rather than be refused. The two enums have to change together.
 
 Additional per-kind checks:
 
 - **Receipts** (`InboundReceiptHandler`): the referenced message must be `OUTGOING` **and the sender must be one of its recipients**. That is stricter than the old "owner of the conversation" check and is what makes per-member ticks safe: a group message legitimately gets a receipt from each member, and from nobody else. Per-recipient statuses only move forward; `at_unix_ms` is clamped to `[createdAt, now]`.
 - **Group messages** (`InboundConversationResolver`): `group_id` is peer-controlled, so being an approved contact is not enough. The group must exist here, must not be closed, and the sender must be an active member — checked before a message is persisted and before a single attachment chunk is staged. Otherwise one contact could write into any group id they ever saw, or into one they were removed from.
-- **Group membership** (`GroupControlHandler`): `CREATE`/`SNAPSHOT` are accepted only from the group's named creator and only when they do not move the version backwards; `UPDATE_NAME`/`ADD`/`REMOVE`/`CLOSE` only from the creator and only at exactly `local + 1` (a gap triggers a snapshot request and the control is dropped); `LEAVE` only from the member it is about. A snapshot that does not list us is dropped, so nobody can push us into a group. Being the target of a `REMOVE` closes our copy locally.
+- **Group membership** (`GroupControlHandler`): `CREATE`/`SNAPSHOT` are accepted only from the group's named creator and only when they do not move the version backwards; `UPDATE_NAME`/`ADD`/`REMOVE`/`CLOSE`/`SET_ROLE` only from the creator and only at exactly `local + 1` (a gap triggers a snapshot request and the control is dropped); `LEAVE` only from the member it is about. A snapshot that does not list us is dropped, so nobody can push us into a group. Being the target of a `REMOVE` closes our copy locally.
+- **Group roles** (`GroupControlCodec.roleOf`): a member's role is read fail-closed — the creator's own row is decided by whose hash matches the group's creator rather than by what the snapshot claimed, and an unset or unrecognised role reads `MEMBER`. So a peer cannot promote itself by editing a snapshot it forwards, and a pre-role snapshot produces plain members, not admins.
+- **Call signals** (`CallCoordinator`): only an approved contact can make the phone ring (§13); a signal naming a `call_id` that is not the live call is ignored, a second invite is answered `BUSY`, and a state transition that does not fit is dropped rather than applied.
+- **Location requests** (`GpsBuzzerHandler`): a verified contact only, and the handler raises a prompt and nothing else — it starts no service and grants no access (§16).
 - **Contact requests** (`ContactRequestHandler`): a payload naming an identity other than the authenticated session peer is ignored; the `request_id` must be the deterministic id derived over `(requester, us)`; the displayed user hash is derived from the proven identity, not from the payload.
 - **Contact responses**: only a contact we are actually waiting on (`PENDING_OUT`, or `APPROVED` for the mutual-add echo) may answer, and only with the request id we derived for them.
 - **Attachments** (`AttachmentReceiver`): a chunk from anyone but that transfer's sender is dropped without touching its state; wrong-size chunks drop the transfer; the plaintext SHA-256 in the header must verify before the message is materialized.
@@ -280,6 +287,7 @@ install that still opens rather than one that opens with neither key.
 | Lock-screen privacy | Message channel and every notification are `VISIBILITY_PRIVATE`; the public version carries no sender and no preview. With "hide notification content" on it is `VISIBILITY_SECRET`, so nothing reaches the lock screen (`core/notifications/.../MessageNotificationManager.kt`) |
 | No cloud backup of app data | `android:allowBackup="false"` |
 | Foreground service type | `remoteMessaging|dataSync` — `remoteMessaging` (API 34+) is exempt from Android 15's 6 h `dataSync` cap and from the Android 14 `BOOT_COMPLETED` start restriction |
+| Microphone service only where a user action reached | `CallState.holdsMicrophoneService` is false in `Idle`, `IncomingRinging` and `Ending`, so a ringing phone holds a notification and nothing more; the microphone service starts on the answer (§13) |
 | Restart after reboot | `BootCompletedReceiver` restarts the network service without the user opening the app |
 | Debug surfaces gated | Debug and Logs screens require developer mode (`PrivacyPreferences.developerModeEnabled`, default false, unlocked by seven taps on the version row in About) |
 | Read receipts opt-out | `PrivacyPreferences.sendReadReceipts` (default on) |
@@ -335,6 +343,9 @@ These are real, current gaps. None of them is hidden behind a "future work" labe
 | L11 | **Replay window is bounded, not absolute** | `ReplayCache` on the node evicts the oldest entries at 200 000 and after its TTL; a listener proof older than `proofMaxSkewMs` (default 5 min) is refused, so the exposure is bounded by that window rather than eliminated. |
 | L12 | **A group is only as private as its smallest member set** | There is no group key and no group server: a group is client-side fan-out over pairwise sessions, so message content is protected exactly as in a 1:1 chat. But every member learns every other member's identity key from the snapshot, and the creator is the sole authority on membership — a malicious creator can add a device nobody else notices, and there is no mechanism (no admin transfer, no member-side veto) to stop them. Membership changes are also not signed independently of the transport: authority rests on the session having authenticated the creator. |
 | L13 | **Group fan-out is O(n) and observable** | One session, one transfer and one queue row per recipient, including for attachments. A relay therefore sees a burst of connections from one identity to the same set of peers whenever a group message is sent, which is a strong hint that those peers form a group. The 32-member cap bounds the cost, not the signal. |
+| L17 | **Call media is direct-only, and the `ACCEPT` hands the peer this device's local addresses** | The accepting side advertises its own local IPv4 addresses so the caller can dial one (§13). There is no STUN and no relay path for audio, so two devices with no direct route cannot call at all — the call ends rather than connecting — and the peer, who is an approved contact, learns those addresses. A dropped media path ends the call; there is no failover. |
+| L18 | **A self-destruct deadline is only as good as the peer** | `expires_at_unix_ms` is sender-stamped and enforced locally on each device (Protocol.md §8.7). An older peer ignores the field and keeps the message; a modified client can keep the plaintext whatever the field says. Like delete-for-everyone it is a request honoured by cooperating software, not a control over another device. |
+| L19 | **Audit retention reverses local erasure for the groups that enable it** | Off by default and creator-only, disclosed to every member by an undismissable banner and a system line in the group's history, scoped to one group, never applied to a 1:1 chat, capped at 90 days and readable only on the device that captured it (§14). Within those bounds it is still what it looks like: a member of such a group is trusting that group's admins with the text of what they edited or withdrew. Leaving is the only opt-out. |
 | L14 | **Half-finished P2P paths are off, not absent** | Peer exchange, embedded DHT participation, relay-peer mode, UDP attempts and default-relay demotion all ship as reachable code behind `P2PConfig` flags that default to false (store-and-forward left this list in 1.1). Turning any of them on in the debug screen enables code that has not been through the same verification as the default path. |
 
 ---
@@ -350,6 +361,7 @@ These are real, current gaps. None of them is hidden behind a "future work" labe
 | KDF | HKDF-SHA256 |
 | Message AEAD | ChaCha20-Poly1305-IETF, fresh random 12-byte nonce prepended per ciphertext |
 | Attachment AEAD | `crypto_secretstream_xchacha20poly1305` (24-byte header, per-chunk tags) |
+| Call media AEAD | `crypto_aead_xchacha20poly1305_ietf`, one seal per Opus packet, 24-byte constructed nonce (direction byte + sequence), empty associated data |
 | Mailbox seal | `crypto_box_seal` (anonymous sealed box) |
 | Backup KDF | Argon2id13 (`crypto_pwhash`), 16-byte salt |
 | Key wrapping | AES-256-GCM in the Android Keystore, 128-bit tag, alias-derived AAD |
@@ -366,3 +378,80 @@ Key material is zeroized with `sodium_memzero` (`CryptoEngine.memzero`) wherever
 - Security-relevant units have focused tests: `HandshakeTranscriptTest`, `SecureChannelFactoryTest`, `SymmetricRatchetTest`, `MessagingServiceFrameGuardTest`, `MessagingServiceKeyChangeTest`, `FrameParserFuzzTest`, `RelayProofTest`, `EndpointRecordTranscriptTest`, `UserHashEncoderTest`, `WrappedKeyBlobTest`, `PairingDescriptorCodecTest`, plus the node's `RelayNodeServerTest`. See [Testing.md](Testing.md).
 - Release APKs are signature-verified in CI with `apksigner` and refused if debug-signed or if the per-ABI APKs do not share one signer; `SHA256SUMS.txt` and `SIGNING.txt` ship with every release.
 - No secrets in the repository. Node operator overrides live in `/etc/vmessenger/node.env` on the host ([Deployment.md](Deployment.md)).
+
+---
+
+## 13. Voice calls
+
+`data/.../call/CallCoordinator.kt`, `CallMediaService.kt`, `CallMediaChannel.kt`, `CallState.kt`. Wire formats in [Protocol.md](Protocol.md) §17–18.
+
+**Peer authenticity is inherited, not re-established.** Signalling is an ordinary sealed `MessageEnvelope` on a v2 messaging session, so the peer is whoever the handshake proved (§4). There is no second authentication to get wrong, no separate call-layer identity, and nothing for a user to compare: a call is exactly as authentic as the chat with the same contact, and no more.
+
+**The media key is per-call and forward-secret.** Each side sends a fresh X25519 public key *inside* that already-authenticated, already-encrypted session, and both derive `HKDF-SHA256(X25519(…), salt = ∅, info = "vmessenger-call-media-v1", 32)`. One round trip buys a key that a later compromise of the long-term identity and static keys cannot recover. It never touches disk, and it is zeroized when the call clears — after the media path is stopped, because the path is holding the reference.
+
+**Only approved contacts can make the phone ring.** `CALL_SIGNAL` is gated to an existing, non-blocked, `APPROVED` contact (§6): a stranger who could send one would have a way to disturb someone who never agreed to hear from them.
+
+**The microphone opens on an explicit accept, and nowhere else.** `CallState.microphoneOpen` is true in `Active` alone, and `Active` is reachable only through an accept — that is why the call is a state machine rather than a pair of booleans. Two consequences are structural rather than a matter of care:
+
+- The callee's media addresses travel in `ACCEPT` only, so the peer does not learn where to reach this device for audio until its user has answered.
+- No state a background signal can reach holds the microphone foreground service (§8). A ringing phone holds a notification; the service starts on the answer, which is also what Android 14 requires.
+
+**The direction byte is what keeps the two streams apart.** Both ends seal with the same per-call key, so a nonce of `[direction][15 zero bytes][sequence]` is the only thing stopping each sequence number from being used twice under one key — for a stream cipher that is the mistake that XORs two plaintexts together and hands an eavesdropper both. One byte, and it is the whole defence.
+
+What calls do **not** give you:
+
+- **No anti-replay window.** A frame that fails to authenticate is dropped, so nobody without the key can inject audio. A frame *captured and replayed* by someone on the path authenticates again; what discards it is the jitter buffer's playout rule (a duplicate, or a sequence already played), not a cryptographic replay check. There is no per-frame anti-replay state as there is for messaging frames (Protocol.md §7.3).
+- **No relay path, and local addresses go to the peer.** See L17.
+- **No call metadata hiding.** A media connection is a TCP connection to port 48557 between two addresses: an observer on the path sees a call happening, its duration and its packet rate, exactly as for messaging frames (§3).
+
+---
+
+## 14. Group audit retention
+
+`data/.../network/MessageAuditRecorder.kt`, `core/database/.../MessageEditHistoryEntity.kt`, `GroupRepositoryImpl.setAuditRetention`. The control field is in [Protocol.md](Protocol.md) §10.4.
+
+This feature reverses a privacy property the app otherwise has — a delete really does erase the text locally — so every bound on it matters:
+
+| Bound | How it holds |
+|---|---|
+| **Off by default** | `GroupEntity.auditRetention = false`; a group that never enabled it captures nothing |
+| **Creator-authored** | only the creator may switch it, and the switch goes out as a `SNAPSHOT`, so the full membership travels with the new policy |
+| **Carried in every control** | a device that missed a message cannot be left applying a stale policy, and an absent field reads `false` |
+| **Never on a 1:1** | `capture` returns false when there is no `groupId`, before it looks at anything else: no creator to author such a policy, no admin to read it, and a 1:1 delete keeps erasing |
+| **Disclosed to all members** | an undismissable banner on the group screen, *and* a system line written into the group's own history when the policy is switched on or off — an event every member sees, not only a banner they might scroll past |
+| **Review is local-only** | each device holds what it saw; the review screen reads this device's rows, and there is no fetch or request that would make one member's phone answer queries about a third party's words |
+| **Who may review** | the creator, or a member whose own row is `ADMIN`, and only while retention is on |
+| **Captures cascade with the message** | the row `CASCADE`s from `message`, so an expiry purge (Protocol.md §8.7) takes the captures with it — an audit table that outlived an expiry would quietly defeat the timer that was the point |
+| **90-day bound** | `MessageAuditRecorder` purges captures older than 90 days on each write. A review window, not an archive |
+| **Switching it off erases** | `historyDao.deleteForGroup`, because leaving a stockpile behind would mean members are still exposed by a rule that no longer applies |
+| **Not in a backup** | the backup payload carries contacts, location grants, user-added nodes and optionally conversations with their messages; this table is not in it, so retained content does not travel off the device that recorded it |
+
+Only messages that were **actually sent** and later edited or withdrawn are captured — the text as it stood, the caption, the attachment name and path, the author's identity hash, and when this device saw the revision. A draft never leaves the composer and is recorded nowhere. With retention on, the attachment file is kept so a captured row still resolves; with it off the file goes as it always has.
+
+Where this is **best-effort**: enforcement is each device's own code. A member running modified software could keep captures with retention off, or keep them past ninety days, exactly as it could keep a message it was asked to delete. What the policy governs is the behaviour of the shipped app and what the group is told about it — not what a peer is able to do. And the honest summary of the feature is L19.
+
+---
+
+## 15. The activity log
+
+`data/.../activity/ActivityLogger.kt`, `ActivityLogExport.kt`, `core/database/.../ActivityLogEntity.kt`.
+
+**The line the table holds to: it records what the user did to the app, never who they communicated with.** Identity created, app locked and unlocked, node added or removed, network up or down, a permission granted or denied, location sharing started or stopped, a call placed, received or ended, a contact added or blocked, the account wiped, and failures. Message bodies are never in it, and neither is the other party to a call or a conversation — a call is logged as having happened and in which direction, and nothing more. A contact's display name appears only for an action the user took deliberately on someone already in their own contacts (adding or blocking them).
+
+That line is what makes the log safe to export. A log that named peers would turn a diagnostics record into a contact graph the moment it left the device.
+
+- **Exportable by the person it is about.** The log screen renders the most recent 500 rows as JSON, CSV or plain text and hands the result to the share sheet; the same screen clears the log. Timestamps are Unix milliseconds rather than formatted local dates, so a record does not silently depend on the device's timezone and calendar. Nothing is added that is not in the rows — there is no enrichment step that could reach for a contact name or a message.
+- **CSV formula-injection guard.** A value beginning `=`, `+`, `-` or `@` is prefixed with an apostrophe, and any value containing a comma, a quote or a newline is quoted with doubled quotes (`ActivityLogExport.escapeCsv`). A log entry is data; it should not be able to execute in the spreadsheet that opens it.
+- **Bounded.** One short, non-sensitive detail per row, truncated at 120 characters, so an entry cannot become a place to store things; rows older than 90 days are purged on each write.
+- **A write cannot fail what it describes.** `record` does not suspend and never throws — it is called from lock transitions, network callbacks, permission results and the wipe. A failed write is logged to the ordinary app log and dropped: an audit trail that can take the app down with it is worse than one with a gap.
+- **Wiped and not backed up.** The table lives inside the SQLCipher database, so §9's `clearAllTables()` takes it, and the backup payload does not include it.
+
+---
+
+## 16. Location requests (GPS buzzer)
+
+`data/.../network/GpsBuzzerHandler.kt`, `LocationSharingCoordinator.requestLocationShare`. Wire form in [Protocol.md](Protocol.md) §8.8.
+
+- **Verified contacts only, enforced on both devices.** The sender builds a request only for a contact that is verified *and* already permitted to receive our location; the receiver refuses to accept one from an unverified contact (§6). The receiver's check is the one that counts — a peer whose own UI skipped it is refused on arrival — and this is the only inbound kind held to a confirmed safety number.
+- **A request the receiver may ignore.** The handler raises a notification against the existing conversation and returns. Nothing else happens: no location service is started, no access is granted, no share state is touched. With no conversation for that contact yet there is nowhere to send the user, and the request is dropped.
+- **Never a remote enable.** The person holding the phone answers, and sharing still goes through the ordinary per-contact grant and the visible location foreground service. There is no path by which this arm turns on a sensor.

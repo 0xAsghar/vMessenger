@@ -3,6 +3,16 @@ package ir.vmessenger.core.common.encoding
 import java.security.MessageDigest
 
 private const val CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+/**
+ * What [UserHashEncoder.encode] writes. Still `vm2` in 2.0.0-beta.1, on purpose.
+ *
+ * `vm-` is the prefix the identity is moving to, and every V2 build already *reads* it — see
+ * [ACCEPTED_PREFIXES_UPPER]. Flipping this constant is a one-word change and it is deliberately
+ * not made yet: an install that has not taken V2 cannot decode a `vm-` ID, so emitting one now
+ * would break contact-add against every 1.1.2 peer still in use. The precondition is a deployment
+ * fact, not a code one — flip it in the release *after* V2 is adopted across the organization.
+ */
 private const val PREFIX = "vm2"
 
 /**

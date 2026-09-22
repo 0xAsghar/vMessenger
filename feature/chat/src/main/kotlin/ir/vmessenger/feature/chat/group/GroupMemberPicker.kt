@@ -64,11 +64,17 @@ private const val SHEET_HEIGHT_FRACTION = 0.9f
  *
  * They live with the picker because the member cap is the rule it exists to enforce: the
  * user is told "no more than this" while choosing, not after a fan-out has already begun.
+ *
+ * [MAX_MEMBERS] must stay equal to `MAX_GROUP_MEMBERS` in `:data`, which is the cap the
+ * repository refuses at and the inbound handler drops a snapshot over. It is duplicated rather
+ * than shared because this module does not depend on `:data`; the two got out of step once
+ * already, when the cap was raised to 100 here but not there, and the result was a picker that
+ * stopped at 32 while the protocol happily carried more.
  */
 object GroupLimits {
 
-    /** The user plus [MAX_OTHER_MEMBERS]; a membership snapshot has to stay one small message. */
-    const val MAX_MEMBERS = 32
+    /** The user plus [MAX_OTHER_MEMBERS]; keep equal to `:data`'s `MAX_GROUP_MEMBERS`. */
+    const val MAX_MEMBERS = 100
 
     /** How many people may be picked besides the user themselves. */
     const val MAX_OTHER_MEMBERS = MAX_MEMBERS - 1
