@@ -645,3 +645,28 @@ val MIGRATION_22_23_STATEMENTS: List<String> = listOf(
     "CREATE INDEX IF NOT EXISTS `index_history_group_time` " +
         "ON `message_edit_history` (`groupId`, `capturedAtUnixMs`)",
 )
+
+val MIGRATION_23_24 = object : Migration(23, 24) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_23_24_STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/**
+ * The device's own activity log.
+ *
+ * No foreign key on purpose: an event does not stop having happened because the contact or node it
+ * mentioned was since deleted, and a cascade would quietly remove the evidence of exactly the
+ * changes a user might be checking.
+ */
+val MIGRATION_23_24_STATEMENTS: List<String> = listOf(
+    """
+    CREATE TABLE IF NOT EXISTS `activity_log` (
+        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        `kind` TEXT NOT NULL,
+        `detail` TEXT,
+        `atUnixMs` INTEGER NOT NULL
+    )
+    """.trimIndent(),
+    "CREATE INDEX IF NOT EXISTS `index_activity_log_atUnixMs` ON `activity_log` (`atUnixMs`)",
+)

@@ -7,10 +7,12 @@ import ir.vmessenger.core.crypto.keystore.KeyStoreKeyManager
 import ir.vmessenger.core.crypto.lock.PinVerifier
 import ir.vmessenger.core.crypto.lock.StrictModeKeyManager
 import ir.vmessenger.core.database.DatabaseKeyProvider
+import ir.vmessenger.core.database.entity.ActivityKind
 import ir.vmessenger.core.datastore.AppLockPreferences
 import ir.vmessenger.core.datastore.PinVerifierBlob
 import ir.vmessenger.core.datastore.PrivacyPreferences
 import ir.vmessenger.core.datastore.SecurityPreferences
+import ir.vmessenger.data.activity.ActivityLogger
 import ir.vmessenger.domain.usecase.settings.SecureWipeUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -171,6 +173,7 @@ class AppLockCoordinator @Inject constructor(
     // directly, so injecting it eagerly opens the database at construction — which is exactly what
     // strict mode forbids, and this class is built while the app is still locked.
     private val secureWipe: Provider<SecureWipeUseCase>,
+    private val activityLogger: ActivityLogger,
 ) {
     /** Process-lived, unlike a view model's: see [onBackgrounded] for why that matters. */
     private val scope =
@@ -206,6 +209,26 @@ class AppLockCoordinator @Inject constructor(
     private val transition = Mutex()
 
     private val _state = MutableStateFlow(LockState.Undetermined)
+
+    /**
+     * The only way the lock state changes.
+     *
+     * A single setter rather than logging at each call site: the activity log has to be able to
+     * say whether the app locked, and a future transition added somewhere else in this class must
+     * not be able to omit itself from it. `Undetermined` is skipped because it is the obscured
+     * in-between, not a state the user did anything to reach.
+     */
+    private fun enter(next: LockState) {
+        val previous = _state.value
+        _state.value = next
+        if (previous == next) return
+        when (next) {
+            LockState.Unlocked -> activityLogger.record(ActivityKind.AppUnlocked)
+            LockState.Locked -> activityLogger.record(ActivityKind.AppLocked)
+            LockState.LockedStrict -> activityLogger.record(ActivityKind.AppLocked, DETAIL_STRICT)
+            LockState.Undetermined -> Unit
+        }
+    }
     val state: StateFlow<LockState> = _state.asStateFlow()
 
     val strictModeSupported: Boolean get() = strictKeys.isSupported
@@ -220,7 +243,7 @@ class AppLockCoordinator @Inject constructor(
     private suspend fun lockIfEnabledInternal() = transition.withLock {
         if (!privacyPreferences.appLockEnabled.first()) {
             decided = true
-            _state.value = LockState.Unlocked
+            enter(LockState.Unlocked)
             return
         }
         completeInterruptedEnable()
@@ -255,7 +278,7 @@ class AppLockCoordinator @Inject constructor(
             databaseKeyProvider.lock()
         }
         decided = true
-        _state.value = if (strict) LockState.LockedStrict else LockState.Locked
+        enter(if (strict) LockState.LockedStrict else LockState.Locked)
     }
 
     /**
@@ -312,7 +335,7 @@ class AppLockCoordinator @Inject constructor(
         // the backoff grew on the same number, so a typo years ago still cost a wait today.
         lockPreferences.clearAttempts()
         databaseKeyProvider.unlock()
-        _state.value = LockState.Unlocked
+        enter(LockState.Unlocked)
     }
 
     /**
@@ -392,7 +415,7 @@ class AppLockCoordinator @Inject constructor(
         // Before publishing Unlocked, exactly as [markUnlocked] does: the collector that watches
         // this state resolves the start route the moment it flips, and that reaches the database.
         databaseKeyProvider.unlock()
-        _state.value = LockState.Unlocked
+        enter(LockState.Unlocked)
         return UnlockResult.NoLockSet
     }
 
@@ -457,12 +480,12 @@ class AppLockCoordinator @Inject constructor(
 
     suspend fun obscureIfEnabled() = transition.withLock {
         if (_state.value != LockState.Unlocked) return
-        if (privacyPreferences.appLockEnabled.first()) _state.value = LockState.Undetermined
+        if (privacyPreferences.appLockEnabled.first()) enter(LockState.Undetermined)
     }
 
     /** The app came back inside the auto-lock window: uncover it without asking for anything. */
     suspend fun revealIfObscured() = transition.withLock {
-        if (_state.value == LockState.Undetermined) _state.value = LockState.Unlocked
+        if (_state.value == LockState.Undetermined) enter(LockState.Unlocked)
     }
 
     /** Turns the screen gate on. Strict mode is a separate, deliberate step. */
@@ -486,7 +509,7 @@ class AppLockCoordinator @Inject constructor(
         if (blocked) return false
         lockPreferences.clear()
         privacyPreferences.setAppLockEnabled(false)
-        _state.value = LockState.Unlocked
+        enter(LockState.Unlocked)
         return true
     }
 
@@ -572,5 +595,8 @@ class AppLockCoordinator @Inject constructor(
         const val ARM_POLL_MS = 30_000L
 
         const val TAG = "AppLock"
+
+        /** Names the stricter of the two locked states in the activity log. */
+        const val DETAIL_STRICT = "strict"
     }
 }

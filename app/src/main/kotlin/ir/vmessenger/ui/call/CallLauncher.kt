@@ -44,6 +44,8 @@ internal fun rememberCallLauncher(viewModel: CallViewModel = hiltViewModel()): (
     val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val contactId = pending
         pending = null
+        // Both answers, because "I never granted that" is the kind of thing a log exists to settle.
+        current.value.recordMicrophoneAnswer(granted)
         when {
             !granted -> Toast.makeText(context, R.string.call_needs_microphone, Toast.LENGTH_LONG).show()
             contactId != null -> {

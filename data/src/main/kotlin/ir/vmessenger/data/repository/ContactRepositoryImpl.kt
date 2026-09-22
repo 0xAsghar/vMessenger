@@ -7,8 +7,10 @@ import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.crypto.pairing.PairingDescriptorCodec
 import ir.vmessenger.core.database.dao.ContactDao
+import ir.vmessenger.core.database.entity.ActivityKind
 import ir.vmessenger.core.database.entity.ContactEntity
 import ir.vmessenger.core.proto.wire.v1.PairingDescriptor
+import ir.vmessenger.data.activity.ActivityLogger
 import ir.vmessenger.data.network.ContactCleanupCoordinator
 import ir.vmessenger.domain.model.Contact
 import ir.vmessenger.domain.repository.ContactRepository
@@ -25,6 +27,7 @@ class ContactRepositoryImpl @Inject constructor(
     private val contactDao: ContactDao,
     private val pairingDescriptorCodec: PairingDescriptorCodec,
     private val cleanupCoordinator: ContactCleanupCoordinator,
+    private val activityLogger: ActivityLogger,
 ) : ContactRepository {
 
     override fun observeContacts(): Flow<List<Contact>> =
@@ -122,6 +125,7 @@ class ContactRepositoryImpl @Inject constructor(
                 lastSeenUnixMs = null,
             )
             contactDao.insert(entity)
+            activityLogger.record(ActivityKind.ContactAdded, entity.displayName)
             entity.toDomain()
         }.fold(
             onSuccess = { AppResult.Success(it) },
@@ -217,7 +221,10 @@ class ContactRepositoryImpl @Inject constructor(
     override suspend fun blockContact(id: String, blocked: Boolean) {
         val contact = contactDao.getById(id) ?: return
         contactDao.update(contact.copy(blocked = blocked))
-        if (blocked) cleanupCoordinator.onBlocked(id)
+        if (blocked) {
+            cleanupCoordinator.onBlocked(id)
+            activityLogger.record(ActivityKind.ContactBlocked, contact.displayName)
+        }
     }
 
     /** Full cleanup contract; see [ContactCleanupCoordinator]. */

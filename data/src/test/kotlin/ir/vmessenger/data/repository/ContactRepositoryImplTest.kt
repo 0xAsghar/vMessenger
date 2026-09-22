@@ -13,6 +13,7 @@ import ir.vmessenger.core.crypto.pairing.PairingDescriptorCodec
 import ir.vmessenger.core.database.entity.ContactEntity
 import ir.vmessenger.core.database.entity.ContactRelationshipStatus
 import ir.vmessenger.core.database.entity.PendingRevokeEntity
+import ir.vmessenger.data.activity.testActivityLogger
 import ir.vmessenger.data.network.CleanupHarness
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertArrayEquals
@@ -38,6 +39,7 @@ class ContactRepositoryImplTest {
             contactDao,
             PairingDescriptorCodec(cryptoEngine),
             cleanup.coordinator,
+            testActivityLogger(),
         )
     }
 

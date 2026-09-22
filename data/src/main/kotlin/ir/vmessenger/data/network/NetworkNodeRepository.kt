@@ -11,10 +11,12 @@ import ir.vmessenger.core.common.network.NodeRanking
 import ir.vmessenger.core.common.network.NodeTrust
 import ir.vmessenger.core.database.dao.BootstrapNodeDao
 import ir.vmessenger.core.database.dao.RelayNodeDao
+import ir.vmessenger.core.database.entity.ActivityKind
 import ir.vmessenger.core.database.entity.BootstrapNodeEntity
 import ir.vmessenger.core.database.entity.RelayNodeEntity
 import ir.vmessenger.core.proto.app.v1.NodeRole
 import ir.vmessenger.core.proto.app.v1.SignedNodeRecord
+import ir.vmessenger.data.activity.ActivityLogger
 import ir.vmessenger.domain.model.NetworkNode
 import ir.vmessenger.domain.model.NetworkNodeRole
 import ir.vmessenger.domain.network.NodeLinkCodec
@@ -50,13 +52,15 @@ import javax.inject.Singleton
 class NetworkNodeRepository(
     private val bootstrapNodeDao: BootstrapNodeDao,
     private val relayNodeDao: RelayNodeDao,
+    private val activityLogger: ActivityLogger,
     private val addressPolicy: () -> NodeAddressPolicy,
 ) : NodeManagementRepository {
     @Inject
     constructor(
         bootstrapNodeDao: BootstrapNodeDao,
         relayNodeDao: RelayNodeDao,
-    ) : this(bootstrapNodeDao, relayNodeDao, { NodeAddressPolicy.current })
+        activityLogger: ActivityLogger,
+    ) : this(bootstrapNodeDao, relayNodeDao, activityLogger, { NodeAddressPolicy.current })
 
     /** Ensures the built-in defaults exist so there is always a working fallback. */
     suspend fun seedDefaults() {
@@ -217,6 +221,9 @@ class NetworkNodeRepository(
             failCount = 0,
             trust = NodeTrust.USER,
         )
+        // The address, not the link: a vmnode: link can carry more than the address, and only the
+        // address is needed to answer "which node did I add, and when".
+        activityLogger.record(ActivityKind.NodeAdded, address)
         return AppResult.Success(node)
     }
 
@@ -241,6 +248,7 @@ class NetworkNodeRepository(
             NetworkNodeRole.BOOTSTRAP -> removeBootstrapNode(address)
             NetworkNodeRole.RELAY -> removeRelayNode(address)
         }
+        activityLogger.record(ActivityKind.NodeRemoved, address)
         return AppResult.Success(Unit)
     }
 

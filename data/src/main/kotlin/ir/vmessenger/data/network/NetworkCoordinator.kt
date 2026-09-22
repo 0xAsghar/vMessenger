@@ -11,6 +11,8 @@ import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.database.dao.ContactDao
+import ir.vmessenger.core.database.entity.ActivityKind
+import ir.vmessenger.data.activity.ActivityLogger
 import ir.vmessenger.data.di.IoDispatcher
 import ir.vmessenger.data.repository.ContactRepositoryImpl
 import ir.vmessenger.data.repository.conflictsWithPinnedStaticKey
@@ -55,6 +57,7 @@ class NetworkCoordinator @Inject constructor(
     private val embeddedDhtService: ir.vmessenger.network.dht.EmbeddedDhtService,
     private val peerRelayCoordinator: PeerRelayCoordinator,
     private val p2pConfigLoader: P2PConfigLoader,
+    private val activityLogger: ActivityLogger,
     @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
@@ -149,9 +152,14 @@ class NetworkCoordinator @Inject constructor(
             is AppResult.Success -> {
                 joinSucceeded = true
                 AppLogger.info("Network", "join network OK")
+                activityLogger.record(ActivityKind.NetworkConnected)
             }
-            is AppResult.Error ->
+            is AppResult.Error -> {
                 AppLogger.error("Network", "join network failed: ${join.error.message}")
+                // Worth a line: from the user's side a failed join is indistinguishable from
+                // "nobody has messaged me", and the log is where they can tell the difference.
+                activityLogger.record(ActivityKind.Failure, join.error.message)
+            }
         }
         publishAndStartRelay(directHost = directHost, directPort = directPort)
         if (!joinSucceeded) {
@@ -179,6 +187,7 @@ class NetworkCoordinator @Inject constructor(
         embeddedDhtService.stop()
         runCatching { messagingService.closeAll() }
             .onFailure { AppLogger.warn("Network", "closeAll failed: ${it.message}") }
+        activityLogger.record(ActivityKind.NetworkDisconnected)
         AppLogger.info("Network", "coordinator stopped")
     }
 

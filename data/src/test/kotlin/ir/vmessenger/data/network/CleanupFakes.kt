@@ -12,6 +12,7 @@ import ir.vmessenger.core.database.entity.ContactRequestEntity
 import ir.vmessenger.core.database.entity.EndpointCacheEntity
 import ir.vmessenger.core.database.entity.MailboxBlobEntity
 import ir.vmessenger.core.database.entity.PendingRevokeEntity
+import ir.vmessenger.data.activity.testActivityLogger
 import ir.vmessenger.data.attachment.AttachmentFileStore
 import ir.vmessenger.data.repository.FakeContactDao
 import ir.vmessenger.data.repository.FakeConversationDao
@@ -187,7 +188,7 @@ class CleanupHarness(val contactDao: FakeContactDao = FakeContactDao()) {
     val serviceControl = FakeLocationServiceControl()
 
     val locationSharing = LocationSharingCoordinator(
-        locationRepository = LocationRepositoryImpl(shareDao, sampleDao, contactDao),
+        locationRepository = LocationRepositoryImpl(shareDao, sampleDao, contactDao, testActivityLogger()),
         locationAccessRepository = locationAccessRepository,
         locationShareDao = shareDao,
         locationSampleDao = sampleDao,

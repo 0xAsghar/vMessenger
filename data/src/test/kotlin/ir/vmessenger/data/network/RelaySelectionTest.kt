@@ -2,6 +2,7 @@ package ir.vmessenger.data.network
 
 import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.NodeAddressPolicy
+import ir.vmessenger.data.activity.testActivityLogger
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -23,7 +24,9 @@ class RelaySelectionTest {
     @Test
     fun communityRelayIgnoredWhenDisabled() = runTest {
         val relayDao = FakeRelayNodeDao()
-        val repo = NetworkNodeRepository(FakeBootstrapNodeDao(), relayDao) { NodeAddressPolicy.RELEASE }
+        val repo = NetworkNodeRepository(FakeBootstrapNodeDao(), relayDao, testActivityLogger()) {
+            NodeAddressPolicy.RELEASE
+        }
         repo.seedDefaults()
         // A peer advertises a relay: stored as community/disabled, so it never becomes the active relay...
         repo.importExchangedNodes(emptyList(), listOf("wss://evil.example/relay"))

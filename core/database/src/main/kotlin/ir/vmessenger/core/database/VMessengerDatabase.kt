@@ -5,6 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import ir.vmessenger.core.common.database.DatabaseSchema
 import ir.vmessenger.core.database.converter.EnumConverters
+import ir.vmessenger.core.database.dao.ActivityLogDao
 import ir.vmessenger.core.database.dao.AppMetadataDao
 import ir.vmessenger.core.database.dao.BootstrapNodeDao
 import ir.vmessenger.core.database.dao.ContactDao
@@ -25,6 +26,7 @@ import ir.vmessenger.core.database.dao.MessageRecipientDao
 import ir.vmessenger.core.database.dao.OutboxDao
 import ir.vmessenger.core.database.dao.PendingRevokeDao
 import ir.vmessenger.core.database.dao.RelayNodeDao
+import ir.vmessenger.core.database.entity.ActivityLogEntity
 import ir.vmessenger.core.database.entity.AppMetadataEntity
 import ir.vmessenger.core.database.entity.BootstrapNodeEntity
 import ir.vmessenger.core.database.entity.ContactEntity
@@ -64,6 +66,7 @@ import ir.vmessenger.core.database.entity.RelayNodeEntity
         MessageEntity::class,
         MessageRecipientEntity::class,
         MessageEditHistoryEntity::class,
+        ActivityLogEntity::class,
         OutboxEntity::class,
         LocationShareEntity::class,
         LocationSampleEntity::class,
@@ -92,6 +95,7 @@ abstract class VMessengerDatabase : RoomDatabase() {
     abstract fun outboxDao(): OutboxDao
     abstract fun messageRecipientDao(): MessageRecipientDao
     abstract fun messageEditHistoryDao(): MessageEditHistoryDao
+    abstract fun activityLogDao(): ActivityLogDao
     abstract fun groupDao(): GroupDao
     abstract fun locationShareDao(): LocationShareDao
     abstract fun locationSampleDao(): LocationSampleDao

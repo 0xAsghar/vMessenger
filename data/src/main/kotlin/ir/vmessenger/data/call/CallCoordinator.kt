@@ -6,12 +6,14 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.crypto.CryptoEngine
 import ir.vmessenger.core.database.dao.ContactDao
+import ir.vmessenger.core.database.entity.ActivityKind
 import ir.vmessenger.core.database.entity.ContactEntity
 import ir.vmessenger.core.proto.app.v1.CallEndpoint
 import ir.vmessenger.core.proto.app.v1.CallRejectReason
 import ir.vmessenger.core.proto.app.v1.CallSignal
 import ir.vmessenger.core.proto.app.v1.CallSignalType
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
+import ir.vmessenger.data.activity.ActivityLogger
 import ir.vmessenger.data.network.MessagingPort
 import ir.vmessenger.data.network.SelfIdentityCache
 import ir.vmessenger.network.messaging.PeerIdentity
@@ -50,6 +52,7 @@ class CallCoordinator @Inject constructor(
     private val messaging: MessagingPort,
     private val crypto: CryptoEngine,
     private val media: CallMediaPort,
+    private val activityLogger: ActivityLogger,
 ) {
     private val mutex = Mutex()
     private val _session = MutableStateFlow<CallSession?>(null)
@@ -78,6 +81,7 @@ class CallCoordinator @Inject constructor(
             state = CallState.OutgoingRinging,
         )
         send(contact, callId, Outgoing(CallSignalType.CALL_SIGNAL_TYPE_INVITE, keys.publicKey))
+        activityLogger.record(ActivityKind.CallPlaced)
         AppLogger.info(TAG, "dialled contact=$contactId call=$callId")
         AppResult.Success(Unit)
     }
@@ -182,6 +186,7 @@ class CallCoordinator @Inject constructor(
         )
         // Tell them this phone is alerting; it is what turns "calling" into "ringing" for them.
         send(contact, callId, Outgoing(CallSignalType.CALL_SIGNAL_TYPE_RING))
+        activityLogger.record(ActivityKind.CallReceived)
         AppLogger.info(TAG, "incoming call contact=$contactId call=$callId")
     }
 
@@ -263,6 +268,8 @@ class CallCoordinator @Inject constructor(
     }
 
     private fun clear() {
+        // Only that a call ended. The peer is deliberately absent — see ActivityLogEntity.
+        if (_session.value != null) activityLogger.record(ActivityKind.CallEnded)
         // Before the key is zeroed: the media path is holding a reference to it.
         media.stop()
         mediaKey?.fill(0)

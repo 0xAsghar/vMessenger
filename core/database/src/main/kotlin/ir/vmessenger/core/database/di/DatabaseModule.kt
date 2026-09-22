@@ -9,6 +9,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import ir.vmessenger.core.database.DatabaseKeyProvider
 import ir.vmessenger.core.database.VMessengerDatabase
+import ir.vmessenger.core.database.dao.ActivityLogDao
 import ir.vmessenger.core.database.dao.AppMetadataDao
 import ir.vmessenger.core.database.dao.BootstrapNodeDao
 import ir.vmessenger.core.database.dao.ContactDao
@@ -43,6 +44,7 @@ import ir.vmessenger.core.database.migration.MIGRATION_1_2
 import ir.vmessenger.core.database.migration.MIGRATION_20_21
 import ir.vmessenger.core.database.migration.MIGRATION_21_22
 import ir.vmessenger.core.database.migration.MIGRATION_22_23
+import ir.vmessenger.core.database.migration.MIGRATION_23_24
 import ir.vmessenger.core.database.migration.MIGRATION_2_3
 import ir.vmessenger.core.database.migration.MIGRATION_3_4
 import ir.vmessenger.core.database.migration.MIGRATION_4_5
@@ -102,6 +104,7 @@ object DatabaseModule {
                 MIGRATION_20_21,
                 MIGRATION_21_22,
                 MIGRATION_22_23,
+                MIGRATION_23_24,
             )
             .build()
     }
@@ -148,6 +151,9 @@ object DatabaseModule {
     @Provides
     fun provideMessageRecipientDao(database: VMessengerDatabase): MessageRecipientDao =
         database.messageRecipientDao()
+
+    @Provides
+    fun provideActivityLogDao(database: VMessengerDatabase): ActivityLogDao = database.activityLogDao()
 
     @Provides
     fun provideMessageEditHistoryDao(database: VMessengerDatabase): MessageEditHistoryDao =

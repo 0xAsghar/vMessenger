@@ -3,6 +3,8 @@ package ir.vmessenger.ui.call
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import ir.vmessenger.core.database.entity.ActivityKind
+import ir.vmessenger.data.activity.ActivityLogger
 import ir.vmessenger.data.call.CallCoordinator
 import ir.vmessenger.data.call.CallSession
 import kotlinx.coroutines.flow.SharingStarted
@@ -21,6 +23,7 @@ import javax.inject.Inject
 @HiltViewModel
 class CallViewModel @Inject constructor(
     private val callCoordinator: CallCoordinator,
+    private val activityLogger: ActivityLogger,
 ) : ViewModel() {
     val session: StateFlow<CallSession?> = callCoordinator.session.stateIn(
         scope = viewModelScope,
@@ -40,7 +43,16 @@ class CallViewModel @Inject constructor(
 
     fun setSpeaker(on: Boolean) = callCoordinator.setSpeaker(on)
 
+    /** Records what the user answered to the microphone request, either way. */
+    fun recordMicrophoneAnswer(granted: Boolean) {
+        val kind = if (granted) ActivityKind.PermissionGranted else ActivityKind.PermissionDenied
+        activityLogger.record(kind, PERMISSION_MICROPHONE)
+    }
+
     private companion object {
         const val SUBSCRIBE_TIMEOUT_MS = 5_000L
+
+        /** The permission's own name, so the log entry reads as the thing the user was asked. */
+        const val PERMISSION_MICROPHONE = "RECORD_AUDIO"
     }
 }

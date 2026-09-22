@@ -1,6 +1,7 @@
 package ir.vmessenger.core.database.converter
 
 import androidx.room.TypeConverter
+import ir.vmessenger.core.database.entity.ActivityKind
 import ir.vmessenger.core.database.entity.ContactRelationshipStatus
 import ir.vmessenger.core.database.entity.ContactRequestStatus
 import ir.vmessenger.core.database.entity.DeliveryStatus
@@ -11,6 +12,12 @@ import ir.vmessenger.core.database.entity.MessageRevisionKind
 
 @Suppress("TooManyFunctions") // two converter methods per persisted enum
 class EnumConverters {
+    @TypeConverter
+    fun fromActivityKind(value: ActivityKind): String = value.name
+
+    @TypeConverter
+    fun toActivityKind(value: String): ActivityKind = ActivityKind.valueOf(value)
+
     @TypeConverter
     fun fromDirection(value: MessageDirection): String = value.name
 

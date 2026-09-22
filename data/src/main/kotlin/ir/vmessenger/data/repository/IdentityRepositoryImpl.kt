@@ -8,8 +8,10 @@ import ir.vmessenger.core.crypto.CryptoEngine
 import ir.vmessenger.core.crypto.keystore.KeyStoreKeyManager
 import ir.vmessenger.core.database.dao.IdentityDao
 import ir.vmessenger.core.database.dao.KeyMaterialDao
+import ir.vmessenger.core.database.entity.ActivityKind
 import ir.vmessenger.core.database.entity.IdentityEntity
 import ir.vmessenger.core.database.entity.KeyMaterialEntity
+import ir.vmessenger.data.activity.ActivityLogger
 import ir.vmessenger.domain.model.Identity
 import ir.vmessenger.domain.repository.IdentityRepository
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +27,7 @@ class IdentityRepositoryImpl @Inject constructor(
     private val keyMaterialDao: KeyMaterialDao,
     private val cryptoEngine: CryptoEngine,
     private val keyStoreKeyManager: KeyStoreKeyManager,
+    private val activityLogger: ActivityLogger,
 ) : IdentityRepository {
 
     override fun observeIdentity(): Flow<Identity?> =
@@ -58,6 +61,9 @@ class IdentityRepositoryImpl @Inject constructor(
         )
         identityDao.insertIdentity(entity)
         wrapKeyMaterial(ed25519.privateKey, x25519.privateKey, now).forEach { keyMaterialDao.insert(it) }
+        // The first entry in any log on this install; a wipe deletes the database, so a log that
+        // starts anywhere else means the account was not created on this device.
+        activityLogger.record(ActivityKind.IdentityCreated)
         entity.toDomain()
     }.fold(
         onSuccess = { AppResult.Success(it) },

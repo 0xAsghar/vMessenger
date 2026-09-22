@@ -10,6 +10,7 @@ import ir.vmessenger.core.common.network.NodeTrust
 import ir.vmessenger.core.crypto.KeyPair
 import ir.vmessenger.core.crypto.LazysodiumCryptoEngine
 import ir.vmessenger.core.proto.app.v1.NodeRole
+import ir.vmessenger.data.activity.testActivityLogger
 import ir.vmessenger.domain.model.NetworkNodeRole
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -24,7 +25,9 @@ class NetworkNodeRepositoryTest {
     private val relayDao = FakeRelayNodeDao()
 
     private fun repository(allowInsecureLocal: Boolean = false) =
-        NetworkNodeRepository(bootstrapDao, relayDao) { NodeAddressPolicy(allowInsecureLocal) }
+        NetworkNodeRepository(bootstrapDao, relayDao, testActivityLogger()) {
+            NodeAddressPolicy(allowInsecureLocal)
+        }
 
     private fun SignedNodeRecordSigner.signRelay(address: String, key: KeyPair, expires: Long) = sign(
         address = address,

@@ -4,9 +4,11 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.LocationSampleDao
 import ir.vmessenger.core.database.dao.LocationShareDao
+import ir.vmessenger.core.database.entity.ActivityKind
 import ir.vmessenger.core.database.entity.LocationSampleEntity
 import ir.vmessenger.core.database.entity.LocationShareEntity
 import ir.vmessenger.core.database.entity.MessageDirection
+import ir.vmessenger.data.activity.ActivityLogger
 import ir.vmessenger.domain.model.LocationSample
 import ir.vmessenger.domain.repository.ActiveLocationShare
 import ir.vmessenger.domain.repository.LocationRepository
@@ -23,6 +25,7 @@ class LocationRepositoryImpl @Inject constructor(
     private val locationShareDao: LocationShareDao,
     private val locationSampleDao: LocationSampleDao,
     private val contactDao: ContactDao,
+    private val activityLogger: ActivityLogger,
 ) : LocationRepository {
     override fun observeActiveShares(): Flow<List<String>> =
         locationShareDao.observeActive().map { shares -> shares.map { it.shareId } }
@@ -112,6 +115,9 @@ class LocationRepositoryImpl @Inject constructor(
                 endedAtUnixMs = null,
             ),
         )
+        // Only that a share started. Naming the contact would make the log a record of who the
+        // user tells where they are, which is precisely what it must not become.
+        activityLogger.record(ActivityKind.LocationSharingStarted)
         return AppResult.Success(shareId)
     }
 
@@ -120,6 +126,7 @@ class LocationRepositoryImpl @Inject constructor(
         locationShareDao.update(
             share.copy(active = false, endedAtUnixMs = System.currentTimeMillis()),
         )
+        activityLogger.record(ActivityKind.LocationSharingStopped)
         return AppResult.Success(Unit)
     }
 
