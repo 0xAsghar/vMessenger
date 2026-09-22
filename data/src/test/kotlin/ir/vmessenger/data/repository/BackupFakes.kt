@@ -286,6 +286,9 @@ class FakeMessageDao(
     override suspend fun getByIdInConversation(id: String, cid: String): MessageEntity? =
         messages.firstOrNull { it.messageId == id && it.conversationId == cid }
 
+    override suspend fun expiredMessageIds(now: Long): List<String> =
+        messages.filter { it.expiresAtUnixMs?.let { expiry -> expiry <= now } == true }.map { it.messageId }
+
     override suspend fun selectUnreadIncomingIds(cid: String): List<String> =
         messages.filter { it.conversationId == cid && it.isUnreadIncoming() }.map { it.messageId }
 

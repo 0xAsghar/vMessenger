@@ -8,6 +8,7 @@ import androidx.work.WorkManager
 import dagger.hilt.android.HiltAndroidApp
 import ir.vmessenger.app.network.NetworkKeepAliveWorker
 import ir.vmessenger.app.network.startNetworkService
+import ir.vmessenger.app.work.ExpiryPurgeWorker
 import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NodeAddressPolicy
@@ -50,6 +51,7 @@ class VMessengerApplication : Application(), Configuration.Provider {
         }
         AppLogger.info(TAG, "vMessenger started")
         startKeepAliveWork()
+        startExpiryPurgeWork()
         // The passphrase is unwrapped from the Keystore, which can take hundreds
         // of milliseconds on first use — never on the main thread. The network
         // service is started only once a key exists, since everything it does
@@ -74,6 +76,16 @@ class VMessengerApplication : Application(), Configuration.Provider {
                 NetworkKeepAliveWorker.periodicRequest(),
             )
         }.onFailure { AppLogger.warn(TAG, "keep-alive work not enqueued: $it") }
+    }
+
+    private fun startExpiryPurgeWork() {
+        runCatching {
+            WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                ExpiryPurgeWorker.UNIQUE_WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                ExpiryPurgeWorker.periodicRequest(),
+            )
+        }.onFailure { AppLogger.warn(TAG, "expiry purge work not enqueued: $it") }
     }
 
     private companion object {

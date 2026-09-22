@@ -96,6 +96,9 @@ interface ConversationRepository {
     /** Deletes the conversation with its messages, queued sends and saved draft. */
     suspend fun deleteConversation(conversationId: String)
 
+    /** Erases every message whose self-destruct timer has elapsed; called by the periodic sweep. */
+    suspend fun purgeExpiredMessages()
+
     suspend fun setMuted(conversationId: String, muted: Boolean)
 
     /** Clears the backoff of a failed/queued message so it is retried right now. */

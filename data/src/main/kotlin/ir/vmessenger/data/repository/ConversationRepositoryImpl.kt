@@ -224,6 +224,8 @@ class ConversationRepositoryImpl @Inject constructor(
 
     override suspend fun deleteConversation(conversationId: String) = writer.deleteConversation(conversationId)
 
+    override suspend fun purgeExpiredMessages() = writer.purgeExpired(System.currentTimeMillis())
+
     override suspend fun setMuted(conversationId: String, muted: Boolean) = writer.setMuted(conversationId, muted)
 
     override suspend fun retry(messageId: String) = writer.retry(messageId)

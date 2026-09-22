@@ -267,6 +267,17 @@ class ConversationWriter @Inject constructor(
         AppLogger.info(TAG, "message deleted locally messageId=$messageId")
     }
 
+    /**
+     * Sweeps every message whose self-destruct deadline has passed, erasing each locally exactly as
+     * a delete-for-me would — attachment file and queued send included. Enforced per device: the
+     * sender and each recipient drop their own copy on the same absolute deadline.
+     */
+    suspend fun purgeExpired(now: Long) {
+        for (messageId in messageDao.expiredMessageIds(now)) {
+            deleteMessageForMe(messageId)
+        }
+    }
+
     /** Erases the conversation with its messages, attachment files, queued sends and draft. */
     suspend fun deleteConversation(conversationId: String) {
         for (path in messageDao.attachmentPaths(conversationId)) {

@@ -180,6 +180,13 @@ class OutboxDispatcher @Inject constructor(
             outboxDao.removeAll(item.messageId)
             return
         }
+        val expiresAt = message.expiresAtUnixMs
+        if (expiresAt != null && expiresAt <= System.currentTimeMillis()) {
+            // The timer ran out before delivery; drop the queued send rather than transmit a message
+            // already meant to be gone. The purge worker erases the local row on its next sweep.
+            outboxDao.removeAll(item.messageId)
+            return
+        }
         // This recipient's own state, not the message's aggregate: in a group the
         // aggregate is still QUEUED while some members already have the message.
         val recipientStatus = recipientDao.forMessage(item.messageId)

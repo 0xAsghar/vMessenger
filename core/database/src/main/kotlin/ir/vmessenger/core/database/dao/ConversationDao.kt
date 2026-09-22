@@ -248,6 +248,10 @@ interface MessageDao {
     @Query("SELECT * FROM message WHERE messageId = :id AND conversationId = :cid LIMIT 1")
     suspend fun getByIdInConversation(id: String, cid: String): MessageEntity?
 
+    /** Ids of messages whose self-destruct deadline has passed, for the expiry purge sweep. */
+    @Query("SELECT messageId FROM message WHERE expiresAtUnixMs IS NOT NULL AND expiresAtUnixMs <= :now")
+    suspend fun expiredMessageIds(now: Long): List<String>
+
     @Query(
         "SELECT messageId FROM message WHERE conversationId = :cid AND direction = 'INCOMING' AND status != 'READ'",
     )
