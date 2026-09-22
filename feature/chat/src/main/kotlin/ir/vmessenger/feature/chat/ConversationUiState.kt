@@ -122,6 +122,8 @@ sealed interface ChatItem {
         val edited: Boolean = false,
         /** The sender asked everyone to drop it; the row survives so replies to it still resolve. */
         val deleted: Boolean = false,
+        /** The message self-destructs; the bubble shows a timer glyph. */
+        val expiring: Boolean = false,
     ) : ChatItem {
         override val key: String get() = messageId
         override val contentType: String

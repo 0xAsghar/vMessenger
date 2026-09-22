@@ -506,6 +506,8 @@ private fun ChatMessage.toItem(startsSenderRun: Boolean): ChatItem.Message {
         // was edited, and when deleted, are both in the Information sheet.
         edited = editedAtUnixMs != null && !deleted,
         deleted = deleted,
+        // Not on a tombstone: a timer on «این پیام حذف شد» would count down a message already gone.
+        expiring = expiresAtUnixMs != null && !deleted,
         attachment = attachment?.let {
             AttachmentUi(
                 type = it.type,

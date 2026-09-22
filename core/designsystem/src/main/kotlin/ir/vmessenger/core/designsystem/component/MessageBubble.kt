@@ -8,8 +8,12 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -73,12 +77,21 @@ fun BubbleMeta(
     modifier: Modifier = Modifier,
     ticks: DeliveryTicksState? = null,
     edited: Boolean = false,
+    expiring: Boolean = false,
 ) {
     Row(
         modifier = modifier.padding(top = VmSpacing.xxs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.xs),
     ) {
+        if (expiring) {
+            Icon(
+                imageVector = Icons.Outlined.Timer,
+                contentDescription = stringResource(R.string.vm_bubble_timed),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(VmSizes.iconSm),
+            )
+        }
         if (edited) {
             Text(
                 text = stringResource(R.string.vm_bubble_edited),

@@ -97,6 +97,7 @@ internal fun MessageBubbleItem(
             )
             BubbleMeta(
                 edited = item.edited,
+                expiring = item.expiring,
                 time = item.time,
                 modifier = Modifier.align(Alignment.End),
                 ticks = item.ticks,

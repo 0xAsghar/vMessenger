@@ -38,6 +38,7 @@ internal fun MessageEntity.toChatMessage(): ChatMessage = ChatMessage(
     isSystemEvent = contentType == MessageContentType.GROUP_CONTROL,
     editedAtUnixMs = editedAtUnixMs,
     deleted = contentType == MessageContentType.DELETED,
+    expiresAtUnixMs = expiresAtUnixMs,
 )
 
 internal fun MessageWithReply.toChatMessage(): ChatMessage =

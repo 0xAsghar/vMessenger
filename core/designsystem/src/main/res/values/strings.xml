@@ -27,6 +27,7 @@
 
     <!-- Message bubbles -->
     <string name="vm_bubble_edited">ویرایش‌شده</string>
+    <string name="vm_bubble_timed">پیام زمان‌دار</string>
     <string name="vm_bubble_image">تصویر</string>
     <string name="vm_bubble_video">ویدیو</string>
     <string name="vm_bubble_video_play">پخش ویدیو</string>

@@ -49,6 +49,8 @@ data class ChatMessage(
      * major). Null once the message is delivered or was never attempted.
      */
     val lastError: String? = null,
+    /** Absolute UTC time a self-destructing message vanishes; null for a message with no timer. */
+    val expiresAtUnixMs: Long? = null,
 )
 
 /** How a message renders in a one-line preview (chat list row, reply quote). */
