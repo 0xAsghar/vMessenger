@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="pairing_no_identity">Create an identity first</string>
+    <string name="my_qr_title">My QR</string>
+    <string name="my_qr_error">The QR could not be shown. Try again.</string>
+    <string name="scan_qr_title">Scan QR</string>
+    <string name="scan_qr_hint">Place the contact\'s QR inside the frame</string>
+    <string name="add_by_hash_title">Add by user ID</string>
+    <string name="add_by_hash_hint">Enter the contact\'s user ID.</string>
+    <string name="add_by_hash_label">User ID</string>
+    <string name="add_by_hash_action">Add</string>
+    <string name="add_contact_success">Contact added — waiting for their approval</string>
+    <string name="add_contact_already_approved">This contact is already in your Contacts</string>
+    <string name="add_contact_pending_hint">If they are not online right now, the contact request is sent as soon as they come online. Once they approve it, the conversation becomes active.</string>
+    <string name="add_contact_done">Back</string>
+    <string name="camera_permission_required">The camera is needed to scan a QR.</string>
+    <string name="camera_permission_grant">Grant camera access</string>
+    <string name="add_by_hash_paste">Paste from clipboard</string>
+    <string name="add_by_hash_format">A user ID starts with vm2- and is written in groups of four.</string>
+    <string name="add_by_hash_valid">The user ID is valid</string>
+    <string name="add_by_hash_invalid">The user ID is incomplete or incorrect</string>
+</resources>

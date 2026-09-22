@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_about_title">About</string>
+    <string name="feature_about_app_name">vMessenger</string>
+    <string name="feature_about_description">A decentralized messenger with end-to-end encryption. No account, no central server.</string>
+
+    <string name="feature_about_section_build">This build</string>
+    <string name="feature_about_row_version">App version</string>
+    <string name="feature_about_row_build_number">Build number</string>
+    <string name="feature_about_row_protocol">Protocol version</string>
+    <string name="feature_about_row_protocol_body">Only the first number decides; a peer on a different major version is not accepted.</string>
+    <string name="feature_about_row_database">Database version</string>
+    <string name="feature_about_row_database_body">The structure of the encrypted database on this device; it moves up by one with every migration.</string>
+
+    <string name="feature_about_section_network">Network</string>
+    <string name="feature_about_row_bootstrap">Bootstrap nodes</string>
+    <string name="feature_about_row_bootstrap_body">Used to find peers on the network.</string>
+    <string name="feature_about_row_relay">Relay nodes</string>
+    <string name="feature_about_row_relay_body">They move encrypted frames between peers, and do not see the contents of those frames.</string>
+    <string name="feature_about_nodes_empty">There are no active nodes.</string>
+    <string name="feature_about_row_nodes_manage">Manage nodes</string>
+    <string name="feature_about_row_nodes_manage_body">This list is read-only; nodes are added and turned off in the Nodes section of Settings.</string>
+
+    <string name="feature_about_section_license">License</string>
+    <string name="feature_about_row_license">Distribution license</string>
+    <string name="feature_about_license_name">GPL-3.0</string>
+    <string name="feature_about_row_freedom_use">Run and study</string>
+    <string name="feature_about_row_freedom_use_body">Run the app for any purpose, and read its code.</string>
+    <string name="feature_about_row_freedom_share">Modify and redistribute</string>
+    <string name="feature_about_row_freedom_share_body">Change it and publish it, provided that the new version is also published under this same license and together with its source code.</string>
+    <string name="feature_about_row_license_text">The full license text</string>
+    <string name="feature_about_row_license_text_body">The LICENSE file in the project repository</string>
+
+    <string name="feature_about_section_source">Source code</string>
+    <string name="feature_about_row_repository">Project repository</string>
+    <string name="feature_about_source_url">github.com/0xAsghar/vMessenger</string>
+    <string name="feature_about_row_docs">Documentation</string>
+    <string name="feature_about_row_docs_body">The docs/ folder in the repository</string>
+
+    <string name="feature_about_developer_mode_countdown">Steps left until developer mode toggles: %1$s</string>
+    <string name="feature_about_developer_mode_enabled">Developer mode is on; the debugging section is now shown in Settings.</string>
+    <string name="feature_about_developer_mode_disabled">Developer mode is off.</string>
+</resources>

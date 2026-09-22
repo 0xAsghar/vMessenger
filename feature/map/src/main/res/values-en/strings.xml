@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_map_title">Map</string>
+
+    <string name="feature_map_pill_off">Location sharing is off</string>
+    <string name="feature_map_pill_sharing">Sharing with contacts: %1$s</string>
+    <string name="feature_map_pill_watchers">Contacts sharing with you: %1$s</string>
+
+    <string name="feature_map_action_my_location">My location</string>
+    <string name="feature_map_action_fit_all">Show all</string>
+
+    <string name="feature_map_share_switch">Share my location</string>
+    <string name="feature_map_share_targets">With: %1$s</string>
+    <string name="feature_map_share_nobody">No contacts selected yet</string>
+    <string name="feature_map_pick_contacts">Select contacts</string>
+    <string name="feature_map_picker_title">Who can see my location?</string>
+    <string name="feature_map_picker_empty">You have no verified contacts</string>
+    <string name="feature_map_close">Close</string>
+
+    <string name="feature_map_contacts_title">Contact location status</string>
+    <string name="feature_map_contacts_empty">You have no verified contacts yet</string>
+    <string name="feature_map_contact_not_sharing">Not sharing their location with you</string>
+    <string name="feature_map_contact_sees_me">Can see your location</string>
+    <string name="feature_map_request_share">Request location sharing</string>
+    <string name="feature_map_request_sent">Request sent. It is up to the contact to accept it.</string>
+
+    <string name="feature_map_permission_title">Location access</string>
+    <string name="feature_map_permission_rationale">Location access is required to show distances and to share your location.</string>
+    <string name="feature_map_permission_grant">Grant access</string>
+    <string name="feature_map_permission_settings">Open settings</string>
+    <string name="feature_map_permission_denied_forever">Location access has been denied. Enable it in the app settings.</string>
+
+    <string name="feature_map_tiles_error">The map did not load — check your internet connection</string>
+    <string name="feature_map_retry">Try again</string>
+
+    <string name="feature_map_select_contact_first">Select at least one contact first</string>
+
+    <string name="feature_map_distance_m">%1$s m</string>
+    <string name="feature_map_distance_km">%1$s km</string>
+</resources>

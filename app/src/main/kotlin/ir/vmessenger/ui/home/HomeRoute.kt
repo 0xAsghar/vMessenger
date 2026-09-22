@@ -37,6 +37,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ir.vmessenger.R
+import ir.vmessenger.core.common.text.VmLocale
 import ir.vmessenger.core.designsystem.theme.VmElevation
 import ir.vmessenger.feature.chat.ChatRoute
 import ir.vmessenger.feature.contacts.ContactsNavigation
@@ -129,6 +130,7 @@ fun HomeRoute(
                 navController = navController,
                 navigation = navigation,
                 onStartChat = viewModel::startChat,
+                onLanguage = viewModel::setLanguage,
                 modifier = Modifier
                     .weight(1f)
                     .then(
@@ -181,6 +183,7 @@ private fun HomeTabNavHost(
     navController: NavHostController,
     navigation: HomeNavigation,
     onStartChat: (String) -> Unit,
+    onLanguage: (VmLocale) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     NavHost(
@@ -219,6 +222,7 @@ private fun HomeTabNavHost(
                 onNavigateToIdentity = navigation.onNavigateToIdentity,
                 onNavigateToBlockedContacts = navigation.onNavigateToBlockedContacts,
                 onNavigateToActivityLog = navigation.onNavigateToActivityLog,
+                onLanguage = onLanguage,
                 onNavigateToUpdate = navigation.onNavigateToUpdate,
                 pinDialog = { onDone -> PinSetupDialog(onDone = onDone) },
             )

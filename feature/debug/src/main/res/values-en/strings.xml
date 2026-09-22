@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_debug_title">Debug</string>
+    <string name="feature_debug_dht_section">Network status</string>
+    <string name="feature_debug_bootstrapped">Bootstrapped: %1$s</string>
+    <string name="feature_debug_bootstrapped_label">Bootstrapped</string>
+    <string name="feature_debug_known_nodes">Known nodes: %1$d</string>
+    <string name="feature_debug_known_nodes_label">Known nodes</string>
+    <string name="feature_debug_endpoint">Published endpoint: %1$s</string>
+    <string name="feature_debug_endpoint_label">Published endpoint</string>
+    <string name="feature_debug_not_published">Not published</string>
+    <string name="feature_debug_status_yes">Yes</string>
+    <string name="feature_debug_status_no">No</string>
+    <string name="feature_debug_actions_section">Actions</string>
+    <string name="feature_debug_join_publish">Join and publish endpoint</string>
+    <string name="feature_debug_dev_mode">Dev mode (emulator)</string>
+    <string name="feature_debug_dev_mode_hint">For testing on an emulator at address 10.0.2.2</string>
+    <string name="feature_debug_view_logs">View logs</string>
+    <string name="feature_debug_adb_section">adb setup (two emulators)</string>
+    <string name="feature_debug_adb_instructions">First run the reference node on the host: ./gradlew :node:run — then run the scripts/emulator-connect.sh script.</string>
+    <string name="feature_debug_copy_adb">Copy commands</string>
+    <string name="feature_logs_title">Operation log</string>
+    <string name="feature_logs_export_share">Export and share</string>
+    <string name="feature_logs_copy">Copy log</string>
+    <string name="feature_logs_copied">Log copied to the clipboard</string>
+    <string name="feature_logs_clear">Clear log</string>
+    <string name="feature_logs_empty">Nothing has been logged yet</string>
+    <string name="feature_logs_share_chooser">Share log</string>
+</resources>

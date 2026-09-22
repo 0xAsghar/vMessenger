@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Chats tab -->
+    <string name="feature_chat_title">Conversations</string>
+    <string name="feature_chat_search">Search conversations</string>
+    <string name="feature_chat_search_open">Search</string>
+    <string name="feature_chat_new">New conversation</string>
+    <string name="feature_chat_empty_title">No conversations yet</string>
+    <string name="feature_chat_empty_body">To start one, pick a verified contact.</string>
+    <string name="feature_chat_no_results_title">No results found</string>
+    <string name="feature_chat_no_results_body">Try a different search term.</string>
+
+    <!-- Chat list selection mode -->
+    <string name="feature_chat_selection_count">%1$s selected</string>
+    <string name="feature_chat_mute">Mute</string>
+    <string name="feature_chat_unmute">Unmute</string>
+    <string name="feature_chat_delete">Delete conversation</string>
+    <string name="feature_chat_delete_title">Delete conversation</string>
+    <string name="feature_chat_delete_body">The messages and attachments in this conversation will be erased from this device. This cannot be undone.</string>
+    <string name="feature_chat_delete_confirm">Delete</string>
+    <string name="feature_chat_deleted">Conversation deleted</string>
+
+    <!-- Preview kinds -->
+    <string name="feature_chat_preview_image">📷 Photo</string>
+    <string name="feature_chat_preview_video">🎬 Video</string>
+    <string name="feature_chat_preview_file">📎 %1$s</string>
+    <string name="feature_chat_preview_location">📍 Location</string>
+    <string name="feature_chat_preview_audio">🎤 Voice message</string>
+    <string name="feature_chat_preview_sender">%1$s: %2$s</string>
+    <string name="feature_chat_open_group">Group info</string>
+    <string name="feature_chat_message_info">Message info</string>
+    <string name="feature_chat_info_delivered">Delivered %1$s</string>
+    <string name="feature_chat_info_read">Read %1$s</string>
+    <string name="feature_chat_info_sent">Sent</string>
+    <string name="feature_chat_info_failed">Not sent</string>
+    <string name="feature_chat_info_pending">Waiting to send</string>
+    <string name="feature_chat_preview_empty">No messages</string>
+
+    <!-- New chat picker -->
+    <string name="feature_chat_new_title">New conversation</string>
+    <string name="feature_chat_new_group">New group</string>
+    <string name="feature_chat_new_search">Search contacts</string>
+    <string name="feature_chat_new_empty_title">No contacts</string>
+    <string name="feature_chat_new_empty_body">First add a contact by scanning a QR code or entering a user ID.</string>
+    <string name="feature_chat_status_pending_out">Waiting for approval</string>
+    <string name="feature_chat_status_pending_in">Request received</string>
+    <string name="feature_chat_status_rejected">Rejected</string>
+    <string name="feature_chat_status_blocked">Blocked</string>
+
+    <!-- Conversation -->
+    <string name="feature_chat_conversation">Conversation</string>
+    <string name="feature_chat_subtitle_verified">Verified</string>
+    <string name="feature_chat_subtitle_key_changed">The safety number has changed</string>
+    <string name="feature_chat_subtitle_blocked">Blocked</string>
+    <string name="feature_chat_open_contact">View contact</string>
+    <string name="feature_chat_blocked_banner">This contact is blocked; you cannot send messages until you unblock them.</string>
+    <string name="feature_chat_jump_to_bottom">Go to the latest message</string>
+    <string name="feature_chat_conversation_empty_title">Start the conversation</string>
+    <string name="feature_chat_conversation_empty_body">Your messages are end-to-end encrypted.</string>
+    <string name="feature_chat_reply">Reply</string>
+    <string name="feature_chat_copy">Copy text</string>
+    <string name="feature_chat_copied">Text copied</string>
+    <string name="feature_chat_delete_message">Delete for me</string>
+    <string name="feature_chat_reply_self">You</string>
+    <string name="feature_chat_retry">Try again</string>
+    <string name="feature_chat_receiving">Receiving attachment…</string>
+    <string name="feature_chat_attachment_open_failed">No app was found to open this file</string>
+
+    <!-- Send failures (mapped from the outbox error codes) -->
+    <string name="feature_chat_error_peer_protocol_outdated">The contact\'s app is out of date and needs to be updated</string>
+    <string name="feature_chat_error_peer_key_changed">The contact\'s safety number has changed; verify it first</string>
+    <string name="feature_chat_error_endpoint_not_found">The contact is not reachable</string>
+    <string name="feature_chat_error_network_unavailable">No network connection is available</string>
+    <string name="feature_chat_error_send_failed">The message could not be sent</string>
+    <string name="feature_chat_error_mailbox_handoff">The message was handed off to a mailbox</string>
+    <string name="feature_chat_error_contact_missing">The contact for this conversation was not found</string>
+    <string name="feature_chat_error_contact_blocked">This contact is blocked</string>
+    <string name="feature_chat_error_contact_not_approved">This contact has not approved your request yet</string>
+
+    <!-- Image viewer -->
+    <string name="feature_chat_image_viewer">Image viewer</string>
+    <string name="feature_chat_image_close">Close</string>
+    <string name="feature_chat_image_failed">The image could not be opened</string>
+    <string name="feature_chat_info_recipients">Recipients</string>
+    <string name="feature_chat_info_sent_at">Sent</string>
+    <string name="feature_chat_info_sender_time">Sender time</string>
+    <string name="feature_chat_info_delivered_at">Delivered</string>
+    <string name="feature_chat_info_read_at">Read</string>
+    <string name="feature_chat_info_edited_at">Edited</string>
+    <string name="feature_chat_info_deleted_at">Deleted</string>
+    <string name="feature_chat_info_size">Size</string>
+    <string name="feature_chat_info_sent_short">Sent %1$s</string>
+    <string name="feature_chat_preview_deleted">Message deleted</string>
+    <string name="feature_chat_message_deleted">This message was deleted</string>
+    <string name="feature_chat_delete_for_everyone">Delete for everyone</string>
+    <string name="feature_chat_delete_for_everyone_body">It will be deleted from this device and from the recipient\'s device. The recipient can ignore this request.</string>
+    <string name="feature_chat_edit_message">Edit</string>
+    <string name="feature_chat_editing">Editing message</string>
+    <string name="feature_chat_error_contact_revoked">This contact no longer has you in their list</string>
+    <string name="feature_chat_share">Share</string>
+    <string name="feature_chat_timer">Self-destructing message timer</string>
+    <string name="feature_chat_timer_off">No timer</string>
+    <string name="feature_chat_timer_1h">1 hour</string>
+    <string name="feature_chat_timer_24h">24 hours</string>
+    <string name="feature_chat_timer_7d">7 days</string>
+    <string name="feature_chat_call_start">Voice call</string>
+    <!-- Group-admin review of edited and deleted messages (§3.2). Disclosed to every member. -->
+    <string name="feature_chat_group_audit_banner">Admins of this group can review edited and deleted messages.</string>
+    <string name="feature_chat_group_audit_row">Review edited and deleted messages</string>
+    <string name="feature_chat_group_audit_row_body">When this is on, the text of a message is kept for the group admins before it is edited or deleted, and every member is told about it.</string>
+    <string name="feature_chat_group_audit_on_title">Turn on review?</string>
+    <string name="feature_chat_group_audit_on_body">From now on, the text of messages in this group is kept before it is edited or deleted, and the group admins can see it. This is announced in the conversation and stays visible to every member. This setting has no effect on private conversations.</string>
+    <string name="feature_chat_group_audit_off_title">Turn off review?</string>
+    <string name="feature_chat_group_audit_off_body">Message text will no longer be kept, and what has been kept so far is erased.</string>
+    <string name="feature_chat_group_audit_confirm">Confirm</string>
+    <string name="feature_chat_group_promote_title">Make this member an admin?</string>
+    <string name="feature_chat_group_promote_body">%1$s will be able to review the edited and deleted messages in this group.</string>
+    <string name="feature_chat_group_demote_title">Remove the admin role?</string>
+    <string name="feature_chat_group_demote_body">%1$s will no longer have access to message review in this group.</string>
+    <string name="feature_chat_group_member_admin">Admin</string>
+    <string name="feature_chat_group_audit_title">Message review</string>
+    <string name="feature_chat_group_audit_screen_notice">This list holds the text of messages that group members edited or deleted and that this device saw. Every member of the group knows this feature is on.</string>
+    <string name="feature_chat_group_audit_off_state_title">Review is not on</string>
+    <string name="feature_chat_group_audit_off_state_body">The group creator has not turned this feature on, or turned it off and what had been kept was erased.</string>
+    <string name="feature_chat_group_audit_empty_title">Nothing to review</string>
+    <string name="feature_chat_group_audit_empty_body">No message has been edited or deleted since this feature was turned on.</string>
+    <string name="feature_chat_group_audit_entry_edited">%1$s edited this message</string>
+    <string name="feature_chat_group_audit_entry_deleted">%1$s deleted this message</string>
+    <string name="feature_chat_group_audit_open">Review edited messages</string>
+</resources>

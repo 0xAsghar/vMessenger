@@ -52,6 +52,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.common.text.VmLocale
 import ir.vmessenger.core.datastore.ThemeMode
 import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.ConfirmDialog
@@ -78,6 +79,13 @@ private data class SettingsNavigation(
     /** Both open the lock module's PIN screen, which lives outside this module. */
     val onSetUpAppLock: () -> Unit,
     val onChangeAppLockPin: () -> Unit,
+)
+
+/** The app's language and the setter for it, bundled so [SettingsContent] keeps its signature. */
+@Immutable
+internal data class LanguageSetting(
+    val current: VmLocale,
+    val onSelect: (VmLocale) -> Unit,
 )
 
 /** The privacy section's switches, each with the setter that belongs to it. */
@@ -115,6 +123,12 @@ fun SettingsRoute(
     onNavigateToIdentity: () -> Unit = {},
     onNavigateToBlockedContacts: () -> Unit = {},
     onNavigateToActivityLog: () -> Unit = {},
+    /**
+     * The app's language and the setter for it. Supplied by :app, which owns the AppCompat
+     * per-app-language API, so settings never depends on it — the same arrangement as [pinDialog].
+     */
+    language: VmLocale = VmLocale.current,
+    onLanguage: (VmLocale) -> Unit = {},
     onNavigateToUpdate: () -> Unit = {},
     /**
      * Collects a PIN. Supplied by :app from :feature:lock, so settings never depends on it —
@@ -160,6 +174,7 @@ fun SettingsRoute(
             viewModel = viewModel,
             appLockViewModel = appLockViewModel,
             navigation = navigation,
+            language = LanguageSetting(language, onLanguage),
             modifier = Modifier.padding(padding),
         )
     }
@@ -220,6 +235,7 @@ private fun SettingsContent(
     viewModel: SettingsViewModel,
     appLockViewModel: AppLockSettingsViewModel,
     navigation: SettingsNavigation,
+    language: LanguageSetting,
     modifier: Modifier = Modifier,
 ) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -236,6 +252,7 @@ private fun SettingsContent(
         verticalArrangement = Arrangement.spacedBy(VmSpacing.xl),
     ) {
         profile?.let { ProfileHeader(profile = it, onClick = navigation.onIdentity) }
+        SettingsLanguageSection(language = language.current, onLanguage = language.onSelect)
         SettingsThemeSection(themeMode = themeMode, onThemeMode = viewModel::setThemeMode)
         SettingsPrivacySection(
             toggles = privacyToggles(viewModel),

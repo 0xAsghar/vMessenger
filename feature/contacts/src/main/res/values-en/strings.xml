@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="contacts_title">Contacts</string>
+    <string name="contacts_search">Search</string>
+    <string name="contacts_search_placeholder">Name or user ID</string>
+    <string name="contacts_search_empty_title">No contacts found</string>
+    <string name="contacts_search_empty_body">Try a different search, or add a new contact.</string>
+    <string name="contacts_empty_title">No contacts yet</string>
+    <string name="contacts_empty_body">To get started, scan the QR code on the other device or enter their user ID.</string>
+    <string name="contacts_empty_scan">Scan QR code</string>
+    <string name="contacts_add">Add contact</string>
+    <string name="contacts_my_qr">My QR code</string>
+    <string name="contacts_scan_qr">Scan QR code</string>
+    <string name="contacts_section_contacts">Contacts</string>
+    <string name="contacts_start_chat">Start conversation</string>
+    <string name="contacts_cancel">Cancel</string>
+
+    <string name="contacts_status_approved">Approved</string>
+    <string name="contacts_status_pending_out">Awaiting approval</string>
+    <string name="contacts_status_pending_in">Incoming request</string>
+    <string name="contacts_status_rejected">Rejected</string>
+    <string name="contacts_status_blocked">Blocked</string>
+
+    <string name="contacts_requests_title">Requests (%1$s)</string>
+    <string name="contacts_request_approve">Approve</string>
+    <string name="contacts_request_reject">Reject</string>
+    <string name="contacts_request_reject_title">Reject request?</string>
+    <string name="contacts_request_reject_body">The request from %1$s will be rejected. They will be informed, and they will not be added to your contacts. They can request again, but after several rejections their requests will no longer be shown to you.</string>
+    <string name="contacts_request_reject_confirm">Reject request</string>
+    <string name="contacts_request_approved">Contact approved</string>
+    <string name="contacts_request_rejected">Request rejected</string>
+    <string name="contacts_resend_request">Resend request</string>
+    <string name="contacts_request_resent">Request sent again</string>
+
+    <string name="contacts_key_change_pending">The security key for this contact has changed</string>
+    <string name="contacts_key_change_accepted">New key accepted</string>
+    <string name="contacts_location_shared">Shared their location with you</string>
+    <string name="contacts_distance_meters">%1$s m</string>
+    <string name="contacts_distance_km">%1$s km</string>
+
+    <string name="contacts_sheet_chat">Chat</string>
+    <string name="contacts_sheet_rename">Rename</string>
+    <string name="contacts_sheet_block">Block</string>
+    <string name="contacts_sheet_unblock">Unblock</string>
+    <string name="contacts_sheet_delete">Delete</string>
+
+    <string name="contacts_rename_title">Rename contact</string>
+    <string name="contacts_rename_label">Display name</string>
+    <string name="contacts_rename_hint">This name is stored only on your device, and is shown everywhere in the app.</string>
+    <string name="contacts_rename_save">Save</string>
+    <string name="contacts_renamed">Contact renamed</string>
+
+    <string name="contacts_block_title">Block %1$s?</string>
+    <string name="contacts_block_body">You will stop receiving messages and location from this contact, and your messages will not be sent to them until you unblock them. The conversation and earlier messages are not deleted, and you can remove the block at any time from Settings → Privacy → Blocked contacts.</string>
+    <string name="contacts_block_confirm">Block</string>
+    <string name="contacts_blocked_done">Contact blocked</string>
+    <string name="contacts_unblock_title">Unblock %1$s?</string>
+    <string name="contacts_unblock_body">You will receive messages and location from this contact again, and they will return to your contacts list.</string>
+    <string name="contacts_unblock_confirm">Unblock</string>
+    <string name="contacts_unblocked_done">Block removed</string>
+
+    <string name="contacts_delete_title">Delete contact</string>
+    <string name="contacts_delete_body">%1$s will be permanently deleted, along with the conversation, messages, attachments and location sharing. This cannot be undone, and where possible the contact is told that they are no longer one of your contacts.</string>
+    <string name="contacts_delete_confirm">Delete</string>
+    <string name="contacts_deleted">Contact deleted</string>
+
+    <string name="contact_detail_title">Contact</string>
+    <string name="contact_detail_avatar">Avatar for %1$s</string>
+    <string name="contact_detail_location_section">Location</string>
+    <string name="contact_detail_location_updated">Last updated %1$s</string>
+    <string name="contact_detail_location_map">Location of %1$s on the map</string>
+    <string name="contact_detail_privacy_section">Privacy</string>
+    <string name="contact_detail_location_access">Can see my location</string>
+    <string name="contact_detail_location_access_body">When this is on, this contact can see your live location.</string>
+    <string name="contact_detail_manage_section">Manage contact</string>
+    <string name="contact_detail_delete">Delete contact</string>
+    <string name="contacts_marked_verified">Marked as verified</string>
+    <string name="contacts_unmarked_verified">No longer marked as verified</string>
+    <string name="contact_detail_verified">Verified</string>
+    <string name="contact_detail_verified_body">Turn this on if you have compared the safety number with the contact another way (by call or in person).</string>
+    <string name="contacts_last_heard">Last contact %1$s</string>
+    <string name="contacts_never_heard">No reply received yet</string>
+</resources>

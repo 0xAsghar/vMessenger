@@ -140,6 +140,9 @@
     <string name="settings_update_banner_open">مشاهده</string>
     <string name="settings_update_banner_later">بعداً</string>
     <!-- §10 activity log: the user's own record of what they did to the app. -->
+    <string name="settings_language">زبان</string>
+    <string name="settings_language_fa">فارسی</string>
+    <string name="settings_language_en">English</string>
     <string name="feature_settings_activity_title">گزارش فعالیت</string>
     <string name="feature_settings_activity_row">گزارش فعالیت</string>
     <string name="feature_settings_activity_row_body">رویدادهای خود شما روی این دستگاه؛ متن پیام‌ها و طرف گفتگو در آن ثبت نمی‌شود.</string>

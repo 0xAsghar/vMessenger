@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notification_channel_messages">Messages</string>
+    <string name="notification_new_message">New message</string>
+    <string name="notification_location_request">%1$s is asking you to share your location</string>
+    <string name="notification_location_request_generic">Location sharing request</string>
+</resources>

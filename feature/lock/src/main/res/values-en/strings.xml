@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_lock_title">vMessenger is locked</string>
+    <string name="app_lock_prompt">Enter your PIN</string>
+    <string name="app_lock_mode_soft">Messages are still received in the background. This lock only stops the screen from being seen.</string>
+    <string name="app_lock_mode_strict">No messages are received until you unlock the app. The database key stays sealed in hardware.</string>
+    <string name="app_lock_checking">Checking your PIN…</string>
+    <string name="app_lock_entered_digits">Digits entered: %1$s</string>
+    <string name="app_lock_key_backspace">Delete last digit</string>
+    <string name="app_lock_key_submit">Unlock</string>
+    <string name="app_lock_wrong">Wrong PIN. Failed attempts: %1$s</string>
+    <string name="app_lock_wrong_wipe">Wrong PIN. Attempt %1$s of %2$s. After that, all app data is wiped.</string>
+    <string name="app_lock_wrong_wipe_close">Wrong PIN. Attempts left before all app data is wiped: %1$s</string>
+    <string name="app_lock_too_soon">Too many failed attempts in a row. Seconds until you can try again: %1$s</string>
+    <string name="app_lock_hardware_refused">The PIN was correct, but the hardware did not release the key. Verify your identity with the button below, then enter the PIN again. If you have removed the device screen lock or moved the data to another device, the key is gone for good and the only way back is to restore from a backup file.</string>
+    <string name="app_lock_biometric_action_soft">Unlock with fingerprint</string>
+    <string name="app_lock_biometric_action">Verify identity with fingerprint or device PIN</string>
+    <string name="app_lock_biometric_title">Verify identity</string>
+    <string name="app_lock_biometric_subtitle_soft">Scan your fingerprint to unlock the app.</string>
+    <string name="app_lock_biometric_subtitle">Verify your identity to release the database key.</string>
+    <string name="app_lock_biometric_done">Your identity is verified. Now enter your PIN.</string>
+    <string name="app_lock_biometric_failed">Identity verification failed.</string>
+
+    <string name="pin_setup_title">PIN</string>
+    <string name="pin_setup_enter">Choose a new PIN. Minimum number of digits: %1$s</string>
+    <string name="pin_setup_confirm">Enter the same PIN again.</string>
+    <string name="pin_setup_mismatch">The two PINs did not match. Start over.</string>
+    <string name="pin_setup_next">Continue</string>
+    <string name="pin_setup_save">Save</string>
+</resources>

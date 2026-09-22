@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="feature_identity_placeholder">Identity — coming soon</string>
+    <string name="create_identity_title">Your identity</string>
+    <string name="create_identity_body">vMessenger works without an account and without a phone number. Your encryption keys are created and kept on this device only.</string>
+    <string name="create_identity_action">Start</string>
+    <string name="create_identity_step_indicator">Step %1$s of %2$s</string>
+    <string name="create_identity_name_title">Your name</string>
+    <string name="create_identity_name_body">This name is shown to your contacts.</string>
+    <string name="create_identity_name_label">Display name</string>
+    <string name="create_identity_name_error_length">The name must be between %1$s and %2$s characters</string>
+    <string name="create_identity_name_action">Create identity</string>
+    <string name="create_identity_creating">Creating your identity…</string>
+    <string name="create_identity_success_title">Your identity has been created</string>
+    <string name="create_identity_user_hash_label">User ID (User Hash)</string>
+    <string name="create_identity_continue">Continue</string>
+    <string name="create_identity_retry">Try again</string>
+    <string name="my_identity_title">My identity</string>
+    <string name="my_identity_none">No identity found</string>
+    <string name="my_identity_none_body">No identity has been created on this device yet.</string>
+    <string name="my_identity_none_action">Back</string>
+    <string name="my_identity_hint">Share this ID with your contacts so they can add you.</string>
+    <string name="my_identity_display_name_label">Display name</string>
+    <string name="my_identity_display_name_placeholder">Enter your name</string>
+    <string name="my_identity_display_name_save">Save name</string>
+    <string name="my_identity_display_name_saved">Display name saved</string>
+    <string name="restore_backup_action">Restore from a backup</string>
+    <string name="restore_backup_reading">Reading the backup file…</string>
+    <string name="restore_backup_confirm_title">Restore from a backup</string>
+    <string name="restore_backup_confirm_body">Enter the passphrase you chose when you created the backup file.</string>
+    <string name="restore_backup_file_section">Backup file</string>
+    <string name="restore_backup_format_version">File format version: %1$s</string>
+    <string name="restore_backup_kdf_params">Key derivation parameters — iterations: %1$s, memory: %2$s MB</string>
+    <string name="restore_backup_passphrase_label">Passphrase</string>
+    <string name="restore_backup_confirm_action">Restore</string>
+    <string name="restore_backup_cancel">Cancel</string>
+    <string name="restore_backup_back">Back</string>
+    <string name="restore_backup_restoring">Restoring…</string>
+    <string name="restore_backup_success_title">Your identity has been restored</string>
+    <string name="restore_backup_summary">Restored — contacts: %1$s, conversations: %2$s, messages: %3$s.</string>
+    <string name="restore_backup_error_wrong_passphrase">The passphrase is incorrect</string>
+    <string name="restore_backup_error_passphrase_short">The passphrase must be at least 8 characters</string>
+    <string name="restore_backup_error_unreadable">The backup file cannot be read</string>
+    <string name="restore_backup_error_generic">The restore failed</string>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="location_notification_channel">Location sharing</string>
+    <string name="location_notification_title">Location sharing is on</string>
+    <string name="location_notification_body">Your live location is being shared with the contacts you selected.</string>
+    <string name="location_notification_stop">Stop</string>
+</resources>

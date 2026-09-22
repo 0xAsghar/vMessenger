@@ -8,7 +8,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Every migration up to 17, in order; [UP_TO_18]…[UP_TO_21] add the later ones. */
+/** Every migration up to 17, in order; [UP_TO_18]…[UP_TO_24] add the later ones. */
 internal val UP_TO_17 = listOf(
     MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
     MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
@@ -28,14 +28,17 @@ internal val UP_TO_22 = UP_TO_21 + MIGRATION_21_22
 
 internal val UP_TO_23 = UP_TO_22 + MIGRATION_22_23
 
+internal val UP_TO_24 = UP_TO_23 + MIGRATION_23_24
+
 /**
  * Replays every migration on a real SQLite engine (JDBC, in memory), because a
  * broken migration is only discovered on a user's device otherwise: Room does not
  * type-check migration SQL, and the v18 step recreates three tables.
  *
- * The DDL asserted here is the DDL Room generates for version 18
- * (`schemas/…/18.json`); if an entity changes without its migration, the column
- * and primary-key assertions below fail.
+ * Each test asserts against the DDL Room generates for the version it migrates to
+ * (`schemas/…/<n>.json`); if an entity changes without its migration, the column and primary-key
+ * assertions fail. `the whole chain replays cleanly onto an empty database` covers the final step,
+ * which is otherwise only validated by Room at runtime — on a user's device, on upgrade.
  */
 class MigrationTest {
     private val database = JdbcSupportDatabase()
@@ -85,6 +88,45 @@ class MigrationTest {
         }
         assertEquals(listOf(0), retention)
         assertTrue(database.isNotNull("chat_group", "auditRetention"), "retention must never be null")
+    }
+
+    @Test
+    fun `the 24 migration creates the activity log with no foreign key`() {
+        UP_TO_23.forEach { it.migrate(database.db) }
+
+        MIGRATION_23_24.migrate(database.db)
+
+        assertContains(database.tables(), "activity_log")
+        assertEquals(listOf("id"), database.primaryKeyOf("activity_log"))
+        listOf("kind", "detail", "atUnixMs").forEach { assertContains(database.columns("activity_log"), it) }
+        assertTrue(database.isNotNull("activity_log", "kind"), "the kind of event is never unknown")
+        assertTrue(database.isNotNull("activity_log", "atUnixMs"), "an event always has a time")
+    }
+
+    @Test
+    fun `an activity entry outlives the contact it names`() {
+        // No foreign key, on purpose: an event does not stop having happened because the row it
+        // mentioned was deleted, and a cascade would erase the evidence of exactly that deletion.
+        UP_TO_24.forEach { it.migrate(database.db) }
+        database.exec("PRAGMA foreign_keys = ON")
+        database.exec(
+            "INSERT INTO `activity_log` (`kind`, `detail`, `atUnixMs`) VALUES ('ContactBlocked', 'Ali', 5)",
+        )
+
+        val remaining = database.query("SELECT COUNT(*) FROM `activity_log`") { it.getInt(1) }
+
+        assertEquals(listOf(1), remaining)
+    }
+
+    @Test
+    fun `the whole chain replays cleanly onto an empty database`() {
+        // The one test that would have caught a broken final step: every migration in order, on a
+        // real engine, with nothing else going on.
+        UP_TO_24.forEach { it.migrate(database.db) }
+
+        val tables = database.tables()
+        listOf("message", "chat_group", "message_edit_history", "activity_log")
+            .forEach { assertContains(tables, it) }
     }
 
     @Test

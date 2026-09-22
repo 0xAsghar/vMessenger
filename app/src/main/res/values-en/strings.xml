@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">vMessenger</string>
+    <string name="tab_chats">Conversations</string>
+    <string name="tab_contacts">Contacts</string>
+    <string name="tab_map">Map</string>
+    <string name="tab_settings">Settings</string>
+    <string name="contact_request_title">Contact request</string>
+    <string name="contact_request_body">%1$s, with the user ID %2$s, has added you to their contacts. Do you want to add this person to your contacts?</string>
+    <string name="contact_request_approve">Approve</string>
+    <string name="contact_request_reject">Reject</string>
+    <!-- The app-wide banner: conditions that stop messages from arriving while everything looks fine -->
+    <string name="alert_dismiss">Dismiss</string>
+    <string name="alert_clock_title">Check the date and time on your device</string>
+    <string name="alert_clock_certificate_body">The connection to the network failed because of a security certificate error. Setting the date and time correctly — preferably to automatic — usually fixes this.</string>
+    <string name="alert_clock_skew_body">Your device clock differs from the network clock, and for that reason the relay server is rejecting you; as long as the difference remains, no message reaches you. Set the date and time to automatic.</string>
+    <string name="alert_identity_title">This account is active on another device</string>
+    <string name="alert_identity_body">Another device is connected to the network with this same identity, and incoming messages are going to it. Each identity works on only one device at a time; to use this device, close the app on the other one.</string>
+    <string name="alert_notifications_title">Notifications are off</string>
+    <string name="alert_notifications_body">The app needs notification permission to receive messages in the background. While notifications are off, messages may arrive late, or not at all.</string>
+    <string name="alert_notifications_action">Open notification settings</string>
+
+    <!-- Destinations whose screens land in a later milestone (M5/M6). -->
+    <string name="route_new_chat">New conversation</string>
+    <string name="route_image_viewer">Image</string>
+    <string name="route_contact_detail">Contact</string>
+    <string name="route_blocked_contacts">Blocked contacts</string>
+    <string name="notification_permission_title">Notification permission</string>
+    <string name="notification_permission_body">To receive messages, this app keeps its connection open in the background, and Android requires an ongoing notification for that. Without this permission, messages may arrive late, or only while the app is open.</string>
+    <string name="notification_permission_confirm">Continue</string>
+    <string name="node_setup_title">Choose a node</string>
+    <string name="node_setup_body">You need a node in order to reach your contacts. A node provides the path your messages travel; the contents of the messages remain end-to-end encrypted and are not readable by the node.</string>
+    <string name="node_setup_use_test">Use the test nodes</string>
+    <string name="node_setup_test_warning">These nodes are meant for testing and will be removed on 31 December 2026.</string>
+    <string name="node_setup_add">Add node</string>
+    <string name="node_setup_add_body">Enter the address of a node you have access to. A vmnode: link is also accepted.</string>
+    <string name="node_setup_create">Create a new node</string>
+    <string name="node_setup_create_body">A node is a standalone service and is not created on this device: run it on a publicly reachable server, following the project\'s setup guide, then enter its address here.</string>
+    <string name="node_setup_address_label">Node address</string>
+    <string name="node_setup_address_save">Save and continue</string>
+    <string name="node_setup_skip">Skip for now</string>
+    <string name="node_setup_skip_confirm">Continue without a node</string>
+    <string name="node_setup_skip_warning">Reaching your contacts requires a node. You can add the node of your choice later from Settings.</string>
+    <string name="share_target_title">Send to</string>
+    <string name="share_target_empty_title">There are no conversations</string>
+    <string name="share_target_empty_body">To send content, first add a contact and start a conversation.</string>
+    <string name="call_start">Voice call</string>
+    <string name="call_calling">Calling…</string>
+    <string name="call_ringing">The contact\'s device is ringing…</string>
+    <string name="call_incoming">Incoming voice call</string>
+    <string name="call_connecting">Connecting…</string>
+    <string name="call_active">In call</string>
+    <string name="call_reconnecting">The connection dropped; trying again…</string>
+    <string name="call_ended">Call ended</string>
+    <string name="call_accept">Answer</string>
+    <string name="call_decline">Decline</string>
+    <string name="call_hang_up">Hang up</string>
+    <string name="call_mute">Mute microphone</string>
+    <string name="call_unmute">Unmute microphone</string>
+    <string name="call_speaker">Speaker</string>
+    <string name="call_earpiece">Earpiece</string>
+    <string name="call_needs_microphone">A voice call needs microphone permission.</string>
+    <string name="call_unavailable">Calling this contact is not available.</string>
+</resources>

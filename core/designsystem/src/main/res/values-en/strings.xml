@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hash_copied">ID copied</string>
+    <string name="hash_share_chooser">Share ID</string>
+    <string name="hash_copy">Copy ID</string>
+    <string name="hash_share">Share</string>
+    <string name="nav_back">Back</string>
+    <string name="vmessenger_logo">vMessenger logo</string>
+    <string name="user_hash_label">User ID</string>
+    <string name="vm_safety_number_title">Safety number</string>
+
+    <!-- Generic actions -->
+    <string name="vm_cancel">Cancel</string>
+    <string name="vm_close">Close</string>
+    <string name="vm_retry">Try again</string>
+
+    <!-- Chat list -->
+    <string name="vm_chat_muted">Muted</string>
+    <string name="vm_chat_unread_count">Unread messages: %1$s</string>
+
+    <!-- Delivery ticks -->
+    <string name="vm_tick_queued">Waiting to send</string>
+    <string name="vm_tick_sent">Sent</string>
+    <string name="vm_tick_delivered">Delivered</string>
+    <string name="vm_tick_read">Read</string>
+    <string name="vm_tick_failed">Not sent</string>
+
+    <!-- Message bubbles -->
+    <string name="vm_bubble_edited">Edited</string>
+    <string name="vm_bubble_timed">Timed message</string>
+    <string name="vm_bubble_image">Image</string>
+    <string name="vm_bubble_video">Video</string>
+    <string name="vm_bubble_video_play">Play video</string>
+    <string name="vm_bubble_file">File</string>
+    <string name="vm_bubble_reply_to">Reply to %1$s</string>
+
+    <!-- Composer -->
+    <string name="vm_composer_placeholder">Message</string>
+    <string name="vm_composer_attach">Attach</string>
+    <string name="vm_composer_send">Send</string>
+    <string name="vm_composer_record">Record voice message</string>
+    <string name="vm_composer_clear_reply">Cancel reply</string>
+
+    <!-- Recording -->
+
+    <!-- Attachment sheet -->
+    <string name="vm_attach_title">Add attachment</string>
+    <string name="vm_attach_photo">Image</string>
+    <string name="vm_attach_video">Video</string>
+    <string name="vm_attach_file">File</string>
+
+    <!-- Search -->
+    <string name="vm_search_placeholder">Search</string>
+    <string name="vm_search_clear">Clear search</string>
+    <string name="vm_search_close">Close search</string>
+
+    <!-- Key change -->
+    <string name="vm_key_change_title">The security key for %1$s has changed</string>
+    <string name="vm_key_change_body">Check the safety number again before continuing the conversation.</string>
+    <string name="vm_key_change_verify">Check safety number</string>
+    <string name="vm_key_change_dismiss">Later</string>
+
+    <!-- Settings rows -->
+    <string name="vm_settings_open">Open</string>
+
+    <!-- Errors -->
+    <string name="vm_error_unknown">An unknown error occurred</string>
+    <string name="vm_error_crypto">The encryption operation failed</string>
+    <string name="vm_error_network">Could not connect to the network</string>
+    <string name="vm_error_validation">The information entered is not valid</string>
+    <string name="vm_error_not_found">The requested item was not found</string>
+    <string name="vm_error_security">The security check failed</string>
+    <string name="vm_error_protocol_version">The contact\'s protocol version (%1$s) is not supported; one of the two apps needs to be updated</string>
+    <string name="vm_error_invalid_qr">This QR code does not belong to vMessenger</string>
+    <string name="vm_error_invalid_user_hash">The user ID is not valid</string>
+    <string name="vm_error_contact_add_failed">Could not add the contact</string>
+    <string name="vm_error_no_contact_selected">No contact is selected</string>
+    <string name="vm_error_request_not_found">This request is no longer available</string>
+    <string name="vm_error_contact_not_found">This contact is no longer available</string>
+    <string name="vm_error_no_network">No network connection is available</string>
+    <string name="vm_error_send_failed">Could not send the message</string>
+    <string name="vm_error_permission_denied">The required permission has not been granted</string>
+    <string name="vm_error_attachment_too_large">The file is larger than %1$s MB</string>
+    <string name="vm_error_attachment_failed">The attachment transfer failed</string>
+    <string name="vm_error_group_full">The group member limit is %1$s</string>
+    <string name="vm_error_not_group_member">You are not a member of this group</string>
+    <string name="vm_error_group_closed">This group has been closed</string>
+    <string name="vm_error_not_group_creator">Only the group creator can make this change</string>
+    <string name="vm_error_no_reachable_members">No members of the group can be reached</string>
+    <string name="vm_error_update_rate_limited">Too many requests; try again shortly</string>
+    <string name="vm_error_update_checksum_mismatch">The downloaded file is damaged</string>
+    <string name="vm_error_update_signature_mismatch">The signature of the new version does not match the installed version</string>
+    <string name="vm_error_update_no_asset">No installer file has been published for this device</string>
+</resources>
