@@ -266,14 +266,13 @@ class ConversationViewModel @Inject constructor(
     }
 
     /**
-     * One message per item, sent one after another in the order they were picked: launched side by
-     * side, a large photo still encrypting would land after the small one picked after it.
+     * One message per item, in pick order. Several images picked together share an album id and
+     * render as a grid; a single item is a plain attachment. The import runs one after another, so a
+     * large photo still encrypting cannot land after a small one picked later.
      */
     fun onAttachmentsPicked(uris: List<String>) {
         if (uris.isEmpty()) return
-        viewModelScope.launch {
-            for (uri in uris) conversationRepository.sendAttachment(conversationId, uri)
-        }
+        viewModelScope.launch { conversationRepository.sendAlbum(conversationId, uris) }
     }
 
     fun onReply(messageId: String) {

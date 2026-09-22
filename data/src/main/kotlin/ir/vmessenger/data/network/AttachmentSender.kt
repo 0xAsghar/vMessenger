@@ -260,6 +260,8 @@ class AttachmentSender @Inject constructor(
             .setSha256(ByteString.copyFrom(plan.sha256))
         attachmentDurationMs?.let(builder::setDurationMs)
         attachmentWaveform?.let { builder.waveform = ByteString.copyFrom(it) }
+        albumId?.let { builder.albumId = ByteString.copyFromUtf8(it) }
+        albumIndex?.let(builder::setAlbumIndex)
         return builder
     }
 

@@ -56,6 +56,9 @@ interface ConversationRepository {
      */
     suspend fun sendAttachment(conversationId: String, sourceUri: String): AppResult<String>
 
+    /** Sends the picked images as one album sharing an id; a single item is a normal attachment. */
+    suspend fun sendAlbum(conversationId: String, sourceUris: List<String>): AppResult<String>
+
     /**
      * Queues a recorded voice message. [filePath] is a plaintext file the recorder
      * wrote into the cache; it is encrypted into app-private storage and deleted.

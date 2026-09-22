@@ -9,6 +9,7 @@ import ir.vmessenger.core.database.dao.GroupDao
 import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.dao.MessageRecipientDao
 import ir.vmessenger.core.database.entity.ConversationEntity
+import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.data.attachment.AttachmentStore
 import ir.vmessenger.data.attachment.AttachmentTransferTracker
@@ -120,6 +121,24 @@ class ConversationRepositoryImpl @Inject constructor(
     override suspend fun sendAttachment(conversationId: String, sourceUri: String): AppResult<String> =
         queueAttachment(conversationId) { attachmentStore.copyFromUri(sourceUri) }
 
+    override suspend fun sendAlbum(conversationId: String, sourceUris: List<String>): AppResult<String> {
+        if (sourceUris.size <= 1) {
+            return sourceUris.firstOrNull()
+                ?.let { sendAttachment(conversationId, it) }
+                ?: AppResult.Error(AppError.AttachmentFailed)
+        }
+        // One shared id, one message per image, imported in pick order so the grid keeps it. Each
+        // keeps its own transfer, progress and failure — one image failing does not fail the album.
+        val albumId = UUID.randomUUID().toString()
+        var last: AppResult<String> = AppResult.Error(AppError.AttachmentFailed)
+        sourceUris.forEachIndexed { index, uri ->
+            last = queueAttachment(conversationId, album = AlbumRef(albumId, index)) {
+                attachmentStore.copyFromUri(uri)
+            }
+        }
+        return last
+    }
+
     override suspend fun sendVoice(
         conversationId: String,
         filePath: String,
@@ -140,6 +159,7 @@ class ConversationRepositoryImpl @Inject constructor(
         conversationId: String,
         durationMs: Long? = null,
         waveform: ByteArray? = null,
+        album: AlbumRef? = null,
         copy: suspend () -> CopiedAttachment,
     ): AppResult<String> {
         val copied = runCatching { copy() }.getOrElse {
@@ -147,6 +167,8 @@ class ConversationRepositoryImpl @Inject constructor(
             return AppResult.Error(AppError.AttachmentFailed)
         }
         val messageId = UUID.randomUUID().toString()
+        // Only images grid: a video or a file picked in the same batch stays a standalone bubble.
+        val inAlbum = album?.takeIf { copied.contentType == MessageContentType.IMAGE }
         val result = writer.queue(
             MessageEntity(
                 messageId = messageId,
@@ -168,11 +190,16 @@ class ConversationRepositoryImpl @Inject constructor(
                 attachmentEncrypted = true,
                 attachmentDurationMs = durationMs,
                 attachmentWaveform = waveform,
+                albumId = inAlbum?.id,
+                albumIndex = inAlbum?.index,
             ),
         )
         AppLogger.info("Messaging", "outgoing attachment queued messageId=$messageId size=${copied.sizeBytes}")
         return result
     }
+
+    /** One member of an album being sent: the shared id and this image's place in it. */
+    private data class AlbumRef(val id: String, val index: Int)
 
     override suspend fun markConversationRead(conversationId: String) = readMarker.markRead(conversationId)
 
