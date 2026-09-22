@@ -56,6 +56,7 @@ internal class ConversationSheetState(
     val actionTarget: MutableState<String?>,
     val picker: AttachmentPicker,
     val onCopy: (ConversationUiState, String) -> Unit,
+    val onShare: (ConversationUiState, String) -> Unit,
 )
 
 /**
@@ -215,7 +216,9 @@ private fun rememberSheetState(
     scope: CoroutineScope,
 ): ConversationSheetState {
     val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     val copied = stringResource(R.string.feature_chat_copied)
+    val shareFailed = stringResource(R.string.feature_chat_attachment_open_failed)
     val attachOpen = rememberSaveable { mutableStateOf(false) }
     val picker = rememberAttachmentPicker(viewModel::onAttachmentsPicked)
     return remember(picker) {
@@ -226,6 +229,14 @@ private fun rememberSheetState(
             onCopy = { state, messageId ->
                 clipboard.setText(AnnotatedString(state.textOf(messageId)))
                 scope.launch { snackbar.showSnackbar(copied) }
+            },
+            onShare = { state, messageId ->
+                val mime = state.attachmentMimeOf(messageId)
+                viewModel.exportAttachment(messageId) { path ->
+                    if (path == null || !shareExternally(context, path, mime)) {
+                        scope.launch { snackbar.showSnackbar(shareFailed) }
+                    }
+                }
             },
         )
     }
@@ -274,8 +285,18 @@ internal fun ConversationUiState.abilitiesFor(messageId: String): MessageAbiliti
         // editable, a photo without one is not.
         canEdit = alive && message.outgoing && text.isNotBlank(),
         canDeleteForEveryone = alive && message.outgoing,
+        // Only an attachment that has actually landed: there is no file to hand on until then.
+        canShare = alive && message.attachment?.available == true,
     )
 }
+
+/** MIME type of a message's attachment, for the share chooser; blank when it has none. */
+internal fun ConversationUiState.attachmentMimeOf(messageId: String): String = items
+    .filterIsInstance<ChatItem.Message>()
+    .firstOrNull { it.messageId == messageId }
+    ?.attachment
+    ?.mimeType
+    .orEmpty()
 
 internal fun ConversationUiState.textOf(messageId: String): String = items
     .filterIsInstance<ChatItem.Message>()

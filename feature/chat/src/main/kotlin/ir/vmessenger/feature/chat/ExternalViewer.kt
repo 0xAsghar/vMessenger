@@ -23,3 +23,20 @@ internal fun openExternally(context: Context, path: String, mimeType: String): B
     }
     context.startActivity(intent)
 }.isSuccess
+
+/**
+ * Hands the exported plaintext copy of an attachment to another app to send on.
+ *
+ * The same FileProvider grant as [openExternally], and the same caveat: what leaves here is a
+ * decrypted copy, so it is the user's choice of app that decides where it ends up. Returns false
+ * when nothing on the device can take it.
+ */
+internal fun shareExternally(context: Context, path: String, mimeType: String): Boolean = runCatching {
+    val uri = FileProvider.getUriForFile(context, context.packageName + FILE_PROVIDER_SUFFIX, File(path))
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = mimeType.ifBlank { FALLBACK_MIME }
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(intent, null))
+}.isSuccess

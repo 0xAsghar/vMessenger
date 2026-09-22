@@ -209,6 +209,7 @@ private fun ConversationSheets(
                 onReply = { viewModel.onReply(messageId) },
                 onEdit = { viewModel.onEditMessage(messageId) },
                 onCopy = { host.sheets.onCopy(state, messageId) },
+                onShare = { host.sheets.onShare(state, messageId) },
                 onInfo = { viewModel.onShowInfo(messageId) },
                 onDelete = { forEveryone ->
                     if (forEveryone) viewModel.onDeleteForEveryone(messageId) else viewModel.onDeleteMessage(messageId)

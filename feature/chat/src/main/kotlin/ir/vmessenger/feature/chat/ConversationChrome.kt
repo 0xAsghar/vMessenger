@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.SyncProblem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -215,6 +216,10 @@ internal fun MessageActionsSheet(
         if (abilities.canCopy) {
             SheetAction(R.string.feature_chat_copy, Icons.Outlined.ContentCopy, actions.onDismiss, actions.onCopy)
         }
+        // Only once the file is actually here: there is nothing to hand another app until then.
+        if (abilities.canShare) {
+            SheetAction(R.string.feature_chat_share, Icons.Outlined.Share, actions.onDismiss, actions.onShare)
+        }
         SheetAction(R.string.feature_chat_message_info, Icons.Outlined.Info, actions.onDismiss, actions.onInfo)
         CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.error) {
             SheetAction(
@@ -243,6 +248,7 @@ internal data class MessageAbilities(
     val canCopy: Boolean,
     val canEdit: Boolean,
     val canDeleteForEveryone: Boolean,
+    val canShare: Boolean,
 )
 
 /** Names the message being acted on, the way the contact sheet names the contact. */
