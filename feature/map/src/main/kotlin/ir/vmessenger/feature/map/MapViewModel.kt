@@ -16,6 +16,7 @@ import ir.vmessenger.domain.model.LocationSample
 import ir.vmessenger.domain.repository.ContactRepository
 import ir.vmessenger.domain.repository.LocationAccessRepository
 import ir.vmessenger.domain.repository.LocationRepository
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
