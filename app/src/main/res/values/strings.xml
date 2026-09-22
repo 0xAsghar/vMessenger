@@ -25,4 +25,7 @@
     <string name="route_image_viewer">تصویر</string>
     <string name="route_contact_detail">مخاطب</string>
     <string name="route_blocked_contacts">مخاطبین مسدودشده</string>
+    <string name="share_target_title">ارسال به</string>
+    <string name="share_target_empty_title">گفتگویی وجود ندارد</string>
+    <string name="share_target_empty_body">برای ارسال محتوا، نخست یک مخاطب اضافه کنید و گفتگویی را آغاز کنید.</string>
 </resources>

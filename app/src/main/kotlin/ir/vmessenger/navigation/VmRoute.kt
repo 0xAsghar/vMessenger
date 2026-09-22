@@ -79,6 +79,10 @@ sealed interface VmRoute {
     @Serializable
     data object BlockedContacts : VmRoute
 
+    /** Destination picker for content another app shared into us. */
+    @Serializable
+    data object ShareTarget : VmRoute
+
     /** Bottom-navigation tabs; these live in the inner host only. */
     @Serializable
     data object ChatsTab : VmRoute

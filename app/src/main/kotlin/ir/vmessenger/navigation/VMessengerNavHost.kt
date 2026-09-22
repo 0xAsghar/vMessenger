@@ -14,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ir.vmessenger.feature.identity.CreateIdentityRoute
+import ir.vmessenger.ui.share.ShareTargetRoute
 
 /**
  * The outer graph: every destination except the four bottom-navigation tabs.
@@ -23,19 +24,23 @@ import ir.vmessenger.feature.identity.CreateIdentityRoute
  * splash to navigate away from.
  */
 @Composable
+@Suppress("LongParameterList") // the outer graph: one parameter per thing the whole stack depends on
 fun VMessengerNavHost(
     startRoute: VmRoute,
     pendingConversationId: String?,
     onPendingConversationHandled: () -> Unit,
+    shareWaiting: Boolean = false,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
 ) {
+    val homeReached = rememberHomeReached(navController, startRoute)
     PendingConversationEffect(
         navController = navController,
-        startRoute = startRoute,
+        homeReached = homeReached,
         pendingConversationId = pendingConversationId,
         onHandled = onPendingConversationHandled,
     )
+    PendingShareEffect(navController = navController, homeReached = homeReached, waiting = shareWaiting)
     NavHost(
         navController = navController,
         startDestination = startRoute,
@@ -54,6 +59,16 @@ fun VMessengerNavHost(
                 },
             )
         }
+        composable<VmRoute.ShareTarget> {
+            ShareTargetRoute(
+                onNavigateBack = { navController.popBackStack() },
+                onShared = { conversationId ->
+                    navController.navigate(VmRoute.Conversation(conversationId)) {
+                        popUpTo<VmRoute.ShareTarget> { inclusive = true }
+                    }
+                },
+            )
+        }
         homeGraph(navController)
         chatGraph(navController)
         contactsGraph(navController)
@@ -64,19 +79,13 @@ fun VMessengerNavHost(
 }
 
 /**
- * Consumes the conversation id a message notification put on the launch intent.
+ * Whether [VmRoute.Home] has actually been on the stack yet.
  *
- * It is applied exactly once, and only after [VmRoute.Home] has actually been on
- * the stack — a tap that arrives while the app is still at onboarding must not
- * push a conversation on top of it.
+ * Both pending-intent effects wait on it: a notification tap or a share that arrives while the app
+ * is still at onboarding must not push a destination on top of identity creation.
  */
 @Composable
-private fun PendingConversationEffect(
-    navController: NavHostController,
-    startRoute: VmRoute,
-    pendingConversationId: String?,
-    onHandled: () -> Unit,
-) {
+private fun rememberHomeReached(navController: NavHostController, startRoute: VmRoute): Boolean {
     val currentEntry by navController.currentBackStackEntryAsState()
     var homeReached by rememberSaveable { mutableStateOf(startRoute == VmRoute.Home) }
     LaunchedEffect(currentEntry) {
@@ -84,6 +93,17 @@ private fun PendingConversationEffect(
             homeReached = true
         }
     }
+    return homeReached
+}
+
+/** Consumes the conversation id a message notification put on the launch intent, exactly once. */
+@Composable
+private fun PendingConversationEffect(
+    navController: NavHostController,
+    homeReached: Boolean,
+    pendingConversationId: String?,
+    onHandled: () -> Unit,
+) {
     LaunchedEffect(pendingConversationId, homeReached) {
         if (pendingConversationId != null && homeReached) {
             navController.navigate(VmRoute.Conversation(pendingConversationId)) {
@@ -91,6 +111,21 @@ private fun PendingConversationEffect(
                 popUpTo<VmRoute.Home>()
             }
             onHandled()
+        }
+    }
+}
+
+/**
+ * Opens the destination picker for a share another app sent us.
+ *
+ * Nothing is consumed here: the picker's view model takes the payload, which empties the store and
+ * closes [waiting] behind it, so this cannot reopen for a share already shown.
+ */
+@Composable
+private fun PendingShareEffect(navController: NavHostController, homeReached: Boolean, waiting: Boolean) {
+    LaunchedEffect(waiting, homeReached) {
+        if (waiting && homeReached) {
+            navController.navigate(VmRoute.ShareTarget) { launchSingleTop = true }
         }
     }
 }

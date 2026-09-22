@@ -21,6 +21,7 @@ import ir.vmessenger.core.notifications.MessageNotificationManager
 import ir.vmessenger.data.lock.LockState
 import ir.vmessenger.feature.lock.AppLockScreen
 import ir.vmessenger.ui.VMessengerApp
+import ir.vmessenger.ui.share.sharePayloadOf
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -53,12 +54,14 @@ class MainActivity : FragmentActivity() {
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         observeScreenSecurity()
         handleDeepLink(intent)
+        handleShare(intent)
         observeAutoLock()
 
         setContent {
             val darkThemePref by viewModel.darkTheme.collectAsStateWithLifecycle()
             val startRoute by viewModel.startRoute.collectAsStateWithLifecycle()
             val pendingConversationId by viewModel.pendingConversationId.collectAsStateWithLifecycle()
+            val shareWaiting by viewModel.shareWaiting.collectAsStateWithLifecycle()
 
             val lockState by viewModel.lockState.collectAsStateWithLifecycle()
 
@@ -70,6 +73,9 @@ class MainActivity : FragmentActivity() {
                 // easiest to walk around.
                 pendingConversationId = pendingConversationId.takeIf { lockState == LockState.Unlocked },
                 onPendingConversationHandled = viewModel::consumePendingConversation,
+                // Held back for the same reason: a share must not open the picker — and with it the
+                // chat list — over the lock screen.
+                shareWaiting = shareWaiting != null && lockState == LockState.Unlocked,
                 lockState = lockState,
                 // Nothing while the state is still [LockState.Undetermined]: the app content is
                 // already held back by `locked`, and drawing the lock there would flash a PIN
@@ -88,6 +94,19 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleDeepLink(intent)
+        handleShare(intent)
+    }
+
+    /**
+     * Takes a share off the launch intent. The extras are removed for the same reason the deep
+     * link's are: the intent outlives the activity, so a configuration change would otherwise
+     * reopen the picker for a share the user has already placed.
+     */
+    private fun handleShare(intent: Intent?) {
+        val payload = sharePayloadOf(intent) ?: return
+        intent?.removeExtra(Intent.EXTRA_STREAM)
+        intent?.removeExtra(Intent.EXTRA_TEXT)
+        viewModel.onShared(payload)
     }
 
     private fun handleDeepLink(intent: Intent?) {

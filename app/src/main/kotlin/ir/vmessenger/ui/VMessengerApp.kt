@@ -46,6 +46,7 @@ fun VMessengerApp(
     startRoute: VmRoute?,
     pendingConversationId: String?,
     onPendingConversationHandled: () -> Unit,
+    shareWaiting: Boolean = false,
     lockState: LockState = LockState.Unlocked,
     lockContent: @Composable () -> Unit = {},
 ) {
@@ -102,6 +103,7 @@ fun VMessengerApp(
                                 startRoute = startRoute,
                                 pendingConversationId = pendingConversationId,
                                 onPendingConversationHandled = onPendingConversationHandled,
+                                shareWaiting = shareWaiting,
                                 navController = navController,
                             )
                         }

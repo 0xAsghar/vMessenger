@@ -15,6 +15,8 @@ import ir.vmessenger.data.lock.AppLockCoordinator
 import ir.vmessenger.data.lock.LockState
 import ir.vmessenger.domain.usecase.identity.HasIdentityUseCase
 import ir.vmessenger.navigation.VmRoute
+import ir.vmessenger.ui.share.PendingShareStore
+import ir.vmessenger.ui.share.SharePayload
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,6 +31,7 @@ import javax.inject.Inject
 import javax.inject.Provider
 
 @HiltViewModel
+@Suppress("LongParameterList") // the activity's view model: one collaborator per thing the window needs
 class MainViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     themePreferences: ThemePreferences,
@@ -40,7 +43,13 @@ class MainViewModel @Inject constructor(
     private val hasIdentity: Provider<HasIdentityUseCase>,
     private val databaseKeyProvider: DatabaseKeyProvider,
     private val appLock: AppLockCoordinator,
+    private val pendingShare: PendingShareStore,
 ) : ViewModel() {
+    /**
+     * Non-null while a share from another app is waiting for a destination. The picker screen
+     * consumes the payload, which empties the store and so closes this trigger behind it.
+     */
+    val shareWaiting: StateFlow<SharePayload?> = pendingShare.pending
     val lockState: StateFlow<LockState> = appLock.state
 
     /**
@@ -167,5 +176,10 @@ class MainViewModel @Inject constructor(
 
     fun consumePendingConversation() {
         _pendingConversationId.value = null
+    }
+
+    /** Called from `onCreate`/`onNewIntent` with whatever another app shared into us. */
+    fun onShared(payload: SharePayload) {
+        pendingShare.set(payload)
     }
 }
