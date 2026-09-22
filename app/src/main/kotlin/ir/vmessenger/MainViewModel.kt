@@ -67,6 +67,21 @@ class MainViewModel @Inject constructor(
             secure || locked
         }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    /**
+     * True until the user has been told why this app needs notification permission.
+     *
+     * Starts false so nothing flashes before the store answers; the effect that reads it also
+     * checks whether the permission is already granted, so an install that allowed it never sees
+     * the explanation at all.
+     */
+    val notificationRationalePending: StateFlow<Boolean> = privacyPreferences.notificationRationaleShown
+        .map { shown -> !shown }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT_MS), false)
+
+    fun onNotificationRationaleAcknowledged() {
+        viewModelScope.launch { privacyPreferences.setNotificationRationaleShown(true) }
+    }
+
     val darkTheme: StateFlow<Boolean?> = themePreferences.themeMode
         .map { mode ->
             when (mode) {
@@ -75,7 +90,7 @@ class MainViewModel @Inject constructor(
                 ThemeMode.SYSTEM -> null
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT_MS), null)
 
     private val _startRoute = MutableStateFlow<VmRoute?>(null)
 
@@ -179,6 +194,7 @@ class MainViewModel @Inject constructor(
 
     private companion object {
         const val TAG = "AppLock"
+        const val SUBSCRIBE_TIMEOUT_MS = 5_000L
     }
 
     /** Called from `onCreate`/`onNewIntent` with the notification's conversation id, if any. */

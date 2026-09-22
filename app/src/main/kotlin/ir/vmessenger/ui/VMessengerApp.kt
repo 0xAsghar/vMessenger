@@ -11,13 +11,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import androidx.navigation.compose.rememberNavController
+import ir.vmessenger.R
 import ir.vmessenger.core.designsystem.LocalAppObscured
+import ir.vmessenger.core.designsystem.component.ConfirmDialog
 import ir.vmessenger.core.designsystem.theme.RtlLayout
 import ir.vmessenger.core.designsystem.theme.VMessengerTheme
 import ir.vmessenger.data.lock.LockState
@@ -47,6 +50,8 @@ fun VMessengerApp(
     pendingConversationId: String?,
     onPendingConversationHandled: () -> Unit,
     shareWaiting: Boolean = false,
+    notificationRationalePending: Boolean = false,
+    onNotificationRationaleAcknowledged: () -> Unit = {},
     lockState: LockState = LockState.Unlocked,
     lockContent: @Composable () -> Unit = {},
 ) {
@@ -60,7 +65,14 @@ fun VMessengerApp(
                 color = MaterialTheme.colorScheme.background,
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    NotificationPermissionEffect()
+                    // Not over the lock: the explanation names what the app does in the background,
+                    // and a dialog is its own window, so it would sit above the lock screen.
+                    if (lockState == LockState.Unlocked) {
+                        NotificationPermissionEffect(
+                            rationalePending = notificationRationalePending,
+                            onAcknowledged = onNotificationRationaleAcknowledged,
+                        )
+                    }
                     // Provided around everything, deliberately. Inside the gate below it could
                     // only ever be observed as false — the subtree is composed only when unlocked —
                     // so the four guards that read it were dead code that looked live.
@@ -127,21 +139,39 @@ fun VMessengerApp(
     }
 }
 
-/** Asks for POST_NOTIFICATIONS once on Android 13+; a refusal is not fatal. */
+/**
+ * Asks for POST_NOTIFICATIONS on Android 13+, but says why first.
+ *
+ * This permission is load-bearing rather than cosmetic: the foreground-service notice is what keeps
+ * the connection alive, so a silent refusal degrades delivery rather than only muting alerts. It
+ * used to be sprung as a bare system dialog on the first frame, and re-sprung on every launch while
+ * denied — which Android stops showing after two refusals anyway. Now the reason is given once, in
+ * the app's own words, and the real platform request follows; a refusal is still not fatal, and the
+ * question is not asked again.
+ */
 @Composable
-private fun NotificationPermissionEffect() {
+private fun NotificationPermissionEffect(rationalePending: Boolean, onAcknowledged: () -> Unit) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
     val context = LocalContext.current
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { }
-    LaunchedEffect(Unit) {
-        val granted = ContextCompat.checkSelfPermission(
+    val granted = remember(rationalePending) {
+        ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.POST_NOTIFICATIONS,
         ) == PackageManager.PERMISSION_GRANTED
-        if (!granted) {
-            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
     }
+    if (granted || !rationalePending) return
+    ConfirmDialog(
+        title = stringResource(R.string.notification_permission_title),
+        body = stringResource(R.string.notification_permission_body),
+        confirmLabel = stringResource(R.string.notification_permission_confirm),
+        onConfirm = {
+            onAcknowledged()
+            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        },
+        // Dismissing is an answer too: it is recorded so the app does not ask again.
+        onDismiss = onAcknowledged,
+    )
 }

@@ -15,6 +15,9 @@ class WipeStep(val name: String, val run: suspend () -> Unit)
  */
 @Suppress("TooManyFunctions") // One method per wipe stage; splitting the interface would hide the order.
 interface SecureWipeActions {
+    /** Cancels the periodic work whose whole job is to bring the network back. */
+    fun cancelBackgroundWork()
+
     suspend fun stopNetwork()
     fun stopLocationSharing()
     fun cancelNotifications()
@@ -33,14 +36,17 @@ interface SecureWipeActions {
 /**
  * The wipe, as an ordered list of guarded steps.
  *
- * Order matters twice. The network stops **first** so nothing writes a new
- * message, receipt or cache entry into storage that is about to be deleted.
- * The Keystore master key is destroyed **last**: every earlier step may still
- * need to decrypt (closing the SQLCipher database, reading attachment paths),
- * and a failure anywhere earlier still ends with the key gone, which alone
- * makes the leftovers unreadable.
+ * Order matters at both ends. The periodic background work is cancelled
+ * **first** and the network stops immediately after: stopping the network
+ * alone was not enough, because the keep-alive work exists to start it again,
+ * so a firing worker could have raised messaging back up while the steps below
+ * were deleting the storage it writes to. The Keystore master key is destroyed
+ * **last**: every earlier step may still need to decrypt (closing the SQLCipher
+ * database, reading attachment paths), and a failure anywhere earlier still ends
+ * with the key gone, which alone makes the leftovers unreadable.
  */
 object SecureWipePlan {
+    const val STEP_BACKGROUND_WORK = "background-work"
     const val STEP_NETWORK = "network"
     const val STEP_LOCATION = "location"
     const val STEP_NOTIFICATIONS = "notifications"
@@ -52,6 +58,7 @@ object SecureWipePlan {
     const val STEP_KEYSTORE = "keystore"
 
     fun steps(actions: SecureWipeActions): List<WipeStep> = listOf(
+        WipeStep(STEP_BACKGROUND_WORK) { actions.cancelBackgroundWork() },
         WipeStep(STEP_NETWORK) { actions.stopNetwork() },
         WipeStep(STEP_LOCATION) { actions.stopLocationSharing() },
         WipeStep(STEP_NOTIFICATIONS) { actions.cancelNotifications() },

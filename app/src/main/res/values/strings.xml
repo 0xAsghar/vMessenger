@@ -25,6 +25,9 @@
     <string name="route_image_viewer">تصویر</string>
     <string name="route_contact_detail">مخاطب</string>
     <string name="route_blocked_contacts">مخاطبین مسدودشده</string>
+    <string name="notification_permission_title">اجازهٔ اعلان‌ها</string>
+    <string name="notification_permission_body">این برنامه برای دریافت پیام‌ها اتصال خود را در پس‌زمینه باز نگه می‌دارد و اندروید برای این کار یک اعلان دائمی لازم دارد. بدون این اجازه، پیام‌ها ممکن است با تأخیر یا تنها هنگام باز بودن برنامه برسند.</string>
+    <string name="notification_permission_confirm">ادامه</string>
     <string name="node_setup_title">انتخاب نود</string>
     <string name="node_setup_body">برای ارتباط با مخاطبین به یک نود نیاز دارید. نود مسیر رسیدن پیام‌ها را فراهم می‌کند؛ محتوای پیام‌ها همچنان سرتاسر رمزنگاری‌شده است و برای نود خوانا نیست.</string>
     <string name="node_setup_use_test">استفاده از نودهای آزمایشی</string>

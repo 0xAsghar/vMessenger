@@ -63,6 +63,7 @@ class SecureWipeCoordinator @Inject constructor(
     // the Keystore key.
     private val networkCoordinator: Provider<NetworkCoordinator>,
     private val locationServiceControl: LocationServiceControl,
+    private val backgroundWorkControl: BackgroundWorkControl,
     private val messageNotificationManager: MessageNotificationManager,
     private val database: Provider<VMessengerDatabase>,
     private val securityPreferences: SecurityPreferences,
@@ -103,6 +104,8 @@ class SecureWipeCoordinator @Inject constructor(
         }
         exitProcess(0)
     }
+
+    override fun cancelBackgroundWork() = backgroundWorkControl.cancelAll()
 
     override suspend fun stopNetwork() = networkCoordinator.get().stop()
 

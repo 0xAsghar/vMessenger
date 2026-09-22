@@ -28,6 +28,17 @@ class PrivacyPreferences @Inject constructor(
         .map { it[KEY_HIDE_NOTIFICATIONS] ?: false }
 
     /**
+     * Whether the user has been told *why* this app needs notification permission.
+     *
+     * Asked once. The permission is load-bearing here — the foreground-service notice is what keeps
+     * the connection alive — so it is explained before the system dialog rather than sprung; and
+     * once explained it is never raised again, because Android stops showing the dialog after two
+     * refusals and nagging would only train the user to dismiss it.
+     */
+    val notificationRationaleShown: Flow<Boolean> = context.privacyDataStore.data
+        .map { it[KEY_NOTIFICATION_RATIONALE] ?: false }
+
+    /**
      * Unlocks the developer tools (Debug and Logs screens) in a release build.
      * Toggled by seven taps on the version row in About; always false by default.
      */
@@ -96,6 +107,10 @@ class PrivacyPreferences @Inject constructor(
         context.privacyDataStore.edit { it[KEY_SCREEN_SECURITY] = enabled }
     }
 
+    suspend fun setNotificationRationaleShown(shown: Boolean) {
+        context.privacyDataStore.edit { it[KEY_NOTIFICATION_RATIONALE] = shown }
+    }
+
     suspend fun setHideNotificationContent(enabled: Boolean) {
         context.privacyDataStore.edit { it[KEY_HIDE_NOTIFICATIONS] = enabled }
     }
@@ -110,6 +125,7 @@ class PrivacyPreferences @Inject constructor(
 
         private val KEY_SCREEN_SECURITY = booleanPreferencesKey("screen_security")
         private val KEY_HIDE_NOTIFICATIONS = booleanPreferencesKey("hide_notification_content")
+        private val KEY_NOTIFICATION_RATIONALE = booleanPreferencesKey("notification_rationale_shown")
         private val KEY_DEVELOPER_MODE = booleanPreferencesKey("developer_mode_enabled")
         private val KEY_SEND_READ_RECEIPTS = booleanPreferencesKey("send_read_receipts")
         private val KEY_APP_LOCK = booleanPreferencesKey("app_lock_enabled")

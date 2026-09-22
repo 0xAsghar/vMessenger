@@ -22,6 +22,7 @@ class SecureWipeCoordinatorTest {
             if (name == failOn) error("boom in $name")
         }
 
+        override fun cancelBackgroundWork() = step(SecureWipePlan.STEP_BACKGROUND_WORK)
         override suspend fun stopNetwork() = step(SecureWipePlan.STEP_NETWORK)
         override fun stopLocationSharing() = step(SecureWipePlan.STEP_LOCATION)
         override fun cancelNotifications() = step(SecureWipePlan.STEP_NOTIFICATIONS)
@@ -34,6 +35,7 @@ class SecureWipeCoordinatorTest {
     }
 
     private val allSteps = listOf(
+        SecureWipePlan.STEP_BACKGROUND_WORK,
         SecureWipePlan.STEP_NETWORK,
         SecureWipePlan.STEP_LOCATION,
         SecureWipePlan.STEP_NOTIFICATIONS,
@@ -74,14 +76,17 @@ class SecureWipeCoordinatorTest {
     }
 
     @Test
-    fun orderIsNetworkFirstKeystoreLast() = runTest {
+    fun orderIsBackgroundWorkThenNetworkFirstKeystoreLast() = runTest {
         val actions = RecordingActions()
 
         val failed = SecureWipePlan.run(SecureWipePlan.steps(actions))
 
         assertTrue(failed.isEmpty())
-        // Network first: nothing may write into storage that is about to go.
-        assertEquals(SecureWipePlan.STEP_NETWORK, actions.performed.first())
+        // The keep-alive work is cancelled before the network stops, or a worker firing mid-wipe
+        // would start messaging again against storage the later steps are deleting.
+        assertEquals(SecureWipePlan.STEP_BACKGROUND_WORK, actions.performed.first())
+        // Network next: nothing may write into storage that is about to go.
+        assertEquals(SecureWipePlan.STEP_NETWORK, actions.performed[1])
         // Keystore last: earlier steps still need to decrypt, and destroying the
         // master key is what makes anything left behind unreadable.
         assertEquals(SecureWipePlan.STEP_KEYSTORE, actions.performed.last())

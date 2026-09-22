@@ -62,6 +62,8 @@ class MainActivity : FragmentActivity() {
             val startRoute by viewModel.startRoute.collectAsStateWithLifecycle()
             val pendingConversationId by viewModel.pendingConversationId.collectAsStateWithLifecycle()
             val shareWaiting by viewModel.shareWaiting.collectAsStateWithLifecycle()
+            val notificationRationalePending by
+                viewModel.notificationRationalePending.collectAsStateWithLifecycle()
 
             val lockState by viewModel.lockState.collectAsStateWithLifecycle()
 
@@ -76,6 +78,8 @@ class MainActivity : FragmentActivity() {
                 // Held back for the same reason: a share must not open the picker — and with it the
                 // chat list — over the lock screen.
                 shareWaiting = shareWaiting != null && lockState == LockState.Unlocked,
+                notificationRationalePending = notificationRationalePending,
+                onNotificationRationaleAcknowledged = viewModel::onNotificationRationaleAcknowledged,
                 lockState = lockState,
                 // Nothing while the state is still [LockState.Undetermined]: the app content is
                 // already held back by `locked`, and drawing the lock there would flash a PIN
