@@ -106,6 +106,13 @@ data class MessageEntity(
      * null for a message that was not. Set together with the `DELETED` content type.
      */
     val deletedAtUnixMs: Long? = null,
+    /**
+     * When a self-destructing message should vanish, an absolute UTC epoch time stamped by the
+     * sender and carried on the envelope; null for a message with no timer. Enforced on each
+     * recipient device (a P2P mesh has no server to withhold an expired message), so it is
+     * best-effort against an honest client rather than a guarantee against an adversarial one.
+     */
+    val expiresAtUnixMs: Long? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -146,6 +153,7 @@ data class MessageEntity(
         attachmentPlayedAtUnixMs,
         editedAtUnixMs,
         deletedAtUnixMs,
+        expiresAtUnixMs,
     )
 
     private companion object {

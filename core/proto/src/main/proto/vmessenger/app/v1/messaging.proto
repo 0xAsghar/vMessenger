@@ -18,6 +18,11 @@ message MessageEnvelope {
   // `sender_identity_hash` above, which is advisory and is not verified.
   bytes group_id = 5;
 
+  // Absolute UTC epoch ms at which a self-destructing message expires; 0/unset means it never does.
+  // It applies to whichever `content` arm this envelope carries. A 1.0.x peer ignores this unknown
+  // scalar field, so a timed message simply does not self-destruct on an older client.
+  int64 expires_at_unix_ms = 6;
+
   oneof content {
     ChatMessage chat = 10;
     Receipt receipt = 11;

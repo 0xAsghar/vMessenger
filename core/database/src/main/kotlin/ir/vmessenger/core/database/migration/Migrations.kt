@@ -570,3 +570,19 @@ val MIGRATION_19_20 = object : Migration(19, 20) {
 val MIGRATION_19_20_STATEMENTS: List<String> = listOf(
     "ALTER TABLE `message` ADD COLUMN `deletedAtUnixMs` INTEGER DEFAULT NULL",
 )
+
+val MIGRATION_20_21 = object : Migration(20, 21) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_20_21_STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/**
+ * When a self-destructing message expires, by the sender's clock, as the envelope carried it; null
+ * for a message with no timer. Additive: every existing message keeps a null expiry and never
+ * vanishes, and expiry is enforced on each recipient device rather than by a server the mesh has
+ * none of.
+ */
+val MIGRATION_20_21_STATEMENTS: List<String> = listOf(
+    "ALTER TABLE `message` ADD COLUMN `expiresAtUnixMs` INTEGER DEFAULT NULL",
+)

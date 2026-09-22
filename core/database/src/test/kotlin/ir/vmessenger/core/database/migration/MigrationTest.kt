@@ -8,7 +8,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Every migration up to 17, in order; [UP_TO_18], [UP_TO_19] and [UP_TO_20] add the later ones. */
+/** Every migration up to 17, in order; [UP_TO_18]…[UP_TO_21] add the later ones. */
 internal val UP_TO_17 = listOf(
     MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
     MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
@@ -21,6 +21,8 @@ internal val UP_TO_18 = UP_TO_17 + MIGRATION_17_18
 internal val UP_TO_19 = UP_TO_18 + MIGRATION_18_19
 
 internal val UP_TO_20 = UP_TO_19 + MIGRATION_19_20
+
+internal val UP_TO_21 = UP_TO_20 + MIGRATION_20_21
 
 /**
  * Replays every migration on a real SQLite engine (JDBC, in memory), because a
@@ -47,6 +49,11 @@ class MigrationTest {
     private fun migrateTo19() {
         migrateTo18()
         MIGRATION_18_19.migrate(database.db)
+    }
+
+    private fun migrateTo20() {
+        migrateTo19()
+        MIGRATION_19_20.migrate(database.db)
     }
 
     @Test
@@ -80,6 +87,29 @@ class MigrationTest {
             it.getString("editedAtUnixMs") to it.getString("deletedAtUnixMs")
         }
         assertEquals(listOf<Pair<String?, String?>>("7" to null), times)
+    }
+
+    @Test
+    fun `timed messages add expiresAtUnixMs without rewriting the message table`() {
+        migrateTo20()
+        database.db.execSQL(
+            """
+            INSERT INTO `message` (
+                `messageId`, `conversationId`, `direction`, `contentType`, `body`,
+                `replyToMessageId`, `status`, `createdAtUnixMs`, `sentAtUnixMs`,
+                `deliveredAtUnixMs`, `readAtUnixMs`, `attachmentEncrypted`
+            ) VALUES ('m1', 'c1', 'OUTGOING', 'TEXT', 'salam', NULL, 'SENT', 1, 1, NULL, NULL, 0)
+            """.trimIndent(),
+        )
+
+        MIGRATION_20_21.migrate(database.db)
+
+        assertContains(database.columns("message"), "expiresAtUnixMs")
+        // A pre-21 message survives and reads as non-expiring, rather than as expiring at epoch zero.
+        val expiry = database.query("SELECT `expiresAtUnixMs` FROM `message` WHERE `messageId` = 'm1'") {
+            it.getString("expiresAtUnixMs")
+        }
+        assertEquals(listOf<String?>(null), expiry)
     }
 
     @Test
