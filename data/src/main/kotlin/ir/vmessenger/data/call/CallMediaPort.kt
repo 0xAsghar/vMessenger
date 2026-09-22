@@ -28,6 +28,9 @@ interface CallMediaPort {
      */
     fun setMuted(muted: Boolean)
 
+    /** Earpiece or speaker. A request to the platform, which a headset or a car may overrule. */
+    fun setSpeaker(on: Boolean)
+
     /** Tears the audio path down: closes the socket, releases the microphone and speaker. */
     fun stop()
 }

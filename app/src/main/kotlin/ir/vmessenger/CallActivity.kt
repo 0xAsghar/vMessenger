@@ -50,6 +50,7 @@ class CallActivity : ComponentActivity() {
             onDecline = { viewModel.decline() },
             onHangUp = { viewModel.hangUp() },
             onToggleMute = viewModel::setMuted,
+            onToggleSpeaker = viewModel::setSpeaker,
         )
 
         setContent {

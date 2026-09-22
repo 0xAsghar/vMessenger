@@ -75,12 +75,23 @@ private fun CallControls(session: CallSession, actions: CallActions) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (session.state.microphoneOpen) {
-            val muteLabel = if (session.muted) R.string.call_unmute else R.string.call_mute
-            VmOutlinedButton(
-                text = stringResource(muteLabel),
-                onClick = { actions.onToggleMute(!session.muted) },
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-            )
+                horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
+            ) {
+                VmOutlinedButton(
+                    text = stringResource(if (session.muted) R.string.call_unmute else R.string.call_mute),
+                    onClick = { actions.onToggleMute(!session.muted) },
+                    modifier = Modifier.weight(1f),
+                )
+                VmOutlinedButton(
+                    text = stringResource(
+                        if (session.speakerOn) R.string.call_earpiece else R.string.call_speaker,
+                    ),
+                    onClick = { actions.onToggleSpeaker(!session.speakerOn) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
             Spacer(Modifier.height(VmSpacing.md))
         }
         if (session.state == CallState.IncomingRinging) {

@@ -14,4 +14,5 @@ class CallActions(
     val onDecline: () -> Unit,
     val onHangUp: () -> Unit,
     val onToggleMute: (Boolean) -> Unit,
+    val onToggleSpeaker: (Boolean) -> Unit,
 )

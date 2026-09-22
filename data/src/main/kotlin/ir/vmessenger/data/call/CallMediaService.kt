@@ -1,8 +1,6 @@
 package ir.vmessenger.data.call
 
-import ir.vmessenger.core.audio.AudioCaptureEngine
-import ir.vmessenger.core.audio.AudioPlaybackEngine
-import ir.vmessenger.core.audio.OpusCodecFactory
+import ir.vmessenger.core.audio.CallAudio
 import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
@@ -42,9 +40,7 @@ import javax.inject.Singleton
 @Singleton
 class CallMediaService @Inject constructor(
     private val internetTransport: InternetTransport,
-    private val codecFactory: OpusCodecFactory,
-    private val capture: AudioCaptureEngine,
-    private val playback: AudioPlaybackEngine,
+    private val audio: CallAudio,
     private val crypto: CryptoEngine,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : CallMediaPort {
@@ -95,14 +91,19 @@ class CallMediaService @Inject constructor(
     }
 
     override fun setMuted(muted: Boolean) {
-        capture.muted = muted
+        audio.capture.muted = muted
+    }
+
+    override fun setSpeaker(on: Boolean) {
+        audio.session.setSpeaker(on)
     }
 
     override fun stop() {
         job?.cancel()
         job = null
-        capture.muted = false
-        playback.close()
+        audio.capture.muted = false
+        audio.playback.close()
+        audio.session.close()
     }
 
     /**
@@ -118,15 +119,21 @@ class CallMediaService @Inject constructor(
         outgoing: Boolean,
         onEvent: suspend (CallEvent) -> Unit,
     ) {
-        val codec = codecFactory.create()
+        val codec = audio.codecs.create()
         val direction = if (outgoing) MediaDirection.CallerToCallee else MediaDirection.CalleeToCaller
-        val channel = CallMediaChannel(crypto, codec, playback, key, direction)
+        val channel = CallMediaChannel(crypto, codec, audio.playback, key, direction)
+        // Before a single frame moves: the echo canceller, the earpiece routing and the volume
+        // keys are all conditioned on communication mode, and focus is what stops the music.
+        audio.session.open()
         try {
-            channel.run(connection, capture.frames()) { onEvent(CallEvent.MediaUp) }
+            channel.run(connection, audio.capture.frames()) { onEvent(CallEvent.MediaUp) }
         } finally {
             withContext(NonCancellable) {
                 runCatching { codec.close() }
                 runCatching { connection.close() }
+                // Restored, not merely left: a process that forgets it was in communication mode
+                // leaves the whole device routing audio as though a call were still up.
+                audio.session.close()
                 // This array is ours (see [CallMediaPort]); nothing else holds it.
                 key.fill(0)
             }

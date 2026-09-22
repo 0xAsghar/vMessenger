@@ -125,6 +125,11 @@ class CallCoordinator @Inject constructor(
         _session.update { it?.copy(muted = muted) }
     }
 
+    fun setSpeaker(on: Boolean) {
+        media.setSpeaker(on)
+        _session.update { it?.copy(speakerOn = on) }
+    }
+
     /**
      * Called by the media path when its first frame lands, and when it ends.
      *

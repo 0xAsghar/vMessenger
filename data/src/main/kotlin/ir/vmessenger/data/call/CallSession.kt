@@ -15,6 +15,11 @@ data class CallSession(
     val outgoing: Boolean,
     val state: CallState,
     val muted: Boolean = false,
+    /**
+     * What the user asked for, which is not necessarily where the audio went: the platform may
+     * route a call to a headset or a car regardless. It drives the button's state, nothing more.
+     */
+    val speakerOn: Boolean = false,
     /** True once the peer's device reported that it is alerting. */
     val peerAlerting: Boolean = false,
 )

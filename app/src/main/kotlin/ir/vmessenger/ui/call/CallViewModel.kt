@@ -38,6 +38,8 @@ class CallViewModel @Inject constructor(
 
     fun setMuted(muted: Boolean) = callCoordinator.setMuted(muted)
 
+    fun setSpeaker(on: Boolean) = callCoordinator.setSpeaker(on)
+
     private companion object {
         const val SUBSCRIBE_TIMEOUT_MS = 5_000L
     }
