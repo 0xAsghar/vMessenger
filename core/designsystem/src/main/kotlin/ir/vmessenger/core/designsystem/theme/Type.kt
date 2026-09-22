@@ -12,14 +12,22 @@ import androidx.compose.ui.unit.sp
 import ir.vmessenger.core.designsystem.R
 
 /**
- * Vazirmatn ships here as Regular + Medium only; there is no Bold asset, so SemiBold and
- * Bold deliberately resolve to the Medium file instead of being synthesised by the system.
+ * Vazirmatn 33.003, as Regular, Medium and Bold — all three the real faces, none synthesised.
+ *
+ * Bold is here because the mapping without it was a silent substitution: `FontWeight.Bold`
+ * resolved to the Medium file, so anyone writing bold text got Medium and no warning. Persian
+ * absorbed that, since the type scale below asks only for Normal and Medium; an English hierarchy
+ * leaning on bold would have read flat with nothing to point at.
+ *
+ * SemiBold still resolves to Medium. Nothing in the app requests it, and vendoring a fourth
+ * 120 KB face for a weight no style uses would be dead weight — but if a style ever does ask for
+ * SemiBold, add `Vazirmatn-SemiBold.ttf` from the same release rather than leaving it approximated.
  */
 val Vazirmatn = FontFamily(
     Font(R.font.vazirmatn_regular, FontWeight.Normal),
     Font(R.font.vazirmatn_medium, FontWeight.Medium),
     Font(R.font.vazirmatn_medium, FontWeight.SemiBold),
-    Font(R.font.vazirmatn_medium, FontWeight.Bold),
+    Font(R.font.vazirmatn_bold, FontWeight.Bold),
 )
 
 /**
