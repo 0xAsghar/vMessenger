@@ -5,6 +5,8 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
 import ir.vmessenger.core.common.network.NetworkConfig
+import ir.vmessenger.core.datastore.NodeSetupChoice
+import ir.vmessenger.core.datastore.NodeSetupPreferences
 import ir.vmessenger.data.network.NetworkNodeRepository
 import ir.vmessenger.domain.model.DiscoveryStatus
 import ir.vmessenger.domain.repository.DiscoveryRepository
@@ -32,6 +34,7 @@ class DiscoveryRepositoryImpl @Inject constructor(
     private val dhtDiscoveryProvider: DhtDiscoveryProvider,
     private val identityRepository: IdentityRepository,
     private val networkNodeRepository: NetworkNodeRepository,
+    private val nodeSetupPreferences: NodeSetupPreferences,
 ) : DiscoveryRepository {
     private val _status = MutableStateFlow(
         DiscoveryStatus(bootstrapped = false, knownNodes = 0, publishedEndpoint = null, lastError = null),
@@ -40,7 +43,13 @@ class DiscoveryRepositoryImpl @Inject constructor(
     override fun observeStatus(): Flow<DiscoveryStatus> = _status.asStateFlow()
 
     override suspend fun joinNetwork(): AppResult<Unit> {
-        networkNodeRepository.seedDefaults()
+        // Only for a user who did not decline them. Seeding unconditionally is what made "skip"
+        // meaningless: the built-in nodes came back on the next join, so the choice was cosmetic.
+        // An install that predates the question reads NotAsked and still gets them, so upgrading
+        // changes nothing.
+        if (nodeSetupPreferences.current() != NodeSetupChoice.Skipped) {
+            networkNodeRepository.seedDefaults()
+        }
         val bootstrapAddress = NetworkConfig.effectiveBootstrapAddress()
         AppLogger.info("Discovery", "joinNetwork bootstrap=$bootstrapAddress")
         return when (val nodes = bootstrapManager.collectNodes()) {

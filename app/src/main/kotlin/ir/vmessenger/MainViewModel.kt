@@ -8,6 +8,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import ir.vmessenger.app.network.startNetworkService
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.DatabaseKeyProvider
+import ir.vmessenger.core.datastore.NodeSetupChoice
+import ir.vmessenger.core.datastore.NodeSetupPreferences
 import ir.vmessenger.core.datastore.PrivacyPreferences
 import ir.vmessenger.core.datastore.ThemeMode
 import ir.vmessenger.core.datastore.ThemePreferences
@@ -44,6 +46,7 @@ class MainViewModel @Inject constructor(
     private val databaseKeyProvider: DatabaseKeyProvider,
     private val appLock: AppLockCoordinator,
     private val pendingShare: PendingShareStore,
+    private val nodeSetupPreferences: NodeSetupPreferences,
 ) : ViewModel() {
     /**
      * Non-null while a share from another app is waiting for a destination. The picker screen
@@ -137,7 +140,7 @@ class MainViewModel @Inject constructor(
                 // Not throwing is not the same as being ready: initialize() returns early for a
                 // locked provider, because loading is exactly what it must not do.
                 check(!databaseKeyProvider.isLocked) { "the app lock holds the database" }
-                if (hasIdentity.get()()) VmRoute.Home else VmRoute.Onboarding
+                startDestination()
             }
                 .onFailure { AppLogger.warn(TAG, "start destination deferred: ${it.message}") }
                 .getOrNull()
@@ -147,6 +150,17 @@ class MainViewModel @Inject constructor(
         // on the main thread, put the one throw this function exists to avoid outside the
         // runCatching that was written for it, in a scope with no handler.
         _startRoute.value = route ?: return
+    }
+
+    /**
+     * Home once an identity exists. Otherwise the node question comes first and only once: a node
+     * is what makes communication possible, so it is asked before the identity rather than left to
+     * be discovered later in Settings. An install that has already answered goes straight on.
+     */
+    private suspend fun startDestination(): VmRoute = when {
+        hasIdentity.get()() -> VmRoute.Home
+        nodeSetupPreferences.current() == NodeSetupChoice.NotAsked -> VmRoute.NodeSetup
+        else -> VmRoute.Onboarding
     }
 
     /**

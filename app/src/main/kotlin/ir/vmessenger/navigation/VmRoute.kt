@@ -20,6 +20,13 @@ import kotlinx.serialization.Serializable
 @Serializable
 sealed interface VmRoute {
 
+    /**
+     * Choose a node, asked once before an identity exists. Communication needs one, so the question
+     * comes before the identity rather than after it.
+     */
+    @Serializable
+    data object NodeSetup : VmRoute
+
     /** Create-or-restore identity; the start destination when no identity exists. */
     @Serializable
     data object Onboarding : VmRoute

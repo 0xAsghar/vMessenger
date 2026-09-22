@@ -19,6 +19,7 @@ import ir.vmessenger.core.datastore.AppLockPreferences
 import ir.vmessenger.core.datastore.ContactRetryPreferences
 import ir.vmessenger.core.datastore.DiscoveryPreferences
 import ir.vmessenger.core.datastore.DraftPreferences
+import ir.vmessenger.core.datastore.NodeSetupPreferences
 import ir.vmessenger.core.datastore.P2PPreferences
 import ir.vmessenger.core.datastore.PrivacyPreferences
 import ir.vmessenger.core.datastore.SecurityPreferences
@@ -70,6 +71,7 @@ class SecureWipeCoordinator @Inject constructor(
     private val discoveryPreferences: DiscoveryPreferences,
     private val contactRetryPreferences: ContactRetryPreferences,
     private val themePreferences: ThemePreferences,
+    private val nodeSetupPreferences: NodeSetupPreferences,
     private val updateStore: UpdateStore,
     private val draftPreferences: DraftPreferences,
     private val keyStoreKeyManager: KeyStoreKeyManager,
@@ -133,6 +135,9 @@ class SecureWipeCoordinator @Inject constructor(
         p2pPreferences.clear()
         discoveryPreferences.clear()
         themePreferences.clear()
+        // Back to unanswered, so the next identity is asked about nodes again rather than
+        // inheriting a "skipped" from the install that was wiped.
+        nodeSetupPreferences.clear()
         // Who this device was still dialling, and how hard.
         contactRetryPreferences.clear()
         // The app lock's own store. Leaving it is not merely a leftover: `securityPreferences`

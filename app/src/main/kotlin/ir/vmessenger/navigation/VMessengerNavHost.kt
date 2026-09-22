@@ -14,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ir.vmessenger.feature.identity.CreateIdentityRoute
+import ir.vmessenger.ui.onboarding.NodeSetupRoute
 import ir.vmessenger.ui.share.ShareTargetRoute
 
 /**
@@ -50,6 +51,15 @@ fun VMessengerNavHost(
         popEnterTransition = { sharedAxisPopEnter() },
         popExitTransition = { sharedAxisPopExit() },
     ) {
+        composable<VmRoute.NodeSetup> {
+            NodeSetupRoute(
+                onDone = {
+                    navController.navigate(VmRoute.Onboarding) {
+                        popUpTo<VmRoute.NodeSetup> { inclusive = true }
+                    }
+                },
+            )
+        }
         composable<VmRoute.Onboarding> {
             CreateIdentityRoute(
                 onIdentityCreated = {
