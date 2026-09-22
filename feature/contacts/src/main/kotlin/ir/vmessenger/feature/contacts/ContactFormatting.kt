@@ -32,7 +32,7 @@ private val BadgeIconSize = 16.dp
 internal fun distanceLabel(meters: Double): String = if (meters >= METERS_PER_KM) {
     stringResource(R.string.contacts_distance_km, persianDecimal(meters / METERS_PER_KM))
 } else {
-    stringResource(R.string.contacts_distance_meters, VmTextFormat.persianDigits(meters.toInt().toString()))
+    stringResource(R.string.contacts_distance_meters, VmTextFormat.digits(meters.toInt().toString()))
 }
 
 /** Between the distance and the last-heard time on one line; reads the same in either direction. */
@@ -161,4 +161,4 @@ internal fun BlockedChip(modifier: Modifier = Modifier) {
 }
 
 private fun persianDecimal(value: Double): String =
-    VmTextFormat.persianDigits(String.format(Locale.US, "%.1f", value)).replace('.', '٫')
+    VmTextFormat.digits(String.format(Locale.US, "%.1f", value)).replace('.', '٫')

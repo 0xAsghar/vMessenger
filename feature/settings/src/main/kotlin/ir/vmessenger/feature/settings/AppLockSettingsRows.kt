@@ -134,7 +134,7 @@ private fun StrictModeRow(state: AppLockSettings) {
         } else {
             stringResource(
                 R.string.settings_app_lock_strict_unsupported,
-                VmTextFormat.persianDigits(STRICT_MODE_MIN_ANDROID),
+                VmTextFormat.digits(STRICT_MODE_MIN_ANDROID),
             )
         },
         trailing = SettingsTrailing.Switch(
@@ -275,6 +275,6 @@ private fun autoLockLabel(minutes: Int): String = if (minutes <= 0) {
 } else {
     stringResource(
         R.string.settings_app_lock_timeout_minutes,
-        VmTextFormat.persianDigits(minutes.toString()),
+        VmTextFormat.digits(minutes.toString()),
     )
 }

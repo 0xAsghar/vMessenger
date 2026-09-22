@@ -46,7 +46,7 @@ internal fun ContactsList(
                 SectionHeader(
                     title = stringResource(
                         R.string.contacts_requests_title,
-                        VmTextFormat.persianDigits(state.requests.size.toString()),
+                        VmTextFormat.digits(state.requests.size.toString()),
                     ),
                 )
             }

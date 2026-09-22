@@ -46,15 +46,15 @@ class AboutViewModel @Inject constructor(
     private val privacyPreferences: PrivacyPreferences,
 ) : ViewModel() {
     /** `۱٫۰٫۰` and `۴۵` — the real running build, in Persian digits. */
-    val versionName: String = VmTextFormat.persianDigits(appBuildInfo.versionName)
-    val versionCode: String = VmTextFormat.persianDigits(appBuildInfo.versionCode.toString())
+    val versionName: String = VmTextFormat.digits(appBuildInfo.versionName)
+    val versionCode: String = VmTextFormat.digits(appBuildInfo.versionCode.toString())
 
     /** `۲.۰`. Only the major gates compatibility; the minor is shown because it dates the build. */
     val protocolVersion: String =
-        VmTextFormat.persianDigits("${ProtocolVersion.MAJOR}.${ProtocolVersion.MINOR}")
+        VmTextFormat.digits("${ProtocolVersion.MAJOR}.${ProtocolVersion.MINOR}")
 
     /** Room's schema version, read from `:core:common` so the screen cannot drift from the database. */
-    val databaseVersion: String = VmTextFormat.persianDigits(DatabaseSchema.VERSION.toString())
+    val databaseVersion: String = VmTextFormat.digits(DatabaseSchema.VERSION.toString())
 
     /**
      * Enabled nodes only. The page answers "what is this build talking to", not "what could it

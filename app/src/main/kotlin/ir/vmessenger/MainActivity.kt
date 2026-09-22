@@ -7,10 +7,10 @@ import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -26,12 +26,16 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
- * A FragmentActivity rather than a ComponentActivity: `androidx.biometric`'s BiometricPrompt needs
- * one to attach to, and the app lock offers biometric unlock. The theme already parents
- * `Theme.AppCompat.DayNight.NoActionBar`, so nothing else about the window changes.
+ * An AppCompatActivity, for two reasons that happen to point the same way.
+ *
+ * `androidx.biometric`'s BiometricPrompt needs a FragmentActivity to attach to, and the app lock
+ * offers biometric unlock — AppCompatActivity is one. And the per-app language API is AppCompat's:
+ * the platform's own (`LocaleManager`) arrived in API 33 and this app supports 26, so
+ * `AppCompatDelegate.setApplicationLocales` is the only way to offer the choice at all. The theme
+ * already parents `Theme.AppCompat.DayNight.NoActionBar`, so nothing about the window changes.
  */
 @AndroidEntryPoint
-class MainActivity : FragmentActivity() {
+class MainActivity : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {

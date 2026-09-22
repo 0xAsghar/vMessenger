@@ -145,7 +145,7 @@ private fun NewGroupNameStep(
                 Text(
                     text = stringResource(
                         R.string.feature_chat_group_name_remaining,
-                        VmTextFormat.persianDigits(state.nameRemaining.toString()),
+                        VmTextFormat.digits(state.nameRemaining.toString()),
                     ),
                 )
             },
@@ -154,7 +154,7 @@ private fun NewGroupNameStep(
         Text(
             text = stringResource(
                 R.string.feature_chat_group_name_members,
-                VmTextFormat.persianDigits(state.picker.selectedCount.toString()),
+                VmTextFormat.digits(state.picker.selectedCount.toString()),
             ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

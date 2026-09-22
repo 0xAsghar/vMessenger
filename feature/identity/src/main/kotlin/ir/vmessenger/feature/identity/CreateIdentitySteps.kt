@@ -208,9 +208,9 @@ internal fun CreateIdentitySuccess(
 @Composable
 private fun restoreSummaryText(summary: RestoreSummary): String = stringResource(
     R.string.restore_backup_summary,
-    VmTextFormat.persianDigits(summary.contacts.toString()),
-    VmTextFormat.persianDigits(summary.conversations.toString()),
-    VmTextFormat.persianDigits(summary.messages.toString()),
+    VmTextFormat.digits(summary.contacts.toString()),
+    VmTextFormat.digits(summary.conversations.toString()),
+    VmTextFormat.digits(summary.messages.toString()),
 )
 
 @Composable
@@ -232,7 +232,7 @@ internal fun CreateIdentityError(message: String, onRetry: () -> Unit) {
 internal fun DisplayNameError.message(): String = when (this) {
     DisplayNameError.OutOfRange -> stringResource(
         R.string.create_identity_name_error_length,
-        VmTextFormat.persianDigits(CreateIdentityViewModel.DISPLAY_NAME_MIN.toString()),
-        VmTextFormat.persianDigits(CreateIdentityViewModel.DISPLAY_NAME_MAX.toString()),
+        VmTextFormat.digits(CreateIdentityViewModel.DISPLAY_NAME_MIN.toString()),
+        VmTextFormat.digits(CreateIdentityViewModel.DISPLAY_NAME_MAX.toString()),
     )
 }

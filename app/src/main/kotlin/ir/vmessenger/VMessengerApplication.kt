@@ -6,6 +6,7 @@ import androidx.work.Configuration
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.WorkManager
 import dagger.hilt.android.HiltAndroidApp
+import ir.vmessenger.app.locale.AppLocaleController
 import ir.vmessenger.app.network.NetworkKeepAliveWorker
 import ir.vmessenger.app.network.startNetworkService
 import ir.vmessenger.app.work.ExpiryPurgeWorker
@@ -38,11 +39,16 @@ class VMessengerApplication : Application(), Configuration.Provider {
             .setWorkerFactory(workerFactory)
             .build()
 
+    @Inject
+    lateinit var appLocaleController: AppLocaleController
+
     override fun onCreate() {
         System.loadLibrary("sqlcipher")
         super.onCreate()
         // Debug builds may store/dial ws:// or host:port nodes on local hosts (emulator, LAN); release: wss:// only.
         NodeAddressPolicy.current = NodeAddressPolicy(allowInsecureLocal = BuildConfig.DEBUG)
+        // Before anything formats a number or builds a notification: see AppLocaleController.
+        appLocaleController.sync()
         MapLibre.getInstance(this)
         fileLogSink = FileLogSink(this)
         AppLogger.addSink(fileLogSink)

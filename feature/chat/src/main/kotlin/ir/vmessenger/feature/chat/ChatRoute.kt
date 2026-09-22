@@ -235,4 +235,4 @@ private fun DeleteConversationsDialog(
 private const val CHAT_ROW_CONTENT_TYPE = "chat-row"
 
 @Composable
-private fun persian(value: Int): String = remember(value) { VmTextFormat.persianDigits(value.toString()) }
+private fun persian(value: Int): String = remember(value) { VmTextFormat.digits(value.toString()) }

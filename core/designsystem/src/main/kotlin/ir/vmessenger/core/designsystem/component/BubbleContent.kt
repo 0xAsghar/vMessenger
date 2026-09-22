@@ -190,4 +190,4 @@ private fun DurationBadge(durationMs: Long, modifier: Modifier = Modifier) {
 }
 
 private fun progressLabel(progress: Float): String =
-    VmTextFormat.persianDigits("${(progress * PERCENT).roundToInt()}٪")
+    VmTextFormat.digits("${(progress * PERCENT).roundToInt()}٪")

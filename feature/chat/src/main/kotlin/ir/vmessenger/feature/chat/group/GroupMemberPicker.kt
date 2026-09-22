@@ -256,8 +256,8 @@ private fun PickerCounter(state: GroupPickerState) {
         Text(
             text = stringResource(
                 R.string.feature_chat_group_picker_selected,
-                VmTextFormat.persianDigits(state.selectedCount.toString()),
-                VmTextFormat.persianDigits(state.capacity.toString()),
+                VmTextFormat.digits(state.selectedCount.toString()),
+                VmTextFormat.digits(state.capacity.toString()),
             ),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
@@ -268,7 +268,7 @@ private fun PickerCounter(state: GroupPickerState) {
             Text(
                 text = stringResource(
                     R.string.feature_chat_group_picker_cap,
-                    VmTextFormat.persianDigits(GroupLimits.MAX_MEMBERS.toString()),
+                    VmTextFormat.digits(GroupLimits.MAX_MEMBERS.toString()),
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

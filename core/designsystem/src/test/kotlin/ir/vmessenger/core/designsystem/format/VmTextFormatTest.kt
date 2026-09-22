@@ -1,7 +1,9 @@
 package ir.vmessenger.core.designsystem.format
 
+import ir.vmessenger.core.common.text.VmLocale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Before
 import org.junit.Test
 
 /**
@@ -10,17 +12,26 @@ import org.junit.Test
  */
 class VmTextFormatTest {
 
+    /**
+     * [VmLocale.current] is process-global, so this class states the language it is testing rather
+     * than relying on whatever ran before it.
+     */
+    @Before
+    fun setUp() {
+        VmLocale.current = VmLocale.Fa
+    }
+
     @Test
     fun `persian digits replace ascii digits only`() {
-        assertEquals("۱۲۳۴۵۶۷۸۹۰", VmTextFormat.persianDigits("1234567890"))
-        assertEquals("نسخهٔ ۱٫۰٫۰ (۴۵)", VmTextFormat.persianDigits("نسخهٔ 1٫0٫0 (45)"))
-        assertEquals("", VmTextFormat.persianDigits(""))
+        assertEquals("۱۲۳۴۵۶۷۸۹۰", VmTextFormat.digits("1234567890"))
+        assertEquals("نسخهٔ ۱٫۰٫۰ (۴۵)", VmTextFormat.digits("نسخهٔ 1٫0٫0 (45)"))
+        assertEquals("", VmTextFormat.digits(""))
     }
 
     @Test
     fun `persian digits are idempotent`() {
-        val once = VmTextFormat.persianDigits("42")
-        assertEquals(once, VmTextFormat.persianDigits(once))
+        val once = VmTextFormat.digits("42")
+        assertEquals(once, VmTextFormat.digits(once))
     }
 
     @Test

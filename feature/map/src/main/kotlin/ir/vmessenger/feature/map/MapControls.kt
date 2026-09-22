@@ -29,11 +29,11 @@ internal fun SharingPill(sharing: SharingState, watcherCount: Int, modifier: Mod
     val label = when {
         sharing.active -> stringResource(
             R.string.feature_map_pill_sharing,
-            VmTextFormat.persianDigits(sharing.grantedNames.size.toString()),
+            VmTextFormat.digits(sharing.grantedNames.size.toString()),
         )
         watcherCount > 0 -> stringResource(
             R.string.feature_map_pill_watchers,
-            VmTextFormat.persianDigits(watcherCount.toString()),
+            VmTextFormat.digits(watcherCount.toString()),
         )
         else -> stringResource(R.string.feature_map_pill_off)
     }

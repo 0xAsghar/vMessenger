@@ -46,7 +46,7 @@ fun UpdateBanner(
             Text(
                 text = stringResource(
                     R.string.settings_update_banner,
-                    VmTextFormat.persianDigits(available),
+                    VmTextFormat.digits(available),
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.weight(1f),

@@ -175,8 +175,8 @@ private fun CreateIdentityUiState.onboardingStep(): Int? = when (this) {
 private fun StepIndicator(step: Int) {
     val position = stringResource(
         R.string.create_identity_step_indicator,
-        VmTextFormat.persianDigits((step + 1).toString()),
-        VmTextFormat.persianDigits(ONBOARDING_STEPS.toString()),
+        VmTextFormat.digits((step + 1).toString()),
+        VmTextFormat.digits(ONBOARDING_STEPS.toString()),
     )
     Row(
         modifier = Modifier

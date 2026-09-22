@@ -89,6 +89,20 @@
             android:taskAffinity=""
             android:theme="@style/Theme.VMessenger" />
 
+        <!--
+          AppCompat stores the per-app language here. Required by
+          AppCompatDelegate.setApplicationLocales on API < 33, which is every device this app
+          supports below Android 13; on 33+ the platform takes over and this is ignored.
+        -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
+
         <!-- remoteMessaging (API 34+) is exempt from Android 15's 6 h dataSync cap
              and from the Android 14 BOOT_COMPLETED start restrictions; dataSync
              stays declared as the pre-34 fallback type. -->

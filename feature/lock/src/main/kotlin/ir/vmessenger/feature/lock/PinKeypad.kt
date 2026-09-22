@@ -48,7 +48,7 @@ private val KEYPAD_ROWS = listOf(1..3, 4..6, 7..9)
 internal fun PinDots(length: Int, modifier: Modifier = Modifier) {
     val spoken = stringResource(
         R.string.app_lock_entered_digits,
-        VmTextFormat.persianDigits(length.toString()),
+        VmTextFormat.digits(length.toString()),
     )
     Row(
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.xs, Alignment.CenterHorizontally),
@@ -118,7 +118,7 @@ private fun KeypadRow(content: @Composable RowScope.() -> Unit) {
 private fun RowScope.DigitKey(digit: Int, enabled: Boolean, onAppend: (Char) -> Unit) {
     // The label is Persian and the character appended is ASCII. The verifier hashes exactly the
     // characters it is handed, so every way into this app has to agree on which zero it means.
-    val label = remember(digit) { VmTextFormat.persianDigits(digit.toString()) }
+    val label = remember(digit) { VmTextFormat.digits(digit.toString()) }
     KeyButton(enabled = enabled, onClick = { onAppend('0' + digit) }) {
         Text(text = label, style = MaterialTheme.typography.titleLarge)
     }

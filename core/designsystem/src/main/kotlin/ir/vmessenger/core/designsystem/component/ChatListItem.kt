@@ -125,7 +125,7 @@ private fun TrailingColumn(time: String, unreadCount: Int, muted: Boolean) {
 @Composable
 private fun UnreadPill(count: Int) {
     if (count <= 0) return
-    val label = VmTextFormat.persianDigits(count.toString())
+    val label = VmTextFormat.digits(count.toString())
     val description = stringResource(R.string.vm_chat_unread_count, label)
     Surface(
         shape = MaterialTheme.shapes.extraLarge,

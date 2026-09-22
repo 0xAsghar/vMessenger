@@ -199,7 +199,7 @@ private fun FeedbackText(feedback: UnlockFeedback, wipeArmed: Boolean) {
         is UnlockFeedback.Wrong -> wrongText(attempt = feedback.attempt, wipeArmed = wipeArmed)
         is UnlockFeedback.TooSoon -> stringResource(
             R.string.app_lock_too_soon,
-            VmTextFormat.persianDigits(((feedback.waitMs + MILLIS_PER_SECOND - 1) / MILLIS_PER_SECOND).toString()),
+            VmTextFormat.digits(((feedback.waitMs + MILLIS_PER_SECOND - 1) / MILLIS_PER_SECOND).toString()),
         )
         UnlockFeedback.HardwareRefused -> stringResource(R.string.app_lock_hardware_refused)
         UnlockFeedback.BiometricDone -> stringResource(R.string.app_lock_biometric_done)
@@ -238,4 +238,4 @@ private fun wrongText(attempt: Int, wipeArmed: Boolean): String {
     }
 }
 
-internal fun persian(value: Int): String = VmTextFormat.persianDigits(value.toString())
+internal fun persian(value: Int): String = VmTextFormat.digits(value.toString())

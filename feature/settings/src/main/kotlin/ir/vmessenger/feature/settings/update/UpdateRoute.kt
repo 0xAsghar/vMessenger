@@ -149,7 +149,7 @@ private fun UpToDate(state: UpdateUiState.UpToDate, actions: UpdateActions) {
 @Composable
 private fun Available(update: AvailableUpdate, actions: UpdateActions) {
     Text(
-        text = stringResource(R.string.settings_update_available, VmTextFormat.persianDigits(update.versionName)),
+        text = stringResource(R.string.settings_update_available, VmTextFormat.digits(update.versionName)),
         style = MaterialTheme.typography.titleMedium,
     )
     Text(
@@ -221,7 +221,7 @@ private fun NeedsPermission(state: UpdateUiState.NeedsInstallPermission) {
         Text(text = stringResource(R.string.settings_update_permission_action))
     }
     Text(
-        text = VmTextFormat.persianDigits(state.update.versionName),
+        text = VmTextFormat.digits(state.update.versionName),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

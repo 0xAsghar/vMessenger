@@ -45,7 +45,7 @@ internal fun AboutNetworkSection(nodes: AboutNodes) {
             label = stringResource(R.string.feature_about_row_bootstrap),
             icon = Icons.Outlined.Hub,
             supporting = stringResource(R.string.feature_about_row_bootstrap_body),
-            trailing = SettingsTrailing.Text(VmTextFormat.persianDigits(nodes.bootstrap.size.toString())),
+            trailing = SettingsTrailing.Text(VmTextFormat.digits(nodes.bootstrap.size.toString())),
         )
         NodeAddresses(nodes = nodes.bootstrap)
         SettingsDivider()
@@ -53,7 +53,7 @@ internal fun AboutNetworkSection(nodes: AboutNodes) {
             label = stringResource(R.string.feature_about_row_relay),
             icon = Icons.Outlined.Router,
             supporting = stringResource(R.string.feature_about_row_relay_body),
-            trailing = SettingsTrailing.Text(VmTextFormat.persianDigits(nodes.relay.size.toString())),
+            trailing = SettingsTrailing.Text(VmTextFormat.digits(nodes.relay.size.toString())),
         )
         NodeAddresses(nodes = nodes.relay)
         SettingsDivider()

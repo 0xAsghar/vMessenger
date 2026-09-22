@@ -51,4 +51,4 @@ fun AppError.toUiText(): String = when (this) {
     else -> stringResource(ERROR_TEXT[this::class] ?: R.string.vm_error_unknown)
 }
 
-private fun digits(value: Int): String = VmTextFormat.persianDigits(value.toString())
+private fun digits(value: Int): String = VmTextFormat.digits(value.toString())

@@ -92,15 +92,15 @@ private fun BackupHeaderCard(header: BackupHeaderInfo) {
             Text(
                 text = stringResource(
                     R.string.restore_backup_format_version,
-                    VmTextFormat.persianDigits(header.version.toString()),
+                    VmTextFormat.digits(header.version.toString()),
                 ),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
                 text = stringResource(
                     R.string.restore_backup_kdf_params,
-                    VmTextFormat.persianDigits(header.kdfOps.toString()),
-                    VmTextFormat.persianDigits((header.kdfMemBytes / BYTES_PER_MIB).toString()),
+                    VmTextFormat.digits(header.kdfOps.toString()),
+                    VmTextFormat.digits((header.kdfMemBytes / BYTES_PER_MIB).toString()),
                 ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

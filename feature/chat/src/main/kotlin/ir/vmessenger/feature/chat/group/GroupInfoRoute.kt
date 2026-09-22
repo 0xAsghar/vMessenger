@@ -116,7 +116,7 @@ fun GroupInfoRoute(
         modifier = modifier,
         subtitle = stringResource(
             R.string.feature_chat_group_member_count,
-            VmTextFormat.persianDigits(state.memberCount.toString()),
+            VmTextFormat.digits(state.memberCount.toString()),
         ),
         snackbarHost = { VmSnackbarHost(snackbar) },
     ) { padding ->
@@ -239,7 +239,7 @@ private fun GroupInfoHeader(state: GroupInfoUiState) {
         Text(
             text = stringResource(
                 R.string.feature_chat_group_member_count,
-                VmTextFormat.persianDigits(state.memberCount.toString()),
+                VmTextFormat.digits(state.memberCount.toString()),
             ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -264,7 +264,7 @@ private fun GroupManageSection(state: GroupInfoUiState, onOpenDialog: (GroupDial
         // action that quietly disappeared.
         supporting = stringResource(
             R.string.feature_chat_group_seats_left,
-            VmTextFormat.persianDigits(state.remainingSeats.toString()),
+            VmTextFormat.digits(state.remainingSeats.toString()),
         ),
         trailing = SettingsTrailing.None,
         enabled = state.canAddMembers,

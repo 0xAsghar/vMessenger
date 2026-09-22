@@ -244,9 +244,9 @@ private fun RowTrailing(status: ContactLocationStatus, onRequestShare: () -> Uni
 /** `۳۵۰ متر` below a kilometre, `۱٫۲ کیلومتر` above it. */
 @Composable
 private fun distanceLabel(meters: Float): String = if (meters < METERS_PER_KM) {
-    stringResource(R.string.feature_map_distance_m, VmTextFormat.persianDigits(meters.toInt().toString()))
+    stringResource(R.string.feature_map_distance_m, VmTextFormat.digits(meters.toInt().toString()))
 } else {
     val km = meters / METERS_PER_KM
     val rounded = if (km >= 10f) km.toInt().toString() else ((km * 10).toInt() / 10f).toString()
-    stringResource(R.string.feature_map_distance_km, VmTextFormat.persianDigits(rounded).replace('.', '٫'))
+    stringResource(R.string.feature_map_distance_km, VmTextFormat.digits(rounded).replace('.', '٫'))
 }

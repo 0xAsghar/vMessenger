@@ -173,7 +173,7 @@ private fun developerModeMessage(status: DeveloperModeStatus): String? = when (s
     DeveloperModeStatus.Idle -> null
     is DeveloperModeStatus.Countdown -> stringResource(
         R.string.feature_about_developer_mode_countdown,
-        VmTextFormat.persianDigits(status.remaining.toString()),
+        VmTextFormat.digits(status.remaining.toString()),
     )
     DeveloperModeStatus.Enabled -> stringResource(R.string.feature_about_developer_mode_enabled)
     DeveloperModeStatus.Disabled -> stringResource(R.string.feature_about_developer_mode_disabled)

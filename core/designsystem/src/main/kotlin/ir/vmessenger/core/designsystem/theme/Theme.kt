@@ -8,6 +8,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
+import ir.vmessenger.core.common.text.VmLocale
 
 @Composable
 fun VMessengerTheme(
@@ -37,8 +38,11 @@ fun VMessengerTheme(
 
 @Composable
 fun RtlLayout(content: @Composable () -> Unit) {
+    // Read rather than observed: changing the app language recreates the activity, so composition
+    // starts again with the new value. Nothing here needs to react to a change in place.
+    val direction = if (VmLocale.current.isRtl) LayoutDirection.Rtl else LayoutDirection.Ltr
     CompositionLocalProvider(
-        LocalLayoutDirection provides LayoutDirection.Rtl,
+        LocalLayoutDirection provides direction,
         content = content,
     )
 }
