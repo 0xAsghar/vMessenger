@@ -64,6 +64,7 @@ private data class ScreenExtras(val hint: MapHint?, val myLocationRequested: Boo
  * collected in `init` and kept them running for the whole life of the screen's view model.
  */
 @HiltViewModel
+@Suppress("TooManyFunctions") // one function per action the screen offers; splitting it would only hide them
 class MapViewModel @Inject constructor(
     private val contactRepository: ContactRepository,
     private val locationRepository: LocationRepository,
@@ -128,6 +129,17 @@ class MapViewModel @Inject constructor(
                 val result = locationSharingCoordinator.startSharingToGrantedContacts()
                 hint.value = if (result is AppResult.Error) MapHint.SelectContactFirst else null
             }
+        }
+    }
+
+    /**
+     * Asks a verified contact to share their location. Sends a prompt and nothing else — the other
+     * person decides, and nothing here changes what we can see.
+     */
+    fun requestShare(contactId: String) {
+        viewModelScope.launch {
+            val result = locationSharingCoordinator.requestLocationShare(contactId)
+            hint.value = MapHint.LocationRequestSent.takeIf { result is AppResult.Success }
         }
     }
 
@@ -257,6 +269,7 @@ private fun contactStatus(
                 seedHex = contact.identityHash.toHex(),
                 marker = byContact[contact.id],
                 granted = access[contact.id] == true,
+                verified = contact.verified,
             )
         }
         .sortedWith(compareBy({ it.marker == null }, { it.name }))

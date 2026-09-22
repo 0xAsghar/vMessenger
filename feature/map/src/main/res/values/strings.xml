@@ -21,6 +21,8 @@
     <string name="feature_map_contacts_empty">هنوز مخاطب تأییدشده‌ای ندارید</string>
     <string name="feature_map_contact_not_sharing">موقعیتش را با شما به اشتراک نمی‌گذارد</string>
     <string name="feature_map_contact_sees_me">می‌تواند موقعیت شما را ببیند</string>
+    <string name="feature_map_request_share">درخواست اشتراک موقعیت</string>
+    <string name="feature_map_request_sent">درخواست ارسال شد؛ پذیرش آن با مخاطب است.</string>
 
     <string name="feature_map_permission_title">دسترسی مکان</string>
     <string name="feature_map_permission_rationale">برای دیدن فاصله و اشتراک‌گذاری، دسترسی مکان لازم است</string>

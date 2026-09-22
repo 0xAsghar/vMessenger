@@ -18,6 +18,7 @@ import ir.vmessenger.core.location.LocationUpdate
 import ir.vmessenger.core.location.LocationUpdateBus
 import ir.vmessenger.core.proto.app.v1.Control
 import ir.vmessenger.core.proto.app.v1.ControlType
+import ir.vmessenger.core.proto.app.v1.GpsBuzzerRequest
 import ir.vmessenger.core.proto.app.v1.LocationPacket
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import ir.vmessenger.data.di.IoDispatcher
@@ -290,6 +291,26 @@ class LocationSharingCoordinator @Inject constructor(
             runCatching { locationServiceControl.stop() }
                 .onFailure { AppLogger.warn("Location", "service stop failed: ${it.message}") }
         }
+    }
+
+    /**
+     * Asks [contactId] to share their location. A request and nothing more: it sends a prompt the
+     * other person answers, and changes no state on either side.
+     *
+     * Refused unless that contact is *verified* — the same condition the receiver enforces in
+     * [InboundPolicy], so a peer whose own UI skipped the check is refused on arrival anyway.
+     */
+    suspend fun requestLocationShare(contactId: String): AppResult<Unit> {
+        val contact = contactDao.getById(contactId)
+        if (contact == null || !contact.canReceiveOurLocation() || !contact.verified) {
+            return AppResult.Error(AppError.Security("asking to share a location needs a verified contact"))
+        }
+        val now = System.currentTimeMillis()
+        send(contactId, "gps-buzz-$now", now) {
+            setGpsBuzzer(GpsBuzzerRequest.newBuilder().setAtUnixMs(now))
+        }
+        AppLogger.info("Location", "location share requested from contact=$contactId")
+        return AppResult.Success(Unit)
     }
 
     suspend fun handleIncomingLocation(contactId: String, envelope: MessageEnvelope) {

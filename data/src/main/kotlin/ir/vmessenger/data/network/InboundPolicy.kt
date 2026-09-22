@@ -25,6 +25,9 @@ enum class InboundKind {
 
     /** A peer telling us their display name or avatar changed. */
     PROFILE_UPDATE,
+
+    /** A request that we share our location. Verified contacts only; see [InboundPolicy]. */
+    GPS_BUZZER,
     ;
 
     /**
@@ -55,6 +58,7 @@ enum class InboundKind {
             envelope.hasNetworkNodes() -> NETWORK_NODES
             envelope.hasGroupControl() -> GROUP_CONTROL
             envelope.hasProfileUpdate() -> PROFILE_UPDATE
+            envelope.hasGpsBuzzer() -> GPS_BUZZER
             else -> null
         }
     }
@@ -94,5 +98,13 @@ object InboundPolicy {
         -> contact != null &&
             !contact.blocked &&
             contact.relationshipStatus == ContactRelationshipStatus.APPROVED
+        // Stricter than the rest, deliberately: asking someone to reveal where they are is only
+        // allowed between contacts who have confirmed each other's safety numbers. Checked here
+        // rather than trusting the sender's own UI to have checked.
+        InboundKind.GPS_BUZZER,
+        -> contact != null &&
+            !contact.blocked &&
+            contact.relationshipStatus == ContactRelationshipStatus.APPROVED &&
+            contact.verified
     }
 }

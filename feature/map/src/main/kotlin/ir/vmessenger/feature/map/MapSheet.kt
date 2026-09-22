@@ -11,9 +11,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -47,11 +49,14 @@ internal fun ColumnScope.MapSheet(
     onPickContacts: () -> Unit,
 ) {
     SharingRow(state = state, onToggle = actions.onToggleSharing, onPickContacts = onPickContacts)
-    if (state.hint == MapHint.SelectContactFirst) {
+    state.hint?.let { hint ->
+        val isProblem = hint == MapHint.SelectContactFirst
         Text(
-            text = stringResource(R.string.feature_map_select_contact_first),
+            text = stringResource(
+                if (isProblem) R.string.feature_map_select_contact_first else R.string.feature_map_request_sent,
+            ),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error,
+            color = if (isProblem) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.xs),
         )
     }
@@ -60,7 +65,7 @@ internal fun ColumnScope.MapSheet(
     }
     HorizontalDivider(modifier = Modifier.padding(vertical = VmSpacing.sm))
     SectionHeader(title = stringResource(R.string.feature_map_contacts_title))
-    WatcherList(state = state, onSelect = actions.onSelect)
+    WatcherList(state = state, onSelect = actions.onSelect, onRequestShare = actions.onRequestShare)
 }
 
 @Composable
@@ -134,7 +139,11 @@ private fun PermissionCard(permission: LocationPermissionController) {
 }
 
 @Composable
-private fun WatcherList(state: MapUiState, onSelect: (String?) -> Unit) {
+private fun WatcherList(
+    state: MapUiState,
+    onSelect: (String?) -> Unit,
+    onRequestShare: (String) -> Unit,
+) {
     if (state.contactStatus.isEmpty()) {
         Text(
             text = stringResource(R.string.feature_map_contacts_empty),
@@ -150,13 +159,19 @@ private fun WatcherList(state: MapUiState, onSelect: (String?) -> Unit) {
                 status = status,
                 selected = status.contactId == state.selectedContactId,
                 onClick = { onSelect(status.contactId) },
+                onRequestShare = { onRequestShare(status.contactId) },
             )
         }
     }
 }
 
 @Composable
-private fun WatcherRow(status: ContactLocationStatus, selected: Boolean, onClick: () -> Unit) {
+private fun WatcherRow(
+    status: ContactLocationStatus,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onRequestShare: () -> Unit,
+) {
     val marker = status.marker
     val background = if (selected) {
         MaterialTheme.colorScheme.secondaryContainer
@@ -191,23 +206,38 @@ private fun WatcherRow(status: ContactLocationStatus, selected: Boolean, onClick
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            // The other direction, on the same row: whether this contact can see us.
-            if (status.granted) {
-                Icon(
-                    imageVector = Icons.Outlined.Visibility,
-                    contentDescription = stringResource(R.string.feature_map_contact_sees_me),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(VmSizes.iconSm),
-                )
-            }
-            marker?.distanceM?.let {
-                Text(
-                    text = distanceLabel(it),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
+            RowTrailing(status = status, onRequestShare = onRequestShare)
         }
+    }
+}
+
+/** The other direction and the distance: whether they can see us, and how far away they are. */
+@Composable
+private fun RowTrailing(status: ContactLocationStatus, onRequestShare: () -> Unit) {
+    if (status.granted) {
+        Icon(
+            imageVector = Icons.Outlined.Visibility,
+            contentDescription = stringResource(R.string.feature_map_contact_sees_me),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(VmSizes.iconSm),
+        )
+    }
+    // Only for a verified contact who is not already sharing: a request they are free to ignore.
+    if (status.marker == null && status.verified) {
+        IconButton(onClick = onRequestShare) {
+            Icon(
+                imageVector = Icons.Outlined.NotificationsActive,
+                contentDescription = stringResource(R.string.feature_map_request_share),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+    status.marker?.distanceM?.let {
+        Text(
+            text = distanceLabel(it),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }
 

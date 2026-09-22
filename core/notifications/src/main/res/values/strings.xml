@@ -2,4 +2,6 @@
 <resources>
     <string name="notification_channel_messages">پیام‌ها</string>
     <string name="notification_new_message">پیام جدید</string>
+    <string name="notification_location_request">%1$s از شما می‌خواهد موقعیتتان را به اشتراک بگذارید</string>
+    <string name="notification_location_request_generic">درخواست اشتراک موقعیت</string>
 </resources>

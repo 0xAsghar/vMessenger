@@ -11,6 +11,9 @@ import javax.inject.Singleton
 /** Raises the "new message" notification; the collector decides *whether* to raise it. */
 interface IncomingMessageNotifier {
     suspend fun notify(senderName: String, preview: String, conversationId: String)
+
+    /** A verified contact asking us to share our location; raises the prompt, changes nothing. */
+    suspend fun notifyLocationRequest(senderName: String, conversationId: String)
 }
 
 @Singleton
@@ -20,24 +23,37 @@ class DefaultIncomingMessageNotifier @Inject constructor(
     private val appLock: AppLockCoordinator,
 ) : IncomingMessageNotifier {
     override suspend fun notify(senderName: String, preview: String, conversationId: String) {
-        // The lock forces this on, the same way it forces FLAG_SECURE regardless of the screen
-        // security setting. Someone who put a PIN in front of their messages did not mean "unless
-        // they arrive while you are looking at the phone", and the shade is the one surface the
-        // lock screen does not cover. The user's own preference still applies when unlocked.
-        //
-        // Gated on the *configured* flag as well as the state, and that is not belt and braces.
-        // `LockState.Undetermined` is the starting value and only the activity's view model ever
-        // resolves it, so in a process that never ran the UI — after a reboot, after the system
-        // restarts the service — it stays undetermined forever. Read as "not Unlocked" on its own,
-        // that hid the sender and the preview from every notification for users who have no app
-        // lock at all, until they next opened the app.
-        val locked = privacyPreferences.appLockEnabled.first() && appLock.state.value != LockState.Unlocked
-        val hideContent = privacyPreferences.hideNotificationContent.first() || locked
         messageNotificationManager.showMessageNotification(
             senderName = senderName,
             preview = preview,
             conversationId = conversationId,
-            hideContent = hideContent,
+            hideContent = hideContent(),
         )
+    }
+
+    override suspend fun notifyLocationRequest(senderName: String, conversationId: String) {
+        messageNotificationManager.showLocationRequest(
+            senderName = senderName,
+            conversationId = conversationId,
+            hideContent = hideContent(),
+        )
+    }
+
+    /**
+     * The lock forces content hidden, the same way it forces `FLAG_SECURE` regardless of the screen
+     * security setting. Someone who put a PIN in front of their messages did not mean "unless they
+     * arrive while you are looking at the phone", and the shade is the one surface the lock screen
+     * does not cover. The user's own preference still applies when unlocked.
+     *
+     * Gated on the *configured* flag as well as the state, and that is not belt and braces.
+     * [LockState.Undetermined] is the starting value and only the activity's view model ever
+     * resolves it, so in a process that never ran the UI — after a reboot, after the system restarts
+     * the service — it stays undetermined forever. Read as "not Unlocked" on its own, that hid the
+     * sender and the preview from every notification for users who have no app lock at all, until
+     * they next opened the app.
+     */
+    private suspend fun hideContent(): Boolean {
+        val locked = privacyPreferences.appLockEnabled.first() && appLock.state.value != LockState.Unlocked
+        return privacyPreferences.hideNotificationContent.first() || locked
     }
 }

@@ -170,6 +170,7 @@ private fun rememberMapActions(
         onToggleSharing = { permission.runWhenGranted(viewModel::toggleSharing) },
         onSetAccess = viewModel::setAccess,
         onSelect = viewModel::select,
+        onRequestShare = viewModel::requestShare,
         onFitAll = viewModel::fitAll,
         onFollowMe = { permission.runWhenGranted(viewModel::followMe) },
         onUserGesture = viewModel::onUserGesture,

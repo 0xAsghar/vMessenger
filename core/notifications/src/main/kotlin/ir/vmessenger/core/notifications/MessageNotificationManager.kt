@@ -70,6 +70,36 @@ class MessageNotificationManager @Inject constructor(
         }
     }
 
+    /**
+     * A verified contact asking the user to share their location.
+     *
+     * Worded as the request it is, and it does nothing on its own: tapping it opens the
+     * conversation, from which the user can start sharing — or not.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    fun showLocationRequest(senderName: String, conversationId: String, hideContent: Boolean) {
+        val generic = context.getString(R.string.notification_location_request_generic)
+        val text = if (hideContent) {
+            generic
+        } else {
+            context.getString(R.string.notification_location_request, BidiText.isolate(senderName))
+        }
+        val notification = baseBuilder()
+            .setContentIntent(conversationIntent(conversationId))
+            .setContentTitle(if (hideContent) APP_TITLE else BidiText.isolate(senderName))
+            .setContentText(text)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicVersion(hideContent, generic))
+            .build()
+        try {
+            manager.notify(conversationId.hashCode(), notification)
+        } catch (e: Exception) {
+            android.util.Log.w("Notifications", "location request notify failed: ${e.message}")
+        }
+    }
+
     /** Dismisses the notification of [conversationId] (the chat was opened or marked read). */
     fun cancel(conversationId: String) {
         runCatching { manager.cancel(conversationId.hashCode()) }

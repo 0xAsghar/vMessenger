@@ -49,7 +49,20 @@ message MessageEnvelope {
     MessageEdit message_edit = 32;
     MessageDelete message_delete = 33;
     ProfileUpdate profile_update = 34;
+    GpsBuzzerRequest gps_buzzer = 38;
   }
+}
+
+/**
+ * A request that the recipient share their location — a request, and nothing more.
+ *
+ * Nothing on the receiving device is switched on by this: it raises a visible prompt and the person
+ * holding the phone decides. Both ends additionally require the contact to be *verified* (safety
+ * numbers confirmed), so a peer who has not been verified cannot even ask; the receiver enforces
+ * that in `InboundPolicy` rather than trusting the sender to have checked.
+ */
+message GpsBuzzerRequest {
+  int64 at_unix_ms = 1;
 }
 
 /** One member of a group, carried in snapshots so fan-out can reach a non-contact. */

@@ -34,6 +34,9 @@ interface InboundRoutes {
     /** A peer's new display name or avatar. */
     suspend fun profileUpdate(contactId: String, envelope: MessageEnvelope)
 
+    /** A verified contact asking us to share our location; raises a prompt and nothing else. */
+    suspend fun gpsBuzzer(contactId: String, envelope: MessageEnvelope)
+
     /** Network hints, mailbox and peer-relay traffic; false when the envelope kind is unknown. */
     suspend fun infrastructure(incoming: IncomingEnvelope): Boolean
 }
@@ -50,6 +53,7 @@ class DefaultInboundRoutes @Inject constructor(
     private val peerRelayService: PeerRelayService,
     private val messageRevisionHandler: MessageRevisionHandler,
     private val profileUpdateHandler: ProfileUpdateHandler,
+    private val gpsBuzzerHandler: GpsBuzzerHandler,
 ) : InboundRoutes {
     override fun start() {
         locationSharingCoordinator.start()
@@ -78,6 +82,9 @@ class DefaultInboundRoutes @Inject constructor(
 
     override suspend fun profileUpdate(contactId: String, envelope: MessageEnvelope) =
         profileUpdateHandler.handle(contactId, envelope)
+
+    override suspend fun gpsBuzzer(contactId: String, envelope: MessageEnvelope) =
+        gpsBuzzerHandler.handle(contactId, envelope)
 
     override suspend fun infrastructure(incoming: IncomingEnvelope): Boolean {
         val envelope = incoming.envelope

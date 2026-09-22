@@ -146,6 +146,8 @@ class IncomingMessageCollector @Inject constructor(
                 acknowledge(contactId, envelope, incoming.session) { routes.messageRevision(contactId, envelope) }
             InboundKind.PROFILE_UPDATE ->
                 acknowledge(contactId, envelope, incoming.session) { routes.profileUpdate(contactId, envelope) }
+            InboundKind.GPS_BUZZER ->
+                acknowledge(contactId, envelope, incoming.session) { routes.gpsBuzzer(contactId, envelope) }
             InboundKind.NETWORK_NODES, null -> routes.infrastructure(incoming)
         }
     }

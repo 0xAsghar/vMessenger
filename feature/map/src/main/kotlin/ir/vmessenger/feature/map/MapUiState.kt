@@ -10,7 +10,7 @@ import kotlinx.collections.immutable.persistentListOf
 enum class MapPermission { Granted, Denied, PermanentlyDenied }
 
 /** One-shot explanations shown in the sheet. */
-enum class MapHint { SelectContactFirst }
+enum class MapHint { SelectContactFirst, LocationRequestSent }
 
 @Immutable
 data class MapPoint(val latitude: Double, val longitude: Double)
@@ -55,6 +55,11 @@ data class ContactLocationStatus(
     val marker: ContactMarker?,
     /** Whether they may see our position. */
     val granted: Boolean,
+    /**
+     * Safety numbers confirmed. Asking someone to share their location is offered only for a
+     * verified contact, and the receiver enforces the same condition on arrival.
+     */
+    val verified: Boolean,
 )
 
 @Immutable
