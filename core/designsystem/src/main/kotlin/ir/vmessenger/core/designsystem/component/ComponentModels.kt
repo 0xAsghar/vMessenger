@@ -6,6 +6,8 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import ir.vmessenger.core.designsystem.theme.vm
 
 /** Person avatars are circles; group avatars are rounded squares. */
@@ -56,3 +58,17 @@ data class ComposerState(
 /** Optional call to action under an [EmptyState]. */
 @Stable
 data class EmptyStateAction(val label: String, val onClick: () -> Unit)
+
+/** The static appearance and behaviour of a [VmTextField]; the screen owns the mutable text itself. */
+@Immutable
+data class VmTextFieldConfig(
+    val label: String? = null,
+    val placeholder: String? = null,
+    val enabled: Boolean = true,
+    val isError: Boolean = false,
+    val supportingText: String? = null,
+    val singleLine: Boolean = true,
+    val isPassword: Boolean = false,
+    val keyboardType: KeyboardType = KeyboardType.Text,
+    val imeAction: ImeAction = ImeAction.Default,
+)
