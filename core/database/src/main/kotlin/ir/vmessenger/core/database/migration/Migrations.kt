@@ -586,3 +586,19 @@ val MIGRATION_20_21 = object : Migration(20, 21) {
 val MIGRATION_20_21_STATEMENTS: List<String> = listOf(
     "ALTER TABLE `message` ADD COLUMN `expiresAtUnixMs` INTEGER DEFAULT NULL",
 )
+
+val MIGRATION_21_22 = object : Migration(21, 22) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_21_22_STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/**
+ * Album grouping for a multi-image send: images picked together share an `albumId` and are ordered by
+ * `albumIndex`, so the chat renders them as one grid. Additive; every existing message keeps a null
+ * album and stays a standalone bubble.
+ */
+val MIGRATION_21_22_STATEMENTS: List<String> = listOf(
+    "ALTER TABLE `message` ADD COLUMN `albumId` TEXT DEFAULT NULL",
+    "ALTER TABLE `message` ADD COLUMN `albumIndex` INTEGER DEFAULT NULL",
+)

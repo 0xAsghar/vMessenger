@@ -113,6 +113,13 @@ data class MessageEntity(
      * best-effort against an honest client rather than a guarantee against an adversarial one.
      */
     val expiresAtUnixMs: Long? = null,
+    /**
+     * The album a multi-image send belongs to: every image picked together shares one [albumId] and
+     * is ordered by [albumIndex], so the chat can group them into a single grid. Null for a standalone
+     * message.
+     */
+    val albumId: String? = null,
+    val albumIndex: Int? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -154,6 +161,8 @@ data class MessageEntity(
         editedAtUnixMs,
         deletedAtUnixMs,
         expiresAtUnixMs,
+        albumId,
+        albumIndex,
     )
 
     private companion object {

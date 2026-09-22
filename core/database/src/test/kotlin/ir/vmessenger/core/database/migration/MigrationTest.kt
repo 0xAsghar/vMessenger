@@ -24,6 +24,8 @@ internal val UP_TO_20 = UP_TO_19 + MIGRATION_19_20
 
 internal val UP_TO_21 = UP_TO_20 + MIGRATION_20_21
 
+internal val UP_TO_22 = UP_TO_21 + MIGRATION_21_22
+
 /**
  * Replays every migration on a real SQLite engine (JDBC, in memory), because a
  * broken migration is only discovered on a user's device otherwise: Room does not
@@ -54,6 +56,11 @@ class MigrationTest {
     private fun migrateTo20() {
         migrateTo19()
         MIGRATION_19_20.migrate(database.db)
+    }
+
+    private fun migrateTo21() {
+        migrateTo20()
+        MIGRATION_20_21.migrate(database.db)
     }
 
     @Test
@@ -110,6 +117,30 @@ class MigrationTest {
             it.getString("expiresAtUnixMs")
         }
         assertEquals(listOf<String?>(null), expiry)
+    }
+
+    @Test
+    fun `albums add albumId and albumIndex without rewriting the message table`() {
+        migrateTo21()
+        database.db.execSQL(
+            """
+            INSERT INTO `message` (
+                `messageId`, `conversationId`, `direction`, `contentType`, `body`,
+                `replyToMessageId`, `status`, `createdAtUnixMs`, `sentAtUnixMs`,
+                `deliveredAtUnixMs`, `readAtUnixMs`, `attachmentEncrypted`
+            ) VALUES ('m1', 'c1', 'OUTGOING', 'IMAGE', NULL, NULL, 'SENT', 1, 1, NULL, NULL, 1)
+            """.trimIndent(),
+        )
+
+        MIGRATION_21_22.migrate(database.db)
+
+        assertContains(database.columns("message"), "albumId")
+        assertContains(database.columns("message"), "albumIndex")
+        // A pre-22 image survives as a standalone message, not as album member zero.
+        val album = database.query("SELECT `albumId`, `albumIndex` FROM `message` WHERE `messageId` = 'm1'") {
+            it.getString("albumId") to it.getString("albumIndex")
+        }
+        assertEquals(listOf<Pair<String?, String?>>(null to null), album)
     }
 
     @Test
