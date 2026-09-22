@@ -243,6 +243,7 @@ class AttachmentReceiver @Inject constructor(
         val now = clock()
         val fileName = info.fileName.ifBlank { stored.name }
         val conversationId = transfer.target.conversationId
+        val albumId = info.albumId.toStringUtf8().ifBlank { null }
         messageDao.insert(
             MessageEntity(
                 messageId = transfer.messageId,
@@ -268,6 +269,8 @@ class AttachmentReceiver @Inject constructor(
                 // already had its shape while the audio was still streaming.
                 attachmentDurationMs = info.durationMs.takeIf { it > 0 },
                 attachmentWaveform = info.waveform.toByteArray().takeIf { it.size == WAVEFORM_BUCKETS },
+                albumId = albumId,
+                albumIndex = albumId?.let { info.albumIndex },
             ),
         )
         conversationDao.getById(conversationId)?.let { conv ->
