@@ -9,7 +9,98 @@ GitHub Releases; they were never tracked here and are not reconstructed.
 
 Two version numbers move independently of this file and are stated where they matter: the **wire
 protocol major** (currently 2, [docs/Protocol.md](docs/Protocol.md)) and the **database schema
-version** (currently 20, [docs/Database.md](docs/Database.md)).
+version** (currently 24, [docs/Database.md](docs/Database.md)).
+
+## [2.0.0-beta.1] - 2026-09-22
+
+The V2 release: voice calls, English alongside Persian, and a batch of messaging, location and
+group-administration features.
+
+**Database schema 20 → 24.** Migrations included; no action needed. **Wire protocol stays major 2**
+— every new field and message is additive, so a 1.1.2 peer ignores what it does not recognise
+instead of failing. A 1.1.2 peer cannot place or answer a call, and will not see an album as a grid
+or honour a message timer.
+
+### Added
+
+- **Voice calls.** One-to-one, end-to-end encrypted, with a media key derived per call from a fresh
+  X25519 exchange carried inside the already-authenticated signalling — so a later compromise of
+  the long-term keys does not recover a past call. Ringing takes the screen over the lock screen and
+  can be answered from the notification. Opus at 48 kHz in 20 ms frames, with concealment for lost
+  packets, mute, and a speaker/earpiece choice.
+
+  Two limits, stated plainly because they decide whether a call connects at all. **Media is direct
+  TCP:** the phone that answers listens and tells the caller its local addresses, so a call works
+  when the two devices can reach each other directly — the same network, a VPN, or a reachable
+  host — and ends cleanly when they cannot. Carrying call audio over a relay is not in this release.
+  **There is no reconnection yet:** a call whose connection drops ends rather than recovering.
+
+  The microphone is opened only by answering, and only under a foreground service, so the system
+  privacy indicator and the notification shade both say so for as long as it is true.
+
+- **English.** The app can now present itself in English as well as Persian, with the calendar,
+  digits, dates, file sizes and layout direction all following the choice. Persian remains the
+  default and is unchanged.
+
+- **Self-destructing messages.** A timer set on a conversation stamps each message with an absolute
+  deadline, and every device that holds a copy deletes it when that passes — there is no server to
+  withhold anything. Like delete-for-everyone, it is best-effort against a recipient who does not
+  want to comply, and the app says so where it is offered.
+
+- **Multi-image albums.** Photos picked together are sent as one album, in order, with per-image
+  progress; a failure affects only the image that failed.
+
+- **Share into a conversation.** vMessenger appears in other apps' share sheets, for text and for
+  files, and shared content lands in the conversation you pick. Messages can be shared out the same
+  way.
+
+- **A standalone map.** The map tab now works without selecting anyone: your own position, every
+  approved contact with both directions of sharing status, and the distance to each. A contact's
+  shared route is drawn for the session they shared it in — the path they actually sent, not an
+  inferred history.
+
+- **Asking someone to share their location.** For a contact whose safety number you have verified,
+  the app can send a request that raises a prompt on their phone. It is a request: nothing starts on
+  their device, they can ignore it, and both devices enforce the verification requirement.
+
+- **Choosing a node at first run.** A new install is asked which node to use before an identity is
+  created — the built-in test nodes, an address of your own, or none for now — and skipping really
+  means none, rather than quietly seeding the defaults on the next connection. Existing installs are
+  unaffected.
+
+- **Group admins, and review of edited or deleted messages.** A group's creator can name admins and,
+  separately, switch on retention of what a message said before it was edited or withdrawn.
+  **It is off by default and never applies to a private conversation.** When it is on, every member
+  of that group sees a banner saying so and a line in the conversation recording the change, because
+  a group where this is on is a group its members should be able to leave over. Switching it off
+  erases what was kept. Captures are bounded to ninety days, are not backed up, and are erased with
+  the message itself — so a message that self-destructs takes its captured text with it.
+
+- **An activity log.** Your own record of what you did to this app — unlocking, adding a node,
+  granting a permission, starting a location share, placing a call — readable in Settings and
+  exportable as JSON, CSV or text. It deliberately does not record who you communicated with: a
+  call appears as a call, not as a call with someone.
+
+- **Groups of up to 100.** Raised from 32.
+
+### Changed
+
+- **`vm-` user IDs are now accepted** anywhere a `vm2-` ID was. The app still *writes* `vm2-`; the
+  switch to writing `vm-` waits until every install in use can read it, so nobody is handed an ID
+  their contact's app cannot decode.
+
+- **The notification permission is explained before it is requested,** once, in the app's own words,
+  and dismissing the explanation counts as an answer instead of asking again on the next launch.
+
+- **New shared UI components** (buttons, fields, switches, chips, the navigation bar) with the app's
+  own tokens, used by everything added in this release.
+
+### Fixed
+
+- **Removing an account left its background work scheduled.** The keep-alive job exists to restart
+  the network, so a wipe that stopped the network but left the job enqueued had it brought back.
+  Cancelling that work is now the wipe's first step, before the network is stopped, and the order is
+  pinned by a test.
 
 ## [1.1.2] - 2026-09-17
 

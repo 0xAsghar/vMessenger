@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The languages this app ships. Declaring them is what puts vMessenger in Android 13's own
+  per-app language picker, in system Settings, alongside every other app — so the choice is
+  available where a user would look for it rather than only inside this app. Persian is first
+  because it is the default.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="fa" />
+    <locale android:name="en" />
+</locale-config>
