@@ -218,6 +218,7 @@ private fun HomeTabNavHost(
                 onNavigateToAbout = navigation.onNavigateToAbout,
                 onNavigateToIdentity = navigation.onNavigateToIdentity,
                 onNavigateToBlockedContacts = navigation.onNavigateToBlockedContacts,
+                onNavigateToActivityLog = navigation.onNavigateToActivityLog,
                 onNavigateToUpdate = navigation.onNavigateToUpdate,
                 pinDialog = { onDone -> PinSetupDialog(onDone = onDone) },
             )

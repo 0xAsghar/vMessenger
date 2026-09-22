@@ -1,7 +1,7 @@
 package ir.vmessenger.data.activity
 
-import ir.vmessenger.core.database.entity.ActivityKind
-import ir.vmessenger.core.database.entity.ActivityLogEntity
+import ir.vmessenger.domain.model.ActivityEvent
+import ir.vmessenger.domain.model.ActivityEventKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -11,7 +11,7 @@ class ActivityLogExportTest {
     @Test
     fun `json escapes a detail that would otherwise break the document`() {
         val rendered = ActivityLogExport.render(
-            listOf(entry(ActivityKind.NodeAdded, "a\"b\\c\nd")),
+            listOf(entry(ActivityEventKind.NodeAdded, "a\"b\\c\nd")),
             ActivityLogFormat.Json,
         )
 
@@ -22,7 +22,10 @@ class ActivityLogExportTest {
 
     @Test
     fun `a null detail is json null rather than the string null`() {
-        val rendered = ActivityLogExport.render(listOf(entry(ActivityKind.AppLocked, null)), ActivityLogFormat.Json)
+        val rendered = ActivityLogExport.render(
+            listOf(entry(ActivityEventKind.AppLocked, null)),
+            ActivityLogFormat.Json,
+        )
 
         assertTrue(rendered.contains(""""detail":null"""), rendered)
         assertFalse(rendered.contains(""""detail":"null""""), rendered)
@@ -31,7 +34,7 @@ class ActivityLogExportTest {
     @Test
     fun `csv quotes a detail containing its separator`() {
         val rendered = ActivityLogExport.render(
-            listOf(entry(ActivityKind.NodeAdded, "host:1,2")),
+            listOf(entry(ActivityEventKind.NodeAdded, "host:1,2")),
             ActivityLogFormat.Csv,
         )
 
@@ -42,7 +45,7 @@ class ActivityLogExportTest {
     fun `csv neutralises a detail a spreadsheet would run as a formula`() {
         // A log entry is data. Nothing in it should be able to execute in the thing that opens it.
         val rendered = ActivityLogExport.render(
-            listOf(entry(ActivityKind.Failure, "=1+1")),
+            listOf(entry(ActivityEventKind.Failure, "=1+1")),
             ActivityLogFormat.Csv,
         )
 
@@ -59,7 +62,7 @@ class ActivityLogExportTest {
     @Test
     fun `text is one line per entry, oldest formatting rules aside`() {
         val rendered = ActivityLogExport.render(
-            listOf(entry(ActivityKind.AppUnlocked, null), entry(ActivityKind.CallPlaced, null)),
+            listOf(entry(ActivityEventKind.AppUnlocked, null), entry(ActivityEventKind.CallPlaced, null)),
             ActivityLogFormat.Text,
         )
 
@@ -73,6 +76,6 @@ class ActivityLogExportTest {
         }
     }
 
-    private fun entry(kind: ActivityKind, detail: String?) =
-        ActivityLogEntity(kind = kind, detail = detail, atUnixMs = 7)
+    private fun entry(kind: ActivityEventKind, detail: String?) =
+        ActivityEvent(id = 0, kind = kind, detail = detail, atUnixMs = 7)
 }

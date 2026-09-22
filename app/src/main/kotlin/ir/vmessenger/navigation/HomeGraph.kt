@@ -41,6 +41,7 @@ private fun rememberHomeNavigation(navController: NavHostController): HomeNaviga
             onNavigateToAbout = { navController.navigate(VmRoute.About) },
             onNavigateToUpdate = { navController.navigate(VmRoute.Update) },
             onNavigateToBlockedContacts = { navController.navigate(VmRoute.BlockedContacts) },
+            onNavigateToActivityLog = { navController.navigate(VmRoute.ActivityLog) },
             onNavigateToDebug = { navController.navigate(VmRoute.Debug) },
         )
     }

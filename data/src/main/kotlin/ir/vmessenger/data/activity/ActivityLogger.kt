@@ -6,10 +6,13 @@ import ir.vmessenger.core.database.dao.ActivityLogDao
 import ir.vmessenger.core.database.entity.ActivityKind
 import ir.vmessenger.core.database.entity.ActivityLogEntity
 import ir.vmessenger.data.di.IoDispatcher
+import ir.vmessenger.domain.model.ActivityEvent
+import ir.vmessenger.domain.model.ActivityEventKind
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -41,9 +44,11 @@ class ActivityLogger @Inject constructor(
         }
     }
 
-    fun observe(limit: Int = PAGE_SIZE): Flow<List<ActivityLogEntity>> = dao.observe(limit)
+    /** Domain models, so a screen can read the log without the database layer on its classpath. */
+    fun observe(limit: Int = PAGE_SIZE): Flow<List<ActivityEvent>> =
+        dao.observe(limit).map { rows -> rows.map(ActivityLogEntity::toDomain) }
 
-    suspend fun recent(limit: Int = PAGE_SIZE): List<ActivityLogEntity> = dao.recent(limit)
+    suspend fun recent(limit: Int = PAGE_SIZE): List<ActivityEvent> = dao.recent(limit).map { it.toDomain() }
 
     /** Erased outright rather than purged: on a wipe there is no account left to keep a log for. */
     suspend fun clear() {
@@ -73,3 +78,18 @@ class ActivityLogger @Inject constructor(
         val RETENTION_MS: Long = TimeUnit.DAYS.toMillis(90)
     }
 }
+
+/**
+ * The stored row as a domain event.
+ *
+ * The two enums are declared separately and mapped by name, which is deliberate: the stored names
+ * are a persisted format and the domain names are an API, and neither should be free to drift
+ * because the other changed. An unrecognised stored value reads as [ActivityEventKind.Failure]
+ * rather than throwing — a log that cannot be opened is worse than one entry that reads oddly.
+ */
+private fun ActivityLogEntity.toDomain() = ActivityEvent(
+    id = id,
+    kind = runCatching { ActivityEventKind.valueOf(kind.name) }.getOrDefault(ActivityEventKind.Failure),
+    detail = detail,
+    atUnixMs = atUnixMs,
+)

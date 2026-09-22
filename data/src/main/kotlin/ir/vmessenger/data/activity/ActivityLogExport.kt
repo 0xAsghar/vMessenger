@@ -1,6 +1,6 @@
 package ir.vmessenger.data.activity
 
-import ir.vmessenger.core.database.entity.ActivityLogEntity
+import ir.vmessenger.domain.model.ActivityEvent
 
 /** The formats the user's own log can be exported in. */
 enum class ActivityLogFormat(val extension: String, val mimeType: String) {
@@ -20,24 +20,24 @@ enum class ActivityLogFormat(val extension: String, val mimeType: String) {
  * the export — there is no enrichment step that could reach for a contact name or a message.
  */
 object ActivityLogExport {
-    fun render(entries: List<ActivityLogEntity>, format: ActivityLogFormat): String = when (format) {
+    fun render(entries: List<ActivityEvent>, format: ActivityLogFormat): String = when (format) {
         ActivityLogFormat.Json -> json(entries)
         ActivityLogFormat.Csv -> csv(entries)
         ActivityLogFormat.Text -> text(entries)
     }
 
-    private fun json(entries: List<ActivityLogEntity>): String =
+    private fun json(entries: List<ActivityEvent>): String =
         entries.joinToString(separator = ",\n", prefix = "[\n", postfix = "\n]") { entry ->
             val detail = entry.detail?.let { "\"${escapeJson(it)}\"" } ?: "null"
             """  {"at":${entry.atUnixMs},"kind":"${entry.kind.name}","detail":$detail}"""
         }
 
-    private fun csv(entries: List<ActivityLogEntity>): String =
+    private fun csv(entries: List<ActivityEvent>): String =
         entries.joinToString(separator = "\n", prefix = "at,kind,detail\n") { entry ->
             "${entry.atUnixMs},${entry.kind.name},${escapeCsv(entry.detail.orEmpty())}"
         }
 
-    private fun text(entries: List<ActivityLogEntity>): String =
+    private fun text(entries: List<ActivityEvent>): String =
         entries.joinToString(separator = "\n") { entry ->
             val detail = entry.detail?.let { " ($it)" }.orEmpty()
             "${entry.atUnixMs} ${entry.kind.name}$detail"

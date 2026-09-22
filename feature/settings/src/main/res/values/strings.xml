@@ -139,4 +139,32 @@
     <string name="settings_update_banner">نسخهٔ %1$s در دسترس است</string>
     <string name="settings_update_banner_open">مشاهده</string>
     <string name="settings_update_banner_later">بعداً</string>
+    <!-- §10 activity log: the user's own record of what they did to the app. -->
+    <string name="feature_settings_activity_title">گزارش فعالیت</string>
+    <string name="feature_settings_activity_row">گزارش فعالیت</string>
+    <string name="feature_settings_activity_row_body">رویدادهای خود شما روی این دستگاه؛ متن پیام‌ها و طرف گفتگو در آن ثبت نمی‌شود.</string>
+    <string name="feature_settings_activity_export">هم‌رسانی گزارش</string>
+    <string name="feature_settings_activity_clear">پاک‌کردن گزارش</string>
+    <string name="feature_settings_activity_clear_title">پاک‌کردن گزارش فعالیت؟</string>
+    <string name="feature_settings_activity_clear_body">همهٔ رویدادهای ثبت‌شده از این دستگاه پاک می‌شود. این کار برگشت‌پذیر نیست.</string>
+    <string name="feature_settings_activity_empty_title">رویدادی ثبت نشده است</string>
+    <string name="feature_settings_activity_empty_body">با استفاده از برنامه، رویدادهای شما اینجا فهرست می‌شود.</string>
+    <string name="feature_settings_activity_identity_created">حساب روی این دستگاه ساخته شد</string>
+    <string name="feature_settings_activity_unlocked">برنامه باز شد</string>
+    <string name="feature_settings_activity_locked">برنامه قفل شد</string>
+    <string name="feature_settings_activity_node_added">نود افزوده شد</string>
+    <string name="feature_settings_activity_node_removed">نود حذف شد</string>
+    <string name="feature_settings_activity_network_connected">اتصال به شبکه برقرار شد</string>
+    <string name="feature_settings_activity_network_disconnected">اتصال به شبکه قطع شد</string>
+    <string name="feature_settings_activity_permission_granted">اجازه داده شد</string>
+    <string name="feature_settings_activity_permission_denied">اجازه داده نشد</string>
+    <string name="feature_settings_activity_location_started">هم‌رسانی موقعیت آغاز شد</string>
+    <string name="feature_settings_activity_location_stopped">هم‌رسانی موقعیت پایان یافت</string>
+    <string name="feature_settings_activity_call_placed">تماس برقرار شد</string>
+    <string name="feature_settings_activity_call_received">تماس ورودی</string>
+    <string name="feature_settings_activity_call_ended">تماس پایان یافت</string>
+    <string name="feature_settings_activity_contact_added">مخاطب افزوده شد</string>
+    <string name="feature_settings_activity_contact_blocked">مخاطب مسدود شد</string>
+    <string name="feature_settings_activity_account_wiped">حساب پاک شد</string>
+    <string name="feature_settings_activity_failure">خطا</string>
 </resources>

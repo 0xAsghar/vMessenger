@@ -90,6 +90,10 @@ sealed interface VmRoute {
     @Serializable
     data object BlockedContacts : VmRoute
 
+    /** The user's own record of what they did to this app; see §10. */
+    @Serializable
+    data object ActivityLog : VmRoute
+
     /** Destination picker for content another app shared into us. */
     @Serializable
     data object ShareTarget : VmRoute

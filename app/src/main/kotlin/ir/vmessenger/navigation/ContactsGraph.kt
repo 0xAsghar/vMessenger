@@ -4,6 +4,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import ir.vmessenger.feature.contacts.ContactDetailRoute
+import ir.vmessenger.feature.settings.ActivityLogRoute
 import ir.vmessenger.feature.settings.BlockedContactsRoute
 
 /**
@@ -23,5 +24,9 @@ internal fun NavGraphBuilder.contactsGraph(navController: NavHostController) {
     }
     composable<VmRoute.BlockedContacts> { entry ->
         BlockedContactsRoute(onNavigateBack = { navController.popIfCurrent(entry) })
+    }
+    // Sits with the other privacy destinations, which is where Settings offers it.
+    composable<VmRoute.ActivityLog> { entry ->
+        ActivityLogRoute(onNavigateBack = { navController.popIfCurrent(entry) })
     }
 }

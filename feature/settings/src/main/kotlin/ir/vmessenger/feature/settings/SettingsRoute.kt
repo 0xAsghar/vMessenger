@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.DoneAll
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.Security
@@ -37,6 +38,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,6 +73,7 @@ private data class SettingsNavigation(
     val onSecureWipe: () -> Unit,
     val onBackup: () -> Unit,
     val onBlockedContacts: () -> Unit,
+    val onActivityLog: () -> Unit,
     val onUpdate: () -> Unit,
     /** Both open the lock module's PIN screen, which lives outside this module. */
     val onSetUpAppLock: () -> Unit,
@@ -111,6 +114,7 @@ fun SettingsRoute(
     onNavigateToAbout: () -> Unit = {},
     onNavigateToIdentity: () -> Unit = {},
     onNavigateToBlockedContacts: () -> Unit = {},
+    onNavigateToActivityLog: () -> Unit = {},
     onNavigateToUpdate: () -> Unit = {},
     /**
      * Collects a PIN. Supplied by :app from :feature:lock, so settings never depends on it —
@@ -137,49 +141,76 @@ fun SettingsRoute(
         snackbarHost = { VmSnackbarHost(hostState = snackbar) },
         actions = { AboutAction(onClick = onNavigateToAbout) },
     ) { padding ->
+        val navigation = SettingsNavigation(
+            onDebug = onNavigateToDebug,
+            onNodes = onNavigateToNodes,
+            onIdentity = onNavigateToIdentity,
+            onBlockedContacts = onNavigateToBlockedContacts,
+            onActivityLog = onNavigateToActivityLog,
+            onUpdate = onNavigateToUpdate,
+            onSetUpAppLock = { askingForPin = true },
+            onChangeAppLockPin = { askingForPin = true },
+            onSecureWipe = { showWipeDialog = true },
+            onBackup = {
+                viewModel.dismissBackupStatus()
+                showBackupDialog = true
+            },
+        )
         SettingsContent(
             viewModel = viewModel,
             appLockViewModel = appLockViewModel,
-            navigation = SettingsNavigation(
-                onDebug = onNavigateToDebug,
-                onNodes = onNavigateToNodes,
-                onIdentity = onNavigateToIdentity,
-                onBlockedContacts = onNavigateToBlockedContacts,
-                onUpdate = onNavigateToUpdate,
-                onSetUpAppLock = { askingForPin = true },
-                onChangeAppLockPin = { askingForPin = true },
-                onSecureWipe = { showWipeDialog = true },
-                onBackup = {
-                    viewModel.dismissBackupStatus()
-                    showBackupDialog = true
-                },
-            ),
+            navigation = navigation,
             modifier = Modifier.padding(padding),
         )
     }
 
-    if (showWipeDialog) {
+    SettingsDialogs(
+        state = SettingsDialogState(showWipeDialog, wipeInProgress, showBackupDialog),
+        viewModel = viewModel,
+        onWipeDismiss = { showWipeDialog = false },
+        onBackupDismiss = { showBackupDialog = false },
+        onBackupConfirmed = { createBackupDocument.launch(SettingsViewModel.suggestedBackupFileName()) },
+    )
+}
+
+/** Which of the screen's three modals is up. */
+@Immutable
+private data class SettingsDialogState(
+    val confirmWipe: Boolean,
+    val wipeInProgress: Boolean,
+    val backupPassphrase: Boolean,
+)
+
+@Composable
+private fun SettingsDialogs(
+    state: SettingsDialogState,
+    viewModel: SettingsViewModel,
+    onWipeDismiss: () -> Unit,
+    onBackupDismiss: () -> Unit,
+    onBackupConfirmed: () -> Unit,
+) {
+    if (state.confirmWipe) {
         WipeConfirmDialog(
             onConfirm = {
                 viewModel.secureWipe()
-                showWipeDialog = false
+                onWipeDismiss()
             },
-            onDismiss = { showWipeDialog = false },
+            onDismiss = onWipeDismiss,
         )
     }
     // The wipe cannot be cancelled and ends by killing the process; the screen
     // is blocked meanwhile so nothing else touches the data being deleted.
-    if (wipeInProgress) {
+    if (state.wipeInProgress) {
         WipeProgressDialog()
     }
-    if (showBackupDialog) {
+    if (state.backupPassphrase) {
         BackupPassphraseDialog(
             onConfirm = { passphrase ->
-                showBackupDialog = false
+                onBackupDismiss()
                 viewModel.beginExport(passphrase)
-                createBackupDocument.launch(SettingsViewModel.suggestedBackupFileName())
+                onBackupConfirmed()
             },
-            onDismiss = { showBackupDialog = false },
+            onDismiss = onBackupDismiss,
         )
     }
 }
@@ -210,6 +241,7 @@ private fun SettingsContent(
             toggles = privacyToggles(viewModel),
             appLock = appLockSettings(appLockViewModel, navigation),
             onBlockedContacts = navigation.onBlockedContacts,
+            onActivityLog = navigation.onActivityLog,
             onSecureWipe = navigation.onSecureWipe,
         )
         SettingsSection(title = stringResource(R.string.settings_network_section)) {
@@ -402,6 +434,7 @@ private fun SettingsPrivacySection(
     toggles: PrivacyToggles,
     appLock: AppLockSettings,
     onBlockedContacts: () -> Unit,
+    onActivityLog: () -> Unit,
     onSecureWipe: () -> Unit,
 ) {
     SettingsSection(title = stringResource(R.string.settings_privacy_section)) {
@@ -432,6 +465,12 @@ private fun SettingsPrivacySection(
             label = stringResource(R.string.settings_blocked_contacts),
             icon = Icons.Outlined.Block,
             onClick = onBlockedContacts,
+        )
+        SettingsDivider()
+        SettingsActionRow(
+            label = stringResource(R.string.feature_settings_activity_row),
+            icon = Icons.Outlined.History,
+            onClick = onActivityLog,
         )
         SettingsDivider()
         SettingsActionRow(
