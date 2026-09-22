@@ -43,7 +43,12 @@ interface ConversationRepository {
     suspend fun sendMessage(conversationId: String, text: String): AppResult<String>
 
     /** [replyToMessageId] is carried to the peer in the envelope and quoted in both chats. */
-    suspend fun sendMessage(conversationId: String, text: String, replyToMessageId: String?): AppResult<String>
+    suspend fun sendMessage(
+        conversationId: String,
+        text: String,
+        replyToMessageId: String?,
+        expiresAtUnixMs: Long? = null,
+    ): AppResult<String>
 
     /**
      * Queues a photo/video/file for delivery. [sourceUri] is a content Uri from

@@ -88,8 +88,13 @@ class ConversationWriter @Inject constructor(
         }
     }
 
-    /** Queues a text message (optionally quoting [replyToMessageId]) and returns its id. */
-    suspend fun sendText(conversationId: String, text: String, replyToMessageId: String?): AppResult<String> {
+    /** Queues a text message (optionally quoting [replyToMessageId], optionally self-destructing). */
+    suspend fun sendText(
+        conversationId: String,
+        text: String,
+        replyToMessageId: String?,
+        expiresAtUnixMs: Long? = null,
+    ): AppResult<String> {
         val messageId = UUID.randomUUID().toString()
         val result = queue(
             MessageEntity(
@@ -104,6 +109,7 @@ class ConversationWriter @Inject constructor(
                 sentAtUnixMs = null,
                 deliveredAtUnixMs = null,
                 readAtUnixMs = null,
+                expiresAtUnixMs = expiresAtUnixMs,
             ),
         )
         // The composer is empty now; a stale draft must not come back on re-entry.

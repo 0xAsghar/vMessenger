@@ -12,5 +12,7 @@ class SendMessageUseCase @Inject constructor(
         conversationId: String,
         text: String,
         replyToMessageId: String? = null,
-    ): AppResult<String> = conversationRepository.sendMessage(conversationId, text, replyToMessageId)
+        expiresAtUnixMs: Long? = null,
+    ): AppResult<String> =
+        conversationRepository.sendMessage(conversationId, text, replyToMessageId, expiresAtUnixMs)
 }

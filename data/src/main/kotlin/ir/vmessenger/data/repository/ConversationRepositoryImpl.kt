@@ -114,7 +114,8 @@ class ConversationRepositoryImpl @Inject constructor(
         conversationId: String,
         text: String,
         replyToMessageId: String?,
-    ): AppResult<String> = writer.sendText(conversationId, text, replyToMessageId)
+        expiresAtUnixMs: Long?,
+    ): AppResult<String> = writer.sendText(conversationId, text, replyToMessageId, expiresAtUnixMs)
 
     override suspend fun sendAttachment(conversationId: String, sourceUri: String): AppResult<String> =
         queueAttachment(conversationId) { attachmentStore.copyFromUri(sourceUri) }

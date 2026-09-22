@@ -163,6 +163,13 @@ class IncomingMessageCollector @Inject constructor(
             ?.let { conversationResolver.resolve(contactId, envelope, now) }
             ?.takeUnless { isDuplicate(contactId, messageId, it.conversationId, now, session) }
             ?: return
+        val expiresAt = envelope.expiresAtUnixMs.takeIf { it > 0 }
+        if (expiresAt != null && expiresAt <= now) {
+            // Already expired in flight (a slow hop or a mailbox replay). Acknowledge so the sender
+            // stops re-sending, but never surface a message that was meant to be gone by now.
+            receiptSender.enqueueDelivered(contactId, messageId, now, session)
+            return
+        }
         messageDao.insert(
             MessageEntity(
                 messageId = messageId,
@@ -178,6 +185,7 @@ class IncomingMessageCollector @Inject constructor(
                 deliveredAtUnixMs = now,
                 readAtUnixMs = null,
                 senderIdentityHash = target.senderIdentityHash,
+                expiresAtUnixMs = expiresAt,
             ),
         )
         bumpConversation(target.conversationId, messageId, now)

@@ -469,6 +469,7 @@ internal fun buildChatEnvelope(message: MessageEntity, self: PeerIdentity, group
         .setSentAtUnixMs(message.createdAtUnixMs)
         .setCounter(1)
         .applyGroup(groupId)
+        .applyExpiry(message.expiresAtUnixMs)
         .setChat(chat)
         .build()
 }
@@ -480,3 +481,10 @@ internal fun buildChatEnvelope(message: MessageEntity, self: PeerIdentity, group
  */
 internal fun MessageEnvelope.Builder.applyGroup(groupId: String?): MessageEnvelope.Builder =
     if (groupId.isNullOrBlank()) this else setGroupId(ByteString.copyFromUtf8(groupId))
+
+/**
+ * Stamps a self-destruct deadline on the envelope, or leaves it unset for a message with no timer —
+ * which the receiver and any older peer both read as "never expires".
+ */
+internal fun MessageEnvelope.Builder.applyExpiry(expiresAtUnixMs: Long?): MessageEnvelope.Builder =
+    if (expiresAtUnixMs == null) this else setExpiresAtUnixMs(expiresAtUnixMs)
