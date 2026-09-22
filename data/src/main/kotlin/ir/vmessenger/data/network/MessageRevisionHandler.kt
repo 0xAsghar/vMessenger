@@ -5,10 +5,12 @@ import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.MessageDao
+import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageDirection
 import ir.vmessenger.core.database.entity.MessageEntity
+import ir.vmessenger.core.database.entity.MessageRevisionKind
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import ir.vmessenger.data.attachment.AttachmentFileStore
 import javax.inject.Inject
@@ -35,20 +37,28 @@ class MessageRevisionHandler @Inject constructor(
     private val conversationDao: ConversationDao,
     private val contactDao: ContactDao,
     private val attachmentFiles: AttachmentFileStore,
+    private val auditRecorder: MessageAuditRecorder,
 ) {
     suspend fun handle(contactId: String, envelope: MessageEnvelope) {
-        val conversationId = conversationFor(contactId, envelope) ?: return
+        val conversation = conversationFor(contactId, envelope) ?: return
         when {
-            envelope.hasMessageEdit() -> applyEdit(conversationId, contactId, envelope)
-            envelope.hasMessageDelete() -> applyDelete(conversationId, contactId, envelope)
+            envelope.hasMessageEdit() -> applyEdit(conversation, contactId, envelope)
+            envelope.hasMessageDelete() -> applyDelete(conversation, contactId, envelope)
         }
     }
 
-    private suspend fun applyEdit(conversationId: String, contactId: String, envelope: MessageEnvelope) {
+    private suspend fun applyEdit(
+        conversation: ConversationEntity,
+        contactId: String,
+        envelope: MessageEnvelope,
+    ) {
         val edit = envelope.messageEdit
-        val target = ownedTarget(conversationId, contactId, edit.targetMessageId.toStringUtf8())
+        val target = ownedTarget(conversation.id, contactId, edit.targetMessageId.toStringUtf8())
         // Strictly newer, so a replayed or reordered edit cannot reinstate older text.
         if (target == null || edit.editedAtUnixMs <= (target.editedAtUnixMs ?: 0L)) return
+        // Before the overwrite, or there is nothing left to capture. A no-op unless this group's
+        // creator switched retention on; see MessageAuditRecorder.
+        auditRecorder.capture(conversation.groupId, target, MessageRevisionKind.EDIT)
         // A caption belongs to an attachment and the body to a text message; the two are never
         // both set, so writing back to whichever the row uses keeps the bubble intact.
         val revised = if (target.contentType == MessageContentType.TEXT) {
@@ -59,17 +69,23 @@ class MessageRevisionHandler @Inject constructor(
         messageDao.update(revised)
     }
 
-    private suspend fun applyDelete(conversationId: String, contactId: String, envelope: MessageEnvelope) {
+    private suspend fun applyDelete(
+        conversation: ConversationEntity,
+        contactId: String,
+        envelope: MessageEnvelope,
+    ) {
         val targetId = envelope.messageDelete.targetMessageId.toStringUtf8()
         if (!targetId.isUsableId()) return
         val deletedAt = envelope.messageDelete.deletedAtUnixMs
-        val existing = messageDao.getByIdInConversation(targetId, conversationId)
+        val existing = messageDao.getByIdInConversation(targetId, conversation.id)
         if (existing == null) {
-            insertEarlyTombstone(conversationId, targetId, deletedAt)
+            insertEarlyTombstone(conversation.id, targetId, deletedAt)
             return
         }
         if (isOwnedBy(existing, contactId)) {
-            existing.attachmentPath?.let { attachmentFiles.delete(it) }
+            val captured = auditRecorder.capture(conversation.groupId, existing, MessageRevisionKind.DELETE)
+            // The file stays only if a capture points at it; otherwise a delete still erases.
+            if (!captured) existing.attachmentPath?.let { attachmentFiles.delete(it) }
             messageDao.update(tombstone(existing, deletedAt))
         }
     }
@@ -139,12 +155,10 @@ class MessageRevisionHandler @Inject constructor(
      * Never creates a conversation. The generic resolver fabricates a 1:1 thread when none exists,
      * which for a revision would mean conjuring an empty chat out of a control frame.
      */
-    private suspend fun conversationFor(contactId: String, envelope: MessageEnvelope): String? {
-        val conversation = if (envelope.groupId.isEmpty) {
+    private suspend fun conversationFor(contactId: String, envelope: MessageEnvelope): ConversationEntity? =
+        if (envelope.groupId.isEmpty) {
             conversationDao.getByContactId(contactId)
         } else {
             GroupControlCodec.groupIdOf(envelope)?.let { conversationDao.getByGroupId(it) }
         }
-        return conversation?.id
-    }
 }

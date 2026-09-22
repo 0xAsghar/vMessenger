@@ -8,6 +8,7 @@ import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.GroupDao
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.GroupEntity
+import ir.vmessenger.core.database.entity.GroupMemberRole
 import ir.vmessenger.core.proto.app.v1.GroupControl
 import ir.vmessenger.core.proto.app.v1.GroupControlType
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
@@ -16,6 +17,7 @@ import ir.vmessenger.data.repository.GroupEventText
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import ir.vmessenger.core.proto.app.v1.GroupMemberRole as ProtoGroupMemberRole
 
 /**
  * Applies membership changes received from a peer.
@@ -184,8 +186,36 @@ class GroupControlHandler @Inject constructor(
                 groupDao.setClosed(incoming.groupId, true)
                 writer.recordGroupEvent(conversationId, GroupEventText.closed(local.name))
             }
+            GroupControlType.GROUP_CONTROL_TYPE_SET_ROLE -> setRole(incoming, conversationId)
             else -> AppLogger.warn(TAG, "unhandled control ${incoming.control.type} group=${incoming.groupId}")
         }
+    }
+
+    /**
+     * A creator-assigned role change. It reached here through [applyIncremental], which already
+     * established that the sender *is* this group's creator and that the version follows ours
+     * exactly — so there is no separate authorisation check to make, and no way for a member to
+     * promote itself by sending one of these.
+     *
+     * The creator's own row is never touched: that role is decided by whose hash matches the
+     * group's creator, on every device, and a control claiming otherwise is ignored.
+     */
+    private suspend fun setRole(incoming: Incoming, conversationId: String) {
+        val target = incoming.control.targetIdentityHash.toStringUtf8()
+        val member = groupDao.member(incoming.groupId, target)
+        if (member == null || member.role == GroupMemberRole.CREATOR) {
+            AppLogger.warn(TAG, "set-role dropped: unknown or creator target group=${incoming.groupId}")
+            return
+        }
+        val admin = incoming.control.targetRole == ProtoGroupMemberRole.GROUP_MEMBER_ROLE_ADMIN
+        val role = if (admin) GroupMemberRole.ADMIN else GroupMemberRole.MEMBER
+        groupDao.setMemberRole(incoming.groupId, target, role)
+        val text = if (admin) {
+            GroupEventText.promoted(member.displayName)
+        } else {
+            GroupEventText.demoted(member.displayName)
+        }
+        writer.recordGroupEvent(conversationId, text)
     }
 
     private suspend fun rename(incoming: Incoming, conversationId: String) {

@@ -39,6 +39,18 @@ interface GroupRepository {
     suspend fun closeGroup(groupId: String): AppResult<Unit>
 
     /**
+     * Switches admin review of edited and deleted messages on or off. Creator only.
+     *
+     * Turning it on changes what the group keeps, so every member is told: a system line lands in
+     * the conversation and a banner stays on the group screen for as long as it is on. Turning it
+     * off also erases what was kept — a policy that ended should not leave a stockpile behind.
+     */
+    suspend fun setAuditRetention(groupId: String, enabled: Boolean): AppResult<Unit>
+
+    /** Promotes or demotes one member. Creator only, and never the creator's own row. */
+    suspend fun setMemberAdmin(groupId: String, identityHash: String, admin: Boolean): AppResult<Unit>
+
+    /**
      * Sends a contact request to a member we do not have yet.
      *
      * Sharing a group is not consent to a private chat, so this goes through the

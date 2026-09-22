@@ -8,6 +8,7 @@ import androidx.room.Transaction
 import androidx.room.Update
 import ir.vmessenger.core.database.entity.GroupEntity
 import ir.vmessenger.core.database.entity.GroupMemberEntity
+import ir.vmessenger.core.database.entity.GroupMemberRole
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -40,6 +41,13 @@ interface GroupDao {
     /** Set when the creator closes the group, and when we are the target of a REMOVE. */
     @Query("UPDATE chat_group SET closed = :closed WHERE id = :groupId")
     suspend fun setClosed(groupId: String, closed: Boolean)
+
+    /** Creator-only; see [ir.vmessenger.core.database.entity.GroupEntity.auditRetention]. */
+    @Query("UPDATE chat_group SET auditRetention = :enabled, version = :version WHERE id = :groupId")
+    suspend fun setAuditRetention(groupId: String, enabled: Boolean, version: Long)
+
+    @Query("UPDATE chat_group_member SET role = :role WHERE groupId = :groupId AND identityHash = :identityHash")
+    suspend fun setMemberRole(groupId: String, identityHash: String, role: GroupMemberRole)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertMembers(members: List<GroupMemberEntity>)

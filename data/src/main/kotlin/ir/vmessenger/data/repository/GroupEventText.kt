@@ -32,5 +32,18 @@ object GroupEventText {
 
     fun closed(name: String): String = "گروه «${isolate(name)}» بسته شد"
 
+    fun promoted(name: String): String = "${isolate(name)} مدیر گروه شد"
+
+    fun demoted(name: String): String = "${isolate(name)} دیگر مدیر گروه نیست"
+
+    /**
+     * Written into the group's own history, so switching the policy is an event every member sees
+     * in the conversation — not only a banner they might scroll past.
+     */
+    const val AUDIT_RETENTION_ON = "بازبینی پیام‌های ویرایش‌شده و حذف‌شده توسط مدیران گروه فعال شد"
+
+    const val AUDIT_RETENTION_OFF =
+        "بازبینی پیام‌های ویرایش‌شده و حذف‌شده غیرفعال شد و آنچه نگه داشته شده بود پاک شد"
+
     private fun isolate(name: String): String = BidiText.isolate(name)
 }

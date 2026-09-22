@@ -20,6 +20,8 @@ data class GroupMemberRow(
     val seed: IdentitySeed,
     val contactId: String?,
     val isCreator: Boolean,
+    /** May review this group's edited and deleted messages while retention is on. */
+    val isAdmin: Boolean,
     val isMe: Boolean,
     /** A contact request to this member is already on its way; offering another would resend it. */
     val requestPending: Boolean,
@@ -54,6 +56,14 @@ sealed interface GroupDialog {
     data object Close : GroupDialog
 
     data class RemoveMember(val member: GroupMemberRow) : GroupDialog
+
+    /**
+     * Switching audit retention on is the one action here that takes something away from the
+     * other members, so it is confirmed rather than toggled.
+     */
+    data class AuditRetention(val enable: Boolean) : GroupDialog
+
+    data class MemberRole(val member: GroupMemberRow, val admin: Boolean) : GroupDialog
 }
 
 /**
@@ -71,6 +81,13 @@ data class GroupInfoUiState(
     val seed: IdentitySeed = IdentitySeed.Empty,
     val createdByMe: Boolean = false,
     val closed: Boolean = false,
+    /**
+     * Whether this group's admins may review edited and deleted messages.
+     *
+     * Shown to **every** member, not only the creator, and that is the point: the feature is only
+     * defensible if the people it applies to know it applies to them and can leave over it.
+     */
+    val auditRetention: Boolean = false,
     val members: ImmutableList<GroupMemberRow> = persistentListOf(),
     val dialog: GroupDialog = GroupDialog.None,
     /** Non-null exactly while the "add members" sheet is open. */
@@ -91,6 +108,9 @@ data class GroupInfoUiState(
     val canLeave: Boolean get() = exists && !createdByMe && !closed
 
     val canClose: Boolean get() = canManage
+
+    /** Roles are the creator's to assign, and only in an open group. */
+    val canAssignRoles: Boolean get() = canManage
 
     /** Seats left, which is the cap the "add members" picker is given. */
     val remainingSeats: Int get() = (GroupLimits.MAX_MEMBERS - memberCount).coerceAtLeast(0)

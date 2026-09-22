@@ -24,6 +24,7 @@ import ir.vmessenger.core.database.dao.LocationSampleDao
 import ir.vmessenger.core.database.dao.LocationShareDao
 import ir.vmessenger.core.database.dao.MailboxDao
 import ir.vmessenger.core.database.dao.MessageDao
+import ir.vmessenger.core.database.dao.MessageEditHistoryDao
 import ir.vmessenger.core.database.dao.MessageRecipientDao
 import ir.vmessenger.core.database.dao.OutboxDao
 import ir.vmessenger.core.database.dao.PendingRevokeDao
@@ -147,6 +148,10 @@ object DatabaseModule {
     @Provides
     fun provideMessageRecipientDao(database: VMessengerDatabase): MessageRecipientDao =
         database.messageRecipientDao()
+
+    @Provides
+    fun provideMessageEditHistoryDao(database: VMessengerDatabase): MessageEditHistoryDao =
+        database.messageEditHistoryDao()
 
     @Provides
     fun provideGroupDao(database: VMessengerDatabase): GroupDao = database.groupDao()

@@ -19,6 +19,8 @@ import ir.vmessenger.domain.usecase.group.LeaveGroupUseCase
 import ir.vmessenger.domain.usecase.group.ObserveGroupMembersUseCase
 import ir.vmessenger.domain.usecase.group.ObserveGroupUseCase
 import ir.vmessenger.domain.usecase.group.RemoveGroupMemberUseCase
+import ir.vmessenger.domain.usecase.group.SetGroupAuditRetentionUseCase
+import ir.vmessenger.domain.usecase.group.SetGroupMemberAdminUseCase
 import ir.vmessenger.domain.usecase.group.UpdateGroupNameUseCase
 import ir.vmessenger.feature.chat.IdentitySeed
 import ir.vmessenger.feature.chat.R
@@ -84,6 +86,8 @@ class GroupInfoViewModel @Inject constructor(
     private val leaveGroup: LeaveGroupUseCase,
     private val closeGroup: CloseGroupUseCase,
     private val addContactFromGroupMember: AddContactFromGroupMemberUseCase,
+    private val setAuditRetention: SetGroupAuditRetentionUseCase,
+    private val setMemberAdmin: SetGroupMemberAdminUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -158,6 +162,9 @@ class GroupInfoViewModel @Inject constructor(
             is GroupDialog.RemoveMember -> report(removeGroupMember(groupId, dialog.member.identityHash))
             is GroupDialog.Leave -> report(leaveGroup(groupId))
             is GroupDialog.Close -> report(closeGroup(groupId))
+            is GroupDialog.AuditRetention -> report(setAuditRetention(groupId, dialog.enable))
+            is GroupDialog.MemberRole ->
+                report(setMemberAdmin(groupId, dialog.member.identityHash, dialog.admin))
             is GroupDialog.Rename, is GroupDialog.None -> Unit
         }
     }
@@ -188,6 +195,7 @@ internal fun buildGroupInfoState(
         seed = IdentitySeed(group?.avatarSeed.orEmpty().toByteArray()),
         createdByMe = group?.isCreatedByMe == true,
         closed = group?.closed == true,
+        auditRetention = group?.auditRetention == true,
         members = rows,
         dialog = control.dialog,
         picker = pickerFor(control, rows, contacts),
@@ -225,6 +233,7 @@ private fun GroupMember.toMemberRow(): GroupMemberRow = GroupMemberRow(
     seed = IdentitySeed(hexToBytes(identityHash)),
     contactId = contactId,
     isCreator = role == GroupMemberRole.CREATOR,
+    isAdmin = role == GroupMemberRole.ADMIN,
     isMe = isMe,
     requestPending = contactStatus == ContactRelationshipStatus.PENDING_OUT,
 )

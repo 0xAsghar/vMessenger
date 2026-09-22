@@ -12,6 +12,7 @@ import ir.vmessenger.data.repository.FakeGroupDao
 import ir.vmessenger.data.repository.FakeIdentityDao
 import ir.vmessenger.data.repository.FakeIdentityRepository
 import ir.vmessenger.data.repository.FakeMessageDao
+import ir.vmessenger.data.repository.FakeMessageEditHistoryDao
 import ir.vmessenger.data.repository.FakeMessageRecipientDao
 import ir.vmessenger.data.repository.GroupFixtures
 import ir.vmessenger.data.repository.MessageRecipientResolver
@@ -64,7 +65,10 @@ class InboundHarness(
         outboxWaker = waker,
     )
     val conversationResolver = InboundConversationResolver(conversationDao, contactDao, groupDao)
-    val revisionHandler = MessageRevisionHandler(messageDao, conversationDao, contactDao, attachmentFiles)
+    val historyDao = FakeMessageEditHistoryDao()
+    val auditRecorder = MessageAuditRecorder(groupDao, historyDao)
+    val revisionHandler =
+        MessageRevisionHandler(messageDao, conversationDao, contactDao, attachmentFiles, auditRecorder)
     val receiptHandler = InboundReceiptHandler(messageDao, contactDao, recipientDao, outboxDao, deliveryAggregator)
     val groupControlHandler = GroupControlHandler(
         groupDao = groupDao,

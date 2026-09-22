@@ -203,6 +203,7 @@ class GroupStateTest {
         name = name,
         seed = IdentitySeed(byteArrayOf(1)),
         contactId = contactId,
+        isAdmin = false,
         isCreator = false,
         isMe = isMe,
         requestPending = requestPending,

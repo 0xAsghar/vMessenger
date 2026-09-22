@@ -5,6 +5,7 @@ import ir.vmessenger.core.database.dao.GroupDao
 import ir.vmessenger.core.database.dao.IdentityDao
 import ir.vmessenger.core.database.entity.GroupEntity
 import ir.vmessenger.core.database.entity.GroupMemberEntity
+import ir.vmessenger.core.database.entity.GroupMemberRole
 import ir.vmessenger.core.proto.app.v1.GroupControlType
 import ir.vmessenger.data.repository.ConversationWriter
 import javax.inject.Inject
@@ -17,8 +18,10 @@ data class GroupControlFanOutRequest(
     val type: GroupControlType,
     val members: List<GroupMemberEntity>,
     val version: Long,
-    /** The member an ADD/REMOVE/LEAVE is about; null for the rest. */
+    /** The member an ADD/REMOVE/LEAVE/SET_ROLE is about; null for the rest. */
     val target: String? = null,
+    /** The role a SET_ROLE assigns; null for the rest. */
+    val targetRole: GroupMemberRole? = null,
     /** The Persian system line stored in the group's history for this change. */
     val systemText: String,
     /**
@@ -53,6 +56,7 @@ class GroupControlFanOut @Inject constructor(
             members = request.members,
             version = request.version,
             targetIdentityHash = request.target,
+            targetRole = request.targetRole,
         )
         val recipients = recipients(request, selfKey)
         return writer.queueGroupControl(

@@ -10,6 +10,7 @@ import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.GroupDao
 import ir.vmessenger.core.database.dao.IdentityDao
+import ir.vmessenger.core.database.dao.MessageEditHistoryDao
 import ir.vmessenger.core.database.entity.ContactEntity
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.GroupEntity
@@ -55,6 +56,7 @@ class GroupRepositoryImpl @Inject constructor(
     private val contactRepository: ContactRepository,
     private val fanOut: GroupControlFanOut,
     private val cryptoEngine: CryptoEngine,
+    private val historyDao: MessageEditHistoryDao,
 ) : GroupRepository {
 
     override fun observeGroup(groupId: String): Flow<Group?> =
@@ -263,6 +265,74 @@ class GroupRepositoryImpl @Inject constructor(
             AppResult.Success(Unit)
         }
 
+    override suspend fun setAuditRetention(groupId: String, enabled: Boolean): AppResult<Unit> =
+        asCreator(groupId) { group, conversationId ->
+            val version = group.version + 1
+            groupDao.setAuditRetention(groupId, enabled, version)
+            // Switching it off erases what the old policy kept. Leaving a stockpile behind would
+            // mean the group's members are still exposed by a rule that no longer applies.
+            if (!enabled) historyDao.deleteForGroup(groupId)
+            fanOut.send(
+                GroupControlFanOutRequest(
+                    group = group.copy(version = version, auditRetention = enabled),
+                    conversationId = conversationId,
+                    // A snapshot rather than a bespoke type: the policy rides every control, so the
+                    // full membership going out with it is what guarantees no device is left stale.
+                    type = GroupControlType.GROUP_CONTROL_TYPE_SNAPSHOT,
+                    members = groupDao.activeMembers(groupId),
+                    version = version,
+                    systemText = if (enabled) {
+                        GroupEventText.AUDIT_RETENTION_ON
+                    } else {
+                        GroupEventText.AUDIT_RETENTION_OFF
+                    },
+                ),
+            )
+            AppResult.Success(Unit)
+        }
+
+    override suspend fun setMemberAdmin(groupId: String, identityHash: String, admin: Boolean): AppResult<Unit> =
+        asCreator(groupId) { group, conversationId ->
+            val member = groupDao.member(groupId, identityHash)
+            when {
+                member == null -> AppResult.Error(AppError.NotFound("member $identityHash"))
+                // The creator's own role is not a thing to assign; it is decided by whose hash
+                // matches the group's creator, on every device, and cannot be reassigned.
+                member.role == GroupMemberRole.CREATOR ->
+                    AppResult.Error(AppError.Validation(CREATOR_ROLE_FIXED))
+                else -> announceRole(group, conversationId, member, admin)
+            }
+        }
+
+    private suspend fun announceRole(
+        group: GroupEntity,
+        conversationId: String,
+        member: GroupMemberEntity,
+        admin: Boolean,
+    ): AppResult<Unit> {
+        val version = group.version + 1
+        val role = if (admin) GroupMemberRole.ADMIN else GroupMemberRole.MEMBER
+        groupDao.setMemberRole(group.id, member.identityHash, role)
+        groupDao.setVersion(group.id, version)
+        fanOut.send(
+            GroupControlFanOutRequest(
+                group = group.copy(version = version),
+                conversationId = conversationId,
+                type = GroupControlType.GROUP_CONTROL_TYPE_SET_ROLE,
+                members = groupDao.activeMembers(group.id),
+                version = version,
+                target = member.identityHash,
+                targetRole = role,
+                systemText = if (admin) {
+                    GroupEventText.promoted(member.displayName)
+                } else {
+                    GroupEventText.demoted(member.displayName)
+                },
+            ),
+        )
+        return AppResult.Success(Unit)
+    }
+
     override suspend fun addMemberAsContact(groupId: String, identityHash: String): AppResult<Unit> {
         val member = groupDao.member(groupId, identityHash)
             ?: return AppResult.Error(AppError.NotFound("member $identityHash"))
@@ -329,5 +399,6 @@ class GroupRepositoryImpl @Inject constructor(
     private companion object {
         const val TAG = "Groups"
         const val GROUP_ID_BYTES = 16
+        const val CREATOR_ROLE_FIXED = "نقش سازنده گروه قابل تغییر نیست"
     }
 }

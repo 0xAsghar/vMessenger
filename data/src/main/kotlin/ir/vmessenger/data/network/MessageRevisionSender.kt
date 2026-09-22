@@ -9,6 +9,7 @@ import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageDirection
 import ir.vmessenger.core.database.entity.MessageEntity
+import ir.vmessenger.core.database.entity.MessageRevisionKind
 import ir.vmessenger.core.proto.app.v1.MessageDelete
 import ir.vmessenger.core.proto.app.v1.MessageEdit
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
@@ -37,6 +38,7 @@ class MessageRevisionSender @Inject constructor(
     private val recipients: MessageRecipientResolver,
     private val writer: ConversationWriter,
     private val attachmentFiles: AttachmentFileStore,
+    private val auditRecorder: MessageAuditRecorder,
 ) {
     suspend fun edit(messageId: String, newText: String): AppResult<Unit> {
         val trimmed = newText.trim()
@@ -48,6 +50,9 @@ class MessageRevisionSender @Inject constructor(
         } else {
             message.copy(caption = trimmed, editedAtUnixMs = now)
         }
+        // Our own revisions are captured too, under the same group policy. An audit with a hole
+        // where the admin's own edits should be is not an audit.
+        auditRecorder.capture(groupIdOf(message.conversationId), message, MessageRevisionKind.EDIT)
         messageDao.update(revised)
         fanOut(message.conversationId) {
             setMessageEdit(
@@ -65,7 +70,13 @@ class MessageRevisionSender @Inject constructor(
             ?.takeIf { it.direction == MessageDirection.OUTGOING }
             ?: return AppResult.Error(AppError.Validation(NOT_OURS))
         val now = System.currentTimeMillis()
-        message.attachmentPath?.let(attachmentFiles::delete)
+        val captured = auditRecorder.capture(
+            groupIdOf(message.conversationId),
+            message,
+            MessageRevisionKind.DELETE,
+        )
+        // The file stays only if a capture points at it; otherwise a delete still erases.
+        if (!captured) message.attachmentPath?.let(attachmentFiles::delete)
         messageDao.update(tombstone(message, deletedAtUnixMs = now))
         fanOut(message.conversationId) {
             setMessageDelete(
@@ -76,6 +87,10 @@ class MessageRevisionSender @Inject constructor(
         }
         return AppResult.Success(Unit)
     }
+
+    /** Null for a 1:1 thread, where no audit policy exists and a delete always erases. */
+    private suspend fun groupIdOf(conversationId: String): String? =
+        conversationDao.getById(conversationId)?.groupId
 
     /** Only our own text, and never a tombstone or a system line. */
     private suspend fun editable(messageId: String): MessageEntity? =

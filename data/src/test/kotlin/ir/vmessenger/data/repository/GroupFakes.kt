@@ -4,12 +4,14 @@ import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.database.dao.GroupDao
 import ir.vmessenger.core.database.dao.IdentityDao
+import ir.vmessenger.core.database.dao.MessageEditHistoryDao
 import ir.vmessenger.core.database.dao.MessageRecipientDao
 import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.GroupEntity
 import ir.vmessenger.core.database.entity.GroupMemberEntity
 import ir.vmessenger.core.database.entity.GroupMemberRole
 import ir.vmessenger.core.database.entity.IdentityEntity
+import ir.vmessenger.core.database.entity.MessageEditHistoryEntity
 import ir.vmessenger.core.database.entity.MessageRecipientEntity
 import ir.vmessenger.data.network.rank
 import ir.vmessenger.domain.model.Identity
@@ -51,6 +53,18 @@ class FakeGroupDao(
 
     override suspend fun setClosed(groupId: String, closed: Boolean) {
         groups.replaceAll { if (it.id == groupId) it.copy(closed = closed) else it }
+    }
+
+    override suspend fun setAuditRetention(groupId: String, enabled: Boolean, version: Long) {
+        groups.replaceAll {
+            if (it.id == groupId) it.copy(auditRetention = enabled, version = version) else it
+        }
+    }
+
+    override suspend fun setMemberRole(groupId: String, identityHash: String, role: GroupMemberRole) {
+        members.replaceAll {
+            if (it.groupId == groupId && it.identityHash == identityHash) it.copy(role = role) else it
+        }
     }
 
     /** INSERT OR REPLACE, so a member in a fresh snapshot loses their tombstone. */
@@ -226,4 +240,29 @@ object GroupFixtures {
 
     /** 32 hex chars, the shape `GroupControlCodec.groupIdOf` accepts on the wire. */
     const val GROUP_ID = "0123456789abcdef0123456789abcdef"
+}
+
+/** In-memory audit captures, so the retention policy can be asserted without a database. */
+class FakeMessageEditHistoryDao : MessageEditHistoryDao {
+    val rows = mutableListOf<MessageEditHistoryEntity>()
+
+    override suspend fun insert(entity: MessageEditHistoryEntity) {
+        rows += entity
+    }
+
+    override suspend fun forGroup(groupId: String, limit: Int): List<MessageEditHistoryEntity> =
+        rows.filter { it.groupId == groupId }.sortedByDescending { it.capturedAtUnixMs }.take(limit)
+
+    override suspend fun forMessage(messageId: String): List<MessageEditHistoryEntity> =
+        rows.filter { it.messageId == messageId }.sortedBy { it.capturedAtUnixMs }
+
+    override suspend fun countForGroup(groupId: String): Int = rows.count { it.groupId == groupId }
+
+    override suspend fun deleteForGroup(groupId: String) {
+        rows.removeAll { it.groupId == groupId }
+    }
+
+    override suspend fun purgeOlderThan(cutoffUnixMs: Long) {
+        rows.removeAll { it.capturedAtUnixMs < cutoffUnixMs }
+    }
 }

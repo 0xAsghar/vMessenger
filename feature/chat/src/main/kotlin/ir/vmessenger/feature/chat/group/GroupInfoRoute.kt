@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.GroupAdd
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PersonAddAlt
 import androidx.compose.material.icons.outlined.PersonRemove
@@ -69,7 +70,7 @@ private data class GroupInfoCallbacks(
 
 /** The confirmations and the member sheet all answer through these. */
 @Immutable
-private data class GroupDialogCallbacks(
+internal data class GroupDialogCallbacks(
     val onConfirm: () -> Unit,
     val onRename: (String) -> Unit,
     val onDismiss: () -> Unit,
@@ -189,6 +190,21 @@ private fun GroupInfoHeader(state: GroupInfoUiState) {
             ) {
                 Text(
                     text = stringResource(R.string.feature_chat_group_closed_banner),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
+                )
+            }
+        }
+        if (state.auditRetention) {
+            // Shown to everyone, not only the creator. The feature is defensible because the
+            // people it applies to are told it applies to them, so this banner is not decoration.
+            Surface(
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = stringResource(R.string.feature_chat_group_audit_banner),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
                 )
@@ -327,6 +343,19 @@ private fun GroupDangerSection(state: GroupInfoUiState, onOpenDialog: (GroupDial
                 onClick = { onOpenDialog(GroupDialog.Leave) },
             )
         }
+        if (state.canAssignRoles) {
+            SettingsRow(
+                label = stringResource(R.string.feature_chat_group_audit_row),
+                icon = Icons.Outlined.History,
+                supporting = stringResource(R.string.feature_chat_group_audit_row_body),
+                // The switch and the row both open the confirmation rather than flipping the
+                // policy: this one is announced to everybody, so it does not happen on a stray tap.
+                trailing = SettingsTrailing.Switch(state.auditRetention) { wanted ->
+                    onOpenDialog(GroupDialog.AuditRetention(wanted))
+                },
+                onClick = { onOpenDialog(GroupDialog.AuditRetention(!state.auditRetention)) },
+            )
+        }
         if (state.canClose) {
             SettingsRow(
                 label = stringResource(R.string.feature_chat_group_close),
@@ -381,6 +410,8 @@ private fun GroupDialogHost(state: GroupInfoUiState, callbacks: GroupDialogCallb
             onDismiss = callbacks.onDismiss,
             destructive = true,
         )
+        is GroupDialog.AuditRetention -> AuditRetentionDialog(dialog.enable, callbacks)
+        is GroupDialog.MemberRole -> MemberRoleDialog(dialog, unknown, callbacks)
     }
 }
 
