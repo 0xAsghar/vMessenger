@@ -108,4 +108,33 @@ class CallStateTest {
         assertTrue(CallState.IncomingRinging.onScreen)
         assertTrue(CallState.Active.onScreen)
     }
+
+    @Test
+    fun `a ringing phone holds no microphone service`() {
+        // Android 14 forbids starting a microphone service from the background, and an incoming
+        // invite is exactly that. It is also the right behaviour: the service is what can hear you,
+        // so it must not exist until the call has been answered on this device.
+        assertFalse(CallState.IncomingRinging.holdsMicrophoneService)
+        assertFalse(CallState.Idle.holdsMicrophoneService)
+        assertFalse(CallState.Ending.holdsMicrophoneService)
+    }
+
+    @Test
+    fun `every state a user action reaches holds the microphone service`() {
+        // Dialling and answering are both local actions, so the service may start in what they
+        // lead to — and must, or the call dies the moment the app is backgrounded.
+        assertTrue(CallState.OutgoingRinging.holdsMicrophoneService)
+        assertTrue(CallState.Connecting.holdsMicrophoneService)
+        assertTrue(CallState.Active.holdsMicrophoneService)
+        assertTrue(CallState.Reconnecting.holdsMicrophoneService)
+    }
+
+    @Test
+    fun `no state holds an open microphone without the service that declares it`() {
+        // The privacy indicator and the notification must never disagree: if audio can be captured,
+        // a foreground service is declaring it to the user.
+        CallState.entries.filter { it.microphoneOpen }.forEach { state ->
+            assertTrue(state.holdsMicrophoneService, "$state captures audio with no service")
+        }
+    }
 }

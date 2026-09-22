@@ -44,4 +44,19 @@
     <string name="share_target_title">ارسال به</string>
     <string name="share_target_empty_title">گفتگویی وجود ندارد</string>
     <string name="share_target_empty_body">برای ارسال محتوا، نخست یک مخاطب اضافه کنید و گفتگویی را آغاز کنید.</string>
+    <string name="call_start">تماس صوتی</string>
+    <string name="call_calling">در حال تماس…</string>
+    <string name="call_ringing">دستگاه مخاطب زنگ می‌زند…</string>
+    <string name="call_incoming">تماس صوتی ورودی</string>
+    <string name="call_connecting">در حال اتصال…</string>
+    <string name="call_active">در حال گفتگو</string>
+    <string name="call_reconnecting">اتصال قطع شد؛ در حال تلاش دوباره…</string>
+    <string name="call_ended">تماس پایان یافت</string>
+    <string name="call_accept">پاسخ</string>
+    <string name="call_decline">رد تماس</string>
+    <string name="call_hang_up">پایان تماس</string>
+    <string name="call_mute">بی‌صدا کردن میکروفون</string>
+    <string name="call_unmute">روشن‌کردن میکروفون</string>
+    <string name="call_needs_microphone">برای تماس صوتی به اجازه‌ی میکروفون نیاز است.</string>
+    <string name="call_unavailable">تماس با این مخاطب در دسترس نیست.</string>
 </resources>

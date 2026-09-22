@@ -7,6 +7,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import dagger.hilt.android.AndroidEntryPoint
+import ir.vmessenger.app.call.CallSessionPresenter
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.database.DatabaseKeyProvider
@@ -39,6 +40,14 @@ class NetworkLifecycleService : Service() {
 
     @Inject
     lateinit var databaseKeyProvider: DatabaseKeyProvider
+
+    /**
+     * Provider for the same reason as the coordinator — it reaches the database through
+     * [ir.vmessenger.data.call.CallCoordinator] — and tied to this service on purpose: the strict
+     * app lock stops this service, and a call must not ring while the app is locked shut.
+     */
+    @Inject
+    lateinit var callSessionPresenter: Provider<CallSessionPresenter>
 
     /**
      * Lazy like the coordinator, and for the same reason — though this one only reaches the
@@ -86,6 +95,11 @@ class NetworkLifecycleService : Service() {
 
     override fun onDestroy() {
         isRunning = false
+        // A ringing notification must not outlive the service that can answer it, and the
+        // microphone service must not outlive the call. runCatching because the presenter may never
+        // have been resolved — the lock path stands the service down before it gets that far.
+        runCatching { callSessionPresenter.get().stop() }
+            .onFailure { AppLogger.warn(TAG, "stopping the call presenter failed: ${it.message}") }
         scope.cancel()
         super.onDestroy()
     }
@@ -135,6 +149,9 @@ class NetworkLifecycleService : Service() {
                 directHost = directHost,
                 directPort = directPort,
             )
+            // After the start, inside the same guard: resolving this also provisions a DAO, so
+            // under the lock it throws in exactly the same way and must be caught in the same net.
+            callSessionPresenter.get().start()
         }.onFailure { AppLogger.warn(TAG, "network start refused: ${it.message}") }.isFailure
         return if (refused) {
             AppLogger.warn(TAG, "started while the app lock holds the database shut; standing down")

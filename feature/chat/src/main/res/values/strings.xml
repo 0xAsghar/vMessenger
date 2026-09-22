@@ -103,4 +103,5 @@
     <string name="feature_chat_timer_1h">۱ ساعت</string>
     <string name="feature_chat_timer_24h">۲۴ ساعت</string>
     <string name="feature_chat_timer_7d">۷ روز</string>
+    <string name="feature_chat_call_start">تماس صوتی</string>
 </resources>

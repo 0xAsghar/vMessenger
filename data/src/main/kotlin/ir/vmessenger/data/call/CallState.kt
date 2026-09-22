@@ -41,6 +41,17 @@ enum class CallState {
 
     /** Whether this state should be showing the user a call screen. */
     val onScreen: Boolean get() = this != Idle && this != Ending
+
+    /**
+     * Whether a microphone foreground service should be running.
+     *
+     * Every live state except [IncomingRinging], and that exception is the platform's rule rather
+     * than a preference: [IncomingRinging] is the one state a call reaches from a background signal
+     * with no user action behind it, and from Android 14 a microphone service cannot be started
+     * there. A ringing phone therefore holds a notification and nothing more; the service starts on
+     * the answer. Which is the behaviour to want anyway — the service is what can hear you.
+     */
+    val holdsMicrophoneService: Boolean get() = this != Idle && this != IncomingRinging && this != Ending
 }
 
 /** What can happen to a call. Local acts and peer signals are named apart, because they differ. */

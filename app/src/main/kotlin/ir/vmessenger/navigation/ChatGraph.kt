@@ -8,6 +8,7 @@ import ir.vmessenger.feature.chat.ImageViewerRoute
 import ir.vmessenger.feature.chat.NewChatRoute
 import ir.vmessenger.feature.chat.group.GroupInfoRoute
 import ir.vmessenger.feature.chat.group.NewGroupRoute
+import ir.vmessenger.ui.call.rememberCallLauncher
 
 /**
  * Conversation and the chat-adjacent destinations.
@@ -19,6 +20,9 @@ import ir.vmessenger.feature.chat.group.NewGroupRoute
  */
 internal fun NavGraphBuilder.chatGraph(navController: NavHostController) {
     composable<VmRoute.Conversation> { entry ->
+        // Remembered against this destination, so the microphone launcher it registers belongs to
+        // the conversation the user is looking at.
+        val startCall = rememberCallLauncher()
         ConversationRoute(
             onBack = { navController.popIfCurrent(entry) },
             onOpenContact = { contactId ->
@@ -30,6 +34,7 @@ internal fun NavGraphBuilder.chatGraph(navController: NavHostController) {
             onOpenImage = { messageId ->
                 navController.navigate(VmRoute.ImageViewer(messageId)) { launchSingleTop = true }
             },
+            onStartCall = startCall,
         )
     }
     composable<VmRoute.NewChat> { entry ->

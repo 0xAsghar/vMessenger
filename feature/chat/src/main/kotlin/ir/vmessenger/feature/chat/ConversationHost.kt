@@ -39,6 +39,8 @@ internal class ConversationNavigation(
     val onBack: () -> Unit,
     val onOpenContact: (String) -> Unit,
     val onOpenGroup: (String) -> Unit,
+    /** Places a voice call to this conversation's contact; never offered on a group thread. */
+    val onStartCall: (String) -> Unit,
 )
 
 /** The three attachment sources, already bound to their activity-result launchers. */

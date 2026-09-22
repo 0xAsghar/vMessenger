@@ -47,6 +47,7 @@ fun ConversationRoute(
     onOpenContact: (String) -> Unit,
     onOpenGroup: (String) -> Unit,
     onOpenImage: (String) -> Unit,
+    onStartCall: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ConversationViewModel = hiltViewModel(),
 ) {
@@ -60,8 +61,8 @@ fun ConversationRoute(
         state = state,
         host = host,
         viewModel = viewModel,
-        navigation = remember(onBack, onOpenContact, onOpenGroup) {
-            ConversationNavigation(onBack, onOpenContact, onOpenGroup)
+        navigation = remember(onBack, onOpenContact, onOpenGroup, onStartCall) {
+            ConversationNavigation(onBack, onOpenContact, onOpenGroup, onStartCall)
         },
         modifier = modifier,
     )
@@ -83,6 +84,7 @@ private fun ConversationScreen(
         title = state.header.title.ifBlank { stringResource(R.string.feature_chat_conversation) },
         onNavigateBack = navigation.onBack,
         actions = {
+            ConversationCallAction(header = state.header, onStartCall = navigation.onStartCall)
             ConversationTimerAction(
                 selectedMs = state.composer.timerMs,
                 onSelect = viewModel::onSelectTimer,
