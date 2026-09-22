@@ -19,6 +19,7 @@ dependencies {
     implementation(project(":core:datastore"))
     implementation(project(":core:proto"))
     implementation(project(":core:common"))
+    implementation(project(":core:audio"))
     implementation(project(":core:location"))
     implementation(project(":core:notifications"))
     // `api`, not `implementation`: :app's Hilt component has to see the updater's

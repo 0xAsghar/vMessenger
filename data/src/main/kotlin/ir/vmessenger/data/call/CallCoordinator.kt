@@ -7,6 +7,7 @@ import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.crypto.CryptoEngine
 import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.entity.ContactEntity
+import ir.vmessenger.core.proto.app.v1.CallEndpoint
 import ir.vmessenger.core.proto.app.v1.CallRejectReason
 import ir.vmessenger.core.proto.app.v1.CallSignal
 import ir.vmessenger.core.proto.app.v1.CallSignalType
@@ -48,6 +49,7 @@ class CallCoordinator @Inject constructor(
     private val selfIdentityCache: SelfIdentityCache,
     private val messaging: MessagingPort,
     private val crypto: CryptoEngine,
+    private val media: CallMediaPort,
 ) {
     private val mutex = Mutex()
     private val _session = MutableStateFlow<CallSession?>(null)
@@ -75,19 +77,35 @@ class CallCoordinator @Inject constructor(
             outgoing = true,
             state = CallState.OutgoingRinging,
         )
-        send(contact, callId, CallSignalType.CALL_SIGNAL_TYPE_INVITE, keys.publicKey)
+        send(contact, callId, Outgoing(CallSignalType.CALL_SIGNAL_TYPE_INVITE, keys.publicKey))
         AppLogger.info(TAG, "dialled contact=$contactId call=$callId")
         AppResult.Success(Unit)
     }
 
-    /** Answers the ringing call: the one transition that can lead to an open microphone. */
+    /**
+     * Answers the ringing call: the one transition that can lead to an open microphone.
+     *
+     * The microphone opens here, on this explicit user action, and the addresses the answer carries
+     * are where the caller may connect — so the peer never learns where to reach this device for
+     * audio until its user has answered.
+     */
     suspend fun accept() = mutex.withLock {
         val current = _session.value ?: return
         if (current.state != CallState.IncomingRinging) return
         val contact = contactDao.getById(current.contactId) ?: return
         val keys = ephemeral ?: crypto.generateX25519KeyPair().also { ephemeral = it }
+        val key = mediaKey
+        val addresses = if (key == null) {
+            emptyList()
+        } else {
+            media.accept(key.copyOf(), outgoing = false, ::onMediaEvent)
+        }
         advance(CallEvent.AcceptedHere)
-        send(contact, current.callId, CallSignalType.CALL_SIGNAL_TYPE_ACCEPT, keys.publicKey)
+        send(
+            contact,
+            current.callId,
+            Outgoing(CallSignalType.CALL_SIGNAL_TYPE_ACCEPT, keys.publicKey, addresses = addresses),
+        )
     }
 
     suspend fun decline() = end(CallSignalType.CALL_SIGNAL_TYPE_REJECT, CallRejectReason.CALL_REJECT_REASON_DECLINED)
@@ -103,11 +121,25 @@ class CallCoordinator @Inject constructor(
     }
 
     fun setMuted(muted: Boolean) {
+        media.setMuted(muted)
         _session.update { it?.copy(muted = muted) }
     }
 
-    /** Called by the media path when its first frame lands, and when it drops or returns. */
-    suspend fun onMediaEvent(event: CallEvent) = mutex.withLock { advance(event) }
+    /**
+     * Called by the media path when its first frame lands, and when it ends.
+     *
+     * A media path that ends, ends the call in this release: [CallState.Reconnecting] is in the
+     * machine for the failover work and nothing reaches it yet, so a call whose socket died would
+     * otherwise sit there with no way back and no way out. Ending it also signals the peer, who may
+     * be listening for a connection that is never going to arrive.
+     */
+    suspend fun onMediaEvent(event: CallEvent) = mutex.withLock {
+        if (event == CallEvent.MediaLost) {
+            endLocked(CallSignalType.CALL_SIGNAL_TYPE_HANGUP)
+        } else {
+            advance(event)
+        }
+    }
 
     suspend fun handleSignal(contactId: String, envelope: MessageEnvelope) = mutex.withLock {
         val signal = envelope.callSignal
@@ -129,7 +161,7 @@ class CallCoordinator @Inject constructor(
         val contact = contactDao.getById(contactId) ?: return
         val busy = _session.value != null
         if (busy) {
-            send(contact, callId, CallSignalType.CALL_SIGNAL_TYPE_BUSY, ByteArray(0))
+            send(contact, callId, Outgoing(CallSignalType.CALL_SIGNAL_TYPE_BUSY))
             AppLogger.info(TAG, "declined a second call as busy contact=$contactId")
             return
         }
@@ -144,7 +176,7 @@ class CallCoordinator @Inject constructor(
             state = CallState.IncomingRinging,
         )
         // Tell them this phone is alerting; it is what turns "calling" into "ringing" for them.
-        send(contact, callId, CallSignalType.CALL_SIGNAL_TYPE_RING, ByteArray(0))
+        send(contact, callId, Outgoing(CallSignalType.CALL_SIGNAL_TYPE_RING))
         AppLogger.info(TAG, "incoming call contact=$contactId call=$callId")
     }
 
@@ -154,12 +186,24 @@ class CallCoordinator @Inject constructor(
         _session.value = current.copy(peerAlerting = true)
     }
 
-    private fun onAccept(callId: String, signal: CallSignal) {
+    /**
+     * They answered. This is where the caller learns where to send audio, and the only place it
+     * opens a media connection.
+     */
+    private suspend fun onAccept(callId: String, signal: CallSignal) {
         val ours = _session.value?.takeIf { it.callId == callId && it.outgoing }
         val keys = ephemeral
         if (ours == null || keys == null) return
         deriveMediaKey(keys.privateKey, signal.mediaEphemeralPub.toByteArray())
         advance(CallEvent.AcceptReceived)
+        val key = mediaKey
+        val addresses = signal.mediaEndpointsList.filterNot { it.relay }.map { it.address }
+        if (key != null && addresses.isNotEmpty()) {
+            media.connect(addresses, key.copyOf(), outgoing = true, ::onMediaEvent)
+        } else {
+            AppLogger.warn(TAG, "accepted with no usable media address; ending call=$callId")
+            endLocked(CallSignalType.CALL_SIGNAL_TYPE_HANGUP)
+        }
     }
 
     private fun onPeerEnded(callId: String) {
@@ -169,9 +213,17 @@ class CallCoordinator @Inject constructor(
     }
 
     private suspend fun end(type: CallSignalType, reason: CallRejectReason) = mutex.withLock {
+        endLocked(type, reason)
+    }
+
+    /** The body of [end], callable from anything that already holds [mutex]. */
+    private suspend fun endLocked(
+        type: CallSignalType,
+        reason: CallRejectReason = CallRejectReason.CALL_REJECT_REASON_UNSPECIFIED,
+    ) {
         val current = _session.value ?: return
         contactDao.getById(current.contactId)?.let { contact ->
-            send(contact, current.callId, type, ByteArray(0), reason)
+            send(contact, current.callId, Outgoing(type, reason = reason))
         }
         advance(CallEvent.EndedHere)
         clear()
@@ -206,6 +258,8 @@ class CallCoordinator @Inject constructor(
     }
 
     private fun clear() {
+        // Before the key is zeroed: the media path is holding a reference to it.
+        media.stop()
         mediaKey?.fill(0)
         mediaKey = null
         ephemeral?.privateKey?.fill(0)
@@ -213,23 +267,30 @@ class CallCoordinator @Inject constructor(
         _session.value = null
     }
 
-    private suspend fun send(
-        contact: ContactEntity,
-        callId: String,
-        type: CallSignalType,
-        ephemeralPublic: ByteArray,
-        reason: CallRejectReason = CallRejectReason.CALL_REJECT_REASON_UNSPECIFIED,
-    ) {
+    /** One outgoing signal's contents, bundled so [send] keeps a readable signature. */
+    private class Outgoing(
+        val type: CallSignalType,
+        val ephemeralPublic: ByteArray = ByteArray(0),
+        val reason: CallRejectReason = CallRejectReason.CALL_REJECT_REASON_UNSPECIFIED,
+        val addresses: List<String> = emptyList(),
+    )
+
+    private suspend fun send(contact: ContactEntity, callId: String, outgoing: Outgoing) {
         val self = selfIdentityCache.get() ?: return
         val signal = CallSignal.newBuilder()
             .setCallId(ByteString.copyFromUtf8(callId))
-            .setType(type)
-            .setRejectReason(reason)
-        if (ephemeralPublic.isNotEmpty()) {
-            signal.mediaEphemeralPub = ByteString.copyFrom(ephemeralPublic)
+            .setType(outgoing.type)
+            .setRejectReason(outgoing.reason)
+        if (outgoing.ephemeralPublic.isNotEmpty()) {
+            signal.mediaEphemeralPub = ByteString.copyFrom(outgoing.ephemeralPublic)
+        }
+        outgoing.addresses.forEach { address ->
+            signal.addMediaEndpoints(CallEndpoint.newBuilder().setAddress(address).setRelay(false))
         }
         val envelope = MessageEnvelope.newBuilder()
-            .setMessageId(ByteString.copyFromUtf8("call-$callId-${type.number}-${System.currentTimeMillis()}"))
+            .setMessageId(
+                ByteString.copyFromUtf8("call-$callId-${outgoing.type.number}-${System.currentTimeMillis()}"),
+            )
             .setSenderIdentityHash(ByteString.copyFrom(self.identityHash))
             .setSentAtUnixMs(System.currentTimeMillis())
             .setCounter(1)
