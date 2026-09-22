@@ -49,8 +49,59 @@ message MessageEnvelope {
     MessageEdit message_edit = 32;
     MessageDelete message_delete = 33;
     ProfileUpdate profile_update = 34;
+    CallSignal call_signal = 35;
     GpsBuzzerRequest gps_buzzer = 38;
   }
+}
+
+/**
+ * Call set-up and tear-down. Signalling only — no audio ever travels on this arm.
+ *
+ * Its own arm rather than extra `Control` types, for the reason `MessageEdit` gives: a 1.0.x peer
+ * parses an unknown arm as nothing at all, so an older client simply cannot be called, which is the
+ * correct outcome. Overloading `ControlType` would have it misread the field instead.
+ *
+ * `media_ephemeral_pub` is a fresh X25519 public key, exchanged inside this already-authenticated
+ * and encrypted session. Both ends derive the media key from it, which gives every call its own
+ * forward-secret key without a second handshake and without SRTP. Audio then flows on a separate
+ * channel, because the messaging session's frame counter would expire mid-call.
+ */
+message CallSignal {
+  bytes call_id = 1;
+  CallSignalType type = 2;
+  bytes media_ephemeral_pub = 3;
+  /** Where to reach this end for media, best candidate first. */
+  repeated CallEndpoint media_endpoints = 4;
+  CallRejectReason reject_reason = 5;
+}
+
+message CallEndpoint {
+  string address = 1;
+  /** True when the address is a relay circuit rather than a direct route to the peer. */
+  bool relay = 2;
+}
+
+enum CallSignalType {
+  CALL_SIGNAL_TYPE_UNSPECIFIED = 0;
+  CALL_SIGNAL_TYPE_INVITE = 1;
+  /** The callee's device is alerting; the caller shows "ringing" only after this. */
+  CALL_SIGNAL_TYPE_RING = 2;
+  CALL_SIGNAL_TYPE_ACCEPT = 3;
+  CALL_SIGNAL_TYPE_REJECT = 4;
+  CALL_SIGNAL_TYPE_BUSY = 5;
+  /** The caller gave up before it was answered. */
+  CALL_SIGNAL_TYPE_CANCEL = 6;
+  CALL_SIGNAL_TYPE_HANGUP = 7;
+  /** Re-attach to a call already agreed, after the media path dropped; never re-rings. */
+  CALL_SIGNAL_TYPE_RECONNECT = 8;
+}
+
+enum CallRejectReason {
+  CALL_REJECT_REASON_UNSPECIFIED = 0;
+  CALL_REJECT_REASON_DECLINED = 1;
+  CALL_REJECT_REASON_BUSY = 2;
+  CALL_REJECT_REASON_UNSUPPORTED = 3;
+  CALL_REJECT_REASON_TIMEOUT = 4;
 }
 
 /**

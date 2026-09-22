@@ -1,6 +1,7 @@
 package ir.vmessenger.data.network
 
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
+import ir.vmessenger.data.call.CallCoordinator
 import ir.vmessenger.network.messaging.IncomingEnvelope
 import ir.vmessenger.network.messaging.PeerRelayService
 import javax.inject.Inject
@@ -12,6 +13,7 @@ import javax.inject.Singleton
  * receipt, dedup and notification logic is unit-testable with fakes instead
  * of the Android-bound services.
  */
+@Suppress("TooManyFunctions") // One method per envelope family; collapsing them would hide the fan-out.
 interface InboundRoutes {
     fun start()
 
@@ -37,12 +39,16 @@ interface InboundRoutes {
     /** A verified contact asking us to share our location; raises a prompt and nothing else. */
     suspend fun gpsBuzzer(contactId: String, envelope: MessageEnvelope)
 
+    /** Call set-up or tear-down. Never audio — media has its own channel. */
+    suspend fun callSignal(contactId: String, envelope: MessageEnvelope)
+
     /** Network hints, mailbox and peer-relay traffic; false when the envelope kind is unknown. */
     suspend fun infrastructure(incoming: IncomingEnvelope): Boolean
 }
 
 @Singleton
-@Suppress("LongParameterList") // one dependency per envelope family the collector fans out to
+// One dependency and one method per envelope family the collector fans out to.
+@Suppress("LongParameterList", "TooManyFunctions")
 class DefaultInboundRoutes @Inject constructor(
     private val attachmentReceiver: AttachmentReceiver,
     private val locationSharingCoordinator: LocationSharingCoordinator,
@@ -54,6 +60,7 @@ class DefaultInboundRoutes @Inject constructor(
     private val messageRevisionHandler: MessageRevisionHandler,
     private val profileUpdateHandler: ProfileUpdateHandler,
     private val gpsBuzzerHandler: GpsBuzzerHandler,
+    private val callCoordinator: CallCoordinator,
 ) : InboundRoutes {
     override fun start() {
         locationSharingCoordinator.start()
@@ -85,6 +92,9 @@ class DefaultInboundRoutes @Inject constructor(
 
     override suspend fun gpsBuzzer(contactId: String, envelope: MessageEnvelope) =
         gpsBuzzerHandler.handle(contactId, envelope)
+
+    override suspend fun callSignal(contactId: String, envelope: MessageEnvelope) =
+        callCoordinator.handleSignal(contactId, envelope)
 
     override suspend fun infrastructure(incoming: IncomingEnvelope): Boolean {
         val envelope = incoming.envelope

@@ -101,6 +101,7 @@ class FakeInboundRoutes : InboundRoutes {
     val revisions = mutableListOf<String>()
     val profileUpdates = mutableListOf<String>()
     val gpsBuzzers = mutableListOf<String>()
+    val callSignals = mutableListOf<String>()
 
     override suspend fun messageRevision(contactId: String, envelope: MessageEnvelope) {
         revisions += contactId
@@ -112,6 +113,10 @@ class FakeInboundRoutes : InboundRoutes {
 
     override suspend fun gpsBuzzer(contactId: String, envelope: MessageEnvelope) {
         gpsBuzzers += contactId
+    }
+
+    override suspend fun callSignal(contactId: String, envelope: MessageEnvelope) {
+        callSignals += contactId
     }
 
     override suspend fun infrastructure(incoming: IncomingEnvelope): Boolean {

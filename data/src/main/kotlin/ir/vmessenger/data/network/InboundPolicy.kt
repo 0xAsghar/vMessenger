@@ -28,6 +28,9 @@ enum class InboundKind {
 
     /** A request that we share our location. Verified contacts only; see [InboundPolicy]. */
     GPS_BUZZER,
+
+    /** Call set-up or tear-down. Never audio: media travels on its own channel. */
+    CALL_SIGNAL,
     ;
 
     /**
@@ -59,6 +62,7 @@ enum class InboundKind {
             envelope.hasGroupControl() -> GROUP_CONTROL
             envelope.hasProfileUpdate() -> PROFILE_UPDATE
             envelope.hasGpsBuzzer() -> GPS_BUZZER
+            envelope.hasCallSignal() -> CALL_SIGNAL
             else -> null
         }
     }
@@ -95,6 +99,9 @@ object InboundPolicy {
         InboundKind.GROUP_CONTROL,
         InboundKind.MESSAGE_REVISION,
         InboundKind.PROFILE_UPDATE,
+        // Only an approved contact may make this phone ring. A stranger who could would have a
+        // way to disturb someone who never agreed to hear from them.
+        InboundKind.CALL_SIGNAL,
         -> contact != null &&
             !contact.blocked &&
             contact.relationshipStatus == ContactRelationshipStatus.APPROVED

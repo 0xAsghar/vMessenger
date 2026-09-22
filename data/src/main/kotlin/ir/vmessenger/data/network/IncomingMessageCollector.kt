@@ -148,6 +148,9 @@ class IncomingMessageCollector @Inject constructor(
                 acknowledge(contactId, envelope, incoming.session) { routes.profileUpdate(contactId, envelope) }
             InboundKind.GPS_BUZZER ->
                 acknowledge(contactId, envelope, incoming.session) { routes.gpsBuzzer(contactId, envelope) }
+            // Not acknowledged: call signalling is only useful live, and a receipt for a ring that
+            // has already been answered or given up on is noise the sender would act on.
+            InboundKind.CALL_SIGNAL -> routes.callSignal(contactId, envelope)
             InboundKind.NETWORK_NODES, null -> routes.infrastructure(incoming)
         }
     }
