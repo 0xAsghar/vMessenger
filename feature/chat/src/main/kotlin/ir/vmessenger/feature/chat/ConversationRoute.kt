@@ -82,6 +82,12 @@ private fun ConversationScreen(
     VMessengerScaffold(
         title = state.header.title.ifBlank { stringResource(R.string.feature_chat_conversation) },
         onNavigateBack = navigation.onBack,
+        actions = {
+            ConversationTimerAction(
+                selectedMs = state.composer.timerMs,
+                onSelect = viewModel::onSelectTimer,
+            )
+        },
         floatingActionButton = {
             JumpToBottomFab(visible = jumpVisible) {
                 host.scope.launch { host.listState.animateScrollToItem(0) }

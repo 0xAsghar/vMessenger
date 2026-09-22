@@ -97,4 +97,9 @@
     <string name="feature_chat_edit_message">ویرایش</string>
     <string name="feature_chat_editing">ویرایش پیام</string>
     <string name="feature_chat_error_contact_revoked">این مخاطب دیگر شما را در فهرست خود ندارد</string>
+    <string name="feature_chat_timer">زمان‌سنج پیام‌های خودحذف‌شونده</string>
+    <string name="feature_chat_timer_off">بدون زمان‌سنج</string>
+    <string name="feature_chat_timer_1h">۱ ساعت</string>
+    <string name="feature_chat_timer_24h">۲۴ ساعت</string>
+    <string name="feature_chat_timer_7d">۷ روز</string>
 </resources>

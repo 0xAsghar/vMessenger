@@ -161,10 +161,18 @@ class ConversationViewModel @Inject constructor(
         .map<List<ChatMessage>, ImmutableList<ChatItem>?> { window -> buildItems(window) }
         .onStart { emit(null) }
 
-    private val composer: Flow<ComposerUiState> =
-        combine(typedText, observeDraft(conversationId), replyTo, editing) { typed, saved, reply, edited ->
-            ComposerUiState(text = typed ?: saved, replyTo = reply, editingMessageId = edited)
-        }
+    /** Self-destruct duration applied to new messages here; sticky per screen session, null = off. */
+    private val timerMs = MutableStateFlow<Long?>(null)
+
+    private val composer: Flow<ComposerUiState> = combine(
+        typedText,
+        observeDraft(conversationId),
+        replyTo,
+        editing,
+        timerMs,
+    ) { typed, saved, reply, edited, timer ->
+        ComposerUiState(text = typed ?: saved, replyTo = reply, editingMessageId = edited, timerMs = timer)
+    }
 
     private val progress: Flow<Map<String, AttachmentProgress>> =
         conversationRepository.observeAttachmentProgress(conversationId)
@@ -231,9 +239,15 @@ class ConversationViewModel @Inject constructor(
             if (edited != null) {
                 conversationRepository.editMessage(edited, text)
             } else {
-                sendMessage(conversationId, text, quoted)
+                val expiry = timerMs.value?.let { System.currentTimeMillis() + it }
+                sendMessage(conversationId, text, quoted, expiry)
             }
         }
+    }
+
+    /** Sets the self-destruct timer applied to new messages in this chat; null turns it off. */
+    fun onSelectTimer(ttlMs: Long?) {
+        timerMs.value = ttlMs
     }
 
     /** Loads a sent message back into the composer; [onSend] then applies it instead of sending. */

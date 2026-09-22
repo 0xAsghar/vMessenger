@@ -144,6 +144,8 @@ data class ComposerUiState(
     val replyTo: ReplyQuoteUi? = null,
     /** Set while the composer is revising a sent message rather than writing a new one. */
     val editingMessageId: String? = null,
+    /** Self-destruct duration applied to new messages in this chat, in ms; null when off. */
+    val timerMs: Long? = null,
 )
 
 @Immutable
