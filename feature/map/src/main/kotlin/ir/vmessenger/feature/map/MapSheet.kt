@@ -7,9 +7,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -55,7 +59,7 @@ internal fun ColumnScope.MapSheet(
         PermissionCard(permission = permission)
     }
     HorizontalDivider(modifier = Modifier.padding(vertical = VmSpacing.sm))
-    SectionHeader(title = stringResource(R.string.feature_map_watchers_title))
+    SectionHeader(title = stringResource(R.string.feature_map_contacts_title))
     WatcherList(state = state, onSelect = actions.onSelect)
 }
 
@@ -131,9 +135,9 @@ private fun PermissionCard(permission: LocationPermissionController) {
 
 @Composable
 private fun WatcherList(state: MapUiState, onSelect: (String?) -> Unit) {
-    if (state.markers.isEmpty()) {
+    if (state.contactStatus.isEmpty()) {
         Text(
-            text = stringResource(R.string.feature_map_watchers_empty),
+            text = stringResource(R.string.feature_map_contacts_empty),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
@@ -141,45 +145,62 @@ private fun WatcherList(state: MapUiState, onSelect: (String?) -> Unit) {
         return
     }
     LazyColumn(modifier = Modifier.heightIn(max = SHEET_MAX_HEIGHT)) {
-        items(state.markers, key = { it.contactId }) { marker ->
+        items(state.contactStatus, key = { it.contactId }) { status ->
             WatcherRow(
-                marker = marker,
-                selected = marker.contactId == state.selectedContactId,
-                onClick = { onSelect(marker.contactId) },
+                status = status,
+                selected = status.contactId == state.selectedContactId,
+                onClick = { onSelect(status.contactId) },
             )
         }
     }
 }
 
 @Composable
-private fun WatcherRow(marker: ContactMarker, selected: Boolean, onClick: () -> Unit) {
+private fun WatcherRow(status: ContactLocationStatus, selected: Boolean, onClick: () -> Unit) {
+    val marker = status.marker
     val background = if (selected) {
         MaterialTheme.colorScheme.secondaryContainer
     } else {
         MaterialTheme.colorScheme.surface
     }
-    Surface(color = background, onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    Surface(
+        color = background,
+        onClick = onClick,
+        // There is nothing to centre the map on for a contact who is not sharing.
+        enabled = marker != null,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         Row(
             modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
         ) {
-            val seed = remember(marker.seedHex) { marker.seedHex.toSeedBytes() }
-            Avatar(seed = seed, name = marker.name, size = VmSizes.avatarSm)
+            val seed = remember(status.seedHex) { status.seedHex.toSeedBytes() }
+            Avatar(seed = seed, name = status.name, size = VmSizes.avatarSm)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = marker.name,
+                    text = status.name,
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = marker.lastUpdateLabel,
+                    text = marker?.lastUpdateLabel
+                        ?: stringResource(R.string.feature_map_contact_not_sharing),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            marker.distanceM?.let {
+            // The other direction, on the same row: whether this contact can see us.
+            if (status.granted) {
+                Icon(
+                    imageVector = Icons.Outlined.Visibility,
+                    contentDescription = stringResource(R.string.feature_map_contact_sees_me),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(VmSizes.iconSm),
+                )
+            }
+            marker?.distanceM?.let {
                 Text(
                     text = distanceLabel(it),
                     style = MaterialTheme.typography.labelMedium,

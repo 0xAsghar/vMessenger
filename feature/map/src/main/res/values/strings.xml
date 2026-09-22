@@ -17,8 +17,10 @@
     <string name="feature_map_picker_empty">مخاطب تأییدشده‌ای ندارید</string>
     <string name="feature_map_close">بستن</string>
 
-    <string name="feature_map_watchers_title">در حال اشتراک با شما</string>
-    <string name="feature_map_watchers_empty">هنوز کسی موقعیتش را با شما به اشتراک نگذاشته است</string>
+    <string name="feature_map_contacts_title">وضعیت موقعیت مخاطبین</string>
+    <string name="feature_map_contacts_empty">هنوز مخاطب تأییدشده‌ای ندارید</string>
+    <string name="feature_map_contact_not_sharing">موقعیتش را با شما به اشتراک نمی‌گذارد</string>
+    <string name="feature_map_contact_sees_me">می‌تواند موقعیت شما را ببیند</string>
 
     <string name="feature_map_permission_title">دسترسی مکان</string>
     <string name="feature_map_permission_rationale">برای دیدن فاصله و اشتراک‌گذاری، دسترسی مکان لازم است</string>

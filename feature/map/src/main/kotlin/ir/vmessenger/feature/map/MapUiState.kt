@@ -39,6 +39,23 @@ data class ContactAccess(
     val granted: Boolean,
 )
 
+/**
+ * Where one approved contact stands, in both directions, so the screen can answer "who is sharing
+ * with me, how far away are they, and can they see me" without selecting anyone first.
+ *
+ * [marker] is null for a contact who is not sharing with us — which is the point: they still appear
+ * in the list, as "not sharing", rather than being invisible until they start.
+ */
+@Immutable
+data class ContactLocationStatus(
+    val contactId: String,
+    val name: String,
+    val seedHex: String,
+    val marker: ContactMarker?,
+    /** Whether they may see our position. */
+    val granted: Boolean,
+)
+
 @Immutable
 data class SharingState(
     val active: Boolean = false,
@@ -51,6 +68,8 @@ data class MapUiState(
     val sharing: SharingState = SharingState(),
     val markers: ImmutableList<ContactMarker> = persistentListOf(),
     val contacts: ImmutableList<ContactAccess> = persistentListOf(),
+    /** Every approved contact with its two-way location status; drives the sheet's list. */
+    val contactStatus: ImmutableList<ContactLocationStatus> = persistentListOf(),
     val myLocation: MapPoint? = null,
     /**
      * Whether to draw the location puck. Deliberately not "has the permission": the puck holds a

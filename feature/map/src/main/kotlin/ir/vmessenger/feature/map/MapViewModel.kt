@@ -196,6 +196,7 @@ private fun buildState(sharing: SharingSlice, live: LiveSlice, screen: ScreenSli
         sharing = SharingState(sharing.active, granted.map { it.displayName }.toImmutableList()),
         markers = markers,
         contacts = approved.map { it.toAccess(sharing.access[it.id] == true) }.toImmutableList(),
+        contactStatus = contactStatus(approved, markers, sharing.access),
         myLocation = live.mine?.let { MapPoint(it.latitude, it.longitude) },
         showMyLocation = screen.permission == MapPermission.Granted &&
             (sharing.active || screen.myLocationRequested),
@@ -205,6 +206,31 @@ private fun buildState(sharing: SharingSlice, live: LiveSlice, screen: ScreenSli
         styleToken = screen.tiles.token,
         hint = screen.hint,
     )
+}
+
+/**
+ * Every approved contact, whether or not they are sharing: the ones who are come first, each with
+ * the marker that carries their distance and last update, so the list answers the question for a
+ * contact who is *not* sharing too.
+ */
+private fun contactStatus(
+    approved: List<Contact>,
+    markers: List<ContactMarker>,
+    access: Map<String, Boolean>,
+): ImmutableList<ContactLocationStatus> {
+    val byContact = markers.associateBy { it.contactId }
+    return approved
+        .map { contact ->
+            ContactLocationStatus(
+                contactId = contact.id,
+                name = contact.displayName,
+                seedHex = contact.identityHash.toHex(),
+                marker = byContact[contact.id],
+                granted = access[contact.id] == true,
+            )
+        }
+        .sortedWith(compareBy({ it.marker == null }, { it.name }))
+        .toImmutableList()
 }
 
 private fun marker(contact: Contact, sample: LocationSample, mine: LocationUpdate?): ContactMarker =
