@@ -16,12 +16,14 @@ class NetworkNotificationManager @Inject constructor(
     private val manager = context.getSystemService(NotificationManager::class.java)
 
     init {
+        // Resolved through the app's language, not the device's; see [localised].
+        val strings = context.localised()
         val channel = NotificationChannel(
             CHANNEL_NETWORK,
-            "شبکه",
+            strings.getString(R.string.notification_channel_network),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "اتصال دائمی به شبکه غیرمتمرکز"
+            description = strings.getString(R.string.notification_channel_network_description)
             setShowBadge(false)
         }
         manager.createNotificationChannel(channel)
@@ -30,14 +32,17 @@ class NetworkNotificationManager @Inject constructor(
     fun buildForegroundNotification(): Notification =
         NotificationCompat.Builder(context, CHANNEL_NETWORK)
             .setSmallIcon(android.R.drawable.ic_menu_share)
-            .setContentTitle("vMessenger")
-            .setContentText("متصل به شبکه")
+            .setContentTitle(APP_NAME)
+            .setContentText(context.localised().getString(R.string.notification_network_connected))
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
 
     companion object {
+        /** Never translated. */
+        private const val APP_NAME = "vMessenger"
+
         const val CHANNEL_NETWORK = "network"
 
         /** Unique among foreground notifications: LocationService's is 2002, and sharing an id merges them. */

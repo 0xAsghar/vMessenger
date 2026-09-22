@@ -4,4 +4,18 @@
     <string name="notification_new_message">پیام جدید</string>
     <string name="notification_location_request">%1$s از شما می‌خواهد موقعیتتان را به اشتراک بگذارید</string>
     <string name="notification_location_request_generic">درخواست اشتراک موقعیت</string>
+
+    <!-- Network: the ongoing connection notification and its channel. -->
+    <string name="notification_channel_network">شبکه</string>
+    <string name="notification_channel_network_description">اتصال دائمی به شبکه غیرمتمرکز</string>
+    <string name="notification_network_connected">متصل به شبکه</string>
+
+    <!-- Calls: two channels, because a ringing call must interrupt and a call in progress must not. -->
+    <string name="notification_channel_call_incoming">تماس ورودی</string>
+    <string name="notification_channel_call_incoming_description">زنگ تماس‌های دریافتی</string>
+    <string name="notification_channel_call_ongoing">تماس در جریان</string>
+    <string name="notification_channel_call_ongoing_description">نشان‌دادن تماس فعال</string>
+    <string name="notification_call_incoming">تماس صوتی ورودی</string>
+    <string name="notification_call_connecting">در حال اتصال…</string>
+    <string name="notification_call_ongoing">تماس صوتی</string>
 </resources>

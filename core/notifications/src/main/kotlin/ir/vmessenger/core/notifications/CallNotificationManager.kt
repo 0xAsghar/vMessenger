@@ -27,6 +27,8 @@ import javax.inject.Singleton
  * its own author decided calls are important is a messenger that gets uninstalled.
  */
 @Singleton
+// One builder or channel per thing the platform draws for a call, plus their shared helpers.
+@Suppress("TooManyFunctions")
 class CallNotificationManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val target: CallNotificationTarget,
@@ -37,6 +39,9 @@ class CallNotificationManager @Inject constructor(
         manager.createNotificationChannel(incomingChannel())
         manager.createNotificationChannel(ongoingChannel())
     }
+
+    /** Strings resolved through the app's language rather than the device's; see [localised]. */
+    private fun text(resId: Int): String = context.localised().getString(resId)
 
     /**
      * Whether a ringing call can take over the screen.
@@ -57,7 +62,7 @@ class CallNotificationManager @Inject constructor(
         val notification = NotificationCompat.Builder(context, CHANNEL_CALL_INCOMING)
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setContentTitle(peerName)
-            .setContentText(TEXT_INCOMING)
+            .setContentText(text(R.string.notification_call_incoming))
             .setStyle(
                 NotificationCompat.CallStyle.forIncomingCall(
                     person(peerName),
@@ -85,7 +90,11 @@ class CallNotificationManager @Inject constructor(
         NotificationCompat.Builder(context, CHANNEL_CALL_ONGOING)
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setContentTitle(peerName)
-            .setContentText(if (connecting) TEXT_CONNECTING else TEXT_ONGOING)
+            .setContentText(
+                text(
+                    if (connecting) R.string.notification_call_connecting else R.string.notification_call_ongoing,
+                ),
+            )
             .setStyle(NotificationCompat.CallStyle.forOngoingCall(person(peerName), action(callId, ACTION_HANG_UP)))
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setOngoing(true)
@@ -132,8 +141,12 @@ class CallNotificationManager @Inject constructor(
     }
 
     private fun incomingChannel(): NotificationChannel =
-        NotificationChannel(CHANNEL_CALL_INCOMING, NAME_INCOMING, NotificationManager.IMPORTANCE_HIGH).apply {
-            description = DESCRIPTION_INCOMING
+        NotificationChannel(
+            CHANNEL_CALL_INCOMING,
+            text(R.string.notification_channel_call_incoming),
+            NotificationManager.IMPORTANCE_HIGH,
+        ).apply {
+            description = text(R.string.notification_channel_call_incoming_description)
             setShowBadge(false)
             enableVibration(true)
             lockscreenVisibility = Notification.VISIBILITY_PUBLIC
@@ -147,8 +160,12 @@ class CallNotificationManager @Inject constructor(
         }
 
     private fun ongoingChannel(): NotificationChannel =
-        NotificationChannel(CHANNEL_CALL_ONGOING, NAME_ONGOING, NotificationManager.IMPORTANCE_LOW).apply {
-            description = DESCRIPTION_ONGOING
+        NotificationChannel(
+            CHANNEL_CALL_ONGOING,
+            text(R.string.notification_channel_call_ongoing),
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = text(R.string.notification_channel_call_ongoing_description)
             setShowBadge(false)
             setSound(null, null)
             enableVibration(false)
@@ -174,13 +191,5 @@ class CallNotificationManager @Inject constructor(
         private const val REQUEST_DECLINE = 3003
         private const val REQUEST_HANG_UP = 3004
         private const val PENDING_FLAGS = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-
-        private const val NAME_INCOMING = "تماس ورودی"
-        private const val DESCRIPTION_INCOMING = "زنگ تماس‌های دریافتی"
-        private const val NAME_ONGOING = "تماس در جریان"
-        private const val DESCRIPTION_ONGOING = "نشان‌دادن تماس فعال"
-        private const val TEXT_INCOMING = "تماس صوتی ورودی"
-        private const val TEXT_CONNECTING = "در حال اتصال…"
-        private const val TEXT_ONGOING = "تماس صوتی"
     }
 }

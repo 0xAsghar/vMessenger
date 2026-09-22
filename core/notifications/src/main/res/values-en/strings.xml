@@ -4,4 +4,18 @@
     <string name="notification_new_message">New message</string>
     <string name="notification_location_request">%1$s is asking you to share your location</string>
     <string name="notification_location_request_generic">Location sharing request</string>
+
+    <!-- Network: the ongoing connection notification and its channel. -->
+    <string name="notification_channel_network">Network</string>
+    <string name="notification_channel_network_description">Persistent connection to the decentralized network</string>
+    <string name="notification_network_connected">Connected to the network</string>
+
+    <!-- Calls: two channels, because a ringing call must interrupt and a call in progress must not. -->
+    <string name="notification_channel_call_incoming">Incoming call</string>
+    <string name="notification_channel_call_incoming_description">Ringtone for incoming calls</string>
+    <string name="notification_channel_call_ongoing">Call in progress</string>
+    <string name="notification_channel_call_ongoing_description">Shows an active call</string>
+    <string name="notification_call_incoming">Incoming voice call</string>
+    <string name="notification_call_connecting">Connecting…</string>
+    <string name="notification_call_ongoing">Voice call</string>
 </resources>
