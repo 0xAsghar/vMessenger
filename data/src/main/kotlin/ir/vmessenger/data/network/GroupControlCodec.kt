@@ -12,7 +12,7 @@ import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import java.util.UUID
 
 /** Maximum members of a group, the user included. Fan-out is O(n) per message, so it is bounded. */
-const val MAX_GROUP_MEMBERS = 32
+const val MAX_GROUP_MEMBERS = 100
 
 /**
  * The wire form of a membership change, and the reverse.
