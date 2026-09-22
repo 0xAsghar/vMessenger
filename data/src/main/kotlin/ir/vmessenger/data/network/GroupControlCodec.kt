@@ -10,6 +10,7 @@ import ir.vmessenger.core.proto.app.v1.GroupControlType
 import ir.vmessenger.core.proto.app.v1.GroupMember
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import java.util.UUID
+import ir.vmessenger.core.proto.app.v1.GroupMemberRole as ProtoGroupMemberRole
 
 /** Maximum members of a group, the user included. Fan-out is O(n) per message, so it is bounded. */
 const val MAX_GROUP_MEMBERS = 100
@@ -35,6 +36,7 @@ object GroupControlCodec {
         members: List<GroupMemberEntity>,
         version: Long,
         targetIdentityHash: String? = null,
+        targetRole: GroupMemberRole? = null,
     ): MessageEnvelope {
         val control = GroupControl.newBuilder()
             .setGroupId(ByteString.copyFromUtf8(group.id))
@@ -44,7 +46,11 @@ object GroupControlCodec {
             .setCreatorIdentityHash(ByteString.copyFromUtf8(group.creatorIdentityHash))
             .setAtUnixMs(System.currentTimeMillis())
             .addAllMembers(members.map(::toProto))
+            // On every control, not only the one that changes it: a device that missed a message
+            // must not be left applying a stale retention policy.
+            .setAuditRetention(group.auditRetention)
         targetIdentityHash?.let { control.targetIdentityHash = ByteString.copyFromUtf8(it) }
+        targetRole?.let { control.targetRole = it.toProto() }
         return MessageEnvelope.newBuilder()
             .setMessageId(ByteString.copyFromUtf8(UUID.randomUUID().toString()))
             .setSenderIdentityHash(ByteString.copyFrom(selfIdentityHash))
@@ -60,7 +66,26 @@ object GroupControlCodec {
         .setIdentityPub(ByteString.copyFrom(member.identityPub))
         .setDisplayName(member.displayName)
         .setX25519StaticPub(ByteString.copyFrom(member.x25519StaticPub ?: ByteArray(0)))
+        .setRole(member.role.toProto())
         .build()
+
+    private fun GroupMemberRole.toProto(): ProtoGroupMemberRole = when (this) {
+        GroupMemberRole.CREATOR -> ProtoGroupMemberRole.GROUP_MEMBER_ROLE_CREATOR
+        GroupMemberRole.ADMIN -> ProtoGroupMemberRole.GROUP_MEMBER_ROLE_ADMIN
+        GroupMemberRole.MEMBER -> ProtoGroupMemberRole.GROUP_MEMBER_ROLE_MEMBER
+    }
+
+    /**
+     * The creator's own row always reads CREATOR regardless of what the snapshot said, and an
+     * unrecognised or unset role reads MEMBER. Both are fail-closed: a peer cannot promote itself
+     * by editing a snapshot it forwards, and a 1.1.2 snapshot — which carries no roles at all —
+     * produces a group of plain members rather than a group of admins.
+     */
+    private fun roleOf(member: GroupMember, hash: String, creatorHash: String): GroupMemberRole = when {
+        hash == creatorHash -> GroupMemberRole.CREATOR
+        member.role == ProtoGroupMemberRole.GROUP_MEMBER_ROLE_ADMIN -> GroupMemberRole.ADMIN
+        else -> GroupMemberRole.MEMBER
+    }
 
     /**
      * The members of a snapshot, as rows. A member with an unusable identity key
@@ -81,7 +106,7 @@ object GroupControlCodec {
                     identityPub = identityPub,
                     x25519StaticPub = member.x25519StaticPub.toByteArray().takeIf { it.size == X25519_KEY_SIZE },
                     displayName = member.displayName.take(MAX_NAME_LENGTH),
-                    role = if (hash == creatorHash) GroupMemberRole.CREATOR else GroupMemberRole.MEMBER,
+                    role = roleOf(member, hash, creatorHash),
                     joinedAtUnixMs = now,
                     removedAtUnixMs = null,
                 )

@@ -122,6 +122,19 @@ message GroupMember {
   bytes identity_pub = 2;
   string display_name = 3;
   bytes x25519_static_pub = 4;
+  // Creator-assigned. Unset means MEMBER, so a 1.1.2 snapshot reads as it always did.
+  GroupMemberRole role = 5;
+}
+
+/**
+ * What a member may do. Only the creator assigns these, in the snapshot every device
+ * accepts from it, so the admin set is the same everywhere without a server deciding it.
+ */
+enum GroupMemberRole {
+  GROUP_MEMBER_ROLE_UNSPECIFIED = 0;
+  GROUP_MEMBER_ROLE_MEMBER = 1;
+  GROUP_MEMBER_ROLE_ADMIN = 2;
+  GROUP_MEMBER_ROLE_CREATOR = 3;
 }
 
 /**
@@ -139,8 +152,18 @@ message GroupControl {
   uint64 version = 5;
   bytes creator_identity_hash = 6;
   int64 at_unix_ms = 7;
-  // The member an ADD/REMOVE is about; unset for the other types.
+  // The member an ADD/REMOVE/SET_ROLE is about; unset for the other types.
   bytes target_identity_hash = 8;
+  /**
+   * Whether this group's admins may review edited and deleted messages.
+   *
+   * Carried in *every* control the creator authors, not only the one that changes it, so a
+   * device cannot end up with a stale policy after missing a message. False on a control from
+   * a 1.1.2 peer, which is the safe reading: no retention.
+   */
+  bool audit_retention = 9;
+  // The role a SET_ROLE assigns to `target_identity_hash`; unset for the other types.
+  GroupMemberRole target_role = 10;
 }
 
 enum GroupControlType {
@@ -153,6 +176,8 @@ enum GroupControlType {
   GROUP_CONTROL_TYPE_SNAPSHOT = 6;
   GROUP_CONTROL_TYPE_SNAPSHOT_REQUEST = 7;
   GROUP_CONTROL_TYPE_CLOSE = 8;
+  // Creator promotes or demotes one member. Version-gated like every other change.
+  GROUP_CONTROL_TYPE_SET_ROLE = 9;
 }
 
 /**

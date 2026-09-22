@@ -26,6 +26,8 @@ internal val UP_TO_21 = UP_TO_20 + MIGRATION_20_21
 
 internal val UP_TO_22 = UP_TO_21 + MIGRATION_21_22
 
+internal val UP_TO_23 = UP_TO_22 + MIGRATION_22_23
+
 /**
  * Replays every migration on a real SQLite engine (JDBC, in memory), because a
  * broken migration is only discovered on a user's device otherwise: Room does not
@@ -61,6 +63,74 @@ class MigrationTest {
     private fun migrateTo21() {
         migrateTo20()
         MIGRATION_20_21.migrate(database.db)
+    }
+
+    private fun migrateTo22() {
+        migrateTo21()
+        MIGRATION_21_22.migrate(database.db)
+    }
+
+    @Test
+    fun `audit retention arrives off, so no existing group starts keeping deleted messages`() {
+        migrateTo22()
+        database.exec("INSERT INTO chat_group VALUES ('g-1', 'Team', 'aa', 1, 1, 0, 'g-1')")
+
+        MIGRATION_22_23.migrate(database.db)
+
+        assertContains(database.columns("chat_group"), "auditRetention")
+        // The whole privacy argument for this feature rests on this default. A group that existed
+        // before the migration must come out of it with retention off, not merely "unset".
+        val retention = database.query("SELECT `auditRetention` FROM `chat_group` WHERE `id` = 'g-1'") {
+            it.getInt("auditRetention")
+        }
+        assertEquals(listOf(0), retention)
+        assertTrue(database.isNotNull("chat_group", "auditRetention"), "retention must never be null")
+    }
+
+    @Test
+    fun `the 23 migration creates the edit history table with its indices`() {
+        migrateTo22()
+
+        MIGRATION_22_23.migrate(database.db)
+
+        assertContains(database.tables(), "message_edit_history")
+        assertEquals(listOf("id"), database.primaryKeyOf("message_edit_history"))
+        val columns = database.columns("message_edit_history")
+        listOf("messageId", "groupId", "authorIdentityHash", "revision", "body", "caption", "capturedAtUnixMs")
+            .forEach { assertContains(columns, it) }
+    }
+
+    @Test
+    fun `a captured revision dies with the message it belongs to`() {
+        // Not a nicety: a self-destructing message's row is deleted on expiry, and an audit row
+        // that outlived it would keep the text the timer was supposed to remove.
+        UP_TO_23.forEach { it.migrate(database.db) }
+        database.exec("PRAGMA foreign_keys = ON")
+        // Inserted here rather than through the shared seed, which is shaped for the pre-18
+        // `conversation` (six columns; the v18 step adds `groupId`).
+        database.exec("INSERT INTO conversation VALUES ('c-1', NULL, NULL, NULL, 1, 0, 0)")
+        database.exec(
+            """
+            INSERT INTO `message` (
+                `messageId`, `conversationId`, `direction`, `contentType`, `body`,
+                `replyToMessageId`, `status`, `createdAtUnixMs`, `sentAtUnixMs`,
+                `deliveredAtUnixMs`, `readAtUnixMs`, `attachmentEncrypted`
+            ) VALUES ('m-1', 'c-1', 'INCOMING', 'TEXT', 'before', NULL, 'DELIVERED', 10, NULL, NULL, NULL, 0)
+            """.trimIndent(),
+        )
+        database.exec(
+            """
+            INSERT INTO `message_edit_history` (
+                `messageId`, `groupId`, `authorIdentityHash`, `revision`, `body`,
+                `caption`, `attachmentName`, `attachmentPath`, `capturedAtUnixMs`
+            ) VALUES ('m-1', 'g-1', 'aa', 'EDIT', 'before', NULL, NULL, NULL, 11)
+            """.trimIndent(),
+        )
+
+        database.exec("DELETE FROM `message` WHERE `messageId` = 'm-1'")
+
+        val remaining = database.query("SELECT COUNT(*) FROM `message_edit_history`") { it.getInt(1) }
+        assertEquals(listOf(0), remaining)
     }
 
     @Test

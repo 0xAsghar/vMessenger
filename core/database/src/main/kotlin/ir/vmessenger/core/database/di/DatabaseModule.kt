@@ -41,6 +41,7 @@ import ir.vmessenger.core.database.migration.MIGRATION_19_20
 import ir.vmessenger.core.database.migration.MIGRATION_1_2
 import ir.vmessenger.core.database.migration.MIGRATION_20_21
 import ir.vmessenger.core.database.migration.MIGRATION_21_22
+import ir.vmessenger.core.database.migration.MIGRATION_22_23
 import ir.vmessenger.core.database.migration.MIGRATION_2_3
 import ir.vmessenger.core.database.migration.MIGRATION_3_4
 import ir.vmessenger.core.database.migration.MIGRATION_4_5
@@ -99,6 +100,7 @@ object DatabaseModule {
                 MIGRATION_19_20,
                 MIGRATION_20_21,
                 MIGRATION_21_22,
+                MIGRATION_22_23,
             )
             .build()
     }

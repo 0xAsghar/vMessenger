@@ -20,9 +20,28 @@ data class Group(
     val avatarSeed: String,
     /** True when this device's identity is the creator's, so the admin actions are available. */
     val isCreatedByMe: Boolean,
+    /**
+     * Whether this group's admins may review messages that were edited or deleted.
+     *
+     * Creator-authored and carried in every snapshot, so no two devices can disagree about it.
+     * Off unless the creator switched it on, and when it is on every member is shown a banner
+     * saying so — the disclosure is what makes the feature something members can consent to or
+     * leave over.
+     */
+    val auditRetention: Boolean = false,
 )
 
-enum class GroupMemberRole { CREATOR, MEMBER }
+enum class GroupMemberRole {
+    CREATOR,
+
+    /** May review edited and deleted messages while retention is on. Designated only by the creator. */
+    ADMIN,
+    MEMBER,
+    ;
+
+    /** Whether this role may ask for a group's audit history. */
+    val canAudit: Boolean get() = this == CREATOR || this == ADMIN
+}
 
 /**
  * One member of a group. A member need not be a contact: their keys travel in the

@@ -26,6 +26,7 @@ internal fun GroupEntity.toDomain(selfKey: String?): Group = Group(
     closed = closed,
     avatarSeed = avatarSeed,
     isCreatedByMe = selfKey != null && creatorIdentityHash == selfKey,
+    auditRetention = auditRetention,
 )
 
 /**
@@ -57,6 +58,7 @@ internal fun ContactEntity.toMember(groupId: String, now: Long): GroupMemberEnti
 
 private fun DbGroupMemberRole.toDomain(): GroupMemberRole = when (this) {
     DbGroupMemberRole.CREATOR -> GroupMemberRole.CREATOR
+    DbGroupMemberRole.ADMIN -> GroupMemberRole.ADMIN
     DbGroupMemberRole.MEMBER -> GroupMemberRole.MEMBER
 }
 

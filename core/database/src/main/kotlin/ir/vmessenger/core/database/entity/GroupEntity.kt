@@ -31,10 +31,28 @@ data class GroupEntity(
     val closed: Boolean,
     /** Identicon seed for the group avatar; derived from [id] at creation and never changes. */
     val avatarSeed: String,
+    /**
+     * Whether admins of this group may review messages that were edited or deleted.
+     *
+     * Creator-authored and carried in every membership snapshot, so it cannot diverge between
+     * devices — a member's copy is whatever the creator last said, not a local preference. **Off by
+     * default, and never set on a 1:1 conversation**, which has no creator and no admins.
+     *
+     * It reverses a real privacy property, so a group with it on shows every member a banner
+     * saying so. See [MessageEditHistoryEntity].
+     */
+    val auditRetention: Boolean = false,
 )
 
 enum class GroupMemberRole {
     CREATOR,
+
+    /**
+     * May review this group's edited and deleted messages, when the creator has switched retention
+     * on. Designated **only** by the creator, through a version-gated control, so every device
+     * records the same admin set from the same authoritative snapshot — there is no server to ask.
+     */
+    ADMIN,
     MEMBER,
 }
 

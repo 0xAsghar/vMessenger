@@ -7,6 +7,7 @@ import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.GroupMemberRole
 import ir.vmessenger.core.database.entity.MessageContentType
 import ir.vmessenger.core.database.entity.MessageDirection
+import ir.vmessenger.core.database.entity.MessageRevisionKind
 
 @Suppress("TooManyFunctions") // two converter methods per persisted enum
 class EnumConverters {
@@ -39,6 +40,12 @@ class EnumConverters {
 
     @TypeConverter
     fun toGroupMemberRole(value: String): GroupMemberRole = GroupMemberRole.valueOf(value)
+
+    @TypeConverter
+    fun fromRevisionKind(value: MessageRevisionKind): String = value.name
+
+    @TypeConverter
+    fun toRevisionKind(value: String): MessageRevisionKind = MessageRevisionKind.valueOf(value)
 
     @TypeConverter
     fun fromContactRequestStatus(value: ContactRequestStatus): String = value.name

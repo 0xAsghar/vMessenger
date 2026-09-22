@@ -20,6 +20,7 @@ import ir.vmessenger.core.database.dao.LocationSampleDao
 import ir.vmessenger.core.database.dao.LocationShareDao
 import ir.vmessenger.core.database.dao.MailboxDao
 import ir.vmessenger.core.database.dao.MessageDao
+import ir.vmessenger.core.database.dao.MessageEditHistoryDao
 import ir.vmessenger.core.database.dao.MessageRecipientDao
 import ir.vmessenger.core.database.dao.OutboxDao
 import ir.vmessenger.core.database.dao.PendingRevokeDao
@@ -39,6 +40,7 @@ import ir.vmessenger.core.database.entity.LocationAccessEntity
 import ir.vmessenger.core.database.entity.LocationSampleEntity
 import ir.vmessenger.core.database.entity.LocationShareEntity
 import ir.vmessenger.core.database.entity.MailboxBlobEntity
+import ir.vmessenger.core.database.entity.MessageEditHistoryEntity
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.database.entity.MessageRecipientEntity
 import ir.vmessenger.core.database.entity.OutboxEntity
@@ -61,6 +63,7 @@ import ir.vmessenger.core.database.entity.RelayNodeEntity
         ConversationEntity::class,
         MessageEntity::class,
         MessageRecipientEntity::class,
+        MessageEditHistoryEntity::class,
         OutboxEntity::class,
         LocationShareEntity::class,
         LocationSampleEntity::class,
@@ -88,6 +91,7 @@ abstract class VMessengerDatabase : RoomDatabase() {
     abstract fun messageDao(): MessageDao
     abstract fun outboxDao(): OutboxDao
     abstract fun messageRecipientDao(): MessageRecipientDao
+    abstract fun messageEditHistoryDao(): MessageEditHistoryDao
     abstract fun groupDao(): GroupDao
     abstract fun locationShareDao(): LocationShareDao
     abstract fun locationSampleDao(): LocationSampleDao

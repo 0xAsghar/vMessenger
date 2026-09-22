@@ -116,6 +116,11 @@ class GroupControlHandler @Inject constructor(
             // would make the group readable but permanently mute.
             closed = false,
             avatarSeed = incoming.groupId,
+            // Taken from the snapshot, not preserved locally: the creator is the authority on this
+            // policy, and every snapshot carries it so no device keeps applying a stale one. A
+            // 1.1.2 snapshot has no such field and therefore reads false — retention off, which is
+            // the safe reading of silence.
+            auditRetention = incoming.control.auditRetention,
         )
         // update, never insert-or-replace: replacing the row would cascade the group's
         // conversation — and every message in it — away on a re-sent snapshot.

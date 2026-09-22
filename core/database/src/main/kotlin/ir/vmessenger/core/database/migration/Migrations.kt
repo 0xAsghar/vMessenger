@@ -602,3 +602,46 @@ val MIGRATION_21_22_STATEMENTS: List<String> = listOf(
     "ALTER TABLE `message` ADD COLUMN `albumId` TEXT DEFAULT NULL",
     "ALTER TABLE `message` ADD COLUMN `albumIndex` INTEGER DEFAULT NULL",
 )
+
+val MIGRATION_22_23 = object : Migration(22, 23) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_22_23_STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/**
+ * Group-admin review of edited and deleted messages.
+ *
+ * Two additive changes and one new table. `auditRetention` defaults to 0, so **every existing group
+ * keeps today's behaviour**: an edit overwrites, a delete erases, and nothing is captured. It can
+ * only become 1 through a control the group's creator authored, and a group with it on tells all of
+ * its members so.
+ *
+ * `message_edit_history` CASCADEs from `message` in both useful directions: a conversation delete
+ * takes its captures with it, and so does an expiry purge — an audit row that outlived a
+ * self-destructing message would quietly defeat the timer.
+ *
+ * The `ADMIN` role needs no statement here: `chat_group_member.role` is a TEXT enum, so a new value
+ * is a new string in an existing column.
+ */
+val MIGRATION_22_23_STATEMENTS: List<String> = listOf(
+    "ALTER TABLE `chat_group` ADD COLUMN `auditRetention` INTEGER NOT NULL DEFAULT 0",
+    """
+    CREATE TABLE IF NOT EXISTS `message_edit_history` (
+        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        `messageId` TEXT NOT NULL,
+        `groupId` TEXT NOT NULL,
+        `authorIdentityHash` TEXT,
+        `revision` TEXT NOT NULL,
+        `body` TEXT,
+        `caption` TEXT,
+        `attachmentName` TEXT,
+        `attachmentPath` TEXT,
+        `capturedAtUnixMs` INTEGER NOT NULL,
+        FOREIGN KEY(`messageId`) REFERENCES `message`(`messageId`) ON UPDATE NO ACTION ON DELETE CASCADE
+    )
+    """.trimIndent(),
+    "CREATE INDEX IF NOT EXISTS `index_message_edit_history_messageId` ON `message_edit_history` (`messageId`)",
+    "CREATE INDEX IF NOT EXISTS `index_history_group_time` " +
+        "ON `message_edit_history` (`groupId`, `capturedAtUnixMs`)",
+)

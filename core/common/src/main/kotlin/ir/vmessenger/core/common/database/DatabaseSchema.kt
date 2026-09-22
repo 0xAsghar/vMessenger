@@ -8,5 +8,5 @@ package ir.vmessenger.core.common.database
  * with this constant, so the number on screen is the number the database is actually at.
  */
 object DatabaseSchema {
-    const val VERSION = 22
+    const val VERSION = 23
 }
