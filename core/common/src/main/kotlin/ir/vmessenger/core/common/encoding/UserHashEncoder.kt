@@ -4,7 +4,14 @@ import java.security.MessageDigest
 
 private const val CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 private const val PREFIX = "vm2"
-private const val PREFIX_UPPER = "VM2"
+
+/**
+ * Prefixes accepted on decode: the current `vm2-` and the shorter `vm-` the identity is migrating to,
+ * so a peer can read a `vm-…` hash before any build emits one. The trailing dash keeps them
+ * unambiguous — `VM2-…` never starts with `VM-`, and `VM-…` never starts with `VM2-` — so the list is
+ * correct in both migration phases regardless of which one `encode` currently emits.
+ */
+private val ACCEPTED_PREFIXES_UPPER = listOf("VM2", "VM")
 private const val GROUP_SIZE = 5
 private const val PREFIX_BYTES = 16
 private const val CHECKSUM_BYTES = 2
@@ -20,8 +27,10 @@ private val INVISIBLE_CHARS = Regex("[\\u200B-\\u200D\\uFEFF]")
  * Human-shareable identity hash, format v2: `vm2-` + Crockford base32 of
  * `prefix16 || SHA256("vmessenger-userhash-v2" || prefix16)[0..2)`, grouped `5-5-5-5-5-4`.
  *
- * The checksum covers every prefix byte (v1 only XOR-ed the last two), and only the `vm2-` prefix is
- * accepted: a `vm1-` string decodes to null with reason `missing_prefix`.
+ * The checksum covers every prefix byte (v1 only XOR-ed the last two). Decode accepts both `vm2-` and
+ * the shorter `vm-` form the identity is migrating to — the encoded body is identical because the
+ * checksum tag is unchanged, so the prefix is only a label. A `vm1-` or prefix-less string decodes to
+ * null with reason `missing_prefix`.
  */
 object UserHashEncoder {
     fun identityHashFromPublicKey(publicKey: ByteArray): ByteArray =
@@ -63,11 +72,11 @@ private fun normalizeChars(userHash: String): String =
         .replace(UNICODE_DASHES, "-")
         .replace(INVISIBLE_CHARS, "")
 
-/** Base32 body without prefix and dashes, or null when the `vm2-` prefix is missing. */
+/** Base32 body without prefix and dashes, or null when no accepted prefix (`vm2-`/`vm-`) is present. */
 private fun normalizedBody(userHash: String): String? {
     val normalized = normalizeChars(userHash)
-    if (!normalized.startsWith("$PREFIX_UPPER-")) return null
-    return normalized.removePrefix("$PREFIX_UPPER-").replace("-", "")
+    val prefix = ACCEPTED_PREFIXES_UPPER.firstOrNull { normalized.startsWith("$it-") } ?: return null
+    return normalized.removePrefix("$prefix-").replace("-", "")
 }
 
 private fun failureReasonForTrimmed(trimmed: String): String = when {

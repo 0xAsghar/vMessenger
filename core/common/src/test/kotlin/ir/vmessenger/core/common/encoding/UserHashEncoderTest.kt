@@ -49,6 +49,28 @@ class UserHashEncoderTest {
     }
 
     @Test
+    fun decodeAcceptsBothVm2AndShortVmPrefix() {
+        val hash = ByteArray(16) { it.toByte() }
+        val vm2 = UserHashEncoder.encode(hash)
+        val vm = "vm-" + vm2.removePrefix("vm2-")
+        assertTrue(vm2.startsWith("vm2-"))
+        val decodedVm = UserHashEncoder.decode(vm)
+        assertNotNull(decodedVm)
+        assertTrue(decodedVm!!.contentEquals(hash))
+        assertEquals("ok", UserHashEncoder.decodeFailureReason(vm))
+        // Both prefixes of the same identity decode to the same bytes — the body is prefix-independent.
+        assertTrue(UserHashEncoder.decode(vm2)!!.contentEquals(decodedVm))
+    }
+
+    @Test
+    fun shortVmPrefixToleratesUppercaseAndUnicodeDashes() {
+        val hash = ByteArray(16) { (it * 3 + 1).toByte() }
+        val vm = "vm-" + UserHashEncoder.encode(hash).removePrefix("vm2-")
+        assertTrue(UserHashEncoder.isValid(vm.uppercase()))
+        assertTrue(UserHashEncoder.isValid(vm.replace('-', '–')))
+    }
+
+    @Test
     fun invalidChecksumRejected() {
         val hash = ByteArray(16) { 0xAB.toByte() }
         val encoded = UserHashEncoder.encode(hash)
