@@ -118,4 +118,13 @@
     <string name="feature_chat_group_demote_title">برداشتن نقش مدیر؟</string>
     <string name="feature_chat_group_demote_body">%1$s دیگر به بازبینی پیام‌های این گروه دسترسی ندارد.</string>
     <string name="feature_chat_group_member_admin">مدیر</string>
+    <string name="feature_chat_group_audit_title">بازبینی پیام‌ها</string>
+    <string name="feature_chat_group_audit_screen_notice">این فهرست متن پیام‌هایی است که اعضای گروه ویرایش یا حذف کرده‌اند و این دستگاه آن را دیده است. همهٔ اعضای گروه از فعال بودن این قابلیت آگاه هستند.</string>
+    <string name="feature_chat_group_audit_off_state_title">بازبینی فعال نیست</string>
+    <string name="feature_chat_group_audit_off_state_body">سازندهٔ گروه این قابلیت را روشن نکرده است، یا آن را خاموش کرده و آنچه نگه داشته شده بود پاک شده است.</string>
+    <string name="feature_chat_group_audit_empty_title">موردی برای بازبینی نیست</string>
+    <string name="feature_chat_group_audit_empty_body">از زمان روشن‌شدن این قابلیت، پیامی ویرایش یا حذف نشده است.</string>
+    <string name="feature_chat_group_audit_entry_edited">%1$s این پیام را ویرایش کرد</string>
+    <string name="feature_chat_group_audit_entry_deleted">%1$s این پیام را حذف کرد</string>
+    <string name="feature_chat_group_audit_open">بازبینی پیام‌های ویرایش‌شده</string>
 </resources>

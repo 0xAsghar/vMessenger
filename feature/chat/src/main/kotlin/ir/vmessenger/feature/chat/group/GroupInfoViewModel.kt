@@ -48,7 +48,7 @@ private const val BYTE_MASK = 0xFF
 private const val LOW_NIBBLE_MASK = 0x0F
 
 /** Route argument name; it has to match `VmRoute.GroupInfo.groupId`. */
-private const val GROUP_ID_KEY = "groupId"
+internal const val GROUP_ID_KEY = "groupId"
 
 /**
  * `null` means the database has not answered yet; a holder with a null [value] means it has

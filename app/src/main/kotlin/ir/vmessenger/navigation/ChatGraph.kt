@@ -3,9 +3,11 @@ package ir.vmessenger.navigation
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
+import androidx.navigation.toRoute
 import ir.vmessenger.feature.chat.ConversationRoute
 import ir.vmessenger.feature.chat.ImageViewerRoute
 import ir.vmessenger.feature.chat.NewChatRoute
+import ir.vmessenger.feature.chat.group.GroupAuditRoute
 import ir.vmessenger.feature.chat.group.GroupInfoRoute
 import ir.vmessenger.feature.chat.group.NewGroupRoute
 import ir.vmessenger.ui.call.rememberCallLauncher
@@ -65,12 +67,19 @@ internal fun NavGraphBuilder.chatGraph(navController: NavHostController) {
     composable<VmRoute.GroupInfo> { entry ->
         // The screen pops itself once the group is gone (left or closed), so there
         // is no leave/close result to handle here.
+        val groupId = entry.toRoute<VmRoute.GroupInfo>().groupId
         GroupInfoRoute(
             onBack = { navController.popIfCurrent(entry) },
             onOpenContact = { contactId ->
                 navController.navigate(VmRoute.ContactDetail(contactId)) { launchSingleTop = true }
             },
+            onOpenAudit = {
+                navController.navigate(VmRoute.GroupAudit(groupId)) { launchSingleTop = true }
+            },
         )
+    }
+    composable<VmRoute.GroupAudit> { entry ->
+        GroupAuditRoute(onBack = { navController.popIfCurrent(entry) })
     }
     composable<VmRoute.ImageViewer> { entry ->
         // Full-bleed by contract: the viewer draws behind the system bars and pads its

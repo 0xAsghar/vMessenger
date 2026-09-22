@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import ir.vmessenger.core.database.entity.MessageEditHistoryEntity
+import kotlinx.coroutines.flow.Flow
 
 /**
  * Captured revisions of group messages.
@@ -23,6 +24,13 @@ interface MessageEditHistoryDao {
             "ORDER BY capturedAtUnixMs DESC LIMIT :limit",
     )
     suspend fun forGroup(groupId: String, limit: Int): List<MessageEditHistoryEntity>
+
+    /** Bounded like [forGroup]: a review screen is a window, not a dump of everything kept. */
+    @Query(
+        "SELECT * FROM message_edit_history WHERE groupId = :groupId " +
+            "ORDER BY capturedAtUnixMs DESC LIMIT :limit",
+    )
+    fun observeForGroup(groupId: String, limit: Int): Flow<List<MessageEditHistoryEntity>>
 
     @Query("SELECT * FROM message_edit_history WHERE messageId = :messageId ORDER BY capturedAtUnixMs ASC")
     suspend fun forMessage(messageId: String): List<MessageEditHistoryEntity>

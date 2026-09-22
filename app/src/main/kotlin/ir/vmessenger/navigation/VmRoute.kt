@@ -50,6 +50,10 @@ sealed interface VmRoute {
     @Serializable
     data class GroupInfo(val groupId: String) : VmRoute
 
+    /** A group's captured revisions; reachable only while its retention is on and we may read it. */
+    @Serializable
+    data class GroupAudit(val groupId: String) : VmRoute
+
     @Serializable
     data class ImageViewer(val messageId: String) : VmRoute
 

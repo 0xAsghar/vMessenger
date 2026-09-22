@@ -109,6 +109,15 @@ data class GroupInfoUiState(
 
     val canClose: Boolean get() = canManage
 
+    /**
+     * Whether this device may open the review screen.
+     *
+     * Retention on, and our own member row a creator or an admin. A closed group still qualifies:
+     * the history is readable, and so is what was captured while it was open.
+     */
+    val canReviewAudit: Boolean
+        get() = auditRetention && (createdByMe || members.any { it.isMe && it.isAdmin })
+
     /** Roles are the creator's to assign, and only in an open group. */
     val canAssignRoles: Boolean get() = canManage
 

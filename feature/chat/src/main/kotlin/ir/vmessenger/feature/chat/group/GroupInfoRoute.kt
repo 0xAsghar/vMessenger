@@ -66,6 +66,7 @@ private data class GroupInfoCallbacks(
     val onOpenDialog: (GroupDialog) -> Unit,
     val onAddContact: (String) -> Unit,
     val onOpenContact: (String) -> Unit,
+    val onOpenAudit: () -> Unit,
 )
 
 /** The confirmations and the member sheet all answer through these. */
@@ -89,6 +90,7 @@ internal data class GroupDialogCallbacks(
 fun GroupInfoRoute(
     onBack: () -> Unit,
     onOpenContact: (String) -> Unit,
+    onOpenAudit: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: GroupInfoViewModel = hiltViewModel(),
 ) {
@@ -126,8 +128,13 @@ fun GroupInfoRoute(
         } else {
             GroupInfoList(
                 state = state,
-                callbacks = remember(viewModel, onOpenContact) {
-                    GroupInfoCallbacks(viewModel::onOpenDialog, viewModel::onAddContact, onOpenContact)
+                callbacks = remember(viewModel, onOpenContact, onOpenAudit) {
+                    GroupInfoCallbacks(
+                        onOpenDialog = viewModel::onOpenDialog,
+                        onAddContact = viewModel::onAddContact,
+                        onOpenContact = onOpenContact,
+                        onOpenAudit = onOpenAudit,
+                    )
                 },
                 modifier = content,
             )
@@ -159,6 +166,16 @@ private fun GroupInfoList(
         item(key = "header") { GroupInfoHeader(state = state) }
         if (state.canManage) {
             item(key = "manage") { GroupManageSection(state = state, onOpenDialog = callbacks.onOpenDialog) }
+        }
+        if (state.canReviewAudit) {
+            item(key = "audit") {
+                SettingsRow(
+                    label = stringResource(R.string.feature_chat_group_audit_open),
+                    icon = Icons.Outlined.History,
+                    trailing = SettingsTrailing.Chevron,
+                    onClick = callbacks.onOpenAudit,
+                )
+            }
         }
         item(key = "members-header") {
             SectionHeader(title = stringResource(R.string.feature_chat_group_members_section))

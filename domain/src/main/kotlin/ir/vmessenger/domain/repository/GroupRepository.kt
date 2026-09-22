@@ -2,6 +2,7 @@ package ir.vmessenger.domain.repository
 
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.domain.model.Group
+import ir.vmessenger.domain.model.GroupAuditEntry
 import ir.vmessenger.domain.model.GroupMember
 import kotlinx.coroutines.flow.Flow
 
@@ -17,6 +18,14 @@ interface GroupRepository {
     fun observeGroup(groupId: String): Flow<Group?>
 
     fun observeMembers(groupId: String): Flow<List<GroupMember>>
+
+    /**
+     * The revisions this device captured for [groupId] while retention was on, newest first.
+     *
+     * Empty when retention was never on, and — because switching it off erases what was kept —
+     * empty again afterwards. Local only; see [ir.vmessenger.domain.model.GroupAuditEntry].
+     */
+    fun observeAuditEntries(groupId: String): Flow<List<GroupAuditEntry>>
 
     suspend fun getGroup(groupId: String): Group?
 

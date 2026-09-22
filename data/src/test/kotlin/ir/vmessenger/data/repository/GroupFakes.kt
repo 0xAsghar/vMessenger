@@ -253,6 +253,9 @@ class FakeMessageEditHistoryDao : MessageEditHistoryDao {
     override suspend fun forGroup(groupId: String, limit: Int): List<MessageEditHistoryEntity> =
         rows.filter { it.groupId == groupId }.sortedByDescending { it.capturedAtUnixMs }.take(limit)
 
+    override fun observeForGroup(groupId: String, limit: Int): Flow<List<MessageEditHistoryEntity>> =
+        flowOf(rows.filter { it.groupId == groupId }.sortedByDescending { it.capturedAtUnixMs }.take(limit))
+
     override suspend fun forMessage(messageId: String): List<MessageEditHistoryEntity> =
         rows.filter { it.messageId == messageId }.sortedBy { it.capturedAtUnixMs }
 

@@ -22,6 +22,7 @@ import ir.vmessenger.data.network.GroupControlFanOut
 import ir.vmessenger.data.network.GroupControlFanOutRequest
 import ir.vmessenger.data.network.MAX_GROUP_MEMBERS
 import ir.vmessenger.domain.model.Group
+import ir.vmessenger.domain.model.GroupAuditEntry
 import ir.vmessenger.domain.model.GroupMember
 import ir.vmessenger.domain.repository.ContactRepository
 import ir.vmessenger.domain.repository.GroupRepository
@@ -33,6 +34,7 @@ import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import ir.vmessenger.core.database.entity.MessageRevisionKind as DbMessageRevisionKind
 
 /**
  * Groups, as this device sees them.
@@ -73,6 +75,24 @@ class GroupRepositoryImpl @Inject constructor(
         }
 
     override suspend fun getGroup(groupId: String): Group? = groupDao.getById(groupId)?.toDomain(selfKey())
+
+    override fun observeAuditEntries(groupId: String): Flow<List<GroupAuditEntry>> =
+        historyDao.observeForGroup(groupId, AUDIT_PAGE_SIZE).map { rows ->
+            val names = groupDao.activeMembers(groupId).associate { it.identityHash to it.displayName }
+            rows.map { row ->
+                GroupAuditEntry(
+                    messageId = row.messageId,
+                    authorIdentityHash = row.authorIdentityHash,
+                    // A member who has since left keeps no name here, and the screen says so
+                    // rather than showing a bare hash as if it were one.
+                    authorName = row.authorIdentityHash?.let(names::get),
+                    deleted = row.revision == DbMessageRevisionKind.DELETE,
+                    text = row.body ?: row.caption,
+                    attachmentName = row.attachmentName,
+                    capturedAtUnixMs = row.capturedAtUnixMs,
+                )
+            }
+        }
 
     override suspend fun createGroup(name: String, memberContactIds: List<String>): AppResult<String> {
         val self = selfMember()
@@ -400,5 +420,8 @@ class GroupRepositoryImpl @Inject constructor(
         const val TAG = "Groups"
         const val GROUP_ID_BYTES = 16
         const val CREATOR_ROLE_FIXED = "نقش سازنده گروه قابل تغییر نیست"
+
+        /** The review screen is a window onto recent revisions, not a full export. */
+        const val AUDIT_PAGE_SIZE = 200
     }
 }
