@@ -81,9 +81,11 @@ private enum class AppAlert(
  * that alert clears, so a fresh occurrence — or a different one — surfaces again.
  */
 @Composable
-fun AppAlertBanner(modifier: Modifier = Modifier) {
+fun AppAlertBanner(notificationAlertAllowed: Boolean, modifier: Modifier = Modifier) {
     val listenerAlert by NetworkPathTracker.listenerAlert.collectAsStateWithLifecycle()
-    val alert = currentAlert(notificationsEnabled(), listenerAlert)
+    // The other alerts are about the network the user is already on; this one is about a question
+    // the app has to have asked first, so the caller says whether it has.
+    val alert = currentAlert(notificationsEnabled() || !notificationAlertAllowed, listenerAlert)
     var dismissed by rememberSaveable { mutableStateOf<String?>(null) }
     // [shown] is kept after the alert clears so the banner still has something to
     // draw while it slides away; the dismissal is dropped at the same moment, so a

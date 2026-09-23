@@ -47,8 +47,6 @@ class VMessengerApplication : Application(), Configuration.Provider {
         super.onCreate()
         // Debug builds may store/dial ws:// or host:port nodes on local hosts (emulator, LAN); release: wss:// only.
         NodeAddressPolicy.current = NodeAddressPolicy(allowInsecureLocal = BuildConfig.DEBUG)
-        // Before anything formats a number or builds a notification: see AppLocaleController.
-        appLocaleController.sync()
         MapLibre.getInstance(this)
         fileLogSink = FileLogSink(this)
         AppLogger.addSink(fileLogSink)
@@ -56,6 +54,9 @@ class VMessengerApplication : Application(), Configuration.Provider {
             AppLogger.addSink(LogcatSink())
         }
         AppLogger.info(TAG, "vMessenger started")
+        // Before anything formats a number or builds a notification (see AppLocaleController), but
+        // after the file sink exists: the first-launch pin is exactly what a log should show.
+        appLocaleController.sync()
         startKeepAliveWork()
         startExpiryPurgeWork()
         // The passphrase is unwrapped from the Keystore, which can take hundreds

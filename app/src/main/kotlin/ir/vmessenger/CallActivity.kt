@@ -3,10 +3,10 @@ package ir.vmessenger
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -14,12 +14,14 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
+import ir.vmessenger.app.locale.AppLocaleController
 import ir.vmessenger.core.designsystem.theme.RtlLayout
 import ir.vmessenger.core.designsystem.theme.VMessengerTheme
 import ir.vmessenger.ui.call.CallActions
 import ir.vmessenger.ui.call.CallScreen
 import ir.vmessenger.ui.call.CallViewModel
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /**
  * The call screen, in its own activity.
@@ -36,11 +38,17 @@ import kotlinx.coroutines.launch
  * screenshot of this screen is a record of who called whom and when.
  */
 @AndroidEntryPoint
-class CallActivity : ComponentActivity() {
+class CallActivity : AppCompatActivity() {
     private val viewModel: CallViewModel by viewModels()
+
+    @Inject
+    lateinit var appLocaleController: AppLocaleController
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // An AppCompatActivity for this reason alone: below Android 13 the per-app language is
+        // applied only to AppCompat activities, and a ComponentActivity would ring in the device's.
+        appLocaleController.onActivityConfiguration(resources.configuration)
         showOverLockScreen()
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()

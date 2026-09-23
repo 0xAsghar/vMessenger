@@ -11,12 +11,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ir.vmessenger.R
 import ir.vmessenger.core.designsystem.LocalAppObscured
@@ -64,12 +68,21 @@ fun VMessengerApp(
                 modifier = Modifier.fillMaxSize(),
                 color = MaterialTheme.colorScheme.background,
             ) {
+                // Remembered here, above everything that reads it: the lock gate below explains why
+                // it must outlive the host, and the first-run check just below needs its destination.
+                val navController = rememberNavController()
+                val pastFirstRun = rememberPastFirstRun(navController)
                 Box(modifier = Modifier.fillMaxSize()) {
                     // Not over the lock: the explanation names what the app does in the background,
                     // and a dialog is its own window, so it would sit above the lock screen.
                     if (lockState == LockState.Unlocked) {
+                        // Not during first run either. The explanation is about delivering messages:
+                        // asked on the node screen it read as a demand from an app the user had not
+                        // decided to use yet, and asked the moment the identity existed it covered the
+                        // one step that shows the user their new ID, with a second "Continue" of its
+                        // own on top of that step's.
                         NotificationPermissionEffect(
-                            rationalePending = notificationRationalePending,
+                            rationalePending = notificationRationalePending && pastFirstRun,
                             onAcknowledged = onNotificationRationaleAcknowledged,
                         )
                     }
@@ -107,7 +120,6 @@ fun VMessengerApp(
                         // with the host, and navigation-compose destroys nothing on dispose — so
                         // every lock cycle abandoned a graph's worth of ViewModelStores, including
                         // the one whose onCleared zeroes a staged backup passphrase.
-                        val navController = rememberNavController()
                         val locked =
                             lockState == LockState.Locked || lockState == LockState.LockedStrict
                         if (startRoute != null && !locked) {
@@ -120,7 +132,13 @@ fun VMessengerApp(
                             )
                         }
                     }
-                    AppAlertBanner(modifier = Modifier.align(Alignment.TopCenter))
+                    AppAlertBanner(
+                        // "Notifications are off" only once the user has been asked and answered.
+                        // Before that it is simply true of every fresh Android 13+ install, and it
+                        // was greeting new users on the first screen, over the text explaining it.
+                        notificationAlertAllowed = pastFirstRun && !notificationRationalePending,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                    )
                     if (lockState != LockState.Unlocked) {
                         // Opaque, and drawn while the state is still Undetermined as well as when
                         // it is decided. Whether to lock is an asynchronous answer; the first frame
@@ -174,4 +192,18 @@ private fun NotificationPermissionEffect(rationalePending: Boolean, onAcknowledg
         // Dismissing is an answer too: it is recorded so the app does not ask again.
         onDismiss = onAcknowledged,
     )
+}
+
+/**
+ * Whether the user has left first run — the node question and onboarding — for the app proper.
+ *
+ * Read from the navigation destination rather than from whether an identity exists: the identity
+ * is created one step *before* onboarding ends, on the step that shows the user their ID, and
+ * "exists" fired there. Until the graph has a destination at all, the answer is no.
+ */
+@Composable
+private fun rememberPastFirstRun(navController: NavHostController): Boolean {
+    val entry by navController.currentBackStackEntryAsState()
+    val destination = entry?.destination ?: return false
+    return !destination.hasRoute(VmRoute.NodeSetup::class) && !destination.hasRoute(VmRoute.Onboarding::class)
 }

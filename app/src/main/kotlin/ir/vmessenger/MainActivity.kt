@@ -17,6 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
+import ir.vmessenger.app.locale.AppLocaleController
 import ir.vmessenger.core.notifications.MessageNotificationManager
 import ir.vmessenger.data.lock.LockState
 import ir.vmessenger.feature.lock.AppLockScreen
@@ -24,6 +25,7 @@ import ir.vmessenger.ui.VMessengerApp
 import ir.vmessenger.ui.share.sharePayloadOf
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /**
  * An AppCompatActivity, for two reasons that happen to point the same way.
@@ -38,9 +40,15 @@ import kotlinx.coroutines.launch
 class MainActivity : AppCompatActivity() {
     private val viewModel: MainViewModel by viewModels()
 
+    @Inject
+    lateinit var appLocaleController: AppLocaleController
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        // Before anything composes: the layout direction and every formatted number follow this,
+        // and it must match the language the resources were just resolved in. See the controller.
+        appLocaleController.onActivityConfiguration(resources.configuration)
         // The system splash stays up until the start destination is known, so the
         // first composed frame is already the right screen — no in-app splash and
         // no artificial delay.
