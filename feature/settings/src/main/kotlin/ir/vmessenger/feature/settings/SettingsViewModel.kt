@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import ir.vmessenger.core.common.AppBuildInfo
+import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.datastore.PrivacyPreferences
 import ir.vmessenger.core.datastore.ThemeMode
@@ -57,8 +58,8 @@ sealed class BackupExportStatus {
 }
 
 sealed class BackupExportFailure {
-    /** The domain layer refused to build the bundle; [message] is user-facing. */
-    data class Bundle(val message: String) : BackupExportFailure()
+    /** The domain layer refused to build the bundle; the screen words [error] in the app's language. */
+    data class Bundle(val error: AppError) : BackupExportFailure()
 
     /** The bundle was built but could not be written to the chosen document. */
     data object Write : BackupExportFailure()
@@ -196,7 +197,7 @@ class SettingsViewModel @Inject constructor(
                         _backupExportStatus.value = when (val result = exportIdentityBackupUseCase(passphrase)) {
                             is AppResult.Success -> writeBundle(uri, result.data)
                             is AppResult.Error ->
-                                BackupExportStatus.Failed(BackupExportFailure.Bundle(result.error.message))
+                                BackupExportStatus.Failed(BackupExportFailure.Bundle(result.error))
                         }
                     } finally {
                         passphrase.fill(NUL)

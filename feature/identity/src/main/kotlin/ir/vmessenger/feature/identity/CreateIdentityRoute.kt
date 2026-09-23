@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.error.toUiText
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.VmTheme
@@ -114,7 +115,7 @@ private fun OnboardingStep(
                 onContinue = onIdentityCreated,
             )
             is CreateIdentityUiState.Error -> CreateIdentityError(
-                message = state.message,
+                message = state.error.toUiText(),
                 onRetry = viewModel::retryFromError,
             )
             CreateIdentityUiState.InspectingBackup -> RestoreProgressStep(inspecting = true)

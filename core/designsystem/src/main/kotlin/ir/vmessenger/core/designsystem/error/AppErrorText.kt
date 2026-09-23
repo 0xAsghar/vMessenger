@@ -3,6 +3,7 @@ package ir.vmessenger.core.designsystem.error
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import ir.vmessenger.core.common.AppError
+import ir.vmessenger.core.common.network.NodeAddressRejection
 import ir.vmessenger.core.designsystem.R
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import kotlin.reflect.KClass
@@ -38,6 +39,7 @@ private val ERROR_TEXT: Map<KClass<out AppError>, Int> = mapOf(
     AppError.UpdateChecksumMismatch::class to R.string.vm_error_update_checksum_mismatch,
     AppError.UpdateSignatureMismatch::class to R.string.vm_error_update_signature_mismatch,
     AppError.UpdateNoAsset::class to R.string.vm_error_update_no_asset,
+    AppError.BuiltInNodeRemoval::class to R.string.vm_error_node_built_in,
 )
 
 /**
@@ -49,7 +51,15 @@ fun AppError.toUiText(): String = when (this) {
     is AppError.AttachmentTooLarge -> stringResource(R.string.vm_error_attachment_too_large, digits(maxMb))
     is AppError.GroupFull -> stringResource(R.string.vm_error_group_full, digits(max))
     is AppError.ProtocolVersion -> stringResource(R.string.vm_error_protocol_version, digits(peerMajor))
+    is AppError.NodeAddressRejected -> stringResource(nodeRejectionText(rejection, relay))
     else -> stringResource(ERROR_TEXT[this::class] ?: R.string.vm_error_unknown)
+}
+
+private fun nodeRejectionText(rejection: NodeAddressRejection, relay: Boolean): Int = when (rejection) {
+    NodeAddressRejection.BLANK -> R.string.vm_error_node_blank
+    NodeAddressRejection.MALFORMED ->
+        if (relay) R.string.vm_error_node_relay_malformed else R.string.vm_error_node_bootstrap_malformed
+    NodeAddressRejection.INSECURE_NOT_LOCAL -> R.string.vm_error_node_insecure
 }
 
 private fun digits(value: Int): String = VmTextFormat.digits(value.toString())

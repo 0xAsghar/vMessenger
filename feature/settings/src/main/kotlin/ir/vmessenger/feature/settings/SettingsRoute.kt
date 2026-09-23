@@ -56,6 +56,7 @@ import ir.vmessenger.core.designsystem.component.VmProgressIndicator
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
 import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
+import ir.vmessenger.core.designsystem.error.toUiText
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.VmTheme
@@ -326,7 +327,7 @@ private fun BackupExportStatusText(status: BackupExportStatus) {
         )
         is BackupExportStatus.Failed -> VmText(
             text = when (val failure = status.failure) {
-                is BackupExportFailure.Bundle -> failure.message
+                is BackupExportFailure.Bundle -> failure.error.toUiText()
                 BackupExportFailure.Write -> stringResource(R.string.settings_backup_write_failed)
             },
             style = VmTheme.typography.bodyMd,

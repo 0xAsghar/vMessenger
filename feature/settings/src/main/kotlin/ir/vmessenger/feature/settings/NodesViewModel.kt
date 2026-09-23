@@ -3,6 +3,7 @@ package ir.vmessenger.feature.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.domain.model.NetworkNode
 import ir.vmessenger.domain.model.NetworkNodeRole
@@ -42,14 +43,16 @@ class NodesViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, NodesUiState())
 
-    private val _addError = MutableStateFlow<String?>(null)
-    val addError: StateFlow<String?> = _addError.asStateFlow()
+    private val _addError = MutableStateFlow<AppError?>(null)
+
+    /** What went wrong, not a sentence: the screen words it in the app's language. */
+    val addError: StateFlow<AppError?> = _addError.asStateFlow()
 
     fun addNode(input: String, role: NetworkNodeRole) {
         viewModelScope.launch {
             when (val result = addNetworkNode(input, role)) {
                 is AppResult.Success -> _addError.value = null
-                is AppResult.Error -> _addError.value = result.error.message
+                is AppResult.Error -> _addError.value = result.error
             }
         }
     }
@@ -66,7 +69,7 @@ class NodesViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = removeNetworkNode(node.address, node.role)) {
                 is AppResult.Success -> Unit
-                is AppResult.Error -> _addError.value = result.error.message
+                is AppResult.Error -> _addError.value = result.error
             }
         }
     }

@@ -95,4 +95,9 @@
     <string name="vm_error_update_checksum_mismatch">فایل دریافت‌شده سالم نیست</string>
     <string name="vm_error_update_signature_mismatch">امضای نسخهٔ جدید با نسخهٔ نصب‌شده یکسان نیست</string>
     <string name="vm_error_update_no_asset">برای این دستگاه فایل نصبی منتشر نشده است</string>
+    <string name="vm_error_node_blank">آدرس نود خالی است</string>
+    <string name="vm_error_node_relay_malformed">آدرس رله باید با wss:// شروع شود و نام میزبان داشته باشد</string>
+    <string name="vm_error_node_bootstrap_malformed">آدرس بوت‌استرپ باید با wss:// شروع شود و نام میزبان داشته باشد</string>
+    <string name="vm_error_node_insecure">اتصال ناامن (ws:// یا host:port) فقط در نسخهٔ توسعه و برای نودهای محلی مجاز است</string>
+    <string name="vm_error_node_built_in">نود پیش‌فرض قابل حذف نیست؛ می‌توانید آن را غیرفعال کنید</string>
 </resources>

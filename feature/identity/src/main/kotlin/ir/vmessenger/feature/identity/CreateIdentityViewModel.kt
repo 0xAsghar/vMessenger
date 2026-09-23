@@ -35,7 +35,9 @@ sealed class CreateIdentityUiState {
     ) : CreateIdentityUiState()
     data object Creating : CreateIdentityUiState()
     data class Success(val identity: Identity, val restored: RestoreSummary? = null) : CreateIdentityUiState()
-    data class Error(val message: String) : CreateIdentityUiState()
+
+    /** What went wrong, not a sentence: the screen words it in the app's language. */
+    data class Error(val error: AppError) : CreateIdentityUiState()
 
     /** The chosen backup file is being read and its header inspected. */
     data object InspectingBackup : CreateIdentityUiState()
@@ -112,7 +114,7 @@ class CreateIdentityViewModel @Inject constructor(
             viewModelScope.launch {
                 _uiState.value = when (val result = generateIdentityUseCase(trimmed)) {
                     is AppResult.Success -> CreateIdentityUiState.Success(result.data)
-                    is AppResult.Error -> CreateIdentityUiState.Error(result.error.message)
+                    is AppResult.Error -> CreateIdentityUiState.Error(result.error)
                 }
             }
         }

@@ -70,6 +70,7 @@
     <string name="nodes_scan_action">Scan QR code</string>
     <string name="nodes_scan_title">Scan node QR code</string>
     <string name="nodes_scan_hint">Place the node QR code (vmnode:…) inside the frame</string>
+    <string name="nodes_scan_invalid">This is not a node QR code. Scan a vmnode:bootstrap:… or vmnode:relay:… code.</string>
     <string name="nodes_scan_success">Node added</string>
     <string name="nodes_role_bootstrap">Bootstrap</string>
     <string name="nodes_role_relay">Relay</string>

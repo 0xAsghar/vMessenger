@@ -9,6 +9,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.util.concurrent.atomic.AtomicInteger
 
 class IncomingWorkerRouterTest {
     private fun envelope(contactId: String, id: String = "m-$contactId") =
@@ -119,9 +120,16 @@ class IncomingWorkerRouterTest {
     @Test
     fun idleWorkersRetireAndComeBack() = runBlocking {
         val handled = Channel<String>(Channel.UNLIMITED)
+        val calls = AtomicInteger()
+        val secondMayFinish = CompletableDeferred<Unit>()
         val router = IncomingWorkerRouter(
             Dispatchers.Default,
-            handler = { handled.send(it.contactId) },
+            handler = {
+                // The second envelope is held, so its worker is certainly alive when counted: read
+                // after handling, a loaded machine could let 50 ms pass and retire it again first.
+                if (calls.incrementAndGet() == 2) secondMayFinish.await()
+                handled.send(it.contactId)
+            },
             idleTimeoutMs = 50,
         )
         try {
@@ -132,9 +140,11 @@ class IncomingWorkerRouterTest {
             }
 
             router.route(envelope("a"))
-            assertEquals("a", withTimeout(2_000) { handled.receive() })
             assertEquals(1, router.workerCount())
+            secondMayFinish.complete(Unit)
+            assertEquals("a", withTimeout(2_000) { handled.receive() })
         } finally {
+            secondMayFinish.complete(Unit)
             router.stop()
         }
     }

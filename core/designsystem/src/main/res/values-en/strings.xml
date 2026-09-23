@@ -95,4 +95,9 @@
     <string name="vm_error_update_checksum_mismatch">The downloaded file is damaged</string>
     <string name="vm_error_update_signature_mismatch">The signature of the new version does not match the installed version</string>
     <string name="vm_error_update_no_asset">No installer file has been published for this device</string>
+    <string name="vm_error_node_blank">The node address is empty</string>
+    <string name="vm_error_node_relay_malformed">A relay address must start with wss:// and include a host name</string>
+    <string name="vm_error_node_bootstrap_malformed">A bootstrap address must start with wss:// and include a host name</string>
+    <string name="vm_error_node_insecure">An unencrypted connection (ws:// or host:port) is allowed only in development builds, for local nodes</string>
+    <string name="vm_error_node_built_in">A built-in node cannot be removed; you can turn it off instead</string>
 </resources>

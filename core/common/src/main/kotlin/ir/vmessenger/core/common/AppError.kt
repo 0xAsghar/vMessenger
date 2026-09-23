@@ -1,11 +1,13 @@
 package ir.vmessenger.core.common
 
+import ir.vmessenger.core.common.network.NodeAddressRejection
+
 /**
  * Every failure the domain and data layers can surface.
  *
  * [message] is developer-facing (logs, crash reports) and is deliberately English; the
- * user-facing Persian text lives in `core:designsystem` (`AppError.toUiText()`), so no
- * subtype should ever carry a translated string.
+ * user-facing text, in the app's language, lives in `core:designsystem` (`AppError.toUiText()`),
+ * so no subtype should ever carry a translated string — and no screen should show [message].
  */
 sealed class AppError(open val message: String) {
     data class Unknown(override val message: String) : AppError(message)
@@ -45,6 +47,13 @@ sealed class AppError(open val message: String) {
     data object NotGroupCreator : AppError("only the group creator may change its membership")
     data object GroupClosed : AppError("the group is closed")
     data object NoReachableMembers : AppError("no approved, reachable group members")
+
+    // Network nodes -------------------------------------------------------------
+    /** A node address the policy refused; [relay] says which kind of node it was meant to be. */
+    data class NodeAddressRejected(val rejection: NodeAddressRejection, val relay: Boolean) :
+        AppError("node address rejected: $rejection")
+
+    data object BuiltInNodeRemoval : AppError("a built-in node cannot be removed, only turned off")
 
     // Updater -----------------------------------------------------------------
     data object UpdateRateLimited : AppError("release API rate limit reached")

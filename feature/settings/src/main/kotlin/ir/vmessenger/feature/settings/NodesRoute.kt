@@ -9,10 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.PriorityHigh
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.runtime.Composable
@@ -41,6 +41,7 @@ import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.component.VmTextButton
 import ir.vmessenger.core.designsystem.component.VmTextField
 import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
+import ir.vmessenger.core.designsystem.error.toUiText
 import ir.vmessenger.core.designsystem.foundation.rememberCopyToClipboard
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
@@ -67,7 +68,7 @@ fun NodesRoute(
         scrolled = scroll.canScrollBackward,
         actions = {
             VmIconButton(
-                icon = Icons.Outlined.PriorityHigh,
+                icon = Icons.AutoMirrored.Outlined.HelpOutline,
                 contentDescription = stringResource(R.string.nodes_run_guide_action),
                 onClick = { showRunGuide = true },
             )
@@ -116,7 +117,7 @@ fun NodesRoute(
 
     if (showAddDialog) {
         AddNodeDialog(
-            error = addError,
+            error = addError?.toUiText(),
             onAdd = { input, role -> viewModel.addNode(input, role) },
             onScan = {
                 showAddDialog = false

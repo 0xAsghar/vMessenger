@@ -5,7 +5,6 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.NodeAddressPolicy
-import ir.vmessenger.core.common.network.NodeAddressRejection
 import ir.vmessenger.core.common.network.NodeRankKey
 import ir.vmessenger.core.common.network.NodeRanking
 import ir.vmessenger.core.common.network.NodeTrust
@@ -206,7 +205,9 @@ class NetworkNodeRepository(
             NetworkNodeRole.RELAY -> addressPolicy().checkRelay(address)
             NetworkNodeRole.BOOTSTRAP -> addressPolicy().checkBootstrap(address)
         }
-        if (rejection != null) return AppResult.Error(AppError.Validation(rejectionMessage(rejection, role)))
+        if (rejection != null) {
+            return AppResult.Error(AppError.NodeAddressRejected(rejection, relay = role == NetworkNodeRole.RELAY))
+        }
         when (role) {
             NetworkNodeRole.BOOTSTRAP -> addBootstrapNode(address)
             NetworkNodeRole.RELAY -> addRelayNode(address)
@@ -240,9 +241,7 @@ class NetworkNodeRepository(
             NetworkNodeRole.RELAY -> relayNodeDao.getByAddress(address)?.source
         }
         if (source == SOURCE_BUILT_IN) {
-            return AppResult.Error(
-                AppError.Validation("نود پیش‌فرض قابل حذف نیست؛ می‌توانید آن را غیرفعال کنید"),
-            )
+            return AppResult.Error(AppError.BuiltInNodeRemoval)
         }
         when (role) {
             NetworkNodeRole.BOOTSTRAP -> removeBootstrapNode(address)
@@ -264,17 +263,6 @@ class NetworkNodeRepository(
     private fun BootstrapNodeEntity.rankKey() = NodeRankKey(priority, failCount, lastOkUnixMs)
 
     private fun RelayNodeEntity.rankKey() = NodeRankKey(priority, failCount, lastOkUnixMs)
-
-    private fun rejectionMessage(rejection: NodeAddressRejection, role: NetworkNodeRole): String =
-        when (rejection) {
-            NodeAddressRejection.BLANK -> "آدرس نود خالی است"
-            NodeAddressRejection.MALFORMED -> when (role) {
-                NetworkNodeRole.RELAY -> "آدرس رله باید با wss:// شروع شود و نام میزبان داشته باشد"
-                NetworkNodeRole.BOOTSTRAP -> "آدرس بوت‌استرپ باید با wss:// شروع شود و نام میزبان داشته باشد"
-            }
-            NodeAddressRejection.INSECURE_NOT_LOCAL ->
-                "اتصال ناامن (ws:// یا host:port) فقط در نسخهٔ توسعه و برای نودهای محلی مجاز است"
-        }
 
     private fun BootstrapNodeEntity.toNetworkNode(role: NetworkNodeRole) = NetworkNode(
         address = address,

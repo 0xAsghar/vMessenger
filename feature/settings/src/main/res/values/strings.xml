@@ -70,6 +70,7 @@
     <string name="nodes_scan_action">اسکن QR</string>
     <string name="nodes_scan_title">اسکن QR نود</string>
     <string name="nodes_scan_hint">QR نود (vmnode:…) را داخل کادر قرار دهید</string>
+    <string name="nodes_scan_invalid">این QR گره نیست. کد vmnode:bootstrap:… یا vmnode:relay:… را اسکن کنید.</string>
     <string name="nodes_scan_success">نود اضافه شد</string>
     <string name="nodes_role_bootstrap">بوت‌استرپ</string>
     <string name="nodes_role_relay">رله</string>
