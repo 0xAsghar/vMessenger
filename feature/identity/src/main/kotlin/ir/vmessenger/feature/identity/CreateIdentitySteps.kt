@@ -14,9 +14,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -128,10 +132,15 @@ internal fun CreateIdentityNameEntry(
         title = stringResource(R.string.create_identity_name_title),
         body = stringResource(R.string.create_identity_name_body),
     )
+    // The one thing this step asks for, so the keyboard is up as it opens rather than a tap away.
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(focus) { focus.requestFocus() }
     VmTextField(
         value = displayName,
         onValueChange = onDisplayNameChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focus),
         config = VmTextFieldConfig(
             label = stringResource(R.string.create_identity_name_label),
             isError = error != null,

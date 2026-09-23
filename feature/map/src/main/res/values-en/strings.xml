@@ -14,11 +14,11 @@
     <string name="feature_map_share_nobody">No contacts selected yet</string>
     <string name="feature_map_pick_contacts">Select contacts</string>
     <string name="feature_map_picker_title">Who can see my location?</string>
-    <string name="feature_map_picker_empty">You have no verified contacts</string>
+    <string name="feature_map_picker_empty">You have no approved contacts</string>
     <string name="feature_map_close">Close</string>
 
     <string name="feature_map_contacts_title">Contact location status</string>
-    <string name="feature_map_contacts_empty">You have no verified contacts yet</string>
+    <string name="feature_map_contacts_empty">You have no approved contacts yet</string>
     <string name="feature_map_contact_not_sharing">Not sharing their location with you</string>
     <string name="feature_map_contact_sees_me">Can see your location</string>
     <string name="feature_map_request_share">Request location sharing</string>

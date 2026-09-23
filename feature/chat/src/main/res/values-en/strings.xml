@@ -6,7 +6,7 @@
     <string name="feature_chat_search_open">Search</string>
     <string name="feature_chat_new">New conversation</string>
     <string name="feature_chat_empty_title">No conversations yet</string>
-    <string name="feature_chat_empty_body">To start one, pick a verified contact.</string>
+    <string name="feature_chat_empty_body">To start one, pick an approved contact.</string>
     <string name="feature_chat_no_results_title">No results found</string>
     <string name="feature_chat_no_results_body">Try a different search term.</string>
 
