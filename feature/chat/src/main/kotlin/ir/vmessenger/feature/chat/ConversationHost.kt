@@ -22,6 +22,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.VmSnackbarHostState
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
+import ir.vmessenger.core.designsystem.foundation.copyNeedsConfirmation
 import ir.vmessenger.feature.chat.voice.MicButtonActions
 import ir.vmessenger.feature.chat.voice.VoiceBubbleHost
 import ir.vmessenger.feature.chat.voice.rememberRecordAudioPermission
@@ -230,7 +231,7 @@ private fun rememberSheetState(
             picker = picker,
             onCopy = { state, messageId ->
                 clipboard.setText(AnnotatedString(state.textOf(messageId)))
-                scope.launch { snackbar.showSnackbar(copied) }
+                if (copyNeedsConfirmation) scope.launch { snackbar.showSnackbar(copied) }
             },
             onShare = { state, messageId ->
                 val mime = state.attachmentMimeOf(messageId)

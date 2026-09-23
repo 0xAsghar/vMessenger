@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -25,6 +26,7 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.common.encoding.UserHashEncoder
+import ir.vmessenger.core.designsystem.component.UserHashLineBreaks
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.core.designsystem.component.VmButton
 import ir.vmessenger.core.designsystem.component.VmIconButton
@@ -46,7 +48,22 @@ private data class HashFieldState(
     val value: String,
     val complete: Boolean,
     val malformed: Boolean,
+    /** A valid ID that is the user's own: nobody to add, so it is neither complete nor malformed. */
+    val own: Boolean,
 )
+
+private fun hashFieldState(value: String, ownUserHash: String?): HashFieldState {
+    val trimmed = value.trim()
+    val entered = UserHashEncoder.decode(trimmed)
+    val own = entered != null && ownUserHash != null && entered.contentEquals(UserHashEncoder.decode(ownUserHash))
+    return HashFieldState(
+        value = value,
+        complete = entered != null && !own,
+        // Only complain once there is enough typed to be wrong, not on the first character.
+        malformed = trimmed.length >= MIN_HASH_HINT_LENGTH && entered == null,
+        own = own,
+    )
+}
 
 @Composable
 fun AddByHashRoute(
@@ -56,13 +73,8 @@ fun AddByHashRoute(
 ) {
     var userHash by rememberSaveable { mutableStateOf("") }
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val trimmed = userHash.trim()
-    val field = HashFieldState(
-        value = userHash,
-        complete = UserHashEncoder.isValid(trimmed),
-        // Only complain once there is enough typed to be wrong, not on the first character.
-        malformed = trimmed.length >= MIN_HASH_HINT_LENGTH && !UserHashEncoder.isValid(trimmed),
-    )
+    val ownUserHash by viewModel.ownUserHash.collectAsStateWithLifecycle()
+    val field = remember(userHash, ownUserHash) { hashFieldState(userHash, ownUserHash) }
 
     VMessengerScaffold(
         title = stringResource(R.string.add_by_hash_title),
@@ -71,9 +83,12 @@ fun AddByHashRoute(
         AddByHashForm(
             padding = padding,
             field = field,
-            onUserHashChange = { userHash = it },
+            onUserHashChange = {
+                userHash = it
+                viewModel.onInputChanged()
+            },
             uiState = uiState,
-            onAdd = { viewModel.addContact(trimmed) },
+            onAdd = { viewModel.addContact(userHash.trim()) },
             onDone = onDone,
         )
     }
@@ -125,10 +140,12 @@ private fun HashField(
             label = stringResource(R.string.add_by_hash_label),
             singleLine = false,
             minLines = 2,
-            isError = field.malformed,
+            visualTransformation = UserHashLineBreaks,
+            isError = field.malformed || field.own,
             // Live feedback: the checksum either verifies or it does not, and the user sees which.
             supportingText = stringResource(
                 when {
+                    field.own -> R.string.add_by_hash_own
                     field.complete -> R.string.add_by_hash_valid
                     field.malformed -> R.string.add_by_hash_invalid
                     else -> R.string.add_by_hash_format
@@ -155,18 +172,22 @@ private fun AddByHashStatus(
     onAdd: () -> Unit,
     onDone: () -> Unit,
 ) {
-    when (uiState) {
-        AddContactUiState.Idle, AddContactUiState.Saving -> VmButton(
+    if (uiState == AddContactUiState.Success) {
+        AddContactSuccessPanel(onDone = onDone)
+        return
+    }
+    // A failure is said above the button, not in its place: the button used to vanish with the
+    // first error, and nothing brought it back short of leaving the screen.
+    Column(verticalArrangement = Arrangement.spacedBy(VmSpacing.md)) {
+        if (uiState is AddContactUiState.Error) {
+            VmText(text = uiState.error.toUiText(), color = VmTheme.colors.textCritical)
+        }
+        VmButton(
             text = stringResource(R.string.add_by_hash_action),
             onClick = onAdd,
             enabled = canSubmit,
             loading = uiState == AddContactUiState.Saving,
             modifier = Modifier.fillMaxWidth(),
-        )
-        AddContactUiState.Success -> AddContactSuccessPanel(onDone = onDone)
-        is AddContactUiState.Error -> VmText(
-            text = uiState.error.toUiText(),
-            color = VmTheme.colors.textCritical,
         )
     }
 }

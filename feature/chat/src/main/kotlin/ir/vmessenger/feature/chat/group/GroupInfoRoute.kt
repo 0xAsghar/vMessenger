@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
@@ -108,9 +110,11 @@ fun GroupInfoRoute(
         if (state.notFound) onBack()
     }
 
+    val listState = rememberLazyListState()
     VMessengerScaffold(
         title = state.name.ifBlank { stringResource(R.string.feature_chat_group_info_title) },
         onNavigateBack = onBack,
+        scrolled = listState.canScrollBackward,
         modifier = modifier,
         subtitle = stringResource(
             R.string.feature_chat_group_member_count,
@@ -126,6 +130,7 @@ fun GroupInfoRoute(
         } else {
             GroupInfoList(
                 state = state,
+                listState = listState,
                 callbacks = remember(viewModel, onOpenContact, onOpenAudit) {
                     GroupInfoCallbacks(
                         onOpenDialog = viewModel::onOpenDialog,
@@ -156,11 +161,12 @@ fun GroupInfoRoute(
 @Composable
 private fun GroupInfoList(
     state: GroupInfoUiState,
+    listState: LazyListState,
     callbacks: GroupInfoCallbacks,
     modifier: Modifier = Modifier,
 ) {
     val unknown = stringResource(R.string.feature_chat_group_member_unknown)
-    LazyColumn(modifier = modifier) {
+    LazyColumn(state = listState, modifier = modifier) {
         item(key = "header") { GroupInfoHeader(state = state) }
         if (state.canManage) {
             item(key = "manage") { GroupManageSection(state = state, onOpenDialog = callbacks.onOpenDialog) }

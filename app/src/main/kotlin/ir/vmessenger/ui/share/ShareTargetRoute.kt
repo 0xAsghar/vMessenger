@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.runtime.Composable
@@ -37,9 +38,11 @@ fun ShareTargetRoute(
 ) {
     val conversations by viewModel.conversations.collectAsStateWithLifecycle()
     val sending by viewModel.sending.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
     VMessengerScaffold(
         title = stringResource(R.string.share_target_title),
         onNavigateBack = onNavigateBack,
+        scrolled = listState.canScrollBackward,
         modifier = modifier,
     ) { padding ->
         if (conversations.isEmpty()) {
@@ -53,6 +56,7 @@ fun ShareTargetRoute(
             )
         } else {
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),

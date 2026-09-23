@@ -1,9 +1,6 @@
 package ir.vmessenger.feature.pairing
 
 import android.Manifest
-import android.content.pm.PackageManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -12,21 +9,19 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -34,10 +29,14 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
+import ir.vmessenger.core.designsystem.component.EmptyState
+import ir.vmessenger.core.designsystem.component.EmptyStateAction
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
-import ir.vmessenger.core.designsystem.component.VmButton
 import ir.vmessenger.core.designsystem.component.VmSurface
 import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.foundation.PermissionStatus
+import ir.vmessenger.core.designsystem.foundation.RuntimePermission
+import ir.vmessenger.core.designsystem.foundation.rememberRuntimePermission
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.VmTheme
 import java.util.concurrent.Executors
@@ -56,21 +55,11 @@ fun QrScannerScreen(
     onQrScanned: (String) -> Unit,
     overlay: @Composable () -> Unit = {},
 ) {
-    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    var hasCamera by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
-                PackageManager.PERMISSION_GRANTED,
-        )
-    }
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted -> hasCamera = granted }
-
-    DisposableEffect(Unit) {
-        if (!hasCamera) permissionLauncher.launch(Manifest.permission.CAMERA)
-        onDispose { }
+    val camera = rememberRuntimePermission(Manifest.permission.CAMERA)
+    // Asked once on the way in; after an answer, only the button asks again.
+    LaunchedEffect(Unit) {
+        if (camera.status == PermissionStatus.NotAsked) camera.request()
     }
 
     VMessengerScaffold(
@@ -78,34 +67,39 @@ fun QrScannerScreen(
         onNavigateBack = onNavigateBack,
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            if (hasCamera && !scanPaused) {
+            if (camera.granted && !scanPaused) {
                 QrCameraPreview(
                     lifecycleOwner = lifecycleOwner,
                     onQrScanned = onQrScanned,
                 )
                 QrScanFrameOverlay(hint = hint)
-            } else if (!hasCamera) {
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(VmSpacing.xl),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    VmText(
-                        text = stringResource(R.string.camera_permission_required),
-                        style = VmTheme.typography.bodyLg,
-                        color = VmTheme.colors.textPrimary,
-                        modifier = Modifier.padding(bottom = VmSpacing.lg),
-                    )
-                    VmButton(
-                        text = stringResource(R.string.camera_permission_grant),
-                        onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                    )
-                }
+            } else if (!camera.granted) {
+                CameraPermissionState(camera = camera, modifier = Modifier.fillMaxSize())
             }
             overlay()
         }
     }
+}
+
+/**
+ * No camera: why it is needed, and the one way forward — Android's dialog, or the app's settings
+ * page once Android has stopped showing that dialog and asking again would do nothing at all.
+ */
+@Composable
+private fun CameraPermissionState(camera: RuntimePermission, modifier: Modifier = Modifier) {
+    val blocked = camera.status == PermissionStatus.PermanentlyDenied
+    val action = if (blocked) {
+        EmptyStateAction(stringResource(R.string.camera_permission_settings), camera::openSettings)
+    } else {
+        EmptyStateAction(stringResource(R.string.camera_permission_grant), camera::request)
+    }
+    EmptyState(
+        icon = Icons.Outlined.PhotoCamera,
+        title = stringResource(R.string.camera_permission_title),
+        body = stringResource(if (blocked) R.string.camera_permission_blocked else R.string.camera_permission_required),
+        modifier = modifier,
+        action = action,
+    )
 }
 
 /**

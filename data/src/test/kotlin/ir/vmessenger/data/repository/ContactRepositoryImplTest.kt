@@ -12,6 +12,7 @@ import ir.vmessenger.core.crypto.LazysodiumCryptoEngine
 import ir.vmessenger.core.crypto.pairing.PairingDescriptorCodec
 import ir.vmessenger.core.database.entity.ContactEntity
 import ir.vmessenger.core.database.entity.ContactRelationshipStatus
+import ir.vmessenger.core.database.entity.IdentityEntity
 import ir.vmessenger.core.database.entity.PendingRevokeEntity
 import ir.vmessenger.data.activity.testActivityLogger
 import ir.vmessenger.data.network.CleanupHarness
@@ -27,6 +28,7 @@ import org.junit.Test
 class ContactRepositoryImplTest {
     private lateinit var cryptoEngine: CryptoEngine
     private lateinit var contactDao: FakeContactDao
+    private lateinit var identityDao: FakeIdentityDao
     private lateinit var cleanup: CleanupHarness
     private lateinit var repository: ContactRepositoryImpl
 
@@ -34,12 +36,14 @@ class ContactRepositoryImplTest {
     fun setUp() {
         cryptoEngine = LazysodiumCryptoEngine(LazySodiumJava(SodiumJava()))
         contactDao = FakeContactDao()
+        identityDao = FakeIdentityDao()
         cleanup = CleanupHarness(contactDao)
         repository = ContactRepositoryImpl(
             contactDao,
             PairingDescriptorCodec(cryptoEngine),
             cleanup.coordinator,
             testActivityLogger(),
+            identityDao,
         )
     }
 
@@ -49,6 +53,40 @@ class ContactRepositoryImplTest {
 
         assertTrue(result is AppResult.Success)
         assertEquals(ContactRelationshipStatus.PENDING_OUT, contactDao.contacts.single().relationshipStatus)
+    }
+
+    @Test
+    fun scanningOurOwnQrAddsNoOne() = runTest {
+        val keys = cryptoEngine.generateEd25519KeyPair()
+        identityDao.identity = ownIdentity(keys)
+
+        val result = repository.addContactByDescriptor(signedDescriptor(keys), null)
+
+        assertTrue(result is AppResult.Error && result.error == AppError.OwnIdentity)
+        assertTrue(contactDao.contacts.isEmpty())
+    }
+
+    @Test
+    fun enteringOurOwnUserIdAddsNoOne() = runTest {
+        val keys = cryptoEngine.generateEd25519KeyPair()
+        val own = ownIdentity(keys)
+        identityDao.identity = own
+
+        val result = repository.addContactByUserHash(own.userHash, null)
+
+        assertTrue(result is AppResult.Error && result.error == AppError.OwnIdentity)
+        assertTrue(contactDao.contacts.isEmpty())
+    }
+
+    @Test
+    fun someoneElsesUserIdIsStillAdded() = runTest {
+        identityDao.identity = ownIdentity(cryptoEngine.generateEd25519KeyPair())
+        val other = UserHashEncoder.identityHashFromPublicKey(cryptoEngine.generateEd25519KeyPair().publicKey)
+
+        val result = repository.addContactByUserHash(UserHashEncoder.encode(other), null)
+
+        assertTrue(result is AppResult.Success)
+        assertEquals(1, contactDao.contacts.size)
     }
 
     @Test
@@ -200,6 +238,17 @@ class ContactRepositoryImplTest {
         return PairingDescriptorCodec(cryptoEngine)
             .createSigned(keys.publicKey, UserHashEncoder.encode(hash), "Sara", keys.privateKey)
             .toByteArray()
+    }
+
+    private fun ownIdentity(keys: KeyPair): IdentityEntity {
+        val hash = UserHashEncoder.identityHashFromPublicKey(keys.publicKey)
+        return IdentityEntity(
+            ed25519Public = keys.publicKey,
+            identityHash = hash,
+            userHash = UserHashEncoder.encode(hash),
+            x25519StaticPublic = cryptoEngine.generateX25519KeyPair().publicKey,
+            createdAtUnixMs = 0L,
+        )
     }
 
     private fun revokeFor(identityHash: ByteArray) = PendingRevokeEntity(

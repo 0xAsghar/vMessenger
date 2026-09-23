@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.theme.VmTheme
@@ -79,6 +80,8 @@ data class VmTextFieldConfig(
     val maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
     val readOnly: Boolean = false,
     val capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
+    /** How the text is drawn, without changing what the field holds; [isPassword] takes precedence. */
+    val visualTransformation: VisualTransformation = VisualTransformation.None,
 )
 
 /** How much room a button takes. Large for a screen's main action, medium inside dialogs and rows. */

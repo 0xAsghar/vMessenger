@@ -4,6 +4,7 @@
     <string name="hash_share_chooser">اشتراک‌گذاری شناسه</string>
     <string name="hash_copy">کپی شناسه</string>
     <string name="hash_share">اشتراک‌گذاری</string>
+    <string name="vm_copied">کپی شد</string>
     <string name="nav_back">بازگشت</string>
     <string name="vmessenger_logo">لوگوی وی‌مسنجر</string>
     <string name="user_hash_label">شناسه کاربری</string>
@@ -75,6 +76,7 @@
     <string name="vm_error_protocol_version">نسخهٔ پروتکل مخاطب (%1$s) پشتیبانی نمی‌شود؛ یکی از دو برنامه باید به‌روزرسانی شود</string>
     <string name="vm_error_invalid_qr">این کد QR متعلق به وی‌مسنجر نیست</string>
     <string name="vm_error_invalid_user_hash">شناسهٔ کاربری معتبر نیست</string>
+    <string name="vm_error_own_identity">این شناسهٔ خودتان است؛ خودتان را نمی‌توانید به مخاطبان اضافه کنید</string>
     <string name="vm_error_contact_add_failed">افزودن مخاطب انجام نشد</string>
     <string name="vm_error_no_contact_selected">هیچ مخاطبی انتخاب نشده است</string>
     <string name="vm_error_request_not_found">این درخواست دیگر در دسترس نیست</string>

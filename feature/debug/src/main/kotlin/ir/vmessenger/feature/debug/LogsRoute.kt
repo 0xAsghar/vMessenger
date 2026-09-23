@@ -1,7 +1,6 @@
 package ir.vmessenger.feature.debug
 
 import android.content.Intent
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,10 +12,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -27,6 +24,7 @@ import ir.vmessenger.core.designsystem.component.VmButton
 import ir.vmessenger.core.designsystem.component.VmButtonSize
 import ir.vmessenger.core.designsystem.component.VmOutlinedButton
 import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.foundation.rememberCopyToClipboard
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.VmTheme
 import java.io.File
@@ -38,8 +36,7 @@ fun LogsRoute(
 ) {
     val entries by viewModel.entries.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
-    val copiedMessage = stringResource(R.string.feature_logs_copied)
+    val copy = rememberCopyToClipboard(stringResource(R.string.feature_logs_copied))
 
     VMessengerScaffold(
         title = stringResource(R.string.feature_logs_title),
@@ -64,10 +61,7 @@ fun LogsRoute(
                 )
                 VmOutlinedButton(
                     text = stringResource(R.string.feature_logs_copy),
-                    onClick = {
-                        clipboard.setText(AnnotatedString(viewModel.snapshotText()))
-                        Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
-                    },
+                    onClick = { copy(viewModel.snapshotText()) },
                     size = VmButtonSize.Medium,
                     modifier = Modifier.weight(1f),
                 )

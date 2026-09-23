@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Group
@@ -86,9 +88,11 @@ fun NewChatRoute(
     }
     BackHandler(enabled = searching) { closeSearch() }
 
+    val listState = rememberLazyListState()
     VMessengerScaffold(
         title = stringResource(R.string.feature_chat_new_title),
         onNavigateBack = if (searching) null else onBack,
+        scrolled = listState.canScrollBackward,
         actions = {
             if (!searching) {
                 VmIconButton(
@@ -114,6 +118,7 @@ fun NewChatRoute(
     ) { padding ->
         NewChatContent(
             state = state,
+            listState = listState,
             onNewGroup = onNewGroup,
             onContactClick = viewModel::onContactClick,
             modifier = Modifier
@@ -126,6 +131,7 @@ fun NewChatRoute(
 @Composable
 private fun NewChatContent(
     state: NewChatUiState,
+    listState: LazyListState,
     onNewGroup: () -> Unit,
     onContactClick: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -140,7 +146,7 @@ private fun NewChatContent(
             modifier = modifier,
         )
 
-        else -> LazyColumn(modifier = modifier) {
+        else -> LazyColumn(state = listState, modifier = modifier) {
             item(key = "new-group", contentType = "new-group") {
                 NewGroupRow(onClick = onNewGroup)
             }

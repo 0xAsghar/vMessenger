@@ -24,9 +24,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.SectionHeader
+import ir.vmessenger.core.designsystem.component.VmButtonSize
 import ir.vmessenger.core.designsystem.component.VmDivider
 import ir.vmessenger.core.designsystem.component.VmIcon
 import ir.vmessenger.core.designsystem.component.VmIconButton
+import ir.vmessenger.core.designsystem.component.VmOutlinedButton
 import ir.vmessenger.core.designsystem.component.VmSurface
 import ir.vmessenger.core.designsystem.component.VmSwitch
 import ir.vmessenger.core.designsystem.component.VmText
@@ -131,16 +133,18 @@ private fun SharingRow(
 @Composable
 private fun PermissionCard(permission: LocationPermissionController) {
     val permanentlyDenied = permission.state == MapPermission.PermanentlyDenied
+    // The info fill, not the subtle one: on a sheet the subtle fill is the sheet's own colour in
+    // the dark theme, and the card disappeared into it.
     VmSurface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
         shape = VmShapes.card,
-        color = VmTheme.colors.bgSubtle,
+        color = VmTheme.colors.bgInfoSubtle,
     ) {
         Column(
             modifier = Modifier.padding(VmSpacing.md),
-            verticalArrangement = Arrangement.spacedBy(VmSpacing.xs),
+            verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
         ) {
             VmText(
                 text = stringResource(
@@ -153,7 +157,7 @@ private fun PermissionCard(permission: LocationPermissionController) {
                 style = VmTheme.typography.bodyMd,
                 color = VmTheme.colors.textPrimary,
             )
-            VmTextButton(
+            VmOutlinedButton(
                 text = stringResource(
                     if (permanentlyDenied) {
                         R.string.feature_map_permission_settings
@@ -162,7 +166,7 @@ private fun PermissionCard(permission: LocationPermissionController) {
                     },
                 ),
                 onClick = if (permanentlyDenied) permission.openSettings else permission.request,
-                modifier = Modifier.align(Alignment.Start),
+                size = VmButtonSize.Medium,
             )
         }
     }

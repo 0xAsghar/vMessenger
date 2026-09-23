@@ -73,9 +73,24 @@ sealed class AddContactUiState {
 @HiltViewModel
 class AddByHashViewModel @Inject constructor(
     private val addByHash: AddContactByHashUseCase,
+    private val getIdentity: GetIdentityUseCase,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<AddContactUiState>(AddContactUiState.Idle)
     val uiState: StateFlow<AddContactUiState> = _uiState.asStateFlow()
+
+    private val _ownUserHash = MutableStateFlow<String?>(null)
+
+    /** The user's own ID, so the field can say so as it is pasted rather than after Add fails. */
+    val ownUserHash: StateFlow<String?> = _ownUserHash.asStateFlow()
+
+    init {
+        viewModelScope.launch { _ownUserHash.value = getIdentity()?.userHash }
+    }
+
+    /** An edit answers the last failure: the form is back to asking, with its button. */
+    fun onInputChanged() {
+        if (_uiState.value is AddContactUiState.Error) _uiState.value = AddContactUiState.Idle
+    }
 
     fun addContact(userHash: String) {
         val trimmed = userHash.trim()

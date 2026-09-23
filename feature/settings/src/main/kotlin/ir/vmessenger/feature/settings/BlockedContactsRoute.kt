@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.runtime.Composable
@@ -54,9 +55,11 @@ fun BlockedContactsRoute(
     val snackbarHost = rememberVmSnackbar()
     UnblockedSnackbarEffect(events = viewModel.events, hostState = snackbarHost)
 
+    val listState = rememberLazyListState()
     VMessengerScaffold(
         title = stringResource(R.string.blocked_contacts_title),
         onNavigateBack = onNavigateBack,
+        scrolled = listState.canScrollBackward,
         snackbarHost = { VmSnackbarHost(snackbarHost) },
     ) { padding ->
         val modifier = Modifier
@@ -70,7 +73,7 @@ fun BlockedContactsRoute(
                 body = stringResource(R.string.blocked_contacts_empty_body),
                 modifier = modifier,
             )
-            else -> LazyColumn(modifier = modifier) {
+            else -> LazyColumn(state = listState, modifier = modifier) {
                 items(state.contacts, key = { it.id }) { contact ->
                     BlockedContactRowItem(
                         contact = contact,

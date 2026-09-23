@@ -15,8 +15,12 @@
     <string name="add_contact_done">Back</string>
     <string name="camera_permission_required">The camera is needed to scan a QR.</string>
     <string name="camera_permission_grant">Grant camera access</string>
+    <string name="camera_permission_title">Camera access</string>
+    <string name="camera_permission_blocked">Camera access is blocked. Turn it on in the app settings to scan a QR.</string>
+    <string name="camera_permission_settings">Open settings</string>
     <string name="add_by_hash_paste">Paste from clipboard</string>
-    <string name="add_by_hash_format">A user ID starts with vm2- and is written in groups of four.</string>
+    <string name="add_by_hash_format">A user ID starts with vm2- and is written in groups of five.</string>
     <string name="add_by_hash_valid">The user ID is valid</string>
+    <string name="add_by_hash_own">This is your own user ID</string>
     <string name="add_by_hash_invalid">The user ID is incomplete or incorrect</string>
 </resources>

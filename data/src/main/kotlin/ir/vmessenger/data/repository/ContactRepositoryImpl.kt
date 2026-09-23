@@ -7,6 +7,7 @@ import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.crypto.pairing.PairingDescriptorCodec
 import ir.vmessenger.core.database.dao.ContactDao
+import ir.vmessenger.core.database.dao.IdentityDao
 import ir.vmessenger.core.database.entity.ActivityKind
 import ir.vmessenger.core.database.entity.ContactEntity
 import ir.vmessenger.core.proto.wire.v1.PairingDescriptor
@@ -28,6 +29,7 @@ class ContactRepositoryImpl @Inject constructor(
     private val pairingDescriptorCodec: PairingDescriptorCodec,
     private val cleanupCoordinator: ContactCleanupCoordinator,
     private val activityLogger: ActivityLogger,
+    private val identityDao: IdentityDao,
 ) : ContactRepository {
 
     override fun observeContacts(): Flow<List<Contact>> =
@@ -57,6 +59,14 @@ class ContactRepositoryImpl @Inject constructor(
         return revived
     }
 
+    /**
+     * Whether [identityHash] — full, or the zero-padded prefix a user ID carries — is the user's own.
+     * Adding it used to succeed: the user became a pending contact of themselves, and the request
+     * went out to their own inbox.
+     */
+    private suspend fun isOwnIdentity(identityHash: ByteArray): Boolean =
+        identityDao.getIdentity()?.identityHash?.let { IdentityHashMatcher.matches(it, identityHash) } == true
+
     override suspend fun addContactByDescriptor(
         descriptorBytes: ByteArray,
         alias: String?,
@@ -65,6 +75,7 @@ class ContactRepositoryImpl @Inject constructor(
         check(pairingDescriptorCodec.verify(descriptor)) { "امضای QR نامعتبر است" }
         val identityPub = descriptor.identityPub.toByteArray()
         val identityHash = UserHashEncoder.identityHashFromPublicKey(identityPub)
+        if (isOwnIdentity(identityHash)) return AppResult.Error(AppError.OwnIdentity)
         cleanupCoordinator.cancelPendingRevoke(identityHash)
         // Prefix-tolerant, because a contact added by hash holds a 16-byte prefix until its first
         // handshake and the exact lookup would miss it — producing a second row for one person.
@@ -102,6 +113,7 @@ class ContactRepositoryImpl @Inject constructor(
                     throw IllegalArgumentException("شناسه کاربری نامعتبر است")
                 }
             val identityHash = ByteArray(32).also { partialHash.copyInto(it, 0, 0, partialHash.size) }
+            if (isOwnIdentity(identityHash)) return AppResult.Error(AppError.OwnIdentity)
             cleanupCoordinator.cancelPendingRevoke(identityHash)
             // Exact byte equality used to be the test here, and it could never match a contact we
             // had already handshaked with: that row holds the *full* 32-byte hash while this one is

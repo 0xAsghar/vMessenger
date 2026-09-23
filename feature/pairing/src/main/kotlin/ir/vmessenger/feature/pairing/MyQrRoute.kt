@@ -27,15 +27,17 @@ fun MyQrRoute(
     viewModel: MyQrViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val scroll = rememberScrollState()
     VMessengerScaffold(
         title = stringResource(R.string.my_qr_title),
         onNavigateBack = onNavigateBack,
+        scrolled = scroll.canScrollBackward,
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scroll),
             contentAlignment = Alignment.Center,
         ) {
             when (val state = uiState) {

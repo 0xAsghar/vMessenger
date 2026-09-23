@@ -1,5 +1,6 @@
 package ir.vmessenger.feature.contacts
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -80,9 +81,11 @@ fun ContactDetailRoute(
         if (state.notFound) onNavigateBack()
     }
 
+    val scroll = rememberScrollState()
     VMessengerScaffold(
         title = state.contact?.name ?: stringResource(R.string.contact_detail_title),
         onNavigateBack = onNavigateBack,
+        scrolled = scroll.canScrollBackward,
         snackbarHost = { VmSnackbarHost(snackbarHost) },
     ) { padding ->
         val contact = state.contact
@@ -93,6 +96,7 @@ fun ContactDetailRoute(
                 state = state,
                 contact = contact,
                 padding = padding,
+                scroll = scroll,
                 callbacks = ContactDetailCallbacks(
                     onStartChat = viewModel::onStartChat,
                     onResend = viewModel::onResendRequest,
@@ -120,13 +124,14 @@ private fun ContactDetailContent(
     state: ContactDetailUiState,
     contact: ContactRow,
     padding: PaddingValues,
+    scroll: ScrollState,
     callbacks: ContactDetailCallbacks,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(padding)
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(scroll),
         verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
     ) {
         if (contact.keyChangePending) {

@@ -15,8 +15,12 @@
     <string name="add_contact_done">بازگشت</string>
     <string name="camera_permission_required">برای اسکن QR به دوربین نیاز است</string>
     <string name="camera_permission_grant">اجازه دسترسی به دوربین</string>
+    <string name="camera_permission_title">دسترسی دوربین</string>
+    <string name="camera_permission_blocked">دسترسی به دوربین بسته است؛ برای اسکن QR آن را از تنظیمات برنامه فعال کنید.</string>
+    <string name="camera_permission_settings">باز کردن تنظیمات</string>
     <string name="add_by_hash_paste">جای‌گذاری از حافظه</string>
-    <string name="add_by_hash_format">شناسه با vm2- شروع می‌شود و در گروه‌های چهارتایی نوشته می‌شود.</string>
+    <string name="add_by_hash_format">شناسه با vm2- شروع می‌شود و در گروه‌های پنج‌تایی نوشته می‌شود.</string>
     <string name="add_by_hash_valid">شناسه معتبر است</string>
+    <string name="add_by_hash_own">این شناسهٔ خودتان است</string>
     <string name="add_by_hash_invalid">شناسه کامل یا درست نیست</string>
 </resources>

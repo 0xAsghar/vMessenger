@@ -24,7 +24,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.foundation.ProvideVmContent
@@ -90,7 +89,11 @@ fun VmTextField(
             singleLine = config.singleLine,
             minLines = config.minLines,
             maxLines = config.maxLines,
-            visualTransformation = if (config.isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+            visualTransformation = if (config.isPassword) {
+                PasswordVisualTransformation()
+            } else {
+                config.visualTransformation
+            },
             interactionSource = interaction,
             cursorBrush = SolidColor(c.textPrimary),
             decorationBox = { inner ->

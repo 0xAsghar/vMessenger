@@ -50,6 +50,14 @@ class ContactRequestHandler @Inject constructor(
         }
         val identityPub = peer?.ed25519PublicKey ?: payloadPub
         val identityHash = peer?.identityHash ?: UserHashEncoder.identityHashFromPublicKey(identityPub)
+        // Nobody files a request with us under our own identity. One that does is our own add of our
+        // own ID, relayed back to our inbox — it used to approve itself and list the user as their
+        // own contact.
+        val self = identityRepository.getIdentity()?.identityHash
+        if (self != null && IdentityHashMatcher.matches(self, identityHash)) {
+            AppLogger.warn("Contact", "contact request ignored: the requester is our own identity")
+            return
+        }
         // The id is deterministic over (requester, us). Any other id would let a
         // peer overwrite another requester's pending row or dodge the reject cap.
         if (requestId !in acceptedRequestIds(identityHash)) {

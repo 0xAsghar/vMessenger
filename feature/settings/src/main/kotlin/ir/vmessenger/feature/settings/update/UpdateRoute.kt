@@ -71,17 +71,19 @@ fun UpdateRoute(
         onPauseOrDispose { }
     }
 
+    val scroll = rememberScrollState()
     VMessengerScaffold(
         title = stringResource(R.string.settings_update_title),
         onNavigateBack = onBack,
+        scrolled = scroll.canScrollBackward,
         modifier = modifier,
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(VmSpacing.lg)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(scroll)
+                .padding(VmSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
         ) {
             UpdateBody(

@@ -21,6 +21,9 @@ sealed class AppError(open val message: String) {
     // Pairing / contacts ------------------------------------------------------
     data object InvalidQr : AppError("pairing payload is not a valid vMessenger QR")
     data object InvalidUserHash : AppError("user hash is malformed")
+
+    /** The ID or QR is the user's own: there is no one on the other end to add. */
+    data object OwnIdentity : AppError("the contact to add is the user's own identity")
     data object ContactAddFailed : AppError("adding the contact failed")
     data object NoContactSelected : AppError("no contact selected")
     data object RequestNotFound : AppError("contact request no longer exists")

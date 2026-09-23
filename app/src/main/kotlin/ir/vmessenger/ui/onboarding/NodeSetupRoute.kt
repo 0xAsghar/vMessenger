@@ -45,17 +45,19 @@ fun NodeSetupRoute(
     val busy by viewModel.busy.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
     var confirmSkip by rememberSaveable { mutableStateOf(false) }
+    val scroll = rememberScrollState()
     VMessengerScaffold(
         title = stringResource(R.string.node_setup_title),
         onNavigateBack = { viewModel.onStep(NodeSetupStep.Choose) }
             .takeIf { step != NodeSetupStep.Choose },
+        scrolled = scroll.canScrollBackward,
         modifier = modifier,
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scroll)
                 .padding(VmSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
         ) {

@@ -23,9 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -44,6 +42,7 @@ import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.component.VmTextButton
 import ir.vmessenger.core.designsystem.component.VmTextField
 import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
+import ir.vmessenger.core.designsystem.foundation.rememberCopyToClipboard
 import ir.vmessenger.core.designsystem.theme.UserHashTextStyle
 import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSizes
@@ -280,7 +279,7 @@ private fun DebugActionsSection(
 
 @Composable
 private fun DebugAdbSection(adbCommands: String) {
-    val clipboard = LocalClipboardManager.current
+    val copy = rememberCopyToClipboard()
     SettingsSection(title = stringResource(R.string.feature_debug_adb_section)) {
         Row(
             modifier = Modifier
@@ -321,7 +320,7 @@ private fun DebugAdbSection(adbCommands: String) {
         ) {
             VmTextButton(
                 text = stringResource(R.string.feature_debug_copy_adb),
-                onClick = { clipboard.setText(AnnotatedString(adbCommands)) },
+                onClick = { copy(adbCommands) },
                 leadingIcon = Icons.Outlined.ContentCopy,
             )
         }

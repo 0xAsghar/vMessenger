@@ -1,7 +1,6 @@
 package ir.vmessenger.core.designsystem.component
 
 import android.content.Intent
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,11 +11,10 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import ir.vmessenger.core.designsystem.R
+import ir.vmessenger.core.designsystem.foundation.rememberCopyToClipboard
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.VmTheme
 
@@ -26,8 +24,7 @@ fun UserHashShareRow(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
-    val copiedMessage = stringResource(R.string.hash_copied)
+    val copy = rememberCopyToClipboard(stringResource(R.string.hash_copied))
     val shareLabel = stringResource(R.string.hash_share_chooser)
 
     Row(
@@ -40,10 +37,7 @@ fun UserHashShareRow(
         VmIconButton(
             icon = Icons.Outlined.ContentCopy,
             contentDescription = stringResource(R.string.hash_copy),
-            onClick = {
-                clipboard.setText(AnnotatedString(userHash))
-                Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
-            },
+            onClick = { copy(userHash) },
             tint = VmTheme.colors.iconSecondary,
         )
         VmIconButton(

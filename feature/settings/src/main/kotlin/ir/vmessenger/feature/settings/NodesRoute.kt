@@ -22,9 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,6 +41,7 @@ import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.component.VmTextButton
 import ir.vmessenger.core.designsystem.component.VmTextField
 import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
+import ir.vmessenger.core.designsystem.foundation.rememberCopyToClipboard
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.VmTheme
@@ -189,7 +188,7 @@ private fun CopyableCodeBlock(
     label: String,
     code: String,
 ) {
-    val clipboard = LocalClipboardManager.current
+    val copy = rememberCopyToClipboard()
     Column(verticalArrangement = Arrangement.spacedBy(VmSpacing.xs)) {
         VmText(
             text = label,
@@ -211,7 +210,7 @@ private fun CopyableCodeBlock(
             VmIconButton(
                 icon = Icons.Outlined.ContentCopy,
                 contentDescription = stringResource(R.string.nodes_copy_code),
-                onClick = { clipboard.setText(AnnotatedString(code)) },
+                onClick = { copy(code) },
                 tint = VmTheme.colors.iconSecondary,
             )
         }
@@ -361,11 +360,11 @@ private fun ShareNodeDialog(
     link: String,
     onDismiss: () -> Unit,
 ) {
-    val clipboard = LocalClipboardManager.current
+    val copy = rememberCopyToClipboard()
     VmInputDialog(
         title = stringResource(R.string.nodes_share_title),
         confirmLabel = stringResource(R.string.nodes_copy_link),
-        onConfirm = { clipboard.setText(AnnotatedString(link)) },
+        onConfirm = { copy(link) },
         onDismiss = onDismiss,
         dismissLabel = stringResource(R.string.nodes_close),
     ) {

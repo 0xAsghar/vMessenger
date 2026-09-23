@@ -1,5 +1,6 @@
 package ir.vmessenger.feature.identity
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,9 +53,11 @@ fun IdentityRoute(
     val snackbarHost = rememberVmSnackbar()
     UiMessageSnackbarEffect(messages = viewModel.messages, hostState = snackbarHost)
 
+    val scroll = rememberScrollState()
     VMessengerScaffold(
         title = stringResource(R.string.my_identity_title),
         onNavigateBack = onNavigateBack,
+        scrolled = scroll.canScrollBackward,
         snackbarHost = { VmSnackbarHost(snackbarHost) },
     ) { padding ->
         Box(
@@ -76,6 +79,7 @@ fun IdentityRoute(
                 )
                 is IdentityUiState.Loaded -> IdentityLoadedContent(
                     state = state,
+                    scroll = scroll,
                     onSaveDisplayName = viewModel::updateDisplayName,
                 )
             }
@@ -86,13 +90,14 @@ fun IdentityRoute(
 @Composable
 private fun IdentityLoadedContent(
     state: IdentityUiState.Loaded,
+    scroll: ScrollState,
     onSaveDisplayName: (String) -> Unit,
 ) {
     // Scrolls because the hash card and the hint used to clip behind the keyboard.
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scroll)
             .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.xl),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(VmSpacing.xl),

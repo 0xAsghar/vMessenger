@@ -4,6 +4,7 @@
     <string name="hash_share_chooser">Share ID</string>
     <string name="hash_copy">Copy ID</string>
     <string name="hash_share">Share</string>
+    <string name="vm_copied">Copied</string>
     <string name="nav_back">Back</string>
     <string name="vmessenger_logo">vMessenger logo</string>
     <string name="user_hash_label">User ID</string>
@@ -75,6 +76,7 @@
     <string name="vm_error_protocol_version">The contact\'s protocol version (%1$s) is not supported; one of the two apps needs to be updated</string>
     <string name="vm_error_invalid_qr">This QR code does not belong to vMessenger</string>
     <string name="vm_error_invalid_user_hash">The user ID is not valid</string>
+    <string name="vm_error_own_identity">That is your own ID; you cannot add yourself as a contact</string>
     <string name="vm_error_contact_add_failed">Could not add the contact</string>
     <string name="vm_error_no_contact_selected">No contact is selected</string>
     <string name="vm_error_request_not_found">This request is no longer available</string>

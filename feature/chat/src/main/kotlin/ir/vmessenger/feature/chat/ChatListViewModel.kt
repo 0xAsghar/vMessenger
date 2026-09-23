@@ -8,6 +8,7 @@ import ir.vmessenger.core.designsystem.format.VmDateFormat
 import ir.vmessenger.domain.model.ConversationSummary
 import ir.vmessenger.domain.model.DeliveryStatus
 import ir.vmessenger.domain.model.MessageDirection
+import ir.vmessenger.domain.model.MessagePreviewKind
 import ir.vmessenger.domain.usecase.chat.DeleteConversationUseCase
 import ir.vmessenger.domain.usecase.chat.MuteConversationUseCase
 import ir.vmessenger.domain.usecase.chat.ObserveChatListUseCase
@@ -125,7 +126,7 @@ private fun ChatListRow.matches(query: String): Boolean {
     return title.contains(needle, ignoreCase = true) || preview?.contains(needle, ignoreCase = true) == true
 }
 
-private fun ConversationSummary.toRow(): ChatListRow = ChatListRow(
+internal fun ConversationSummary.toRow(): ChatListRow = ChatListRow(
     id = id,
     contactId = contactId,
     groupId = groupId,
@@ -135,8 +136,11 @@ private fun ConversationSummary.toRow(): ChatListRow = ChatListRow(
     preview = preview,
     previewKind = previewKind,
     senderName = lastSenderName,
-    // Ticks belong to the last message only when it is the user's own.
-    ticks = lastStatus?.takeIf { lastDirection == MessageDirection.OUTGOING }?.toTicks(),
+    // Ticks belong to the last message only when it is the user's own, and never to a system
+    // line: a rename of the user's is stored as theirs, but nothing ever reports it delivered.
+    ticks = lastStatus
+        ?.takeIf { lastDirection == MessageDirection.OUTGOING && previewKind != MessagePreviewKind.GROUP_EVENT }
+        ?.toTicks(),
     time = if (lastActivityUnixMs > 0L) VmDateFormat.chatListTime(lastActivityUnixMs) else "",
     unreadCount = unreadCount,
     muted = muted,

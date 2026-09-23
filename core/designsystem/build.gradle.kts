@@ -11,6 +11,7 @@ dependencies {
     api(project(":core:common"))
     implementation(libs.androidx.core.ktx)
     api(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     api(libs.androidx.biometric)
     implementation(libs.javax.inject)
     implementation(libs.compose.material.icons.extended)

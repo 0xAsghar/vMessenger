@@ -81,6 +81,18 @@ class ContactRequestHandlerTest {
     }
 
     @Test
+    fun requestFromOurOwnIdentityIgnored() = runTest {
+        // Our own add of our own ID, relayed back to our inbox: it used to approve itself.
+        val us = InboundFixtures.peer(0x01)
+        contactDao.contacts += InboundFixtures.contact("me", us, status = ContactRelationshipStatus.PENDING_OUT)
+
+        handler.handleRequest(InboundFixtures.requestEnvelope(requestIdFrom(us), displayName = "Me"), us)
+
+        assertTrue(requests.saved.isEmpty())
+        assertEquals(ContactRelationshipStatus.PENDING_OUT, contactDao.getById("me")!!.relationshipStatus)
+    }
+
+    @Test
     fun requestWithRoutingPrefixIdAccepted() = runTest {
         // A peer that added us by user hash only knows our routing prefix and derives the id from it.
         val prefixId = ContactRequestService.deterministicRequestId(
