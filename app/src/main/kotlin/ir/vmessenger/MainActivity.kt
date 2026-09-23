@@ -1,15 +1,19 @@
 package ir.vmessenger
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.WindowManager
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.toArgb
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -18,6 +22,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import ir.vmessenger.app.locale.AppLocaleController
+import ir.vmessenger.core.designsystem.theme.VmDarkColors
+import ir.vmessenger.core.designsystem.theme.VmLightColors
 import ir.vmessenger.core.notifications.MessageNotificationManager
 import ir.vmessenger.data.lock.LockState
 import ir.vmessenger.feature.lock.AppLockScreen
@@ -78,9 +84,20 @@ class MainActivity : AppCompatActivity() {
                 viewModel.notificationRationalePending.collectAsStateWithLifecycle()
 
             val lockState by viewModel.lockState.collectAsStateWithLifecycle()
+            val darkTheme = darkThemePref ?: isSystemInDarkTheme()
+            // The bars follow the app's theme, not the phone's. Left to the default they read the
+            // system setting, so the app in Dark on a light phone drew dark status icons on its
+            // dark canvas — invisible — over a light band where the navigation buttons sit.
+            DisposableEffect(darkTheme) {
+                enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { darkTheme },
+                    navigationBarStyle = SystemBarStyle.auto(NavScrimLight, NavScrimDark) { darkTheme },
+                )
+                onDispose {}
+            }
 
             VMessengerApp(
-                darkTheme = darkThemePref ?: isSystemInDarkTheme(),
+                darkTheme = darkTheme,
                 startRoute = startRoute,
                 // Held back while locked. A notification tap would otherwise have the NavHost open
                 // the conversation underneath the lock screen, which is the one place the gate is
@@ -181,3 +198,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 }
+
+/**
+ * Behind three-button navigation: the app's own canvas, nearly opaque, so the buttons sit on the
+ * same colour as the tab bar above them instead of on a band of their own.
+ */
+private val NavScrimLight = VmLightColors.bgCanvas.copy(alpha = NAV_SCRIM_ALPHA).toArgb()
+private val NavScrimDark = VmDarkColors.bgCanvas.copy(alpha = NAV_SCRIM_ALPHA).toArgb()
+private const val NAV_SCRIM_ALPHA = 0.9f

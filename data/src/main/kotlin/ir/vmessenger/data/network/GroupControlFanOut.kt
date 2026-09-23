@@ -22,7 +22,7 @@ data class GroupControlFanOutRequest(
     val target: String? = null,
     /** The role a SET_ROLE assigns; null for the rest. */
     val targetRole: GroupMemberRole? = null,
-    /** The Persian system line stored in the group's history for this change. */
+    /** The system line stored in the group's history for this change, in the app's language. */
     val systemText: String,
     /**
      * Someone who must receive the control although they are no longer a member —

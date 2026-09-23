@@ -13,12 +13,14 @@ import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /**
- * A line the conversation says about itself — «X» گروه را ترک کرد — centred in small secondary
- * text, owned by nobody, so it cannot be mistaken for a message.
+ * A line the conversation says about itself — «X» گروه را ترک کرد, "X left the group" — centred
+ * in small secondary text, owned by nobody, so it cannot be mistaken for a message.
  *
- * The lines are Persian by construction, so the paragraph direction is pinned: content direction
- * would let a Latin name at the start of «Ali به گروه اضافه شد» flip the whole sentence. Newly
- * written lines isolate the name themselves; pinning here covers the ones already stored.
+ * The paragraph takes its direction from the line itself: a line keeps the language it was written
+ * in, so a history can hold both. The names inside are isolated when the line is written, and an
+ * isolated name is skipped when the direction is decided — a Latin name leading a Persian line no
+ * longer turns it left-to-right, which is why this is no longer pinned right-to-left: pinned, an
+ * English line had its full stop jump to the wrong end.
  */
 @Composable
 fun SystemMessage(
@@ -33,7 +35,7 @@ fun SystemMessage(
     ) {
         VmText(
             text = text,
-            style = VmTheme.typography.bodySm.copy(textDirection = TextDirection.Rtl),
+            style = VmTheme.typography.bodySm.copy(textDirection = TextDirection.Content),
             color = VmTheme.colors.textSecondary,
             textAlign = TextAlign.Center,
             modifier = Modifier

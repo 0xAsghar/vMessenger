@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- New group: member picker, then the name -->
+    <string name="feature_chat_group_new_title">New group</string>
+    <string name="feature_chat_group_new_members_step">Choose members</string>
+    <string name="feature_chat_group_new_name_step">Name the group</string>
+    <string name="feature_chat_group_continue">Continue</string>
+    <string name="feature_chat_group_create">Create group</string>
+    <string name="feature_chat_group_name_label">Group name</string>
+    <string name="feature_chat_group_name_remaining">%1$s characters left</string>
+    <string name="feature_chat_group_name_members">%1$s selected</string>
+    <!-- Drawn inside the avatar until the group has a name to take its first letter from -->
+    <string name="feature_chat_group_avatar_placeholder">G</string>
+
+    <!-- Contact picker shared by "new group" and "add members" -->
+    <string name="feature_chat_group_picker_search">Search contacts</string>
+    <string name="feature_chat_group_picker_clear">Clear search</string>
+    <string name="feature_chat_group_picker_selected">%1$s of %2$s selected</string>
+    <string name="feature_chat_group_picker_cap">A group can have at most %1$s members.</string>
+    <string name="feature_chat_group_picker_empty_title">No approved contacts yet</string>
+    <string name="feature_chat_group_picker_empty_body">A group can only be made from contacts who have approved your request.</string>
+
+    <!-- Group info -->
+    <string name="feature_chat_group_info_title">Group info</string>
+    <string name="feature_chat_group_avatar">Picture of the group %1$s</string>
+    <string name="feature_chat_group_member_count">%1$s members</string>
+    <string name="feature_chat_group_members_section">Members</string>
+    <string name="feature_chat_group_manage_section">Manage group</string>
+    <string name="feature_chat_group_rename">Rename group</string>
+    <string name="feature_chat_group_add_members">Add members</string>
+    <string name="feature_chat_group_seats_left">%1$s places left</string>
+    <string name="feature_chat_group_closed_banner">This group has been closed; you can only read its past messages.</string>
+    <string name="feature_chat_group_out_of_sync_banner">This group’s member list is out of date: its creator is not answering sync requests. Messages still arrive, but you will not see new changes to the members.</string>
+
+    <!-- Member rows -->
+    <string name="feature_chat_group_member_unknown">Unknown</string>
+    <string name="feature_chat_group_badge_creator">Creator</string>
+    <string name="feature_chat_group_badge_me">You</string>
+    <string name="feature_chat_group_add_contact">Add to contacts</string>
+    <string name="feature_chat_group_request_sent">Contact request sent</string>
+    <string name="feature_chat_group_remove_member">Remove from group</string>
+
+    <!-- Add members sheet -->
+    <string name="feature_chat_group_add_members_title">Add members</string>
+    <string name="feature_chat_group_add_members_confirm">Add to group</string>
+
+    <!-- Rename -->
+    <string name="feature_chat_group_rename_title">Rename group</string>
+    <string name="feature_chat_group_rename_save">Save</string>
+    <string name="feature_chat_group_rename_cancel">Cancel</string>
+
+    <!-- Leaving, closing and removing: each names what is lost before it happens -->
+    <string name="feature_chat_group_leave">Leave group</string>
+    <string name="feature_chat_group_leave_title">Leave group</string>
+    <string name="feature_chat_group_leave_body">Once you leave, new messages in this group no longer reach you and the conversation becomes read-only. You can only come back if the creator invites you again.</string>
+    <string name="feature_chat_group_leave_confirm">Leave</string>
+    <string name="feature_chat_group_close">Close group</string>
+    <string name="feature_chat_group_close_title">Close group</string>
+    <string name="feature_chat_group_close_body">The group is closed for every member, and nobody can send to it afterwards. Past messages stay. This cannot be undone.</string>
+    <string name="feature_chat_group_close_confirm">Close group</string>
+    <string name="feature_chat_group_remove_title">Remove member</string>
+    <string name="feature_chat_group_remove_body">%1$s is removed from the group, and their copy becomes read-only.</string>
+    <string name="feature_chat_group_remove_confirm">Remove</string>
+</resources>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Recording -->
+    <string name="feature_chat_voice_record">Record a voice message</string>
+    <string name="feature_chat_voice_recording">Recording</string>
+    <string name="feature_chat_voice_slide_to_cancel">Slide to cancel</string>
+    <string name="feature_chat_voice_cancel">Cancel recording</string>
+    <string name="feature_chat_voice_send">Send voice message</string>
+    <string name="feature_chat_voice_lock_hint">Slide up to keep recording hands-free</string>
+    <string name="feature_chat_voice_locked">Recording locked</string>
+
+    <!-- Playback -->
+    <string name="feature_chat_voice_play">Play voice message</string>
+    <string name="feature_chat_voice_pause">Pause</string>
+    <string name="feature_chat_voice_waveform">Voice message progress</string>
+    <string name="feature_chat_voice_unplayed">Not played</string>
+    <string name="feature_chat_voice_speed">Playback speed: %1$s</string>
+    <string name="feature_chat_voice_speed_normal">1×</string>
+    <string name="feature_chat_voice_speed_fast">1.5×</string>
+    <string name="feature_chat_voice_speed_fastest">2×</string>
+
+    <!-- Microphone permission -->
+    <string name="feature_chat_voice_permission_rationale">Recording a voice message needs access to the microphone.</string>
+    <string name="feature_chat_voice_permission_blocked">Microphone access is blocked; turn it on in Settings.</string>
+    <string name="feature_chat_voice_permission_allow">Allow</string>
+    <string name="feature_chat_voice_permission_settings">Settings</string>
+</resources>

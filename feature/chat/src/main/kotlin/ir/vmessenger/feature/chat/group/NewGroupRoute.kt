@@ -3,10 +3,14 @@ package ir.vmessenger.feature.chat.group
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -176,8 +180,10 @@ private fun NewGroupBottomBar(
             ),
             onClick = if (naming) onCreate else onContinue,
             enabled = if (naming) state.canCreate else state.canContinue,
+            // Above the keyboard as well as the navigation bar: on the naming step the keyboard is
+            // up, and the one button that finishes the step used to sit underneath it.
             modifier = Modifier
-                .navigationBarsPadding()
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
                 .fillMaxWidth()
                 .padding(VmSpacing.lg),
         )
