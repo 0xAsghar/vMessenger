@@ -53,7 +53,10 @@ class AudioCaptureEngine @Inject constructor() {
             while (currentCoroutineContext().isActive) {
                 val read = recorder.read(frame, 0, frame.size)
                 // A short read is a stopping recorder, not a partial frame worth sending.
-                if (read < frame.size) break
+                if (read < frame.size) {
+                    AppLogger.warn(TAG, "microphone read returned $read; capture stopped")
+                    break
+                }
                 emit(if (muted) silence else frame.copyOf())
             }
         } finally {
@@ -70,13 +73,23 @@ class AudioCaptureEngine @Inject constructor() {
         )
         // Several frames of slack: sized off one frame, a scheduling hiccup becomes a dropout.
         val bytesPerFrame = VoiceAudio.SAMPLES_PER_FRAME * Short.SIZE_BYTES
-        AudioRecord(
+        val recorder = AudioRecord(
             MediaRecorder.AudioSource.VOICE_COMMUNICATION,
             VoiceAudio.SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
             maxOf(minimum, bytesPerFrame * BUFFER_FRAMES),
-        ).takeIf { it.state == AudioRecord.STATE_INITIALIZED }
+        )
+        if (recorder.state == AudioRecord.STATE_INITIALIZED) {
+            recorder
+        } else {
+            // Released, not dropped: an uninitialised recorder still holds its native side. This is
+            // what a refused permission or a microphone held by another app looks like, and it used
+            // to pass without a word, leaving the flow to end as though nothing had been asked of it.
+            recorder.release()
+            AppLogger.warn(TAG, "microphone unavailable: the recorder did not initialise")
+            null
+        }
     }.onFailure { AppLogger.warn(TAG, "microphone unavailable: ${it.message}") }.getOrNull()
 
     private fun attachEffects(sessionId: Int) {

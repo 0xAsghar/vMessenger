@@ -7,8 +7,14 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import dagger.hilt.android.AndroidEntryPoint
+import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.notifications.CallNotificationManager
+import ir.vmessenger.data.call.CallCoordinator
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -27,6 +33,9 @@ import javax.inject.Inject
 class CallForegroundService : Service() {
     @Inject
     lateinit var callNotificationManager: CallNotificationManager
+
+    @Inject
+    lateinit var callCoordinator: CallCoordinator
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val callId = intent?.getStringExtra(CallNotificationManager.EXTRA_CALL_ID)
@@ -56,6 +65,9 @@ class CallForegroundService : Service() {
             // A refused microphone service means the platform will not let this call capture audio.
             // Standing down is honest; carrying on would leave a call that cannot be heard.
             AppLogger.warn(TAG, "microphone foreground service refused: ${it.message}")
+            // And the call goes with it. The refusal lands here, in the service, not where it was
+            // started — so the starter's own fallback never saw it, and the call stayed up unheard.
+            scope.launch { callCoordinator.hangUp() }
             stopSelf()
         }
     }
@@ -64,6 +76,9 @@ class CallForegroundService : Service() {
 
     companion object {
         private const val TAG = "Call"
+
+        /** Outlives the service, which stops itself in the same breath as it asks for the hang-up. */
+        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + loggingExceptionHandler(TAG))
         const val EXTRA_PEER_NAME = "peer_name"
         const val EXTRA_CONNECTING = "connecting"
 

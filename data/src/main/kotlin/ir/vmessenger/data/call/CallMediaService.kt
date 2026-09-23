@@ -9,6 +9,7 @@ import ir.vmessenger.core.crypto.CryptoEngine
 import ir.vmessenger.data.di.IoDispatcher
 import ir.vmessenger.network.transport.Connection
 import ir.vmessenger.network.transport.InternetTransport
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -126,7 +127,13 @@ class CallMediaService @Inject constructor(
         // keys are all conditioned on communication mode, and focus is what stops the music.
         audio.session.open()
         try {
-            channel.run(connection, audio.capture.frames()) { onEvent(CallEvent.MediaUp) }
+            // A failure is still an end: thrown past this point, it skipped the report below and
+            // left the call on screen over a dead socket.
+            val failure = runCatching {
+                channel.run(connection, audio.capture.frames()) { onEvent(CallEvent.MediaUp) }
+            }.exceptionOrNull()
+            if (failure is CancellationException) throw failure
+            failure?.let { AppLogger.warn(TAG, "media path failed: ${it.message}") }
         } finally {
             withContext(NonCancellable) {
                 runCatching { codec.close() }

@@ -1,14 +1,19 @@
 package ir.vmessenger
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
@@ -17,6 +22,8 @@ import ir.vmessenger.core.designsystem.component.VmSurface
 import ir.vmessenger.core.designsystem.theme.RtlLayout
 import ir.vmessenger.core.designsystem.theme.VMessengerTheme
 import ir.vmessenger.core.designsystem.theme.VmTheme
+import ir.vmessenger.core.notifications.CallNotificationManager
+import ir.vmessenger.ui.appDarkTheme
 import ir.vmessenger.ui.call.CallActions
 import ir.vmessenger.ui.call.CallScreen
 import ir.vmessenger.ui.call.CallViewModel
@@ -44,6 +51,17 @@ class CallActivity : AppCompatActivity() {
     @Inject
     lateinit var appLocaleController: AppLocaleController
 
+    private val microphone = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        viewModel.recordMicrophoneAnswer(granted)
+        if (granted) {
+            viewModel.accept()
+        } else {
+            // Nothing to answer with: a call in which this side cannot be heard is not answered.
+            Toast.makeText(this, R.string.call_needs_microphone, Toast.LENGTH_LONG).show()
+            viewModel.decline()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // An AppCompatActivity for this reason alone: below Android 13 the per-app language is
@@ -54,7 +72,7 @@ class CallActivity : AppCompatActivity() {
         enableEdgeToEdge()
 
         val actions = CallActions(
-            onAccept = { viewModel.accept() },
+            onAccept = ::answer,
             onDecline = { viewModel.decline() },
             onHangUp = { viewModel.hangUp() },
             onToggleMute = viewModel::setMuted,
@@ -63,11 +81,19 @@ class CallActivity : AppCompatActivity() {
 
         setContent {
             val session by viewModel.session.collectAsStateWithLifecycle()
-            RtlLayout {
-                VMessengerTheme(darkTheme = isSystemInDarkTheme()) {
-                    VmSurface(color = VmTheme.colors.bgCanvas) {
-                        session?.let { live ->
-                            CallScreen(session = live, actions = actions)
+            val avatarSeed by viewModel.avatarSeed.collectAsStateWithLifecycle()
+            val theme by viewModel.theme.collectAsStateWithLifecycle()
+            // The app's theme, not the phone's: this screen alone followed the system setting, so a
+            // dark app on a light phone rang in white. Nothing is drawn for the moment the setting
+            // takes to read, rather than a frame in the wrong theme.
+            theme?.let { choice ->
+                val darkTheme = appDarkTheme(choice.dark)
+                RtlLayout {
+                    VMessengerTheme(darkTheme = darkTheme) {
+                        VmSurface(color = VmTheme.colors.bgCanvas) {
+                            session?.let { live ->
+                                CallScreen(session = live, avatarSeed = avatarSeed, actions = actions)
+                            }
                         }
                     }
                 }
@@ -78,6 +104,32 @@ class CallActivity : AppCompatActivity() {
         // own scope rather than in composition: a finish() driven from a composable would depend on
         // the window still being composed, and this must happen even as it is going away.
         observeCallEnd()
+        if (savedInstanceState == null) answerIfAsked(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        answerIfAsked(intent)
+    }
+
+    /**
+     * Answers, asking for the microphone first — the same rule as dialling. Answering used to go
+     * straight through: the call connected, the microphone service was refused for want of the
+     * permission, and this side was never heard.
+     */
+    private fun answer() {
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) viewModel.accept() else microphone.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    /** The notification's answer button, when the microphone still had to be asked for. */
+    private fun answerIfAsked(intent: Intent?) {
+        if (intent?.getBooleanExtra(CallNotificationManager.EXTRA_ANSWER, false) != true) return
+        // Once: a recreated screen must not answer a second call with the first one's intent.
+        intent.removeExtra(CallNotificationManager.EXTRA_ANSWER)
+        answer()
     }
 
     private fun observeCallEnd() {

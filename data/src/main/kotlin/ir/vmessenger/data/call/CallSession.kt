@@ -22,4 +22,9 @@ data class CallSession(
     val speakerOn: Boolean = false,
     /** True once the peer's device reported that it is alerting. */
     val peerAlerting: Boolean = false,
+    /**
+     * When the call first went live (wall clock), for the timer on its screen. Kept with the call
+     * rather than the screen, so a screen reopened mid-call still counts from the start.
+     */
+    val connectedAtMs: Long? = null,
 )

@@ -1,16 +1,19 @@
 package ir.vmessenger.core.notifications
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.Person
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import ir.vmessenger.core.common.logging.AppLogger
 import javax.inject.Inject
@@ -67,7 +70,7 @@ class CallNotificationManager @Inject constructor(
                 NotificationCompat.CallStyle.forIncomingCall(
                     person(peerName),
                     action(callId, ACTION_DECLINE),
-                    action(callId, ACTION_ACCEPT),
+                    answer(callId),
                 ),
             )
             .setCategory(NotificationCompat.CATEGORY_CALL)
@@ -115,14 +118,32 @@ class CallNotificationManager @Inject constructor(
     private fun person(peerName: String): Person =
         Person.Builder().setName(peerName).setImportant(true).build()
 
-    /** Opens the call screen. A new task, so it can come up over the lock screen on its own. */
-    private fun screen(callId: String): PendingIntent {
+    /**
+     * Opens the call screen. A new task, so it can come up over the lock screen on its own.
+     *
+     * With [answer], the screen answers as it opens, asking for the microphone first: its own
+     * request code, because PendingIntent equality ignores extras and the two would otherwise be one.
+     */
+    private fun screen(callId: String, answer: Boolean = false): PendingIntent {
         val intent = Intent(context, target.callActivityClass).apply {
             action = ACTION_SHOW_CALL
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             putExtra(EXTRA_CALL_ID, callId)
+            putExtra(EXTRA_ANSWER, answer)
         }
-        return PendingIntent.getActivity(context, REQUEST_SCREEN, intent, PENDING_FLAGS)
+        val requestCode = if (answer) REQUEST_SCREEN_ANSWER else REQUEST_SCREEN
+        return PendingIntent.getActivity(context, requestCode, intent, PENDING_FLAGS)
+    }
+
+    /**
+     * The answer button. Without the microphone it opens the call screen instead of answering behind
+     * it: a permission can only be asked for from a screen, and a call answered without one is a call
+     * in which this side cannot be heard.
+     */
+    private fun answer(callId: String): PendingIntent {
+        val canHear = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        return if (canHear) action(callId, ACTION_ACCEPT) else screen(callId, answer = true)
     }
 
     private fun action(callId: String, actionName: String): PendingIntent {
@@ -185,11 +206,15 @@ class CallNotificationManager @Inject constructor(
         const val ACTION_SHOW_CALL = "ir.vmessenger.call.SHOW"
         const val EXTRA_CALL_ID = "call_id"
 
+        /** On the call screen's intent: answer the ringing call as the screen opens. */
+        const val EXTRA_ANSWER = "answer"
+
         private const val TAG = "Call"
         private const val REQUEST_SCREEN = 3001
         private const val REQUEST_ACCEPT = 3002
         private const val REQUEST_DECLINE = 3003
         private const val REQUEST_HANG_UP = 3004
+        private const val REQUEST_SCREEN_ANSWER = 3005
         private const val PENDING_FLAGS = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     }
 }

@@ -3,6 +3,7 @@ package ir.vmessenger.data.call
 import com.google.protobuf.ByteString
 import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
+import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.crypto.CryptoEngine
 import ir.vmessenger.core.database.dao.ContactDao
@@ -14,13 +15,20 @@ import ir.vmessenger.core.proto.app.v1.CallSignal
 import ir.vmessenger.core.proto.app.v1.CallSignalType
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import ir.vmessenger.data.activity.ActivityLogger
+import ir.vmessenger.data.di.DefaultDispatcher
 import ir.vmessenger.data.network.MessagingPort
 import ir.vmessenger.data.network.SelfIdentityCache
 import ir.vmessenger.network.messaging.PeerIdentity
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
@@ -44,8 +52,9 @@ import javax.inject.Singleton
  */
 @Singleton
 // One method per signal the protocol defines, plus the local actions; a split would separate the
-// state machine from the sends that must accompany each transition.
-@Suppress("TooManyFunctions")
+// state machine from the sends that must accompany each transition. The constructor takes one
+// collaborator per thing a call touches, and the dispatcher its timeouts run on.
+@Suppress("TooManyFunctions", "LongParameterList")
 class CallCoordinator @Inject constructor(
     private val contactDao: ContactDao,
     private val selfIdentityCache: SelfIdentityCache,
@@ -53,9 +62,14 @@ class CallCoordinator @Inject constructor(
     private val crypto: CryptoEngine,
     private val media: CallMediaPort,
     private val activityLogger: ActivityLogger,
+    @DefaultDispatcher dispatcher: CoroutineDispatcher,
 ) {
     private val mutex = Mutex()
     private val _session = MutableStateFlow<CallSession?>(null)
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher + loggingExceptionHandler(TAG))
+
+    /** The one pending deadline of the state the call is in; replaced on every move. See [armTimeout]. */
+    private var timeout: Job? = null
 
     val session: StateFlow<CallSession?> = _session.asStateFlow()
 
@@ -80,6 +94,7 @@ class CallCoordinator @Inject constructor(
             outgoing = true,
             state = CallState.OutgoingRinging,
         )
+        armTimeout()
         send(contact, callId, Outgoing(CallSignalType.CALL_SIGNAL_TYPE_INVITE, keys.publicKey))
         activityLogger.record(ActivityKind.CallPlaced)
         AppLogger.info(TAG, "dialled contact=$contactId call=$callId")
@@ -184,6 +199,7 @@ class CallCoordinator @Inject constructor(
             outgoing = false,
             state = CallState.IncomingRinging,
         )
+        armTimeout()
         // Tell them this phone is alerting; it is what turns "calling" into "ringing" for them.
         send(contact, callId, Outgoing(CallSignalType.CALL_SIGNAL_TYPE_RING))
         activityLogger.record(ActivityKind.CallReceived)
@@ -252,7 +268,48 @@ class CallCoordinator @Inject constructor(
             AppLogger.info(TAG, "ignored $event in ${current.state}")
             return
         }
-        _session.value = current.copy(state = next)
+        val connectedAt = current.connectedAtMs
+            ?: System.currentTimeMillis().takeIf { next == CallState.Active }
+        _session.value = current.copy(state = next, connectedAtMs = connectedAt)
+        armTimeout()
+    }
+
+    /**
+     * Gives the state the call just entered its deadline, replacing the last one.
+     *
+     * Nothing used to end a call that simply stopped: an unanswered call rang for ever, a caller
+     * whose process died left the callee ringing, and a media path that connected but never carried
+     * a frame held both ends in Connecting. Each waiting state now has a limit, and running out ends
+     * the call the way the user would — cancelling a call nobody answered, hanging up one that never
+     * came through. [CallState.Active] has none: a call in progress is not waiting for anything.
+     */
+    private fun armTimeout() {
+        timeout?.cancel()
+        val armed = _session.value ?: return
+        val limit = timeoutOf(armed.state) ?: return
+        timeout = scope.launch {
+            delay(limit)
+            mutex.withLock {
+                val now = _session.value
+                if (now != null && now.callId == armed.callId && now.state == armed.state) timeOutLocked(now)
+            }
+        }
+    }
+
+    private suspend fun timeOutLocked(session: CallSession) {
+        AppLogger.info(TAG, "call timed out in ${session.state} call=${session.callId}")
+        val type = when (session.state) {
+            CallState.OutgoingRinging -> CallSignalType.CALL_SIGNAL_TYPE_CANCEL
+            // The caller's own, shorter limit has normally cancelled by now; this is the backstop
+            // for one that went away without saying so, and it tells them in case they are still there.
+            CallState.IncomingRinging -> CallSignalType.CALL_SIGNAL_TYPE_REJECT
+            else -> CallSignalType.CALL_SIGNAL_TYPE_HANGUP
+        }
+        contactDao.getById(session.contactId)?.let { contact ->
+            send(contact, session.callId, Outgoing(type, reason = CallRejectReason.CALL_REJECT_REASON_TIMEOUT))
+        }
+        advance(CallEvent.TimedOut)
+        clear()
     }
 
     private fun deriveMediaKey(privateKey: ByteArray, peerPublic: ByteArray) {
@@ -268,6 +325,8 @@ class CallCoordinator @Inject constructor(
     }
 
     private fun clear() {
+        timeout?.cancel()
+        timeout = null
         // Only that a call ended. The peer is deliberately absent — see ActivityLogEntity.
         if (_session.value != null) activityLogger.record(ActivityKind.CallEnded)
         // Before the key is zeroed: the media path is holding a reference to it.
@@ -321,6 +380,22 @@ class CallCoordinator @Inject constructor(
         const val TAG = "Call"
         const val X25519_KEY_SIZE = 32
         const val MEDIA_KEY_SIZE = 32
+
+        /** How long a call rings unanswered before the caller gives up, as a phone would. */
+        const val RING_TIMEOUT_MS = 60_000L
+
+        /** Longer than [RING_TIMEOUT_MS], so the caller's cancel normally arrives first. */
+        const val INCOMING_RING_TIMEOUT_MS = 75_000L
+
+        /** Answered, but no audio yet: long enough to try every advertised address in turn. */
+        const val CONNECT_TIMEOUT_MS = 30_000L
+
+        fun timeoutOf(state: CallState): Long? = when (state) {
+            CallState.OutgoingRinging -> RING_TIMEOUT_MS
+            CallState.IncomingRinging -> INCOMING_RING_TIMEOUT_MS
+            CallState.Connecting, CallState.Reconnecting -> CONNECT_TIMEOUT_MS
+            CallState.Idle, CallState.Active, CallState.Ending -> null
+        }
 
         /** Domain separation, so this key can never collide with a messaging or backup key. */
         const val MEDIA_KEY_INFO = "vmessenger-call-media-v1"

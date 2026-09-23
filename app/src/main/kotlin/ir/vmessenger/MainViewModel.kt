@@ -11,7 +11,6 @@ import ir.vmessenger.core.database.DatabaseKeyProvider
 import ir.vmessenger.core.datastore.NodeSetupChoice
 import ir.vmessenger.core.datastore.NodeSetupPreferences
 import ir.vmessenger.core.datastore.PrivacyPreferences
-import ir.vmessenger.core.datastore.ThemeMode
 import ir.vmessenger.core.datastore.ThemePreferences
 import ir.vmessenger.data.lock.AppLockCoordinator
 import ir.vmessenger.data.lock.LockState
@@ -19,6 +18,7 @@ import ir.vmessenger.domain.usecase.identity.HasIdentityUseCase
 import ir.vmessenger.navigation.VmRoute
 import ir.vmessenger.ui.share.PendingShareStore
 import ir.vmessenger.ui.share.SharePayload
+import ir.vmessenger.ui.themeChoice
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -82,14 +82,8 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch { privacyPreferences.setNotificationRationaleShown(true) }
     }
 
-    val darkTheme: StateFlow<Boolean?> = themePreferences.themeMode
-        .map { mode ->
-            when (mode) {
-                ThemeMode.LIGHT -> false
-                ThemeMode.DARK -> true
-                ThemeMode.SYSTEM -> null
-            }
-        }
+    val darkTheme: StateFlow<Boolean?> = themePreferences.themeChoice()
+        .map { it.dark }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT_MS), null)
 
     private val _startRoute = MutableStateFlow<VmRoute?>(null)

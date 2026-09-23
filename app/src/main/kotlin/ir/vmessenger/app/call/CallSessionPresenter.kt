@@ -3,7 +3,10 @@ package ir.vmessenger.app.call
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
 import dagger.hilt.android.qualifiers.ApplicationContext
+import ir.vmessenger.CallActivity
 import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.notifications.CallNotificationManager
@@ -78,6 +81,21 @@ class CallSessionPresenter @Inject constructor(
             AppLogger.info(TAG, "full-screen calls are not permitted; ringing as a notification")
         }
         callNotificationManager.showIncoming(session.callId, session.peerName)
+        openScreenIfAppOpen()
+    }
+
+    /**
+     * With the app open, the call takes the screen itself. The notification alone is not enough
+     * there: on a phone in use the platform shows a full-screen intent only as a heads-up, and with
+     * the app's notifications turned off it shows nothing at all — the call rang out, unseen, on an
+     * open app. The notification is still posted, because its channel is what plays the ringtone.
+     */
+    private fun openScreenIfAppOpen() {
+        val open = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        if (!open) return
+        val intent = Intent(context, CallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { context.startActivity(intent) }
+            .onFailure { AppLogger.warn(TAG, "could not open the call screen: ${it.message}") }
     }
 
     /**

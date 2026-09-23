@@ -4,11 +4,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ir.vmessenger.core.database.entity.ActivityKind
+import ir.vmessenger.core.datastore.ThemePreferences
 import ir.vmessenger.data.activity.ActivityLogger
 import ir.vmessenger.data.call.CallCoordinator
 import ir.vmessenger.data.call.CallSession
+import ir.vmessenger.domain.repository.ContactRepository
+import ir.vmessenger.ui.ThemeChoice
+import ir.vmessenger.ui.themeChoice
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -24,12 +30,31 @@ import javax.inject.Inject
 class CallViewModel @Inject constructor(
     private val callCoordinator: CallCoordinator,
     private val activityLogger: ActivityLogger,
+    private val contactRepository: ContactRepository,
+    themePreferences: ThemePreferences,
 ) : ViewModel() {
+    /** The app's theme setting, or null for the moment it takes to read — the screen waits for it. */
+    internal val theme: StateFlow<ThemeChoice?> = themePreferences.themeChoice()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT_MS), null)
+
     val session: StateFlow<CallSession?> = callCoordinator.session.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT_MS),
         initialValue = callCoordinator.session.value,
     )
+
+    /**
+     * The peer's identicon seed, the same one the contact list draws. Empty until it is read, or
+     * when it cannot be — the avatar then shows the name's initial on a neutral disc.
+     */
+    val avatarSeed: StateFlow<ByteArray> = callCoordinator.session
+        .map { it?.contactId }
+        .distinctUntilChanged()
+        .map { contactId ->
+            contactId?.let { runCatching { contactRepository.getContact(it)?.identityHash }.getOrNull() }
+                ?: ByteArray(0)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT_MS), ByteArray(0))
 
     fun dial(contactId: String) = viewModelScope.launch { callCoordinator.dial(contactId) }
 

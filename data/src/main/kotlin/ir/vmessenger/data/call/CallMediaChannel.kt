@@ -8,6 +8,7 @@ import ir.vmessenger.core.audio.VoiceAudio
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.crypto.CryptoEngine
 import ir.vmessenger.network.transport.Connection
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
@@ -51,17 +52,32 @@ internal class CallMediaChannel(
     private var sendSequence = 0
     private var reportedBadFrame = false
 
-    /** Runs until the connection closes; cancelling the caller tears the whole call down. */
+    /**
+     * Runs until either direction ends; cancelling the caller tears the whole call down.
+     *
+     * Either one, not just the peer's stream: the capture flow ends when the microphone cannot be
+     * opened or stops mid-call, and the call used to carry on without it — one-way, with this side
+     * unheard and the peer, never sent a frame, waiting in Connecting.
+     */
     suspend fun run(connection: Connection, capture: Flow<ShortArray>, onFirstFrame: suspend () -> Unit) {
         coroutineScope {
             playback.open()
-            val transmitting = launch { transmit(connection, capture) }
+            val ended = CompletableDeferred<Unit>()
+            val transmitting = launch {
+                transmit(connection, capture)
+                AppLogger.warn(TAG, "the microphone stopped; ending the call's media")
+                ended.complete(Unit)
+            }
+            val receiving = launch {
+                receive(connection, onFirstFrame)
+                ended.complete(Unit)
+            }
             val playing = launch { play() }
             try {
-                // Returns when the peer's stream ends, which is what ends the call's media.
-                receive(connection, onFirstFrame)
+                ended.await()
             } finally {
                 transmitting.cancel()
+                receiving.cancel()
                 playing.cancel()
                 playback.close()
             }

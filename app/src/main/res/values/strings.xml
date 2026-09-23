@@ -57,6 +57,7 @@
     <string name="call_hang_up">پایان تماس</string>
     <string name="call_mute">بی‌صدا کردن میکروفون</string>
     <string name="call_unmute">روشن‌کردن میکروفون</string>
+    <string name="call_mute_short">بی‌صدا</string>
     <string name="call_speaker">بلندگو</string>
     <string name="call_earpiece">گوشی</string>
     <string name="call_needs_microphone">برای تماس صوتی به اجازه‌ی میکروفون نیاز است.</string>

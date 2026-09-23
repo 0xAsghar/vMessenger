@@ -57,6 +57,7 @@
     <string name="call_hang_up">Hang up</string>
     <string name="call_mute">Mute microphone</string>
     <string name="call_unmute">Unmute microphone</string>
+    <string name="call_mute_short">Mute</string>
     <string name="call_speaker">Speaker</string>
     <string name="call_earpiece">Earpiece</string>
     <string name="call_needs_microphone">A voice call needs microphone permission.</string>
