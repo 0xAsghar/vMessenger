@@ -422,7 +422,10 @@ private fun GroupDialogHost(state: GroupInfoUiState, callbacks: GroupDialogCallb
         )
         is GroupDialog.RemoveMember -> ConfirmDialog(
             title = stringResource(R.string.feature_chat_group_remove_title),
-            body = stringResource(R.string.feature_chat_group_remove_body, dialog.member.label(unknown)),
+            body = stringResource(
+                R.string.feature_chat_group_remove_body,
+                VmTextFormat.isolate(dialog.member.label(unknown)),
+            ),
             confirmLabel = stringResource(R.string.feature_chat_group_remove_confirm),
             onConfirm = callbacks.onConfirm,
             onDismiss = callbacks.onDismiss,

@@ -21,6 +21,7 @@ import ir.vmessenger.core.designsystem.component.VmDivider
 import ir.vmessenger.core.designsystem.component.VmSurface
 import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.format.VmDateFormat
+import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.feature.chat.R
@@ -105,7 +106,7 @@ private fun AuditRow(row: GroupAuditRow) {
                 } else {
                     R.string.feature_chat_group_audit_entry_edited
                 },
-                row.authorName ?: unknown,
+                VmTextFormat.isolate(row.authorName ?: unknown),
             ),
             style = VmTheme.typography.bodyMdMedium,
             color = VmTheme.colors.textSecondary,
