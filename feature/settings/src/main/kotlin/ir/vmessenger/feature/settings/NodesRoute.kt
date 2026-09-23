@@ -15,14 +15,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.PriorityHigh
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,15 +34,20 @@ import ir.vmessenger.core.designsystem.component.SettingsDivider
 import ir.vmessenger.core.designsystem.component.SettingsSection
 import ir.vmessenger.core.designsystem.component.StyledQrCode
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmChip
 import ir.vmessenger.core.designsystem.component.VmFab
+import ir.vmessenger.core.designsystem.component.VmIconButton
 import ir.vmessenger.core.designsystem.component.VmInputDialog
+import ir.vmessenger.core.designsystem.component.VmSwitch
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextButton
+import ir.vmessenger.core.designsystem.component.VmTextField
+import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.domain.model.NetworkNode
 import ir.vmessenger.domain.model.NetworkNodeRole
-
-/** Enough of the guide to read without the dialog swallowing the screen. */
-private val GuideMaxHeight = 420.dp
 
 @Composable
 fun NodesRoute(
@@ -63,23 +60,23 @@ fun NodesRoute(
     var showAddDialog by remember { mutableStateOf(false) }
     var showRunGuide by remember { mutableStateOf(false) }
     var shareNode by remember { mutableStateOf<NetworkNode?>(null) }
+    val scroll = rememberScrollState()
 
     VMessengerScaffold(
         title = stringResource(R.string.nodes_title),
         onNavigateBack = onNavigateBack,
+        scrolled = scroll.canScrollBackward,
         actions = {
-            IconButton(onClick = { showRunGuide = true }) {
-                Icon(
-                    Icons.Outlined.PriorityHigh,
-                    contentDescription = stringResource(R.string.nodes_run_guide_action),
-                )
-            }
-            IconButton(onClick = onNavigateToScan) {
-                Icon(
-                    Icons.Outlined.QrCodeScanner,
-                    contentDescription = stringResource(R.string.nodes_scan_action),
-                )
-            }
+            VmIconButton(
+                icon = Icons.Outlined.PriorityHigh,
+                contentDescription = stringResource(R.string.nodes_run_guide_action),
+                onClick = { showRunGuide = true },
+            )
+            VmIconButton(
+                icon = Icons.Outlined.QrCodeScanner,
+                contentDescription = stringResource(R.string.nodes_scan_action),
+                onClick = onNavigateToScan,
+            )
         },
         floatingActionButton = {
             VmFab(
@@ -89,12 +86,13 @@ fun NodesRoute(
             )
         },
     ) { padding ->
+        // Edge to edge: the sections pad their own rows. The bottom keeps the last row clear of the FAB.
         Column(
             modifier = Modifier
                 .padding(padding)
-                .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(VmSpacing.xl),
+                .verticalScroll(scroll)
+                .padding(bottom = FAB_CLEARANCE),
+            verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
         ) {
             NodeSection(
                 title = stringResource(R.string.nodes_bootstrap_section),
@@ -151,18 +149,12 @@ private fun RunNodeGuideDialog(onDismiss: () -> Unit) {
         // Nothing to accept or reject: the guide is read and closed.
         dismissLabel = null,
     ) {
+        // The dialog scrolls its own content, so the guide can run as long as it needs.
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = GuideMaxHeight)
-                .verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
         ) {
-            Text(
-                text = stringResource(R.string.nodes_run_intro),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            VmText(text = stringResource(R.string.nodes_run_intro))
             CopyableCodeBlock(
                 label = stringResource(R.string.nodes_run_install_label),
                 code = stringResource(R.string.nodes_run_install_one_liner),
@@ -179,11 +171,7 @@ private fun RunNodeGuideDialog(onDismiss: () -> Unit) {
                 label = stringResource(R.string.nodes_run_dev_label),
                 code = stringResource(R.string.nodes_run_dev_cmd),
             )
-            Text(
-                text = stringResource(R.string.nodes_run_add_hint),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            VmText(text = stringResource(R.string.nodes_run_add_hint))
             CopyableCodeBlock(
                 label = stringResource(R.string.nodes_run_link_bootstrap_label),
                 code = stringResource(R.string.nodes_run_link_bootstrap),
@@ -203,30 +191,29 @@ private fun CopyableCodeBlock(
 ) {
     val clipboard = LocalClipboardManager.current
     Column(verticalArrangement = Arrangement.spacedBy(VmSpacing.xs)) {
-        Text(
+        VmText(
             text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodySmMedium,
+            color = VmTheme.colors.textSecondary,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
         ) {
-            Text(
+            VmText(
                 text = code,
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                style = VmTheme.typography.bodySm.copy(fontFamily = FontFamily.Monospace),
+                color = VmTheme.colors.textPrimary,
                 modifier = Modifier
                     .weight(1f)
                     .padding(end = VmSpacing.xs),
             )
-            IconButton(
+            VmIconButton(
+                icon = Icons.Outlined.ContentCopy,
+                contentDescription = stringResource(R.string.nodes_copy_code),
                 onClick = { clipboard.setText(AnnotatedString(code)) },
-            ) {
-                Icon(
-                    Icons.Outlined.ContentCopy,
-                    contentDescription = stringResource(R.string.nodes_copy_code),
-                )
-            }
+                tint = VmTheme.colors.iconSecondary,
+            )
         }
     }
 }
@@ -241,11 +228,11 @@ private fun NodeSection(
 ) {
     SettingsSection(title = title) {
         if (nodes.isEmpty()) {
-            Text(
+            VmText(
                 text = stringResource(R.string.nodes_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(VmSpacing.lg),
+                style = VmTheme.typography.bodyMd,
+                color = VmTheme.colors.textSecondary,
+                modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
             )
         } else {
             nodes.forEachIndexed { index, node ->
@@ -267,34 +254,37 @@ private fun NodeRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = VmSizes.touchTarget)
-            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
+            .padding(start = VmSpacing.lg, end = VmSpacing.xs, top = VmSpacing.sm, bottom = VmSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            VmText(
                 text = node.address,
-                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                style = VmTheme.typography.bodyMd.copy(fontFamily = FontFamily.Monospace),
+                color = VmTheme.colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
+            VmText(
                 text = nodeHealthText(node),
-                style = MaterialTheme.typography.bodySmall,
+                style = VmTheme.typography.bodySm,
                 color = healthColor(node),
             )
         }
-        Switch(checked = node.enabled, onCheckedChange = { onToggle(node, it) })
-        IconButton(onClick = { onShare(node) }) {
-            Icon(Icons.Outlined.Share, contentDescription = stringResource(R.string.nodes_share))
-        }
+        VmSwitch(checked = node.enabled, onCheckedChange = { onToggle(node, it) })
+        VmIconButton(
+            icon = Icons.Outlined.Share,
+            contentDescription = stringResource(R.string.nodes_share),
+            onClick = { onShare(node) },
+            tint = VmTheme.colors.iconSecondary,
+        )
         if (!node.builtIn) {
-            IconButton(onClick = { onRemove(node) }) {
-                Icon(
-                    Icons.Outlined.Delete,
-                    contentDescription = stringResource(R.string.nodes_delete),
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            }
+            VmIconButton(
+                icon = Icons.Outlined.Delete,
+                contentDescription = stringResource(R.string.nodes_delete),
+                onClick = { onRemove(node) },
+                tint = VmTheme.colors.iconCritical,
+            )
         }
     }
 }
@@ -313,9 +303,9 @@ private fun nodeHealthText(node: NetworkNode): String {
 
 @Composable
 private fun healthColor(node: NetworkNode) = when {
-    node.failCount > 0 -> MaterialTheme.colorScheme.error
-    node.lastOkUnixMs != null -> MaterialTheme.colorScheme.tertiary
-    else -> MaterialTheme.colorScheme.onSurfaceVariant
+    node.failCount > 0 -> VmTheme.colors.textCritical
+    node.lastOkUnixMs != null -> VmTheme.colors.textSuccess
+    else -> VmTheme.colors.textSecondary
 }
 
 @Composable
@@ -336,35 +326,33 @@ private fun AddNodeDialog(
         confirmEnabled = input.isNotBlank(),
         dismissLabel = stringResource(R.string.nodes_cancel),
     ) {
-        OutlinedTextField(
+        VmTextField(
             value = input,
             onValueChange = { input = it },
-            label = { Text(stringResource(R.string.nodes_add_hint)) },
-            singleLine = true,
+            config = VmTextFieldConfig(
+                label = stringResource(R.string.nodes_add_hint),
+                isError = error != null,
+                supportingText = error,
+            ),
             modifier = Modifier.fillMaxWidth(),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm)) {
-            FilterChip(
+            VmChip(
                 selected = role == NetworkNodeRole.RELAY,
                 onClick = { role = NetworkNodeRole.RELAY },
-                label = { Text(stringResource(R.string.nodes_role_relay)) },
+                label = stringResource(R.string.nodes_role_relay),
             )
-            FilterChip(
+            VmChip(
                 selected = role == NetworkNodeRole.BOOTSTRAP,
                 onClick = { role = NetworkNodeRole.BOOTSTRAP },
-                label = { Text(stringResource(R.string.nodes_role_bootstrap)) },
+                label = stringResource(R.string.nodes_role_bootstrap),
             )
         }
-        if (error != null) {
-            Text(
-                text = error,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
-        TextButton(onClick = onScan) {
-            Text(stringResource(R.string.nodes_scan_action))
-        }
+        VmTextButton(
+            text = stringResource(R.string.nodes_scan_action),
+            onClick = onScan,
+            leadingIcon = Icons.Outlined.QrCodeScanner,
+        )
     }
 }
 
@@ -387,12 +375,15 @@ private fun ShareNodeDialog(
             modifier = Modifier.fillMaxWidth(),
         ) {
             StyledQrCode(payload = link)
-            Text(
+            VmText(
                 text = link,
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                style = VmTheme.typography.bodySm.copy(fontFamily = FontFamily.Monospace),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }
     }
 }
+
+/** Room under the last row for the FAB and its margin, so it never sits on a node's controls. */
+private val FAB_CLEARANCE = 88.dp

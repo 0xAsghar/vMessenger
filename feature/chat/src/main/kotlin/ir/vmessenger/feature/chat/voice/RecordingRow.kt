@@ -5,16 +5,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,9 +20,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.component.VmIcon
+import ir.vmessenger.core.designsystem.component.VmIconButton
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.format.VmTextFormat
-import ir.vmessenger.core.designsystem.theme.VmSizes
-import ir.vmessenger.core.designsystem.theme.vm
+import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.feature.chat.R
 
 private val DotMinSize = 8.dp
@@ -47,12 +47,12 @@ private const val MIN_HINT_ALPHA = 0.2f
  * Once the gesture locks, that button turns itself into send, which is why there is no send
  * button here.
  *
- * Children run from the mic outwards, because the mic leads the composer row: the lock hint sits
- * next to the button it points at, and the delete button sits farthest from the finger.
+ * The mic ends the composer row, so the children run toward it: the delete button farthest from
+ * the finger, the lock hint right next to the button it points at.
  *
- * The hint follows the finger through [slide] (0..1 of the way to the cancel threshold). The `dp`
- * offset is mirrored for RTL on its own, and the cancel direction is now toward the layout end,
- * so the sign here is always positive.
+ * The hint follows the finger through [slide] (0..1 of the way to the cancel threshold). Cancel
+ * is toward the layout start — away from the mic — so the offset is negative; a `dp` offset is
+ * mirrored for RTL on its own.
  */
 @Composable
 internal fun RowScope.RecordingRow(
@@ -61,20 +61,20 @@ internal fun RowScope.RecordingRow(
     slide: Float,
     onCancel: () -> Unit,
 ) {
-    if (!locked) LockHint()
-    Hint(locked = locked, slide = slide, modifier = Modifier.weight(1f))
-    Text(
-        text = VmTextFormat.duration(state.elapsedMs),
-        style = MaterialTheme.typography.labelLarge,
+    VmIconButton(
+        icon = Icons.Outlined.Delete,
+        contentDescription = stringResource(R.string.feature_chat_voice_cancel),
+        onClick = onCancel,
+        tint = VmTheme.colors.iconCritical,
     )
     AmplitudeDot(amplitude = state.amplitude)
-    IconButton(onClick = onCancel, modifier = Modifier.size(VmSizes.touchTarget)) {
-        Icon(
-            imageVector = Icons.Outlined.Delete,
-            contentDescription = stringResource(R.string.feature_chat_voice_cancel),
-            tint = MaterialTheme.colorScheme.error,
-        )
-    }
+    VmText(
+        text = VmTextFormat.duration(state.elapsedMs),
+        style = VmTheme.typography.bodyMdMedium,
+        modifier = Modifier.padding(horizontal = VmSpacing.sm),
+    )
+    Hint(locked = locked, slide = slide, modifier = Modifier.weight(1f))
+    if (!locked) LockHint()
 }
 
 /** The recording indicator, grown by the live level so a silent mic is visibly silent. */
@@ -85,21 +85,21 @@ private fun AmplitudeDot(amplitude: Float) {
         modifier = Modifier
             .semantics { contentDescription = description }
             .size(DotMinSize + DotMaxGrowth * amplitude.coerceIn(0f, 1f))
-            .background(color = MaterialTheme.vm.recordingRed, shape = CircleShape),
+            .background(color = VmTheme.colors.recordingRed, shape = CircleShape),
     )
 }
 
 @Composable
 private fun Hint(locked: Boolean, slide: Float, modifier: Modifier = Modifier) {
     val progress = slide.coerceIn(0f, 1f)
-    Text(
+    VmText(
         text = stringResource(
             if (locked) R.string.feature_chat_voice_locked else R.string.feature_chat_voice_slide_to_cancel,
         ),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = VmTheme.typography.bodySmMedium,
+        color = VmTheme.colors.textSecondary,
         modifier = modifier
-            .offset(x = SlideTravel * progress)
+            .offset(x = -SlideTravel * progress)
             .alpha(if (locked) 1f else maxOf(MIN_HINT_ALPHA, 1f - progress)),
     )
 }
@@ -112,15 +112,15 @@ private fun LockHint() {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.semantics { contentDescription = description },
     ) {
-        Icon(
+        VmIcon(
             imageVector = Icons.Filled.KeyboardArrowUp,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = VmTheme.colors.iconSecondary,
         )
-        Icon(
+        VmIcon(
             imageVector = Icons.Filled.Lock,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = VmTheme.colors.iconSecondary,
         )
     }
 }

@@ -417,7 +417,7 @@ class ConversationViewModel @Inject constructor(
             // run in opposite directions, and only per-name isolation keeps the commas in place.
             memberNames = groupState.members
                 .takeIf { it.isNotEmpty() }
-                ?.joinToString(NAME_SEPARATOR) { VmTextFormat.isolate(it.displayName) },
+                ?.let { members -> VmTextFormat.list(members.map { VmTextFormat.isolate(it.displayName) }) },
             closed = groupInfo?.closed == true,
             outOfSync = groupInfo != null && groupInfo.id in outOfSyncGroups,
             verified = contact?.verified == true,
@@ -434,9 +434,6 @@ class ConversationViewModel @Inject constructor(
         const val SUBSCRIBE_TIMEOUT_MS = 5_000L
         const val HIGHLIGHT_DURATION_MS = 2_000L
         const val DRAFT_DEBOUNCE_MS = 400L
-
-        /** Persian comma: the separator a member list is written with. */
-        const val NAME_SEPARATOR = "، "
     }
 }
 

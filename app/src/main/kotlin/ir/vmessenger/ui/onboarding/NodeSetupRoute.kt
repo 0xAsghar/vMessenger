@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,11 +20,13 @@ import ir.vmessenger.core.designsystem.component.ConfirmDialog
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.core.designsystem.component.VmButton
 import ir.vmessenger.core.designsystem.component.VmOutlinedButton
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.component.VmTextButton
 import ir.vmessenger.core.designsystem.component.VmTextField
 import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
 import ir.vmessenger.core.designsystem.error.toUiText
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /**
  * The node question, asked once before an identity is created.
@@ -91,13 +91,13 @@ fun NodeSetupRoute(
 
 @Composable
 private fun Explainer(text: String, emphasis: Boolean = false) {
-    Text(
+    VmText(
         text = text,
-        style = MaterialTheme.typography.bodyMedium,
+        style = VmTheme.typography.bodyMd,
         color = if (emphasis) {
-            MaterialTheme.colorScheme.error
+            VmTheme.colors.textCritical
         } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
+            VmTheme.colors.textSecondary
         },
     )
 }

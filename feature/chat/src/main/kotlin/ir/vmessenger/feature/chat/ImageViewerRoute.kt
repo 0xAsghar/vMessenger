@@ -7,10 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +25,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import ir.vmessenger.core.designsystem.component.VmIconButton
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /**
  * Full-bleed image viewer: pinch and double-tap to zoom, drag to pan, swipe up or down to leave.
@@ -54,18 +53,15 @@ fun ImageViewerRoute(
             .background(Color.Black),
     ) {
         ZoomableImage(model = request, onDismiss = onBack)
-        IconButton(
+        VmIconButton(
+            icon = Icons.Outlined.Close,
+            contentDescription = stringResource(R.string.feature_chat_image_close),
             onClick = onBack,
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .safeDrawingPadding(),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Close,
-                contentDescription = stringResource(R.string.feature_chat_image_close),
-                tint = Color.White,
-            )
-        }
+            tint = Color.White,
+        )
     }
 }
 
@@ -78,9 +74,9 @@ private fun ZoomableImage(model: Any?, onDismiss: () -> Unit) {
     val gestures = remember(dismissPx, flingPx) { ViewerGestureState(dismissPx, flingPx) }
 
     if (failed) {
-        Text(
+        VmText(
             text = stringResource(R.string.feature_chat_image_failed),
-            style = MaterialTheme.typography.bodyMedium,
+            style = VmTheme.typography.bodyMd,
             color = Color.White,
             modifier = Modifier.safeDrawingPadding(),
         )

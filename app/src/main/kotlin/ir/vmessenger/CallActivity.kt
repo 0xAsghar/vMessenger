@@ -8,15 +8,15 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import ir.vmessenger.app.locale.AppLocaleController
+import ir.vmessenger.core.designsystem.component.VmSurface
 import ir.vmessenger.core.designsystem.theme.RtlLayout
 import ir.vmessenger.core.designsystem.theme.VMessengerTheme
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.ui.call.CallActions
 import ir.vmessenger.ui.call.CallScreen
 import ir.vmessenger.ui.call.CallViewModel
@@ -65,7 +65,7 @@ class CallActivity : AppCompatActivity() {
             val session by viewModel.session.collectAsStateWithLifecycle()
             RtlLayout {
                 VMessengerTheme(darkTheme = isSystemInDarkTheme()) {
-                    Surface(color = MaterialTheme.colorScheme.background) {
+                    VmSurface(color = VmTheme.colors.bgCanvas) {
                         session?.let { live ->
                             CallScreen(session = live, actions = actions)
                         }

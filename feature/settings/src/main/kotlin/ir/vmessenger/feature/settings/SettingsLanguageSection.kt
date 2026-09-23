@@ -1,19 +1,15 @@
 package ir.vmessenger.feature.settings
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import ir.vmessenger.core.common.text.VmLocale
 import ir.vmessenger.core.designsystem.component.SettingsSection
+import ir.vmessenger.core.designsystem.component.VmChip
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 
 /**
@@ -34,18 +30,14 @@ internal fun SettingsLanguageSection(language: VmLocale, onLanguage: (VmLocale) 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(VmSpacing.md),
+                .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
             horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
         ) {
             VmLocale.entries.forEach { locale ->
-                FilterChip(
+                VmChip(
                     selected = language == locale,
                     onClick = { onLanguage(locale) },
-                    label = {
-                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text(text = stringResource(locale.labelRes()), textAlign = TextAlign.Center)
-                        }
-                    },
+                    label = stringResource(locale.labelRes()),
                     modifier = Modifier.weight(1f),
                 )
             }

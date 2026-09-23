@@ -1,6 +1,5 @@
 package ir.vmessenger.core.designsystem.component
 
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,7 +17,7 @@ import kotlinx.coroutines.flow.Flow
 @Composable
 fun UiMessageSnackbarEffect(
     messages: Flow<UiMessage>,
-    hostState: SnackbarHostState,
+    hostState: VmSnackbarHostState,
 ) {
     var pending by remember { mutableStateOf<UiMessage?>(null) }
     LaunchedEffect(messages) {

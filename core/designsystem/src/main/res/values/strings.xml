@@ -13,6 +13,8 @@
     <string name="vm_cancel">انصراف</string>
     <string name="vm_close">بستن</string>
     <string name="vm_retry">تلاش دوباره</string>
+    <string name="vm_sheet_expand">باز کردن فهرست</string>
+    <string name="vm_sheet_collapse">بستن فهرست</string>
 
     <!-- Chat list -->
     <string name="vm_chat_muted">بی‌صدا</string>

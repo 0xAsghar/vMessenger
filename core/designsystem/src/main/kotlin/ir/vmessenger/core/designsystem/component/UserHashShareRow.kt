@@ -9,10 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,6 +18,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import ir.vmessenger.core.designsystem.R
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 @Composable
 fun UserHashShareRow(
@@ -40,19 +37,18 @@ fun UserHashShareRow(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(
+        VmIconButton(
+            icon = Icons.Outlined.ContentCopy,
+            contentDescription = stringResource(R.string.hash_copy),
             onClick = {
                 clipboard.setText(AnnotatedString(userHash))
                 Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
             },
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.ContentCopy,
-                contentDescription = stringResource(R.string.hash_copy),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        IconButton(
+            tint = VmTheme.colors.iconSecondary,
+        )
+        VmIconButton(
+            icon = Icons.Outlined.Share,
+            contentDescription = stringResource(R.string.hash_share),
             onClick = {
                 val intent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
@@ -60,13 +56,8 @@ fun UserHashShareRow(
                 }
                 context.startActivity(Intent.createChooser(intent, shareLabel))
             },
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Share,
-                contentDescription = stringResource(R.string.hash_share),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+            tint = VmTheme.colors.iconSecondary,
+        )
     }
 }
 
@@ -74,10 +65,10 @@ fun UserHashShareRow(
 fun UserHashLabel(
     modifier: Modifier = Modifier,
 ) {
-    Text(
+    VmText(
         text = stringResource(R.string.user_hash_label),
         modifier = modifier,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = VmTheme.typography.bodySmMedium,
+        color = VmTheme.colors.textSecondary,
     )
 }

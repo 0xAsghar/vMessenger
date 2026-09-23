@@ -5,20 +5,17 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,8 +32,12 @@ import ir.vmessenger.core.designsystem.component.EmptyState
 import ir.vmessenger.core.designsystem.component.EmptyStateAction
 import ir.vmessenger.core.designsystem.component.SkeletonList
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmFab
+import ir.vmessenger.core.designsystem.component.VmIconButton
 import ir.vmessenger.core.designsystem.component.VmSearchBar
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
+import ir.vmessenger.core.designsystem.component.VmSnackbarHostState
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import kotlinx.coroutines.launch
@@ -62,9 +63,11 @@ fun ChatRoute(
 
     BackHandler(enabled = state.selectionMode) { viewModel.onClearSelection() }
     BackHandler(enabled = state.searching && !state.selectionMode) { viewModel.onSearchClose() }
+    val listState = rememberLazyListState()
 
     VMessengerScaffold(
         title = stringResource(R.string.feature_chat_title),
+        scrolled = listState.canScrollBackward,
         onNavigateBack = if (state.selectionMode) viewModel::onClearSelection else null,
         actions = { ChatListActions(state = state, viewModel = viewModel, onDelete = { confirmDelete = true }) },
         floatingActionButton = { NewChatFab(visible = !state.selectionMode, onClick = onNewChat) },
@@ -74,6 +77,7 @@ fun ChatRoute(
     ) { padding ->
         ChatListContent(
             state = state,
+            listState = listState,
             onOpen = onOpenConversation,
             onLongPress = viewModel::onToggleSelection,
             onNewChat = onNewChat,
@@ -100,7 +104,7 @@ fun ChatRoute(
 @Composable
 private fun chatListTitle(state: ChatListUiState, viewModel: ChatListViewModel): (@Composable () -> Unit)? = when {
     state.selectionMode -> {
-        { Text(text = stringResource(R.string.feature_chat_selection_count, persian(state.selection.size))) }
+        { VmText(text = stringResource(R.string.feature_chat_selection_count, persian(state.selection.size))) }
     }
 
     state.searching -> {
@@ -124,52 +128,42 @@ private fun RowScope.ChatListActions(
     onDelete: () -> Unit,
 ) {
     if (state.selectionMode) {
-        IconButton(onClick = viewModel::onToggleMuteSelected) {
-            Icon(
-                imageVector = if (state.selectionMuted) {
-                    Icons.Outlined.NotificationsActive
-                } else {
-                    Icons.Outlined.NotificationsOff
-                },
-                contentDescription = stringResource(
-                    if (state.selectionMuted) R.string.feature_chat_unmute else R.string.feature_chat_mute,
-                ),
-            )
-        }
-        IconButton(onClick = onDelete) {
-            Icon(
-                imageVector = Icons.Outlined.Delete,
-                contentDescription = stringResource(R.string.feature_chat_delete),
-            )
-        }
+        VmIconButton(
+            icon = if (state.selectionMuted) Icons.Outlined.NotificationsActive else Icons.Outlined.NotificationsOff,
+            contentDescription = stringResource(
+                if (state.selectionMuted) R.string.feature_chat_unmute else R.string.feature_chat_mute,
+            ),
+            onClick = viewModel::onToggleMuteSelected,
+        )
+        VmIconButton(
+            icon = Icons.Outlined.Delete,
+            contentDescription = stringResource(R.string.feature_chat_delete),
+            onClick = onDelete,
+        )
     } else if (!state.searching) {
-        IconButton(onClick = viewModel::onSearchOpen) {
-            Icon(
-                imageVector = Icons.Outlined.Search,
-                contentDescription = stringResource(R.string.feature_chat_search_open),
-            )
-        }
+        VmIconButton(
+            icon = Icons.Outlined.Search,
+            contentDescription = stringResource(R.string.feature_chat_search_open),
+            onClick = viewModel::onSearchOpen,
+        )
     }
 }
 
 @Composable
 private fun NewChatFab(visible: Boolean, onClick: () -> Unit) {
     if (!visible) return
-    FloatingActionButton(
+    VmFab(
+        icon = Icons.Outlined.Edit,
+        contentDescription = stringResource(R.string.feature_chat_new),
         onClick = onClick,
-        containerColor = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
-    ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.Chat,
-            contentDescription = stringResource(R.string.feature_chat_new),
-        )
-    }
+    )
 }
 
 @Composable
+@Suppress("LongParameterList") // The list's state and one callback per thing a row can do.
 private fun ChatListContent(
     state: ChatListUiState,
+    listState: LazyListState,
     onOpen: (String) -> Unit,
     onLongPress: (String) -> Unit,
     onNewChat: () -> Unit,
@@ -193,7 +187,7 @@ private fun ChatListContent(
             modifier = modifier,
         )
 
-        else -> LazyColumn(modifier = modifier) {
+        else -> LazyColumn(state = listState, modifier = modifier) {
             items(
                 items = state.rows,
                 key = { it.id },
@@ -215,7 +209,7 @@ private fun ChatListContent(
 private fun DeleteConversationsDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
-    snackbar: SnackbarHostState,
+    snackbar: VmSnackbarHostState,
     message: String,
 ) {
     val scope = rememberCoroutineScope()

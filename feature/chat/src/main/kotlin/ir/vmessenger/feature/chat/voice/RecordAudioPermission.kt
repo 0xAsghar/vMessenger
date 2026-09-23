@@ -10,8 +10,6 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -25,6 +23,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import ir.vmessenger.core.designsystem.component.VmSnackbarHostState
+import ir.vmessenger.core.designsystem.component.VmSnackbarResult
 import ir.vmessenger.feature.chat.R
 import kotlinx.coroutines.launch
 
@@ -63,7 +63,7 @@ internal class RecordAudioPermission(
  * the screen, which is exactly where the snackbar and its action appear.
  */
 @Composable
-internal fun rememberRecordAudioPermission(snackbar: SnackbarHostState): RecordAudioPermission {
+internal fun rememberRecordAudioPermission(snackbar: VmSnackbarHostState): RecordAudioPermission {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val scope = rememberCoroutineScope()
@@ -101,13 +101,9 @@ internal fun rememberRecordAudioPermission(snackbar: SnackbarHostState): RecordA
     }
 }
 
-private suspend fun explain(snackbar: SnackbarHostState, prompt: MicPrompt) {
-    val result = snackbar.showSnackbar(
-        message = prompt.message,
-        actionLabel = prompt.action,
-        withDismissAction = true,
-    )
-    if (result == SnackbarResult.ActionPerformed) prompt.onAction()
+private suspend fun explain(snackbar: VmSnackbarHostState, prompt: MicPrompt) {
+    val result = snackbar.showSnackbar(message = prompt.message, actionLabel = prompt.action)
+    if (result == VmSnackbarResult.ActionPerformed) prompt.onAction()
 }
 
 /**

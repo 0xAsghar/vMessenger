@@ -6,18 +6,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentPaste
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
@@ -28,18 +18,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextDirection
-import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.common.encoding.UserHashEncoder
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmButton
+import ir.vmessenger.core.designsystem.component.VmIconButton
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextField
+import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
 import ir.vmessenger.core.designsystem.error.toUiText
+import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
-private val ProgressSize = 20.dp
+/** Ltr: a hash is an opaque identifier and must not reorder as the user types it. */
+private val HashTextStyle = TextStyle(fontFamily = FontFamily.Monospace, textDirection = TextDirection.Ltr)
 
 /** The field's own opinion of what has been typed so far. */
 @Immutable
@@ -94,13 +93,13 @@ private fun AddByHashForm(
         modifier = Modifier
             .fillMaxSize()
             .padding(padding)
-            .padding(horizontal = VmSpacing.xl, vertical = VmSpacing.lg),
+            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(VmSpacing.lg),
     ) {
-        Text(
+        VmText(
             text = stringResource(R.string.add_by_hash_hint),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodyMd,
+            color = VmTheme.colors.textSecondary,
         )
         HashField(field = field, onUserHashChange = onUserHashChange)
         AddByHashStatus(
@@ -118,46 +117,35 @@ private fun HashField(
     onUserHashChange: (String) -> Unit,
 ) {
     val clipboard = LocalClipboardManager.current
-    OutlinedTextField(
+    VmTextField(
         value = field.value,
         onValueChange = onUserHashChange,
         modifier = Modifier.fillMaxWidth(),
-        label = { Text(text = stringResource(R.string.add_by_hash_label)) },
-        // Ltr: a hash is an opaque identifier and must not reorder as the user types it.
-        textStyle = MaterialTheme.typography.bodyLarge.copy(
-            fontFamily = FontFamily.Monospace,
-            textDirection = TextDirection.Ltr,
+        config = VmTextFieldConfig(
+            label = stringResource(R.string.add_by_hash_label),
+            singleLine = false,
+            minLines = 2,
+            isError = field.malformed,
+            // Live feedback: the checksum either verifies or it does not, and the user sees which.
+            supportingText = stringResource(
+                when {
+                    field.complete -> R.string.add_by_hash_valid
+                    field.malformed -> R.string.add_by_hash_invalid
+                    else -> R.string.add_by_hash_format
+                },
+            ),
+            supportingIsSuccess = field.complete,
+            capitalization = KeyboardCapitalization.Characters,
         ),
-        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-        singleLine = false,
-        minLines = 2,
-        isError = field.malformed,
-        supportingText = { HashFieldSupportingText(field) },
+        textStyle = HashTextStyle,
         trailingIcon = {
-            IconButton(onClick = { clipboard.getText()?.text?.let(onUserHashChange) }) {
-                Icon(
-                    imageVector = Icons.Outlined.ContentPaste,
-                    contentDescription = stringResource(R.string.add_by_hash_paste),
-                )
-            }
+            VmIconButton(
+                icon = Icons.Outlined.ContentPaste,
+                contentDescription = stringResource(R.string.add_by_hash_paste),
+                onClick = { clipboard.getText()?.text?.let(onUserHashChange) },
+            )
         },
     )
-}
-
-/** Live feedback: the checksum either verifies or it does not, and the user sees which. */
-@Composable
-private fun HashFieldSupportingText(field: HashFieldState) {
-    when {
-        field.complete -> Text(
-            text = stringResource(R.string.add_by_hash_valid),
-            color = MaterialTheme.colorScheme.primary,
-        )
-        field.malformed -> Text(
-            text = stringResource(R.string.add_by_hash_invalid),
-            color = MaterialTheme.colorScheme.error,
-        )
-        else -> Text(text = stringResource(R.string.add_by_hash_format))
-    }
 }
 
 @Composable
@@ -168,49 +156,48 @@ private fun AddByHashStatus(
     onDone: () -> Unit,
 ) {
     when (uiState) {
-        AddContactUiState.Idle, AddContactUiState.Saving -> Button(
+        AddContactUiState.Idle, AddContactUiState.Saving -> VmButton(
+            text = stringResource(R.string.add_by_hash_action),
             onClick = onAdd,
-            enabled = canSubmit && uiState != AddContactUiState.Saving,
+            enabled = canSubmit,
+            loading = uiState == AddContactUiState.Saving,
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            if (uiState == AddContactUiState.Saving) {
-                CircularProgressIndicator(modifier = Modifier.size(ProgressSize), strokeWidth = 2.dp)
-            } else {
-                Text(text = stringResource(R.string.add_by_hash_action))
-            }
-        }
+        )
         AddContactUiState.Success -> AddContactSuccessPanel(onDone = onDone)
-        is AddContactUiState.Error -> Text(
+        is AddContactUiState.Error -> VmText(
             text = uiState.error.toUiText(),
-            color = MaterialTheme.colorScheme.error,
+            color = VmTheme.colors.textCritical,
         )
     }
 }
 
 @Composable
 private fun AddContactSuccessPanel(onDone: () -> Unit) {
-    Surface(
+    VmSurface(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = VmShapes.card,
+        color = VmTheme.colors.bgSubtle,
     ) {
         Column(
             modifier = Modifier.padding(VmSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
+            VmText(
                 text = stringResource(R.string.add_contact_success),
-                style = MaterialTheme.typography.titleMedium,
+                style = VmTheme.typography.bodyLgMedium,
+                color = VmTheme.colors.textPrimary,
             )
-            Text(
+            VmText(
                 text = stringResource(R.string.add_contact_pending_hint),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = VmTheme.typography.bodyMd,
+                color = VmTheme.colors.textSecondary,
             )
-            Button(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.add_contact_done))
-            }
+            VmButton(
+                text = stringResource(R.string.add_contact_done),
+                onClick = onDone,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }

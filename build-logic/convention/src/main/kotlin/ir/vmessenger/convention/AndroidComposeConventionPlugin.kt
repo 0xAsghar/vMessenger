@@ -28,12 +28,12 @@ class AndroidComposeConventionPlugin : Plugin<Project> {
                 }
             }
 
-            // Material 3 still marks staples we rely on (TopAppBar scroll behaviour,
-            // ScaffoldDefaults, ModalBottomSheet) experimental. Opting in once here
-            // keeps a @file:OptIn off every screen that touches them.
+            // Foundation still marks a few staples the app's own components rely on
+            // (combinedClickable, animateItem) experimental. Opting in once here keeps a
+            // @file:OptIn off every screen that touches them. There is no Material 3 to opt
+            // into: the design system is built on Foundation alone.
             tasks.withType(KotlinCompile::class.java).configureEach {
                 compilerOptions.freeCompilerArgs.addAll(
-                    "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
                     "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
                 )
             }
@@ -45,7 +45,6 @@ class AndroidComposeConventionPlugin : Plugin<Project> {
                 add("implementation", libs.findLibrary("compose-ui").get())
                 add("implementation", libs.findLibrary("compose-ui-graphics").get())
                 add("implementation", libs.findLibrary("compose-ui-tooling-preview").get())
-                add("implementation", libs.findLibrary("compose-material3").get())
                 add("debugImplementation", libs.findLibrary("compose-ui-tooling").get())
                 add("debugImplementation", libs.findLibrary("compose-ui-test-manifest").get())
             }

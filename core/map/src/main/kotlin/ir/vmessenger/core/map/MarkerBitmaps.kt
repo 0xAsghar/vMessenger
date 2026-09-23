@@ -13,7 +13,6 @@ import android.text.TextDirectionHeuristics
 import android.text.TextPaint
 import android.text.TextUtils
 import android.util.LruCache
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
@@ -21,7 +20,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.res.ResourcesCompat
 import ir.vmessenger.core.designsystem.theme.VmColors
-import ir.vmessenger.core.designsystem.theme.vm
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
@@ -155,13 +154,12 @@ class MarkerBitmaps internal constructor(
 @Composable
 fun rememberMarkerBitmaps(): MarkerBitmaps {
     val context = LocalContext.current
-    val colors = MaterialTheme.vm
-    val scheme = MaterialTheme.colorScheme
+    val colors = VmTheme.colors
     val chrome = MarkerChrome(
-        surface = scheme.surface.toArgb(),
-        onSurface = scheme.onSurface.toArgb(),
-        outline = scheme.outlineVariant.toArgb(),
-        accent = scheme.primary.toArgb(),
+        surface = colors.bgElevated.toArgb(),
+        onSurface = colors.textPrimary.toArgb(),
+        outline = colors.borderSubtle.toArgb(),
+        accent = colors.bgAccent.toArgb(),
     )
     // The application context: this object outlives the composition that made it.
     val appContext = context.applicationContext

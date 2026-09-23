@@ -2,10 +2,9 @@ package ir.vmessenger.feature.chat
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Call
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
+import ir.vmessenger.core.designsystem.component.VmIconButton
 
 /**
  * The call button in the conversation's top bar.
@@ -18,10 +17,9 @@ import androidx.compose.ui.res.stringResource
 internal fun ConversationCallAction(header: ConversationHeaderUi, onStartCall: (String) -> Unit) {
     val contactId = header.contactId
     if (contactId == null || header.blocked) return
-    IconButton(onClick = { onStartCall(contactId) }) {
-        Icon(
-            imageVector = Icons.Outlined.Call,
-            contentDescription = stringResource(R.string.feature_chat_call_start),
-        )
-    }
+    VmIconButton(
+        icon = Icons.Outlined.Call,
+        contentDescription = stringResource(R.string.feature_chat_call_start),
+        onClick = { onStartCall(contactId) },
+    )
 }

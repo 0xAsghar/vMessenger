@@ -4,36 +4,38 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.component.VmIcon
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.format.VmTextFormat
-import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 private val DotSize = 10.dp
+
+/** A key is a circle this wide: a thumb's width, and four rows still fit a small phone. */
+private val KeySize = 64.dp
 
 /**
  * Past this the row would be wider than a phone. The count in the spoken description stays
@@ -62,7 +64,7 @@ internal fun PinDots(length: Int, modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .size(DotSize)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary),
+                    .background(VmTheme.colors.textPrimary),
             )
         }
     }
@@ -79,7 +81,7 @@ internal fun PinKeypad(
     modifier: Modifier = Modifier,
     onSubmit: (() -> Unit)? = null,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VmSpacing.sm)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(VmSpacing.md)) {
         KEYPAD_ROWS.forEach { digits ->
             KeypadRow {
                 digits.forEach { digit ->
@@ -120,7 +122,7 @@ private fun RowScope.DigitKey(digit: Int, enabled: Boolean, onAppend: (Char) -> 
     // characters it is handed, so every way into this app has to agree on which zero it means.
     val label = remember(digit) { VmTextFormat.digits(digit.toString()) }
     KeyButton(enabled = enabled, onClick = { onAppend('0' + digit) }) {
-        Text(text = label, style = MaterialTheme.typography.titleLarge)
+        VmText(text = label, style = VmTheme.typography.headingLg.copy(fontWeight = FontWeight.Medium))
     }
 }
 
@@ -131,27 +133,33 @@ private fun RowScope.ActionKey(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    KeyButton(enabled = enabled, onClick = onClick) {
-        Icon(imageVector = icon, contentDescription = description)
+    KeyButton(enabled = enabled, onClick = onClick, filled = false) {
+        VmIcon(imageVector = icon, contentDescription = description)
     }
 }
 
-/** One key: a third of the row wide, and never shorter than a finger. */
+/**
+ * One key: a circle centred in a third of the row. Digits sit on a soft fill; the two actions are
+ * bare, so the ten digits read as the pad and the arrows as what you do with it.
+ */
 @Composable
 private fun RowScope.KeyButton(
     enabled: Boolean,
     onClick: () -> Unit,
+    filled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    FilledTonalButton(
-        onClick = onClick,
-        enabled = enabled,
-        shape = MaterialTheme.shapes.large,
-        contentPadding = PaddingValues(VmSpacing.xs),
-        modifier = Modifier
-            .weight(1f)
-            .height(VmSizes.touchTarget),
-    ) {
-        content()
+    val c = VmTheme.colors
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f)) {
+        VmSurface(
+            onClick = onClick,
+            enabled = enabled,
+            shape = CircleShape,
+            color = if (filled) c.bgSubtle else Color.Transparent,
+            contentColor = if (enabled) c.textPrimary else c.textDisabled,
+            modifier = Modifier.size(KeySize),
+        ) {
+            Box(contentAlignment = Alignment.Center) { content() }
+        }
     }
 }

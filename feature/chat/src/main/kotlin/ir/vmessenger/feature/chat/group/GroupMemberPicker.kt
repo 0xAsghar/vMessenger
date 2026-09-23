@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,15 +16,6 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.PersonOff
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
@@ -40,9 +30,18 @@ import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.EmptyState
 import ir.vmessenger.core.designsystem.component.SkeletonList
 import ir.vmessenger.core.designsystem.component.UserHashText
+import ir.vmessenger.core.designsystem.component.VmButton
+import ir.vmessenger.core.designsystem.component.VmCheckbox
+import ir.vmessenger.core.designsystem.component.VmIcon
+import ir.vmessenger.core.designsystem.component.VmIconButton
+import ir.vmessenger.core.designsystem.component.VmModalSheet
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextField
+import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.domain.model.Contact
 import ir.vmessenger.feature.chat.IdentitySeed
 import ir.vmessenger.feature.chat.R
@@ -190,22 +189,14 @@ fun GroupMemberPickerSheet(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
+    VmModalSheet(onDismissRequest = onDismiss) {
         // Not VmBottomSheet: this one is a fixed fraction of the screen with a weighted list
-        // above a pinned button, which the component's wrap-content column cannot express. The
-        // inset it would have brought is applied here instead — without it the confirm button
-        // sits under the gesture pill.
-        Column(
-            modifier = Modifier
-                .fillMaxHeight(SHEET_HEIGHT_FRACTION)
-                .navigationBarsPadding(),
-        ) {
-            Text(
+        // above a pinned button, which the action sheet's wrap-content column cannot express.
+        // The sheet itself keeps the button clear of the navigation bar and the keyboard.
+        Column(modifier = Modifier.fillMaxHeight(SHEET_HEIGHT_FRACTION)) {
+            VmText(
                 text = stringResource(R.string.feature_chat_group_add_members_title),
-                style = MaterialTheme.typography.titleMedium,
+                style = VmTheme.typography.bodyLgMedium,
                 modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
             )
             GroupMemberPicker(
@@ -214,36 +205,35 @@ fun GroupMemberPickerSheet(
                 onToggle = onToggle,
                 modifier = Modifier.weight(1f),
             )
-            Button(
+            VmButton(
+                text = stringResource(R.string.feature_chat_group_add_members_confirm),
                 onClick = onConfirm,
                 enabled = state.hasSelection,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(VmSpacing.lg),
-            ) {
-                Text(text = stringResource(R.string.feature_chat_group_add_members_confirm))
-            }
+            )
         }
     }
 }
 
 @Composable
 private fun PickerSearchField(query: String, onQueryChange: (String) -> Unit) {
-    OutlinedTextField(
+    VmTextField(
         value = query,
         onValueChange = onQueryChange,
-        singleLine = true,
-        placeholder = { Text(text = stringResource(R.string.feature_chat_group_picker_search)) },
-        leadingIcon = { Icon(imageVector = Icons.Outlined.Search, contentDescription = null) },
-        trailingIcon = {
-            if (query.isNotEmpty()) {
-                IconButton(onClick = { onQueryChange("") }) {
-                    Icon(
-                        imageVector = Icons.Outlined.Close,
-                        contentDescription = stringResource(R.string.feature_chat_group_picker_clear),
-                    )
-                }
+        config = VmTextFieldConfig(placeholder = stringResource(R.string.feature_chat_group_picker_search)),
+        leadingIcon = { VmIcon(imageVector = Icons.Outlined.Search, contentDescription = null) },
+        trailingIcon = if (query.isNotEmpty()) {
+            {
+                VmIconButton(
+                    icon = Icons.Outlined.Close,
+                    contentDescription = stringResource(R.string.feature_chat_group_picker_clear),
+                    onClick = { onQueryChange("") },
+                )
             }
+        } else {
+            null
         },
         modifier = Modifier
             .fillMaxWidth()
@@ -259,25 +249,25 @@ private fun PickerCounter(state: GroupPickerState) {
             .padding(horizontal = VmSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(VmSpacing.xxs),
     ) {
-        Text(
+        VmText(
             text = stringResource(
                 R.string.feature_chat_group_picker_selected,
                 VmTextFormat.digits(state.selectedCount.toString()),
                 VmTextFormat.digits(state.capacity.toString()),
             ),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            style = VmTheme.typography.bodyMdMedium,
+            color = VmTheme.colors.textAccent,
         )
         // Only shown once the cap actually bites: before that the ceiling is noise, and
         // after it the greyed-out rows below need an explanation on the spot.
         if (state.atCapacity) {
-            Text(
+            VmText(
                 text = stringResource(
                     R.string.feature_chat_group_picker_cap,
                     VmTextFormat.digits(GroupLimits.MAX_MEMBERS.toString()),
                 ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = VmTheme.typography.bodySm,
+                color = VmTheme.colors.textSecondary,
             )
         }
     }
@@ -343,18 +333,18 @@ private fun PickerRow(
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
     ) {
         // The row owns the toggle semantics, so the box itself is decorative.
-        Checkbox(checked = checked, onCheckedChange = null, enabled = enabled)
+        VmCheckbox(checked = checked, onCheckedChange = null, enabled = enabled)
         Avatar(seed = contact.seed.bytes, name = contact.name, size = VmSizes.avatarMd)
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            VmText(
                 text = contact.name,
-                style = MaterialTheme.typography.titleMedium,
+                style = VmTheme.typography.bodyLgMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             UserHashText(
                 text = contact.userHash,
-                style = MaterialTheme.typography.bodySmall,
+                style = VmTheme.typography.bodySm,
                 textAlign = TextAlign.Start,
             )
         }

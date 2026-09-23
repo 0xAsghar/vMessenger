@@ -41,6 +41,13 @@ class VmLocaleFormatTest {
     }
 
     @Test
+    fun `english decimals and lists use latin punctuation`() {
+        assertEquals("1.2", VmTextFormat.oneDecimal(1.24))
+        assertEquals("3", VmTextFormat.oneDecimal(2.96))
+        assertEquals("Ali, Maryam", VmTextFormat.list(listOf("Ali", "Maryam")))
+    }
+
+    @Test
     fun `english percent uses the latin sign`() {
         assertEquals("42%", VmTextFormat.percent(0.42f))
         assertEquals("100%", VmTextFormat.percent(2f))

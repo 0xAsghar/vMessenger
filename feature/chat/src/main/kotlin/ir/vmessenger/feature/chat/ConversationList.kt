@@ -1,29 +1,65 @@
 package ir.vmessenger.feature.chat
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
-import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.component.BubbleDirection
 import ir.vmessenger.core.designsystem.component.DateSeparator
 import ir.vmessenger.core.designsystem.component.MessageBubble
 import ir.vmessenger.core.designsystem.component.ProgressPill
+import ir.vmessenger.core.designsystem.component.SystemMessage
+import ir.vmessenger.core.designsystem.component.VmIcon
 import ir.vmessenger.core.designsystem.theme.VmMotion
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.feature.chat.voice.VoiceBubbleHost
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 private const val INCOMING_CONTENT_TYPE = "incoming-transfer"
+
+/** How far a bubble must travel before letting go replies to it. */
+private val REPLY_THRESHOLD = 64.dp
+
+/** Past this the bubble stops following: the gesture has said what it means. */
+private val REPLY_MAX_TRAVEL = 96.dp
+
+/** The bubble moves this share of the finger's travel, so it feels held rather than loose. */
+private const val RESISTANCE = 0.6f
 
 /**
  * The message list.
@@ -70,7 +106,7 @@ internal fun ConversationMessageList(
                 is ChatItem.Day -> DateSeparator(label = item.label, modifier = animated)
                 // A membership change is the conversation talking about itself: centred,
                 // unowned by either side, and with nothing to reply to or long-press.
-                is ChatItem.System -> DateSeparator(label = item.text, modifier = animated)
+                is ChatItem.System -> SystemMessage(text = item.text, modifier = animated)
                 is ChatItem.Message -> SwipeToReply(
                     onReply = { actions.onReply(item.messageId) },
                     modifier = animated,
@@ -91,13 +127,14 @@ internal fun ConversationMessageList(
 }
 
 /**
- * Drag a bubble toward the end of the line to reply. `StartToEnd` is direction aware, so
- * it is a right-swipe in a Latin layout and the left-swipe Persian users expect here.
+ * Drag a bubble toward the end of the line to reply: a right-swipe in English, the left-swipe
+ * Persian users expect. The bubble follows the finger with some resistance, a reply arrow fades in
+ * where it came from, and crossing the threshold gives a tick of haptics — let go past it and the
+ * reply opens, let go short of it and nothing happens. Either way the bubble springs back.
  *
- * The background is deliberately empty. `SwipeToDismissBox` composes and draws its background
- * slot unconditionally — swiping only uncovers it — and because a bubble is capped at 78% of the
- * width, an icon there was permanently visible through the empty half of every single row. The
- * gesture itself lives in the state below and is untouched.
+ * Only a drag *toward the end* is taken. One toward the start is left for whatever is underneath
+ * — in Persian that is the conversation's own swipe back, which the Material box this replaced
+ * swallowed on every bubble, so going back only worked from the gaps between messages.
  */
 @Composable
 private fun SwipeToReply(
@@ -105,20 +142,57 @@ private fun SwipeToReply(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val swipeState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.StartToEnd) onReply()
-            // Never actually dismiss: the gesture is a shortcut, not a delete.
-            false
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val density = LocalDensity.current
+    val threshold = with(density) { REPLY_THRESHOLD.toPx() }
+    val maxTravel = with(density) { REPLY_MAX_TRAVEL.toPx() }
+    val haptics = LocalHapticFeedback.current
+    val offset = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val reply by rememberUpdatedState(onReply)
+    Box(
+        modifier = modifier.pointerInput(rtl, threshold, maxTravel) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                var armed = false
+                val towardEnd = { dx: Float -> if (rtl) -dx else dx }
+                val start = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
+                    // Not consuming a start-ward slop leaves the drag to the swipe back.
+                    if (towardEnd(over) > 0f) change.consume()
+                } ?: return@awaitEachGesture
+                horizontalDrag(start.id) { change ->
+                    val next = (offset.value + towardEnd(change.positionChange().x) * RESISTANCE)
+                        .coerceIn(0f, maxTravel)
+                    scope.launch { offset.snapTo(next) }
+                    if (!armed && next >= threshold) {
+                        armed = true
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    } else if (armed && next < threshold) {
+                        armed = false
+                    }
+                    change.consume()
+                }
+                if (armed) reply()
+                scope.launch { offset.animateTo(0f, spring()) }
+            }
         },
-    )
-    SwipeToDismissBox(
-        state = swipeState,
-        backgroundContent = {},
-        modifier = modifier,
-        enableDismissFromEndToStart = false,
     ) {
-        content()
+        val progress = (offset.value / threshold).coerceIn(0f, 1f)
+        if (progress > 0f) {
+            VmIcon(
+                imageVector = Icons.AutoMirrored.Outlined.Reply,
+                contentDescription = null,
+                tint = VmTheme.colors.iconSecondary,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(start = VmSpacing.lg)
+                    .alpha(progress),
+            )
+        }
+        // offset is layout-relative: a positive x moves toward the end in either direction.
+        Box(modifier = Modifier.offset { IntOffset(offset.value.roundToInt(), 0) }) {
+            content()
+        }
     }
 }
 

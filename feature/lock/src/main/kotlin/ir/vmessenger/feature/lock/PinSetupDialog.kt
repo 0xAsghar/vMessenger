@@ -3,10 +3,6 @@ package ir.vmessenger.feature.lock
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
@@ -19,7 +15,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import ir.vmessenger.core.crypto.lock.PinVerifier
+import ir.vmessenger.core.designsystem.component.VmDialog
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextButton
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.core.designsystem.R as DesignR
 
 /**
@@ -39,26 +39,20 @@ fun PinSetupDialog(onDone: (CharArray?) -> Unit) {
     DisposableEffect(state) {
         onDispose { state.clear() }
     }
-    AlertDialog(
+    VmDialog(
         onDismissRequest = { onDone(null) },
-        title = { Text(text = stringResource(R.string.pin_setup_title)) },
-        text = { PinSetupBody(state = state) },
-        confirmButton = {
-            TextButton(enabled = state.entry.isSubmittable, onClick = { state.submit()?.let(onDone) }) {
-                Text(
-                    text = stringResource(
-                        if (state.confirming) R.string.pin_setup_save else R.string.pin_setup_next,
-                    ),
-                )
-            }
+        title = stringResource(R.string.pin_setup_title),
+        buttons = {
+            VmTextButton(text = stringResource(DesignR.string.vm_cancel), onClick = { onDone(null) })
+            VmTextButton(
+                text = stringResource(if (state.confirming) R.string.pin_setup_save else R.string.pin_setup_next),
+                enabled = state.entry.isSubmittable,
+                onClick = { state.submit()?.let(onDone) },
+            )
         },
-        dismissButton = {
-            TextButton(onClick = { onDone(null) }) {
-                Text(text = stringResource(DesignR.string.vm_cancel))
-            }
-        },
-        shape = MaterialTheme.shapes.large,
-    )
+    ) {
+        PinSetupBody(state = state)
+    }
 }
 
 @Composable
@@ -67,20 +61,18 @@ private fun PinSetupBody(state: PinSetupState) {
         verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
+        VmText(
             text = if (state.confirming) {
                 stringResource(R.string.pin_setup_confirm)
             } else {
                 stringResource(R.string.pin_setup_enter, persian(PinVerifier.MIN_PIN_LENGTH))
             },
-            style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
         )
         if (state.mismatch) {
-            Text(
+            VmText(
                 text = stringResource(R.string.pin_setup_mismatch),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
+                color = VmTheme.colors.textCritical,
                 textAlign = TextAlign.Center,
             )
         }

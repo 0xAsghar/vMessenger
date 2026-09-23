@@ -1,23 +1,19 @@
 package ir.vmessenger.feature.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.EnhancedEncryption
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Password
 import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,14 +22,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import ir.vmessenger.core.designsystem.component.ConfirmDialog
 import ir.vmessenger.core.designsystem.component.SettingsDivider
 import ir.vmessenger.core.designsystem.component.SettingsRow
 import ir.vmessenger.core.designsystem.component.SettingsTrailing
+import ir.vmessenger.core.designsystem.component.VmDialog
+import ir.vmessenger.core.designsystem.component.VmRadioButton
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextButton
 import ir.vmessenger.core.designsystem.component.rememberDeviceAuthentication
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /** Android 11 is where the Keystore learned to hold a key behind a recent authentication. */
 private const val STRICT_MODE_MIN_ANDROID = "11"
@@ -221,32 +223,23 @@ private fun AutoLockDialog(
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
+    VmDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = stringResource(R.string.settings_app_lock_timeout_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
+        title = stringResource(R.string.settings_app_lock_timeout_title),
+        buttons = {
+            VmTextButton(text = stringResource(R.string.settings_app_lock_timeout_close), onClick = onDismiss)
         },
-        text = {
-            Column {
-                AUTO_LOCK_CHOICES.forEach { minutes ->
-                    AutoLockChoice(
-                        minutes = minutes,
-                        selected = minutes == selected,
-                        onSelect = { onSelect(minutes) },
-                    )
-                }
+    ) {
+        Column(modifier = Modifier.selectableGroup()) {
+            AUTO_LOCK_CHOICES.forEach { minutes ->
+                AutoLockChoice(
+                    minutes = minutes,
+                    selected = minutes == selected,
+                    onSelect = { onSelect(minutes) },
+                )
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(R.string.settings_app_lock_timeout_close))
-            }
-        },
-        shape = MaterialTheme.shapes.large,
-    )
+        }
+    }
 }
 
 @Composable
@@ -255,17 +248,18 @@ private fun AutoLockChoice(
     selected: Boolean,
     onSelect: () -> Unit,
 ) {
+    // One choice per row: the whole row selects, and the radio only shows which.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onSelect)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onSelect)
             .heightIn(min = VmSizes.touchTarget)
             .padding(horizontal = VmSpacing.xs),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
     ) {
-        RadioButton(selected = selected, onClick = onSelect)
-        Text(text = autoLockLabel(minutes), style = MaterialTheme.typography.bodyLarge)
+        VmRadioButton(selected = selected, onClick = null)
+        VmText(text = autoLockLabel(minutes), style = VmTheme.typography.bodyLg, color = VmTheme.colors.textPrimary)
     }
 }
 

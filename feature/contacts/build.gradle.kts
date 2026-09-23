@@ -19,7 +19,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.compose.material.icons.extended)
-    implementation(libs.compose.material3)
     implementation(libs.kotlinx.collections.immutable)
     testImplementation(libs.junit)
 }

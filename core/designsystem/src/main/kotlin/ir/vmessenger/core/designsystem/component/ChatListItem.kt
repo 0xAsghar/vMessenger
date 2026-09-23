@@ -7,18 +7,13 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.NotificationsOff
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -29,14 +24,16 @@ import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmMotion
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
-
-private const val SELECTED_ALPHA = 0.16f
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /**
  * One row of the chats tab: avatar slot, title, preview line (already styled by the caller as an
- * [AnnotatedString]), time, unread pill, mute icon and optional outgoing ticks.
+ * [AnnotatedString]), time, unread count, mute icon and optional outgoing ticks.
  *
- * The geometry is [VmListRow]'s; only the chat-specific slots and the long-press gesture live here.
+ * Unread is carried by the accent, as in Element X: the time turns the accent colour and the count
+ * sits in an accent pill — grey instead when the conversation is muted, since a muted chat is
+ * information rather than a call. The geometry is [VmListRow]'s; only the chat-specific slots and
+ * the long-press gesture live here.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Suppress("LongParameterList") // Compose slot API: each element of the row is independently supplied.
@@ -54,13 +51,8 @@ fun ChatListItem(
     selected: Boolean = false,
     avatar: @Composable () -> Unit,
 ) {
-    val targetBackground = if (selected) {
-        MaterialTheme.colorScheme.primary.copy(alpha = SELECTED_ALPHA)
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
     val background by animateColorAsState(
-        targetValue = targetBackground,
+        targetValue = if (selected) VmTheme.colors.bgAccentSubtle else Color.Transparent,
         animationSpec = VmMotion.emphasis(),
         label = "row-selection",
     )
@@ -84,10 +76,8 @@ private fun PreviewLine(subtitle: AnnotatedString, ticks: DeliveryTicksState?) {
         if (ticks != null) {
             DeliveryTicks(state = ticks)
         }
-        Text(
+        VmText(
             text = subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -96,47 +86,38 @@ private fun PreviewLine(subtitle: AnnotatedString, ticks: DeliveryTicksState?) {
 
 @Composable
 private fun TrailingColumn(time: String, unreadCount: Int, muted: Boolean) {
+    val c = VmTheme.colors
+    val unread = unreadCount > 0
     Column(
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(VmSpacing.xs),
     ) {
-        Text(
+        VmText(
             text = time,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = if (unread) VmTheme.typography.bodySmMedium else VmTheme.typography.bodySm,
+            color = if (unread && !muted) c.textAccent else c.textSecondary,
         )
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VmSpacing.xs),
         ) {
             if (muted) {
-                Icon(
+                VmIcon(
                     imageVector = Icons.Outlined.NotificationsOff,
                     contentDescription = stringResource(R.string.vm_chat_muted),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(VmSizes.iconSm),
+                    tint = c.iconTertiary,
+                    size = VmSizes.iconSm,
                 )
             }
-            UnreadPill(unreadCount)
+            if (unread) {
+                val label = VmTextFormat.digits(unreadCount.toString())
+                val description = stringResource(R.string.vm_chat_unread_count, label)
+                VmBadge(
+                    text = label,
+                    emphasized = !muted,
+                    modifier = Modifier.semantics { contentDescription = description },
+                )
+            }
         }
-    }
-}
-
-@Composable
-private fun UnreadPill(count: Int) {
-    if (count <= 0) return
-    val label = VmTextFormat.digits(count.toString())
-    val description = stringResource(R.string.vm_chat_unread_count, label)
-    Surface(
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
-        modifier = Modifier.semantics { contentDescription = description },
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = VmSpacing.sm, vertical = VmSpacing.xxs),
-        )
     }
 }

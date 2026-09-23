@@ -8,15 +8,10 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +22,7 @@ import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.VmTextStyles
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /**
  * The chrome around one message: side, shape, colours and the 78% width cap. The payload is a
@@ -49,7 +45,7 @@ fun MessageBubble(
             .padding(horizontal = VmSpacing.sm, vertical = VmSpacing.xxs),
         contentAlignment = alignment,
     ) {
-        Surface(
+        VmSurface(
             shape = shape,
             color = colors.container,
             contentColor = colors.content,
@@ -79,30 +75,31 @@ fun BubbleMeta(
     edited: Boolean = false,
     expiring: Boolean = false,
 ) {
+    val quiet = VmTheme.colors.textSecondary
     Row(
         modifier = modifier.padding(top = VmSpacing.xxs),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.xs),
     ) {
         if (expiring) {
-            Icon(
+            VmIcon(
                 imageVector = Icons.Outlined.Timer,
                 contentDescription = stringResource(R.string.vm_bubble_timed),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(VmSizes.iconSm),
+                tint = quiet,
+                size = VmSizes.iconSm,
             )
         }
         if (edited) {
-            Text(
+            VmText(
                 text = stringResource(R.string.vm_bubble_edited),
                 style = VmTextStyles.bubbleTime,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = quiet,
             )
         }
-        Text(
+        VmText(
             text = time,
             style = VmTextStyles.bubbleTime,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = quiet,
         )
         if (ticks != null) {
             DeliveryTicks(state = ticks)

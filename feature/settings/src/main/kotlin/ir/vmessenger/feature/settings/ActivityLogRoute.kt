@@ -2,23 +2,18 @@ package ir.vmessenger.feature.settings
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,8 +29,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.ConfirmDialog
 import ir.vmessenger.core.designsystem.component.EmptyState
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmDivider
+import ir.vmessenger.core.designsystem.component.VmDropdownMenu
+import ir.vmessenger.core.designsystem.component.VmDropdownMenuItem
+import ir.vmessenger.core.designsystem.component.VmIconButton
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.format.VmDateFormat
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.data.activity.ActivityLogFormat
 import java.io.File
 
@@ -63,18 +64,19 @@ fun ActivityLogRoute(
         viewModel.onExportHandled()
     }
 
+    val listState = rememberLazyListState()
     VMessengerScaffold(
         title = stringResource(R.string.feature_settings_activity_title),
         onNavigateBack = onNavigateBack,
         modifier = modifier,
+        scrolled = listState.canScrollBackward,
         actions = {
             ExportMenu(onPick = viewModel::requestExport)
-            IconButton(onClick = { confirmClear = true }) {
-                Icon(
-                    imageVector = Icons.Outlined.DeleteOutline,
-                    contentDescription = stringResource(R.string.feature_settings_activity_clear),
-                )
-            }
+            VmIconButton(
+                icon = Icons.Outlined.DeleteOutline,
+                contentDescription = stringResource(R.string.feature_settings_activity_clear),
+                onClick = { confirmClear = true },
+            )
         },
     ) { padding ->
         if (entries.isEmpty()) {
@@ -85,10 +87,10 @@ fun ActivityLogRoute(
                 modifier = Modifier.padding(padding),
             )
         } else {
-            LazyColumn(modifier = Modifier.padding(padding).fillMaxSize()) {
+            LazyColumn(state = listState, modifier = Modifier.padding(padding).fillMaxSize()) {
                 items(entries, key = { it.id }) { row ->
                     ActivityRow(row)
-                    HorizontalDivider()
+                    VmDivider(modifier = Modifier.padding(horizontal = VmSpacing.lg))
                 }
             }
         }
@@ -112,21 +114,23 @@ fun ActivityLogRoute(
 @Composable
 private fun ExportMenu(onPick: (ActivityLogFormat) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    IconButton(onClick = { open = true }) {
-        Icon(
-            imageVector = Icons.Outlined.Share,
+    // The menu anchors to what it shares a box with: the button, not the whole bar.
+    Box {
+        VmIconButton(
+            icon = Icons.Outlined.Share,
             contentDescription = stringResource(R.string.feature_settings_activity_export),
+            onClick = { open = true },
         )
-    }
-    DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-        ActivityLogFormat.entries.forEach { format ->
-            DropdownMenuItem(
-                text = { Text(text = format.extension.uppercase()) },
-                onClick = {
-                    open = false
-                    onPick(format)
-                },
-            )
+        VmDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            ActivityLogFormat.entries.forEach { format ->
+                VmDropdownMenuItem(
+                    text = format.extension.uppercase(),
+                    onClick = {
+                        open = false
+                        onPick(format)
+                    },
+                )
+            }
         }
     }
 }
@@ -138,18 +142,22 @@ private fun ActivityRow(row: ActivityLogRow) {
             .fillMaxWidth()
             .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
     ) {
-        Text(text = stringResource(row.kind.labelRes()), style = MaterialTheme.typography.bodyMedium)
+        VmText(
+            text = stringResource(row.kind.labelRes()),
+            style = VmTheme.typography.bodyMd,
+            color = VmTheme.colors.textPrimary,
+        )
         row.detail?.let { detail ->
-            Text(
+            VmText(
                 text = detail,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = VmTheme.typography.bodySm,
+                color = VmTheme.colors.textSecondary,
             )
         }
-        Text(
+        VmText(
             text = VmDateFormat.dayAndTime(row.atUnixMs),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodyXs,
+            color = VmTheme.colors.textSecondary,
         )
     }
 }

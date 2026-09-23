@@ -17,10 +17,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -39,7 +35,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmButton
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 
@@ -91,13 +91,16 @@ fun QrScannerScreen(
                         .padding(VmSpacing.xl),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(
+                    VmText(
                         text = stringResource(R.string.camera_permission_required),
+                        style = VmTheme.typography.bodyLg,
+                        color = VmTheme.colors.textPrimary,
                         modifier = Modifier.padding(bottom = VmSpacing.lg),
                     )
-                    Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
-                        Text(stringResource(R.string.camera_permission_grant))
-                    }
+                    VmButton(
+                        text = stringResource(R.string.camera_permission_grant),
+                        onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                    )
                 }
             }
             overlay()
@@ -117,23 +120,23 @@ private fun QrScanFrameOverlay(hint: String) {
             .background(Color.Black.copy(alpha = SCRIM_ALPHA)),
         contentAlignment = Alignment.Center,
     ) {
-        Surface(
+        VmSurface(
             modifier = Modifier.size(ViewfinderSize),
             shape = RoundedCornerShape(ViewfinderCorner),
             color = Color.Transparent,
             border = BorderStroke(ViewfinderBorder, Color.White),
         ) {}
-        Surface(
+        VmSurface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = HintBottomOffset),
             shape = RoundedCornerShape(ViewfinderCorner),
             color = Color.Black.copy(alpha = HINT_SCRIM_ALPHA),
         ) {
-            Text(
+            VmText(
                 text = hint,
                 modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
-                style = MaterialTheme.typography.bodyMedium,
+                style = VmTheme.typography.bodyMd,
                 color = Color.White,
             )
         }

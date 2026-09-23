@@ -3,9 +3,6 @@ package ir.vmessenger.feature.settings
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -13,7 +10,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.designsystem.component.VmButton
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.feature.pairing.QrScannerScreen
 
 @Composable
@@ -43,24 +45,36 @@ private fun NodeQrScannerOverlay(
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         when (uiState) {
-            is NodeScanUiState.Error -> {
-                Text(
+            // The camera is still running under an error, and its hint sits at the bottom: the
+            // message goes at the top, on a surface of its own so it reads over any picture.
+            is NodeScanUiState.Error -> VmSurface(
+                shape = VmShapes.field,
+                color = VmTheme.colors.bgCriticalSubtle,
+                contentColor = VmTheme.colors.textCritical,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(VmSpacing.lg),
+            ) {
+                VmText(
                     text = uiState.message,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(VmSpacing.xl),
-                    color = MaterialTheme.colorScheme.error,
+                    style = VmTheme.typography.bodyMd,
+                    modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
                 )
             }
             NodeScanUiState.Success -> {
-                Text(
+                VmText(
                     text = stringResource(R.string.nodes_scan_success),
+                    style = VmTheme.typography.bodyLg,
+                    color = VmTheme.colors.textPrimary,
                     modifier = Modifier.align(Alignment.Center),
                 )
-                Button(
+                VmButton(
+                    text = stringResource(R.string.nodes_close),
                     onClick = onDone,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(VmSpacing.xl),
-                ) {
-                    Text(stringResource(R.string.nodes_close))
-                }
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(VmSpacing.xl),
+                )
             }
             else -> Unit
         }

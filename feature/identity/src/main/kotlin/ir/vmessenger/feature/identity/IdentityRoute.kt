@@ -11,10 +11,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Fingerprint
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,15 +25,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.EmptyState
 import ir.vmessenger.core.designsystem.component.EmptyStateAction
-import ir.vmessenger.core.designsystem.component.SettingsSection
 import ir.vmessenger.core.designsystem.component.SkeletonList
 import ir.vmessenger.core.designsystem.component.UiMessageSnackbarEffect
 import ir.vmessenger.core.designsystem.component.UserHashText
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmButton
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextField
+import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.domain.model.Identity
 
 /** Enough rows to fill the header block without pretending a long list is coming. */
@@ -104,10 +104,10 @@ private fun IdentityLoadedContent(
             onSave = onSaveDisplayName,
         )
         IdentityHashCard(userHash = state.identity.userHash)
-        Text(
+        VmText(
             text = stringResource(R.string.my_identity_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodySm,
+            color = VmTheme.colors.textSecondary,
             textAlign = TextAlign.Center,
         )
     }
@@ -125,8 +125,12 @@ private fun IdentityHeader(identity: Identity) {
             name = identity.displayName,
             size = VmSizes.avatarLg,
         )
-        Text(text = identity.displayName, style = MaterialTheme.typography.titleMedium)
-        UserHashText(text = identity.userHash, style = MaterialTheme.typography.bodySmall)
+        VmText(
+            text = identity.displayName,
+            style = VmTheme.typography.headingMd,
+            color = VmTheme.colors.textPrimary,
+        )
+        UserHashText(text = identity.userHash, style = VmTheme.typography.bodySm)
     }
 }
 
@@ -138,30 +142,28 @@ private fun DisplayNameSection(
 ) {
     var name by rememberSaveable(displayName) { mutableStateOf(displayName) }
     val trimmed = name.trim()
-    SettingsSection(title = stringResource(R.string.my_identity_display_name_label)) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(VmSpacing.lg),
-            verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
-        ) {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text(stringResource(R.string.my_identity_display_name_placeholder)) },
-                singleLine = true,
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
+    ) {
+        VmTextField(
+            value = name,
+            onValueChange = { name = it },
+            modifier = Modifier.fillMaxWidth(),
+            config = VmTextFieldConfig(
+                label = stringResource(R.string.my_identity_display_name_label),
+                placeholder = stringResource(R.string.my_identity_display_name_placeholder),
                 enabled = !saving,
-            )
-            // Nothing to save while the write is in flight, or while the name is unchanged —
-            // a button that stays enabled through both is how the silent failure went unnoticed.
-            Button(
-                onClick = { onSave(trimmed) },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !saving && trimmed != displayName && isDisplayNameValid(name),
-            ) {
-                Text(text = stringResource(R.string.my_identity_display_name_save))
-            }
-        }
+            ),
+        )
+        // Nothing to save while the write is in flight, or while the name is unchanged —
+        // a button that stays enabled through both is how the silent failure went unnoticed.
+        VmButton(
+            text = stringResource(R.string.my_identity_display_name_save),
+            onClick = { onSave(trimmed) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = trimmed != displayName && isDisplayNameValid(name),
+            loading = saving,
+        )
     }
 }

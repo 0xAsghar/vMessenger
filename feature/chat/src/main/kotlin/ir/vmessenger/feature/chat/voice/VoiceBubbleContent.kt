@@ -14,12 +14,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
@@ -28,9 +22,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.component.VmIconButton
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.format.VmTextFormat
-import ir.vmessenger.core.designsystem.theme.VmSizes
+import ir.vmessenger.core.designsystem.foundation.LocalVmContentColor
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.feature.chat.R
 
 private val BubbleMinWidth = 168.dp
@@ -75,14 +73,13 @@ internal fun VoiceBubbleContent(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
     ) {
-        IconButton(onClick = onPlayPause, modifier = Modifier.size(VmSizes.touchTarget)) {
-            Icon(
-                imageVector = if (playback.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                contentDescription = stringResource(
-                    if (playback.playing) R.string.feature_chat_voice_pause else R.string.feature_chat_voice_play,
-                ),
-            )
-        }
+        VmIconButton(
+            icon = if (playback.playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+            contentDescription = stringResource(
+                if (playback.playing) R.string.feature_chat_voice_pause else R.string.feature_chat_voice_play,
+            ),
+            onClick = onPlayPause,
+        )
         Column(modifier = Modifier.weight(1f)) {
             WaveformBar(
                 waveform = waveform,
@@ -115,10 +112,10 @@ private fun MetaRow(
             .fillMaxWidth()
             .padding(top = VmSpacing.xxs),
     ) {
-        Text(
+        VmText(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodyXsMedium,
+            color = VmTheme.colors.textSecondary,
         )
         if (playback.unplayed) UnplayedDot()
         Spacer(modifier = Modifier.weight(1f))
@@ -134,7 +131,7 @@ private fun UnplayedDot() {
         modifier = Modifier
             .semantics { contentDescription = description }
             .size(UnplayedDotSize)
-            .background(color = MaterialTheme.colorScheme.primary, shape = CircleShape),
+            .background(color = VmTheme.colors.textAccent, shape = CircleShape),
     )
 }
 
@@ -143,16 +140,16 @@ private fun UnplayedDot() {
 private fun SpeedChip(speed: VoiceSpeed, onClick: () -> Unit) {
     val label = stringResource(speedLabelRes(speed))
     val description = stringResource(R.string.feature_chat_voice_speed, label)
-    Surface(
+    VmSurface(
         onClick = onClick,
         shape = CircleShape,
-        color = LocalContentColor.current.copy(alpha = CHIP_CONTAINER_ALPHA),
-        contentColor = LocalContentColor.current,
+        color = LocalVmContentColor.current.copy(alpha = CHIP_CONTAINER_ALPHA),
+        contentColor = LocalVmContentColor.current,
         modifier = Modifier.semantics { contentDescription = description },
     ) {
-        Text(
+        VmText(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            style = VmTheme.typography.bodyXsMedium,
             modifier = Modifier.padding(horizontal = ChipPadding, vertical = VmSpacing.xxs),
         )
     }

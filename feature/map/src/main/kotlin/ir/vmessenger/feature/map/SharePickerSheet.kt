@@ -4,26 +4,26 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.SectionHeader
+import ir.vmessenger.core.designsystem.component.VmModalSheet
+import ir.vmessenger.core.designsystem.component.VmSwitch
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import kotlinx.collections.immutable.ImmutableList
 
 private val PICKER_MAX_HEIGHT = 440.dp
@@ -35,24 +35,17 @@ internal fun SharePickerSheet(
     onSetAccess: (String, Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
+    VmModalSheet(onDismissRequest = onDismiss) {
         SectionHeader(title = stringResource(R.string.feature_map_picker_title))
         if (contacts.isEmpty()) {
-            Text(
+            VmText(
                 text = stringResource(R.string.feature_map_picker_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = VmTheme.typography.bodyMd,
+                color = VmTheme.colors.textSecondary,
                 modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
             )
         }
-        LazyColumn(
-            modifier = Modifier
-                .heightIn(max = PICKER_MAX_HEIGHT)
-                .navigationBarsPadding(),
-        ) {
+        LazyColumn(modifier = Modifier.heightIn(max = PICKER_MAX_HEIGHT)) {
             items(contacts, key = { it.contactId }) { contact ->
                 AccessRow(contact = contact, onSetAccess = onSetAccess)
             }
@@ -63,24 +56,28 @@ internal fun SharePickerSheet(
 @Composable
 private fun AccessRow(contact: ContactAccess, onSetAccess: (String, Boolean) -> Unit) {
     val seed = remember(contact.seedHex) { contact.seedHex.toSeedBytes() }
+    // One toggle per contact: the whole row flips it, and the switch only shows its state.
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .toggleable(
+                value = contact.granted,
+                role = Role.Switch,
+                onValueChange = { granted -> onSetAccess(contact.contactId, granted) },
+            )
             .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
     ) {
         Avatar(seed = seed, name = contact.name, size = VmSizes.avatarSm)
-        Text(
+        VmText(
             text = contact.name,
-            style = MaterialTheme.typography.bodyLarge,
+            style = VmTheme.typography.bodyLg,
+            color = VmTheme.colors.textPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        Switch(
-            checked = contact.granted,
-            onCheckedChange = { granted -> onSetAccess(contact.contactId, granted) },
-        )
+        VmSwitch(checked = contact.granted, onCheckedChange = null)
     }
 }

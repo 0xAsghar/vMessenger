@@ -11,18 +11,22 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.foundation.LocalVmContentColor
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 private val QuoteBarWidth = 3.dp
 private val QuoteMinHeight = 36.dp
-private const val QUOTE_ALPHA = 0.12f
+
+/** A wash of whatever colour the quote sits on, so it reads as set-in on a bubble of either side. */
+private const val QUOTE_ALPHA = 0.07f
+private val QuoteShape = RoundedCornerShape(6.dp)
 
 /**
  * The quoted message shown above a reply, both inside a bubble and in the composer strip.
@@ -48,27 +52,27 @@ fun ReplyQuote(
             // which made the bar, the strip and the bottom bar screen-tall. Intrinsic-min resolves
             // the row to its tallest real child first, so there is something finite to fill.
             .height(IntrinsicSize.Min)
-            .clip(MaterialTheme.shapes.extraSmall)
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = QUOTE_ALPHA)),
+            .clip(QuoteShape)
+            .background(LocalVmContentColor.current.copy(alpha = QUOTE_ALPHA)),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .width(QuoteBarWidth)
-                .background(MaterialTheme.colorScheme.primary),
+                .background(VmTheme.colors.iconAccent),
         )
         Column(modifier = Modifier.padding(horizontal = VmSpacing.sm, vertical = VmSpacing.xs)) {
-            Text(
+            VmText(
                 text = senderName,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
+                style = VmTheme.typography.bodySmMedium,
+                color = VmTheme.colors.textAccent,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
+            VmText(
                 text = preview,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = VmTheme.typography.bodySm,
+                color = VmTheme.colors.textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

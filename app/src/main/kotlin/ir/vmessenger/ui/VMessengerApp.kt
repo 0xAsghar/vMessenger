@@ -7,13 +7,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -25,13 +22,16 @@ import androidx.navigation.compose.rememberNavController
 import ir.vmessenger.R
 import ir.vmessenger.core.designsystem.LocalAppObscured
 import ir.vmessenger.core.designsystem.component.ConfirmDialog
+import ir.vmessenger.core.designsystem.component.VmSurface
 import ir.vmessenger.core.designsystem.theme.RtlLayout
 import ir.vmessenger.core.designsystem.theme.VMessengerTheme
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.data.lock.LockState
 import ir.vmessenger.navigation.VMessengerNavHost
 import ir.vmessenger.navigation.VmRoute
 import ir.vmessenger.ui.contact.ContactRequestOverlay
-import ir.vmessenger.ui.network.AppAlertBanner
+import ir.vmessenger.ui.network.LocalAppAlertHost
+import ir.vmessenger.ui.network.rememberAppAlertHost
 
 /**
  * Everything the activity draws.
@@ -64,9 +64,9 @@ fun VMessengerApp(
             // Root surface guarantees a themed background behind every screen;
             // bare-Column screens otherwise show the window background, which may
             // not match the in-app theme choice.
-            Surface(
+            VmSurface(
                 modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background,
+                color = VmTheme.colors.bgCanvas,
             ) {
                 // Remembered here, above everything that reads it: the lock gate below explains why
                 // it must outlive the host, and the first-run check just below needs its destination.
@@ -89,7 +89,18 @@ fun VMessengerApp(
                     // Provided around everything, deliberately. Inside the gate below it could
                     // only ever be observed as false — the subtree is composed only when unlocked —
                     // so the four guards that read it were dead code that looked live.
-                    CompositionLocalProvider(LocalAppObscured provides (lockState != LockState.Unlocked)) {
+                    // Out here, above the lock gate: the graph is torn down while locked, and a
+                    // dismissed alert should stay dismissed when the user comes back.
+                    val alertHost = rememberAppAlertHost(
+                        // "Notifications are off" only once the user has been asked and answered.
+                        // Before that it is simply true of every fresh Android 13+ install, and it
+                        // was greeting new users on the first screen, over the text explaining it.
+                        notificationAlertAllowed = pastFirstRun && !notificationRationalePending,
+                    )
+                    CompositionLocalProvider(
+                        LocalAppObscured provides (lockState != LockState.Unlocked),
+                        LocalAppAlertHost provides alertHost,
+                    ) {
                         // The contact-request overlay is the one sibling of the NavHost whose view
                         // model reaches a DAO, and building a DAO while the lock holds the passphrase
                         // is what crashed the activity before it could draw the lock. It is also the
@@ -132,22 +143,15 @@ fun VMessengerApp(
                             )
                         }
                     }
-                    AppAlertBanner(
-                        // "Notifications are off" only once the user has been asked and answered.
-                        // Before that it is simply true of every fresh Android 13+ install, and it
-                        // was greeting new users on the first screen, over the text explaining it.
-                        notificationAlertAllowed = pastFirstRun && !notificationRationalePending,
-                        modifier = Modifier.align(Alignment.TopCenter),
-                    )
                     if (lockState != LockState.Unlocked) {
                         // Opaque, and drawn while the state is still Undetermined as well as when
                         // it is decided. Whether to lock is an asynchronous answer; the first frame
                         // after a resume is not, and without something over it that frame is the
                         // conversation the user had open. The navigation graph underneath stays
                         // composed, so nothing is lost when the answer is "no lock needed".
-                        Surface(
+                        VmSurface(
                             modifier = Modifier.fillMaxSize(),
-                            color = MaterialTheme.colorScheme.background,
+                            color = VmTheme.colors.bgCanvas,
                         ) {}
                         lockContent()
                     }

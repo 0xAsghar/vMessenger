@@ -18,11 +18,6 @@ import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.PersonOff
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,9 +37,15 @@ import ir.vmessenger.core.designsystem.component.EmptyState
 import ir.vmessenger.core.designsystem.component.SkeletonList
 import ir.vmessenger.core.designsystem.component.UserHashText
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmIcon
+import ir.vmessenger.core.designsystem.component.VmIconButton
 import ir.vmessenger.core.designsystem.component.VmSearchBar
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.domain.model.ContactRelationshipStatus
 
 private const val DISABLED_ALPHA = 0.5f
@@ -90,12 +91,11 @@ fun NewChatRoute(
         onNavigateBack = if (searching) null else onBack,
         actions = {
             if (!searching) {
-                IconButton(onClick = { searching = true }) {
-                    Icon(
-                        imageVector = Icons.Outlined.Search,
-                        contentDescription = stringResource(R.string.feature_chat_search_open),
-                    )
-                }
+                VmIconButton(
+                    icon = Icons.Outlined.Search,
+                    contentDescription = stringResource(R.string.feature_chat_search_open),
+                    onClick = { searching = true },
+                )
             }
         },
         modifier = modifier,
@@ -171,21 +171,21 @@ private fun NewGroupRow(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
     ) {
-        Surface(
+        VmSurface(
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
+            color = VmTheme.colors.textAccent,
+            contentColor = VmTheme.colors.textOnSolid,
             modifier = Modifier.size(VmSizes.avatarMd),
         ) {
-            Icon(
+            VmIcon(
                 imageVector = Icons.Outlined.Group,
                 contentDescription = null,
                 modifier = Modifier.padding(VmSpacing.md),
             )
         }
-        Text(
+        VmText(
             text = stringResource(R.string.feature_chat_new_group),
-            style = MaterialTheme.typography.titleMedium,
+            style = VmTheme.typography.bodyLgMedium,
         )
     }
 }
@@ -204,15 +204,15 @@ private fun ContactPickerRow(row: NewChatRow, onClick: (String) -> Unit) {
     ) {
         Avatar(seed = row.seed.bytes, name = row.name, size = VmSizes.avatarMd)
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            VmText(
                 text = row.name,
-                style = MaterialTheme.typography.titleMedium,
+                style = VmTheme.typography.bodyLgMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             UserHashText(
                 text = row.userHash,
-                style = MaterialTheme.typography.bodySmall,
+                style = VmTheme.typography.bodySm,
                 textAlign = TextAlign.Start,
             )
         }
@@ -223,14 +223,14 @@ private fun ContactPickerRow(row: NewChatRow, onClick: (String) -> Unit) {
 @Composable
 private fun StatusChip(row: NewChatRow) {
     val label = statusLabel(row) ?: return
-    Surface(
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    VmSurface(
+        shape = VmShapes.pill,
+        color = VmTheme.colors.bgSubtleStrong,
+        contentColor = VmTheme.colors.textSecondary,
     ) {
-        Text(
+        VmText(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            style = VmTheme.typography.bodyXsMedium,
             modifier = Modifier.padding(horizontal = VmSpacing.sm, vertical = VmSpacing.xxs),
         )
     }

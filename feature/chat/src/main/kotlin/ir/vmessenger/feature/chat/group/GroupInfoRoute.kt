@@ -17,17 +17,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PersonAddAlt
 import androidx.compose.material.icons.outlined.PersonRemove
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,13 +38,21 @@ import ir.vmessenger.core.designsystem.component.SettingsRow
 import ir.vmessenger.core.designsystem.component.SettingsTrailing
 import ir.vmessenger.core.designsystem.component.SkeletonList
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmIconButton
+import ir.vmessenger.core.designsystem.component.VmInputDialog
 import ir.vmessenger.core.designsystem.component.VmListRow
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextField
+import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
 import ir.vmessenger.core.designsystem.component.asText
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
 import ir.vmessenger.core.designsystem.format.VmTextFormat
+import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.feature.chat.R
 
 private const val MEMBER_CONTENT_TYPE = "group-member"
@@ -200,14 +198,14 @@ private fun GroupInfoHeader(state: GroupInfoUiState) {
         verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
     ) {
         if (state.closed) {
-            Surface(
-                color = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            VmSurface(
+                color = VmTheme.colors.bgCriticalSubtle,
+                contentColor = VmTheme.colors.textCritical,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
+                VmText(
                     text = stringResource(R.string.feature_chat_group_closed_banner),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = VmTheme.typography.bodyMd,
                     modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
                 )
             }
@@ -215,14 +213,14 @@ private fun GroupInfoHeader(state: GroupInfoUiState) {
         if (state.auditRetention) {
             // Shown to everyone, not only the creator. The feature is defensible because the
             // people it applies to are told it applies to them, so this banner is not decoration.
-            Surface(
-                color = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            VmSurface(
+                color = VmTheme.colors.bgWarningSubtle,
+                contentColor = VmTheme.colors.textPrimary,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
+                VmText(
                     text = stringResource(R.string.feature_chat_group_audit_banner),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = VmTheme.typography.bodyMd,
                     modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
                 )
             }
@@ -235,14 +233,14 @@ private fun GroupInfoHeader(state: GroupInfoUiState) {
             modifier = Modifier.padding(top = VmSpacing.md),
             contentDescription = stringResource(R.string.feature_chat_group_avatar, state.name),
         )
-        Text(text = state.name, style = MaterialTheme.typography.headlineSmall)
-        Text(
+        VmText(text = state.name, style = VmTheme.typography.headingMd)
+        VmText(
             text = stringResource(
                 R.string.feature_chat_group_member_count,
                 VmTextFormat.digits(state.memberCount.toString()),
             ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodyMd,
+            color = VmTheme.colors.textSecondary,
         )
     }
 }
@@ -313,35 +311,33 @@ private fun MemberActions(
     callbacks: GroupInfoCallbacks,
 ) {
     if (member.canBeAddedAsContact) {
-        IconButton(onClick = { callbacks.onAddContact(member.identityHash) }) {
-            Icon(
-                imageVector = Icons.Outlined.PersonAddAlt,
-                contentDescription = stringResource(R.string.feature_chat_group_add_contact),
-            )
-        }
+        VmIconButton(
+            icon = Icons.Outlined.PersonAddAlt,
+            contentDescription = stringResource(R.string.feature_chat_group_add_contact),
+            onClick = { callbacks.onAddContact(member.identityHash) },
+        )
     }
     // The creator cannot remove themselves out of a group they own; closing it is their exit.
     if (canRemove && !member.isMe) {
-        IconButton(onClick = { callbacks.onOpenDialog(GroupDialog.RemoveMember(member)) }) {
-            Icon(
-                imageVector = Icons.Outlined.PersonRemove,
-                contentDescription = stringResource(R.string.feature_chat_group_remove_member),
-                tint = MaterialTheme.colorScheme.error,
-            )
-        }
+        VmIconButton(
+            icon = Icons.Outlined.PersonRemove,
+            contentDescription = stringResource(R.string.feature_chat_group_remove_member),
+            onClick = { callbacks.onOpenDialog(GroupDialog.RemoveMember(member)) },
+            tint = VmTheme.colors.iconCritical,
+        )
     }
 }
 
 @Composable
 private fun MemberChip(label: String) {
-    Surface(
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    VmSurface(
+        shape = VmShapes.pill,
+        color = VmTheme.colors.bgSubtleStrong,
+        contentColor = VmTheme.colors.textSecondary,
     ) {
-        Text(
+        VmText(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            style = VmTheme.typography.bodyXsMedium,
             modifier = Modifier.padding(horizontal = VmSpacing.sm, vertical = VmSpacing.xxs),
         )
     }
@@ -351,36 +347,35 @@ private fun MemberChip(label: String) {
 @Composable
 private fun GroupDangerSection(state: GroupInfoUiState, onOpenDialog: (GroupDialog) -> Unit) {
     if (!state.canLeave && !state.canClose) return
-    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.error) {
-        if (state.canLeave) {
-            SettingsRow(
-                label = stringResource(R.string.feature_chat_group_leave),
-                icon = Icons.AutoMirrored.Outlined.Logout,
-                trailing = SettingsTrailing.None,
-                onClick = { onOpenDialog(GroupDialog.Leave) },
-            )
-        }
-        if (state.canAssignRoles) {
-            SettingsRow(
-                label = stringResource(R.string.feature_chat_group_audit_row),
-                icon = Icons.Outlined.History,
-                supporting = stringResource(R.string.feature_chat_group_audit_row_body),
-                // The switch and the row both open the confirmation rather than flipping the
-                // policy: this one is announced to everybody, so it does not happen on a stray tap.
-                trailing = SettingsTrailing.Switch(state.auditRetention) { wanted ->
-                    onOpenDialog(GroupDialog.AuditRetention(wanted))
-                },
-                onClick = { onOpenDialog(GroupDialog.AuditRetention(!state.auditRetention)) },
-            )
-        }
-        if (state.canClose) {
-            SettingsRow(
-                label = stringResource(R.string.feature_chat_group_close),
-                icon = Icons.Outlined.Lock,
-                trailing = SettingsTrailing.None,
-                onClick = { onOpenDialog(GroupDialog.Close) },
-            )
-        }
+    if (state.canLeave) {
+        SettingsRow(
+            label = stringResource(R.string.feature_chat_group_leave),
+            icon = Icons.AutoMirrored.Outlined.Logout,
+            trailing = SettingsTrailing.None,
+            destructive = true,
+            onClick = { onOpenDialog(GroupDialog.Leave) },
+        )
+    }
+    if (state.canAssignRoles) {
+        SettingsRow(
+            label = stringResource(R.string.feature_chat_group_audit_row),
+            icon = Icons.Outlined.History,
+            supporting = stringResource(R.string.feature_chat_group_audit_row_body),
+            // The switch and the row both open the confirmation rather than flipping the
+            // policy: this one is announced to everybody, so it does not happen on a stray tap.
+            trailing = SettingsTrailing.Switch(state.auditRetention) { wanted ->
+                onOpenDialog(GroupDialog.AuditRetention(wanted))
+            },
+        )
+    }
+    if (state.canClose) {
+        SettingsRow(
+            label = stringResource(R.string.feature_chat_group_close),
+            icon = Icons.Outlined.Lock,
+            trailing = SettingsTrailing.None,
+            destructive = true,
+            onClick = { onOpenDialog(GroupDialog.Close) },
+        )
     }
 }
 
@@ -441,29 +436,22 @@ private fun RenameGroupDialog(
 ) {
     var name by rememberSaveable(currentName) { mutableStateOf(currentName) }
     val trimmed = name.trim()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = stringResource(R.string.feature_chat_group_rename_title)) },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { if (it.length <= GroupLimits.MAX_NAME_LENGTH) name = it },
-                label = { Text(text = stringResource(R.string.feature_chat_group_name_label)) },
-                singleLine = true,
+    VmInputDialog(
+        title = stringResource(R.string.feature_chat_group_rename_title),
+        confirmLabel = stringResource(R.string.feature_chat_group_rename_save),
+        onConfirm = { onSave(trimmed) },
+        onDismiss = onDismiss,
+        confirmEnabled = GroupLimits.isValidName(name),
+        dismissLabel = stringResource(R.string.feature_chat_group_rename_cancel),
+    ) {
+        VmTextField(
+            value = name,
+            onValueChange = { if (it.length <= GroupLimits.MAX_NAME_LENGTH) name = it },
+            config = VmTextFieldConfig(
+                label = stringResource(R.string.feature_chat_group_name_label),
                 isError = !GroupLimits.isValidName(name),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(trimmed) }, enabled = GroupLimits.isValidName(name)) {
-                Text(text = stringResource(R.string.feature_chat_group_rename_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(R.string.feature_chat_group_rename_cancel))
-            }
-        },
-        shape = MaterialTheme.shapes.large,
-    )
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
 }

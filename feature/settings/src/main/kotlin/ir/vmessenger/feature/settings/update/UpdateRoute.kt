@@ -18,13 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -35,9 +28,16 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmButton
+import ir.vmessenger.core.designsystem.component.VmLinearProgress
+import ir.vmessenger.core.designsystem.component.VmOutlinedButton
+import ir.vmessenger.core.designsystem.component.VmProgressIndicator
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextButton
 import ir.vmessenger.core.designsystem.error.toUiText
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.domain.model.AvailableUpdate
 import ir.vmessenger.feature.settings.R
 
@@ -126,79 +126,79 @@ private fun UpdateBody(state: UpdateUiState, actions: UpdateActions) {
 
 @Composable
 private fun Progress(label: String) {
-    CircularProgressIndicator()
-    Text(text = label, style = MaterialTheme.typography.bodyMedium)
+    VmProgressIndicator()
+    VmText(text = label, style = VmTheme.typography.bodyMd)
 }
 
 @Composable
 private fun UpToDate(state: UpdateUiState.UpToDate, actions: UpdateActions) {
-    Text(
+    VmText(
         text = stringResource(R.string.settings_update_up_to_date),
-        style = MaterialTheme.typography.titleMedium,
+        style = VmTheme.typography.bodyLgMedium,
     )
     state.lastCheckedLabel?.let {
-        Text(
+        VmText(
             text = stringResource(R.string.settings_update_last_checked, it),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodySm,
+            color = VmTheme.colors.textSecondary,
         )
     }
-    Button(onClick = actions.onCheck) { Text(text = stringResource(R.string.settings_update_check_now)) }
+    VmButton(text = stringResource(R.string.settings_update_check_now), onClick = actions.onCheck)
 }
 
 @Composable
 private fun Available(update: AvailableUpdate, actions: UpdateActions) {
-    Text(
+    VmText(
         text = stringResource(R.string.settings_update_available, VmTextFormat.digits(update.versionName)),
-        style = MaterialTheme.typography.titleMedium,
+        style = VmTheme.typography.bodyLgMedium,
     )
-    Text(
+    VmText(
         text = stringResource(R.string.settings_update_size, VmTextFormat.fileSize(update.asset.sizeBytes)),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = VmTheme.typography.bodySm,
+        color = VmTheme.colors.textSecondary,
     )
     if (update.releaseNotes.isNotBlank()) {
-        Text(text = update.releaseNotes, style = MaterialTheme.typography.bodySmall)
+        VmText(text = update.releaseNotes, style = VmTheme.typography.bodySm)
     }
-    Button(onClick = { actions.onDownload(update) }, modifier = Modifier.fillMaxWidth()) {
-        Text(text = stringResource(R.string.settings_update_download))
-    }
-    TextButton(onClick = { actions.onSkip(update) }) {
-        Text(text = stringResource(R.string.settings_update_skip))
-    }
+    VmButton(
+        text = stringResource(R.string.settings_update_download),
+        onClick = { actions.onDownload(update) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    VmTextButton(text = stringResource(R.string.settings_update_skip), onClick = { actions.onSkip(update) })
 }
 
 @Composable
 private fun Downloading(state: UpdateUiState.Downloading, actions: UpdateActions) {
-    Text(
+    VmText(
         text = stringResource(R.string.settings_update_downloading, state.sizeLabel),
-        style = MaterialTheme.typography.bodyMedium,
+        style = VmTheme.typography.bodyMd,
     )
-    LinearProgressIndicator(progress = { state.fraction }, modifier = Modifier.fillMaxWidth())
-    Text(
+    VmLinearProgress(progress = state.fraction, modifier = Modifier.fillMaxWidth())
+    VmText(
         text = VmTextFormat.percent(state.fraction),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = VmTheme.typography.bodySm,
+        color = VmTheme.colors.textSecondary,
     )
-    TextButton(onClick = { actions.onCancel(state.update) }) {
-        Text(text = stringResource(R.string.settings_update_cancel))
-    }
+    VmTextButton(text = stringResource(R.string.settings_update_cancel), onClick = { actions.onCancel(state.update) })
 }
 
 @Composable
 private fun ReadyToInstall(state: UpdateUiState.ReadyToInstall, actions: UpdateActions) {
-    Text(
+    VmText(
         text = stringResource(R.string.settings_update_verified),
-        style = MaterialTheme.typography.titleMedium,
+        style = VmTheme.typography.bodyLgMedium,
     )
-    Text(
+    VmText(
         text = stringResource(R.string.settings_update_verified_body),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = VmTheme.typography.bodySm,
+        color = VmTheme.colors.textSecondary,
     )
-    Button(onClick = { actions.onInstall(state.path) }, modifier = Modifier.fillMaxWidth()) {
-        Text(text = stringResource(R.string.settings_update_install))
-    }
+    VmButton(
+        text = stringResource(R.string.settings_update_install),
+        onClick = { actions.onInstall(state.path) },
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /**
@@ -208,22 +208,24 @@ private fun ReadyToInstall(state: UpdateUiState.ReadyToInstall, actions: UpdateA
 @Composable
 private fun NeedsPermission(state: UpdateUiState.NeedsInstallPermission) {
     val context = LocalContext.current
-    Text(
+    VmText(
         text = stringResource(R.string.settings_update_permission_title),
-        style = MaterialTheme.typography.titleMedium,
+        style = VmTheme.typography.bodyLgMedium,
     )
-    Text(
+    VmText(
         text = stringResource(R.string.settings_update_permission_body),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = VmTheme.typography.bodySm,
+        color = VmTheme.colors.textSecondary,
     )
-    Button(onClick = { openInstallSettings(context) }, modifier = Modifier.fillMaxWidth()) {
-        Text(text = stringResource(R.string.settings_update_permission_action))
-    }
-    Text(
+    VmButton(
+        text = stringResource(R.string.settings_update_permission_action),
+        onClick = { openInstallSettings(context) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    VmText(
         text = VmTextFormat.digits(state.update.versionName),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = VmTheme.typography.bodyXsMedium,
+        color = VmTheme.colors.textSecondary,
     )
 }
 
@@ -234,29 +236,31 @@ private fun NeedsPermission(state: UpdateUiState.NeedsInstallPermission) {
  */
 @Composable
 private fun ReinstallRequired(actions: UpdateActions) {
-    Text(
+    VmText(
         text = stringResource(R.string.settings_update_reinstall_title),
-        style = MaterialTheme.typography.titleMedium,
+        style = VmTheme.typography.bodyLgMedium,
     )
-    Text(
+    VmText(
         text = stringResource(R.string.settings_update_reinstall_body),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = VmTheme.typography.bodySm,
+        color = VmTheme.colors.textSecondary,
     )
-    Button(onClick = actions.onSaveFile, modifier = Modifier.fillMaxWidth()) {
-        Text(text = stringResource(R.string.settings_update_save_file))
-    }
+    VmButton(
+        text = stringResource(R.string.settings_update_save_file),
+        onClick = actions.onSaveFile,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
 private fun Failed(state: UpdateUiState.Error, actions: UpdateActions) {
-    Text(
+    VmText(
         text = state.error.toUiText(),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.error,
+        style = VmTheme.typography.bodyMd,
+        color = VmTheme.colors.textCritical,
         textAlign = TextAlign.Start,
     )
-    OutlinedButton(onClick = actions.onCheck) { Text(text = stringResource(R.string.settings_update_retry)) }
+    VmOutlinedButton(text = stringResource(R.string.settings_update_retry), onClick = actions.onCheck)
 }
 
 /**

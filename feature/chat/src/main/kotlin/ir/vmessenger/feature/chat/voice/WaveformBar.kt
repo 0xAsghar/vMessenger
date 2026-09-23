@@ -5,7 +5,6 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -15,6 +14,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.foundation.LocalVmContentColor
 import ir.vmessenger.feature.chat.R
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -50,7 +50,7 @@ internal fun WaveformBar(
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val playedColor = LocalContentColor.current
+    val playedColor = LocalVmContentColor.current
     val pendingColor = playedColor.copy(alpha = UNPLAYED_ALPHA)
     val description = stringResource(R.string.feature_chat_voice_waveform)
     Canvas(

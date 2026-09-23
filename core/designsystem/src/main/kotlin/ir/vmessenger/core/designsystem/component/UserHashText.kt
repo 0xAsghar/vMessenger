@@ -1,13 +1,12 @@
 package ir.vmessenger.core.designsystem.component
 
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import ir.vmessenger.core.designsystem.theme.UserHashTextStyle
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 @Composable
 fun UserHashText(
@@ -16,7 +15,7 @@ fun UserHashText(
     style: TextStyle = UserHashTextStyle,
     textAlign: TextAlign = TextAlign.Center,
 ) {
-    Text(
+    VmText(
         // Break at the group separators, not inside a group. The hash has no spaces, so when it
         // does not fit the line breaker falls back to breaking between characters — on the pairing
         // screen that stranded the final "J" of …-WV5J alone on a second line, which reads like a
@@ -27,6 +26,6 @@ fun UserHashText(
         modifier = modifier,
         style = style,
         textAlign = textAlign,
-        color = MaterialTheme.colorScheme.onBackground,
+        color = VmTheme.colors.textPrimary,
     )
 }

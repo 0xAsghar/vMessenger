@@ -66,6 +66,21 @@ object VmTextFormat {
         }
     }
 
+    /**
+     * `۱٫۲` / `1.2`: one decimal place in the language's own separator — a distance, a size. A
+     * fraction that rounds to nothing leaves a bare integer rather than a trailing `٫۰`.
+     */
+    fun oneDecimal(value: Double): String {
+        val tenths = (value * 10).roundToLong()
+        val whole = tenths / 10
+        val fraction = abs(tenths % 10)
+        return digits(if (fraction == 0L) whole.toString() else "$whole${decimalSeparator()}$fraction")
+    }
+
+    /** `علی، مریم` / `Ali, Maryam`: names in a run, with the language's own comma between them. */
+    fun list(items: List<String>): String =
+        items.joinToString(if (VmLocale.current == VmLocale.En) ", " else "، ")
+
     /** `۴۲٪` / `42%` — a 0..1 fraction as a whole percentage, clamped; used by progress readouts. */
     fun percent(fraction: Float): String {
         val clamped = fraction.coerceIn(0f, 1f)
@@ -136,12 +151,7 @@ object VmTextFormat {
     private fun pad(value: Long): String = if (value < 10) "0$value" else value.toString()
 
     /** One decimal place, in the locale's separator, with a bare integer when it rounds to zero. */
-    private fun decimal(bytes: Long, unit: Long): String {
-        val separator = if (VmLocale.current == VmLocale.En) '.' else '٫'
-        val tenths = (bytes.toDouble() / unit * 10).roundToLong()
-        val whole = tenths / 10
-        val fraction = tenths % 10
-        val raw = if (fraction == 0L) whole.toString() else "$whole$separator$fraction"
-        return digits(raw)
-    }
+    private fun decimal(bytes: Long, unit: Long): String = oneDecimal(bytes.toDouble() / unit)
+
+    private fun decimalSeparator(): Char = if (VmLocale.current == VmLocale.En) '.' else '٫'
 }

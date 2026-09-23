@@ -6,21 +6,22 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import ir.vmessenger.core.designsystem.foundation.ProvideVmContent
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /**
  * The one row shape the app uses for a list of people or conversations: avatar, a title that
  * truncates, an optional second line and whatever belongs at the end.
  *
- * Background, ripple and click handling stay with the caller through [modifier] — a chat row
- * and a contact row want different gestures out of the same geometry.
+ * The second line and the end slot are set in the quiet secondary style unless they say otherwise.
+ * Background, press feedback and click handling stay with the caller through [modifier] — a chat
+ * row and a contact row want different gestures out of the same geometry.
  */
 @Composable
 fun VmListRow(
@@ -40,14 +41,23 @@ fun VmListRow(
     ) {
         avatar()
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            VmText(
                 text = title,
-                style = MaterialTheme.typography.titleMedium,
+                style = VmTheme.typography.bodyLgMedium,
+                color = VmTheme.colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            subtitle?.invoke()
+            if (subtitle != null) {
+                ProvideVmContent(color = VmTheme.colors.textSecondary, style = VmTheme.typography.bodyMd) {
+                    subtitle()
+                }
+            }
         }
-        trailing?.invoke()
+        if (trailing != null) {
+            ProvideVmContent(color = VmTheme.colors.textSecondary, style = VmTheme.typography.bodySm) {
+                trailing()
+            }
+        }
     }
 }

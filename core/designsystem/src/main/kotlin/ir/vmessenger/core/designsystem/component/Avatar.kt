@@ -5,21 +5,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.Dp
 import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSizes
-import ir.vmessenger.core.designsystem.theme.vm
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 private const val WASH_ALPHA = 0.16f
 private const val SECONDARY_ALPHA = 0.55f
+
+/** The fallback letter's size as a share of the avatar's, so it fills a large avatar as it does a small one. */
+private const val LETTER_FRACTION = 0.42f
 
 /**
  * Identity picture for a contact or a group.
@@ -39,7 +41,7 @@ fun Avatar(
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
 ) {
-    val base = MaterialTheme.vm.senderColor(seed)
+    val base = VmTheme.colors.senderColor(seed)
     val shape = if (variant == AvatarVariant.Group) VmShapes.groupAvatar else CircleShape
     Box(
         modifier = modifier
@@ -50,9 +52,11 @@ fun Avatar(
         contentAlignment = Alignment.Center,
     ) {
         if (seed.isEmpty()) {
-            Text(
+            // Sized from the avatar in dp, so a large font setting cannot push the letter out of it.
+            val letterSize = with(LocalDensity.current) { (size * LETTER_FRACTION).toSp() }
+            VmText(
                 text = name.trim().take(1),
-                style = MaterialTheme.typography.titleMedium,
+                style = VmTheme.typography.bodyLgMedium.copy(fontSize = letterSize, lineHeight = letterSize),
                 color = base,
             )
         } else {

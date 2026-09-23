@@ -23,14 +23,14 @@ class TypographyDirectionTest {
 
     @Test
     fun `every typography style follows its content, not the forced layout direction`() {
-        val styles = with(VMessengerTypography) {
+        val styles = with(VmDefaultTypography) {
             mapOf(
-                "displayLarge" to displayLarge, "displayMedium" to displayMedium,
-                "displaySmall" to displaySmall, "headlineLarge" to headlineLarge,
-                "headlineMedium" to headlineMedium, "headlineSmall" to headlineSmall,
-                "titleLarge" to titleLarge, "titleMedium" to titleMedium, "titleSmall" to titleSmall,
-                "bodyLarge" to bodyLarge, "bodyMedium" to bodyMedium, "bodySmall" to bodySmall,
-                "labelLarge" to labelLarge, "labelMedium" to labelMedium, "labelSmall" to labelSmall,
+                "headingXl" to headingXl, "headingLg" to headingLg,
+                "headingMd" to headingMd, "headingSm" to headingSm,
+                "bodyLg" to bodyLg, "bodyLgMedium" to bodyLgMedium,
+                "bodyMd" to bodyMd, "bodyMdMedium" to bodyMdMedium,
+                "bodySm" to bodySm, "bodySmMedium" to bodySmMedium,
+                "bodyXs" to bodyXs, "bodyXsMedium" to bodyXsMedium,
             )
         } + mapOf("bubbleTime" to VmTextStyles.bubbleTime)
 

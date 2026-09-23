@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -33,10 +30,12 @@ import ir.vmessenger.core.designsystem.component.MessageBubble
 import ir.vmessenger.core.designsystem.component.MessageBubbleDefaults
 import ir.vmessenger.core.designsystem.component.ReplyQuote
 import ir.vmessenger.core.designsystem.component.TextBubbleContent
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextButton
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmMotion
 import ir.vmessenger.core.designsystem.theme.VmSpacing
-import ir.vmessenger.core.designsystem.theme.vm
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.domain.model.AttachmentProgress
 import ir.vmessenger.domain.model.AttachmentType
 import ir.vmessenger.domain.model.MessagePreviewKind
@@ -66,7 +65,7 @@ internal fun MessageBubbleItem(
     // Animated in both directions, so the highlight fades out rather than snapping back when the
     // two seconds are up. MessageBubble already takes a colors parameter; nothing new is needed.
     val container by animateColorAsState(
-        targetValue = if (highlighted) MaterialTheme.vm.bubbleHighlight else base.container,
+        targetValue = if (highlighted) VmTheme.colors.bubbleHighlight else base.container,
         animationSpec = VmMotion.emphasis(),
         label = "bubble-highlight",
     )
@@ -116,11 +115,11 @@ internal fun MessageBubbleItem(
 @Composable
 private fun SenderLabel(item: ChatItem.Message) {
     val name = item.senderName?.takeIf { item.startsSenderRun } ?: return
-    Text(
+    VmText(
         text = name,
-        style = MaterialTheme.typography.labelMedium,
-        color = item.senderSeed?.let { MaterialTheme.vm.senderColor(it.bytes) }
-            ?: MaterialTheme.colorScheme.onSurfaceVariant,
+        style = VmTheme.typography.bodySmMedium,
+        color = item.senderSeed?.let { VmTheme.colors.senderColor(it.bytes) }
+            ?: VmTheme.colors.textSecondary,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.padding(bottom = VmSpacing.xxs),
@@ -139,11 +138,10 @@ private fun BubbleBody(
 ) {
     if (item.deleted) {
         // Italic and muted, so a tombstone never passes for something the sender wrote.
-        Text(
+        VmText(
             text = stringResource(R.string.feature_chat_message_deleted),
-            style = MaterialTheme.typography.bodyLarge,
-            fontStyle = FontStyle.Italic,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodyLg.copy(fontStyle = FontStyle.Italic),
+            color = VmTheme.colors.textSecondary,
         )
         return
     }
@@ -244,14 +242,12 @@ private fun FailureLine(item: ChatItem.Message, onRetry: (String) -> Unit) {
         horizontalArrangement = if (item.outgoing) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
+        VmText(
             text = sendErrorText(item.errorCode),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.error,
+            style = VmTheme.typography.bodyXsMedium,
+            color = VmTheme.colors.textCritical,
         )
-        TextButton(onClick = { onRetry(item.messageId) }) {
-            Text(text = stringResource(R.string.feature_chat_retry))
-        }
+        VmTextButton(text = stringResource(R.string.feature_chat_retry), onClick = { onRetry(item.messageId) })
     }
 }
 

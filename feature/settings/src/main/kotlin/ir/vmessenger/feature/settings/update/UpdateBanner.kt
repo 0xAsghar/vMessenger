@@ -4,16 +4,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextButton
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.feature.settings.R
 
 /**
@@ -33,28 +33,26 @@ fun UpdateBanner(
     modifier: Modifier = Modifier,
 ) {
     val available = version
-    Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    VmSurface(
+        color = VmTheme.colors.bgAccentSubtle,
+        contentColor = VmTheme.colors.textPrimary,
         modifier = modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier = Modifier.padding(start = VmSpacing.md),
+            modifier = Modifier.padding(start = VmSpacing.lg, end = VmSpacing.xs),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
+            horizontalArrangement = Arrangement.spacedBy(VmSpacing.xs),
         ) {
-            Text(
+            VmText(
                 text = stringResource(
                     R.string.settings_update_banner,
                     VmTextFormat.digits(available),
                 ),
-                style = MaterialTheme.typography.bodySmall,
+                style = VmTheme.typography.bodySm,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = onOpen) { Text(text = stringResource(R.string.settings_update_banner_open)) }
-            TextButton(onClick = onDismiss) {
-                Text(text = stringResource(R.string.settings_update_banner_later))
-            }
+            VmTextButton(text = stringResource(R.string.settings_update_banner_later), onClick = onDismiss)
+            VmTextButton(text = stringResource(R.string.settings_update_banner_open), onClick = onOpen)
         }
     }
 }

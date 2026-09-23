@@ -16,13 +16,7 @@ import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.VerifiedUser
-import androidx.compose.material3.Button
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,10 +38,14 @@ import ir.vmessenger.core.designsystem.component.UiMessageSnackbarEffect
 import ir.vmessenger.core.designsystem.component.UserHashShareRow
 import ir.vmessenger.core.designsystem.component.UserHashText
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmButton
+import ir.vmessenger.core.designsystem.component.VmOutlinedButton
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /** The taps the detail screen can produce, bundled to keep the content signatures short. */
 @Immutable
@@ -186,7 +184,7 @@ private fun ContactDetailHeader(contact: ContactRow) {
             size = VmSizes.avatarLg,
             contentDescription = stringResource(R.string.contact_detail_avatar, contact.name),
         )
-        Text(text = contact.name, style = MaterialTheme.typography.headlineSmall)
+        VmText(text = contact.name, style = VmTheme.typography.headingMd, color = VmTheme.colors.textPrimary)
         UserHashText(text = contact.userHash, textAlign = TextAlign.Center)
         Row(horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm)) {
             if (contact.blocked) {
@@ -213,17 +211,18 @@ private fun ContactPrimaryActions(
             .padding(horizontal = VmSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
     ) {
-        Button(
+        VmButton(
+            text = stringResource(R.string.contacts_start_chat),
             onClick = onStartChat,
             enabled = contact.canChat,
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(text = stringResource(R.string.contacts_start_chat))
-        }
+        )
         if (canResend) {
-            OutlinedButton(onClick = onResend, modifier = Modifier.fillMaxWidth()) {
-                Text(text = stringResource(R.string.contacts_resend_request))
-            }
+            VmOutlinedButton(
+                text = stringResource(R.string.contacts_resend_request),
+                onClick = onResend,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -250,22 +249,22 @@ private fun ContactDangerSection(
             onClick = { onMenuAction(ContactSheetAction.UNBLOCK) },
         )
     }
-    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.error) {
-        if (!contact.blocked) {
-            SettingsRow(
-                label = stringResource(R.string.contacts_sheet_block),
-                icon = Icons.Outlined.Block,
-                trailing = SettingsTrailing.None,
-                onClick = { onMenuAction(ContactSheetAction.BLOCK) },
-            )
-        }
+    if (!contact.blocked) {
         SettingsRow(
-            label = stringResource(R.string.contact_detail_delete),
-            icon = Icons.Outlined.DeleteOutline,
+            label = stringResource(R.string.contacts_sheet_block),
+            icon = Icons.Outlined.Block,
             trailing = SettingsTrailing.None,
-            onClick = { onMenuAction(ContactSheetAction.DELETE) },
+            destructive = true,
+            onClick = { onMenuAction(ContactSheetAction.BLOCK) },
         )
     }
+    SettingsRow(
+        label = stringResource(R.string.contact_detail_delete),
+        icon = Icons.Outlined.DeleteOutline,
+        trailing = SettingsTrailing.None,
+        destructive = true,
+        onClick = { onMenuAction(ContactSheetAction.DELETE) },
+    )
 }
 
 private const val SKELETON_ROWS = 4

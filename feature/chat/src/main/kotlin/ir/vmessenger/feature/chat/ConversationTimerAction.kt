@@ -1,21 +1,19 @@
 package ir.vmessenger.feature.chat
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Timer
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
+import ir.vmessenger.core.designsystem.component.VmDropdownMenu
+import ir.vmessenger.core.designsystem.component.VmDropdownMenuItem
+import ir.vmessenger.core.designsystem.component.VmIconButton
+import ir.vmessenger.core.designsystem.foundation.LocalVmContentColor
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import java.util.concurrent.TimeUnit
 
 /** A self-destruct duration offered by [ConversationTimerAction]; a null duration is "off". */
@@ -36,27 +34,25 @@ private val TIMER_OPTIONS = listOf(
 @Composable
 internal fun ConversationTimerAction(selectedMs: Long?, onSelect: (Long?) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    IconButton(onClick = { expanded = true }) {
-        Icon(
-            imageVector = Icons.Outlined.Timer,
+    // The menu anchors to what it shares a box with: the clock, not the whole bar.
+    Box {
+        VmIconButton(
+            icon = Icons.Outlined.Timer,
             contentDescription = stringResource(R.string.feature_chat_timer),
-            tint = if (selectedMs != null) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+            onClick = { expanded = true },
+            tint = if (selectedMs != null) VmTheme.colors.iconAccent else LocalVmContentColor.current,
         )
-    }
-    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-        for (option in TIMER_OPTIONS) {
-            DropdownMenuItem(
-                text = { Text(text = stringResource(option.labelRes)) },
-                onClick = {
-                    onSelect(option.durationMs)
-                    expanded = false
-                },
-                trailingIcon = if (option.durationMs == selectedMs) {
-                    { Icon(imageVector = Icons.Outlined.Check, contentDescription = null) }
-                } else {
-                    null
-                },
-            )
+        VmDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            for (option in TIMER_OPTIONS) {
+                VmDropdownMenuItem(
+                    text = stringResource(option.labelRes),
+                    selected = option.durationMs == selectedMs,
+                    onClick = {
+                        onSelect(option.durationMs)
+                        expanded = false
+                    },
+                )
+            }
         }
     }
 }

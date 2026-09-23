@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,8 +17,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 private val TitleBarHeight = 14.dp
 private val SubtitleBarHeight = 12.dp
@@ -45,7 +46,7 @@ fun SkeletonList(
 
 @Composable
 private fun SkeletonRow(itemHeight: Dp) {
-    val placeholder = MaterialTheme.colorScheme.surfaceContainerHigh
+    val placeholder = VmTheme.colors.bgSubtleStrong
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -73,7 +74,7 @@ private fun Bar(placeholderHeight: Dp, widthFraction: Float) {
         modifier = Modifier
             .fillMaxWidth(widthFraction)
             .height(placeholderHeight)
-            .clip(MaterialTheme.shapes.extraSmall)
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            .clip(VmShapes.pill)
+            .background(VmTheme.colors.bgSubtle),
     )
 }

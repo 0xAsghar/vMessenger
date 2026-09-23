@@ -1,18 +1,11 @@
 package ir.vmessenger.feature.lock
 
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fingerprint
-import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import ir.vmessenger.core.designsystem.component.VmOutlinedButton
 import ir.vmessenger.core.designsystem.component.rememberDeviceAuthentication
-import ir.vmessenger.core.designsystem.theme.VmSizes
-import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.data.lock.LockState
 
 /**
@@ -37,21 +30,16 @@ internal fun BiometricAction(state: AppLockUiState, onResult: (Boolean) -> Unit)
     val authenticate = rememberBiometricAuthentication(strict, onResult)
     val locked = state.lockState == LockState.Locked || state.lockState == LockState.LockedStrict
     if (locked && authenticate != null) {
-        OutlinedButton(
+        VmOutlinedButton(
+            // Strict mode's prompt takes the device credential too; the soft one is narrowed
+            // to a biometric on purpose, so it must not offer the device PIN in its label.
+            text = stringResource(
+                if (strict) R.string.app_lock_biometric_action else R.string.app_lock_biometric_action_soft,
+            ),
             onClick = authenticate,
             enabled = !state.checking,
-            modifier = Modifier.heightIn(min = VmSizes.touchTarget),
-        ) {
-            Icon(imageVector = Icons.Filled.Fingerprint, contentDescription = null)
-            Text(
-                // Strict mode's prompt takes the device credential too; the soft one is narrowed
-                // to a biometric on purpose, so it must not offer the device PIN in its label.
-                text = stringResource(
-                    if (strict) R.string.app_lock_biometric_action else R.string.app_lock_biometric_action_soft,
-                ),
-                modifier = Modifier.padding(start = VmSpacing.sm),
-            )
-        }
+            leadingIcon = Icons.Filled.Fingerprint,
+        )
     }
 }
 

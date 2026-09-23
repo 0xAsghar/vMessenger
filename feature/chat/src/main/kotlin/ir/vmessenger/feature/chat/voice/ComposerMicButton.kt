@@ -3,14 +3,13 @@ package ir.vmessenger.feature.chat.voice
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -19,6 +18,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
@@ -29,8 +29,11 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import ir.vmessenger.core.designsystem.component.VmIcon
+import ir.vmessenger.core.designsystem.component.VmSurface
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.feature.chat.R
 import kotlinx.coroutines.delay
 
@@ -38,6 +41,8 @@ import kotlinx.coroutines.delay
 private const val HOLD_TO_START_MS = 150L
 
 private val CancelDistance = 120.dp
+private val SendSize = 40.dp
+private val SendIconSize = 20.dp
 private val LockDistance = 80.dp
 
 /** Where the mic gesture is. [Cancelled] is a moment the reducer reports, not a resting state. */
@@ -78,16 +83,16 @@ internal fun reduceMicDrag(phase: MicPhase, towardField: Float, upward: Float, l
 /**
  * A raw horizontal pointer delta, turned into "how far toward the text field".
  *
- * The mic leads the composer row, so it is drawn at the layout START — the right in RTL, the left
- * in LTR — and the field sits on the other side of it. Toward the field is therefore leftward
- * (negative x) under RTL and rightward under LTR.
+ * The mic ends the composer row, so it is drawn at the layout END — the left in RTL, the right in
+ * LTR — and the field sits on the other side of it. Toward the field is therefore rightward
+ * (positive x) under RTL and leftward under LTR.
  *
- * This is one sign, it flips with a layout the app never runs in, and getting it backwards makes
- * slide-to-cancel fire when the finger moves away from the field instead of toward it. The app is
- * Persian-only, so there is no second locale in which the mistake would show up — which is exactly
- * why it is a named function with a test rather than an expression inside a pointer loop.
+ * This is one sign, it flips with the layout, and getting it backwards makes slide-to-cancel fire
+ * when the finger moves away from the field instead of toward it — which is why it is a named
+ * function with a test rather than an expression inside a pointer loop. It has flipped once
+ * already, when the mic moved from the start of the row to the end.
  */
-internal fun towardField(dx: Float, rtl: Boolean): Float = if (rtl) -dx else dx
+internal fun towardField(dx: Float, rtl: Boolean): Float = if (rtl) dx else -dx
 
 /** How far the slide-to-cancel hint has travelled, 0..1. */
 internal fun slideFraction(towardField: Float, cancelPx: Float): Float =
@@ -125,18 +130,31 @@ internal fun ComposerMicButton(
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { gesture.detach() }
 
     if (phase.value == MicPhase.Locked) {
-        IconButton(onClick = gesture::send, modifier = modifier.size(VmSizes.touchTarget)) {
-            Icon(
-                imageVector = Icons.Filled.ArrowUpward,
-                contentDescription = stringResource(R.string.feature_chat_voice_send),
-                tint = MaterialTheme.colorScheme.primary,
-            )
+        // The same accent circle the composer sends a text with: a locked recording is sent the
+        // way anything else is.
+        VmSurface(
+            onClick = gesture::send,
+            shape = CircleShape,
+            color = VmTheme.colors.bgAccent,
+            contentColor = VmTheme.colors.textOnSolid,
+            modifier = modifier
+                .padding((VmSizes.touchTarget - SendSize) / 2)
+                .size(SendSize),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                VmIcon(
+                    imageVector = Icons.Filled.ArrowUpward,
+                    contentDescription = stringResource(R.string.feature_chat_voice_send),
+                    size = SendIconSize,
+                )
+            }
         }
     } else {
-        Icon(
+        VmIcon(
             imageVector = Icons.Filled.Mic,
             contentDescription = stringResource(R.string.feature_chat_voice_record),
-            tint = MaterialTheme.colorScheme.primary,
+            // Quiet at rest like the rest of the bar; the accent while it is listening.
+            tint = if (phase.value == MicPhase.Recording) VmTheme.colors.iconAccent else VmTheme.colors.iconSecondary,
             modifier = modifier
                 .micGestures(enabled, gesture)
                 .size(VmSizes.touchTarget)

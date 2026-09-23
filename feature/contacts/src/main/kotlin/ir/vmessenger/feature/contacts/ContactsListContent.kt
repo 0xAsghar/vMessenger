@@ -8,10 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,9 +20,12 @@ import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.SectionHeader
 import ir.vmessenger.core.designsystem.component.UserHashText
 import ir.vmessenger.core.designsystem.component.VmListRow
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextButton
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.domain.model.ContactRelationshipStatus
 
 /**
@@ -37,10 +38,11 @@ import ir.vmessenger.domain.model.ContactRelationshipStatus
 @Composable
 internal fun ContactsList(
     state: ContactsUiState,
+    listState: LazyListState,
     callbacks: ContactsListCallbacks,
     modifier: Modifier = Modifier,
 ) {
-    LazyColumn(modifier = modifier.fillMaxWidth()) {
+    LazyColumn(state = listState, modifier = modifier.fillMaxWidth()) {
         if (state.requests.isNotEmpty()) {
             item(key = "requests_header") {
                 SectionHeader(
@@ -124,9 +126,10 @@ private fun RequestRowItem(
     ) {
         Avatar(seed = request.identityHash, name = request.name)
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            VmText(
                 text = request.name,
-                style = MaterialTheme.typography.titleMedium,
+                style = VmTheme.typography.bodyLgMedium,
+                color = VmTheme.colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -136,14 +139,7 @@ private fun RequestRowItem(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        TextButton(onClick = onApprove) {
-            Text(text = stringResource(R.string.contacts_request_approve))
-        }
-        TextButton(onClick = onReject) {
-            Text(
-                text = stringResource(R.string.contacts_request_reject),
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
+        VmTextButton(text = stringResource(R.string.contacts_request_approve), onClick = onApprove)
+        VmTextButton(text = stringResource(R.string.contacts_request_reject), onClick = onReject, destructive = true)
     }
 }

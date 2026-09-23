@@ -7,11 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,12 +19,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.AvatarVariant
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmButton
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextField
+import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
 import ir.vmessenger.core.designsystem.component.asText
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.feature.chat.R
 
 /**
@@ -136,28 +137,25 @@ private fun NewGroupNameStep(
             size = VmSizes.avatarLg,
             variant = AvatarVariant.Group,
         )
-        OutlinedTextField(
+        VmTextField(
             value = state.name,
             onValueChange = onNameChange,
-            label = { Text(text = stringResource(R.string.feature_chat_group_name_label)) },
-            singleLine = true,
-            supportingText = {
-                Text(
-                    text = stringResource(
-                        R.string.feature_chat_group_name_remaining,
-                        VmTextFormat.digits(state.nameRemaining.toString()),
-                    ),
-                )
-            },
+            config = VmTextFieldConfig(
+                label = stringResource(R.string.feature_chat_group_name_label),
+                supportingText = stringResource(
+                    R.string.feature_chat_group_name_remaining,
+                    VmTextFormat.digits(state.nameRemaining.toString()),
+                ),
+            ),
             modifier = Modifier.fillMaxWidth(),
         )
-        Text(
+        VmText(
             text = stringResource(
                 R.string.feature_chat_group_name_members,
                 VmTextFormat.digits(state.picker.selectedCount.toString()),
             ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodyMd,
+            color = VmTheme.colors.textSecondary,
             textAlign = TextAlign.Center,
         )
     }
@@ -171,20 +169,17 @@ private fun NewGroupBottomBar(
     onCreate: () -> Unit,
 ) {
     val naming = state.step == NewGroupStep.NameGroup
-    Surface(color = MaterialTheme.colorScheme.background) {
-        Button(
+    VmSurface(color = VmTheme.colors.bgCanvas) {
+        VmButton(
+            text = stringResource(
+                if (naming) R.string.feature_chat_group_create else R.string.feature_chat_group_continue,
+            ),
             onClick = if (naming) onCreate else onContinue,
             enabled = if (naming) state.canCreate else state.canContinue,
             modifier = Modifier
                 .navigationBarsPadding()
                 .fillMaxWidth()
                 .padding(VmSpacing.lg),
-        ) {
-            Text(
-                text = stringResource(
-                    if (naming) R.string.feature_chat_group_create else R.string.feature_chat_group_continue,
-                ),
-            )
-        }
+        )
     }
 }

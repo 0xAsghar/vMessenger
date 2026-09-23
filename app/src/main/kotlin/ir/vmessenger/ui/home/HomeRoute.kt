@@ -5,27 +5,23 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -38,7 +34,9 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import ir.vmessenger.R
 import ir.vmessenger.core.common.text.VmLocale
-import ir.vmessenger.core.designsystem.theme.VmElevation
+import ir.vmessenger.core.designsystem.component.VmNavigationBar
+import ir.vmessenger.core.designsystem.component.VmNavigationBarItem
+import ir.vmessenger.core.designsystem.component.VmScaffold
 import ir.vmessenger.feature.chat.ChatRoute
 import ir.vmessenger.feature.contacts.ContactsNavigation
 import ir.vmessenger.feature.contacts.ContactsRoute
@@ -48,28 +46,27 @@ import ir.vmessenger.feature.settings.SettingsRoute
 import ir.vmessenger.feature.settings.update.UpdateBanner
 import ir.vmessenger.feature.settings.update.UpdateBannerViewModel
 import ir.vmessenger.navigation.VmRoute
+import ir.vmessenger.ui.network.AppAlertBanner
+import ir.vmessenger.ui.network.LocalAppAlertHost
+import ir.vmessenger.ui.network.visibleAppAlert
 
 private const val TAB_FADE_MS = 160
+
+/** What the top of the shell has to clear: the status bar and any cutout reaching below it. */
+private val TopInsets: WindowInsets
+    @Composable get() = WindowInsets.safeDrawing.only(WindowInsetsSides.Top)
 
 private data class HomeTab(
     val route: VmRoute,
     val labelRes: Int,
-    val icon: @Composable () -> Unit,
+    val icon: ImageVector,
 )
 
 private val HomeTabs = listOf(
-    HomeTab(VmRoute.ChatsTab, R.string.tab_chats) {
-        Icon(Icons.AutoMirrored.Outlined.Chat, contentDescription = null)
-    },
-    HomeTab(VmRoute.ContactsTab, R.string.tab_contacts) {
-        Icon(Icons.Outlined.Contacts, contentDescription = null)
-    },
-    HomeTab(VmRoute.MapTab, R.string.tab_map) {
-        Icon(Icons.Outlined.LocationOn, contentDescription = null)
-    },
-    HomeTab(VmRoute.SettingsTab, R.string.tab_settings) {
-        Icon(Icons.Outlined.Settings, contentDescription = null)
-    },
+    HomeTab(VmRoute.ChatsTab, R.string.tab_chats, Icons.AutoMirrored.Outlined.Chat),
+    HomeTab(VmRoute.ContactsTab, R.string.tab_contacts, Icons.Outlined.Contacts),
+    HomeTab(VmRoute.MapTab, R.string.tab_map, Icons.Outlined.LocationOn),
+    HomeTab(VmRoute.SettingsTab, R.string.tab_settings, Icons.Outlined.Settings),
 )
 
 /**
@@ -96,9 +93,8 @@ fun HomeRoute(
         }
     }
 
-    Scaffold(
+    VmScaffold(
         modifier = modifier,
-        containerColor = MaterialTheme.colorScheme.background,
         // The shell itself pads nothing: the navigation bar consumes the bottom
         // inset and each tab's top app bar consumes the status-bar inset, so the
         // bars stay edge-to-edge and no inset is applied twice.
@@ -113,19 +109,28 @@ fun HomeRoute(
                 .padding(padding)
                 .consumeWindowInsets(padding),
         ) {
-            // Above the tabs, not inside one: an update is about the app, not about
-            // whichever screen the user happens to be on. It is therefore the topmost
-            // content, so it takes the status-bar inset — and the tabs below, whose own
-            // app bars would otherwise take it again, are told it is spent.
+            // Above the tabs, not inside one: an update and an alert are about the app, not about
+            // whichever tab the user happens to be on. The topmost of them takes the top inset —
+            // and the tabs below, whose own app bars would otherwise take it again, are told it is
+            // spent. The *safe-drawing* top, the one the app bars use: on a phone whose camera
+            // cutout runs below its status bar, consuming the status bar alone left a gap.
             val updateVersion by bannerViewModel.availableVersion.collectAsStateWithLifecycle()
+            val alertHost = LocalAppAlertHost.current
+            val alert = alertHost?.let { visibleAppAlert(it) }
             updateVersion?.let { version ->
                 UpdateBanner(
                     version = version,
                     onOpen = navigation.onNavigateToUpdate,
                     onDismiss = bannerViewModel::dismiss,
-                    modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
+                    modifier = Modifier.windowInsetsPadding(TopInsets),
                 )
             }
+            AppAlertBanner(
+                alert = alert,
+                onDismiss = { alertHost?.dismiss(it) },
+                modifier = if (updateVersion == null) Modifier.windowInsetsPadding(TopInsets) else Modifier,
+            )
+            val bannerOnTop = updateVersion != null || alert != null
             HomeTabNavHost(
                 navController = navController,
                 navigation = navigation,
@@ -133,9 +138,7 @@ fun HomeRoute(
                 onLanguage = viewModel::setLanguage,
                 modifier = Modifier
                     .weight(1f)
-                    .then(
-                        if (updateVersion == null) Modifier else Modifier.consumeWindowInsets(WindowInsets.statusBars),
-                    ),
+                    .then(if (bannerOnTop) Modifier.consumeWindowInsets(TopInsets) else Modifier),
             )
         }
     }
@@ -145,25 +148,15 @@ fun HomeRoute(
 private fun HomeBottomBar(navController: NavHostController) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val destination = backStackEntry?.destination
-    NavigationBar(
-        containerColor = MaterialTheme.colorScheme.background,
-        tonalElevation = VmElevation.none,
-    ) {
+    VmNavigationBar {
         HomeTabs.forEach { tab ->
-            NavigationBarItem(
+            VmNavigationBarItem(
                 // Before the inner graph is set there is no destination yet; the
                 // start tab is the honest answer for that one frame.
                 selected = destination?.hasRoute(tab.route::class) ?: (tab.route == VmRoute.ChatsTab),
                 onClick = { navController.navigateToTab(tab.route) },
                 icon = tab.icon,
-                label = { Text(text = stringResource(tab.labelRes)) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.onBackground,
-                    selectedTextColor = MaterialTheme.colorScheme.onBackground,
-                    indicatorColor = MaterialTheme.colorScheme.surfaceVariant,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
+                label = stringResource(tab.labelRes),
             )
         }
     }

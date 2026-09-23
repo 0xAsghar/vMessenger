@@ -12,22 +12,24 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Router
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import ir.vmessenger.core.designsystem.component.SettingsDivider
 import ir.vmessenger.core.designsystem.component.SettingsRow
 import ir.vmessenger.core.designsystem.component.SettingsSection
 import ir.vmessenger.core.designsystem.component.SettingsTrailing
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.domain.model.NetworkNode
 
 private const val REPOSITORY_URL = "https://github.com/0xAsghar/vMessenger"
@@ -67,18 +69,21 @@ internal fun AboutNetworkSection(nodes: AboutNodes) {
 
 /**
  * The addresses under a role heading. Not [SettingsRow]s: an address is an opaque identifier
- * rather than prose, and under the app's forced RTL its digit groups reorder unless the
- * paragraph is pinned left-to-right — which a row label cannot do.
+ * rather than prose, and in a right-to-left layout its digit groups reorder unless the paragraph
+ * is pinned left-to-right — which a row label cannot do.
  */
 @Composable
 private fun NodeAddresses(nodes: List<NetworkNode>) {
     // Lines the address up under the label of the row above it: row padding, icon, gap.
-    val indent = VmSpacing.lg + VmSpacing.xl + VmSpacing.md
+    val indent = VmSpacing.lg + VmSpacing.xl + VmSpacing.lg
+    // The paragraph is pinned left-to-right, so Start and End would resolve against it rather
+    // than against the screen; the edge the labels start from has to be named outright.
+    val labelEdge = if (LocalLayoutDirection.current == LayoutDirection.Rtl) TextAlign.Right else TextAlign.Left
     if (nodes.isEmpty()) {
-        Text(
+        VmText(
             text = stringResource(R.string.feature_about_nodes_empty),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodySm,
+            color = VmTheme.colors.textSecondary,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = indent, end = VmSpacing.lg, bottom = VmSpacing.md),
@@ -86,16 +91,15 @@ private fun NodeAddresses(nodes: List<NetworkNode>) {
         return
     }
     nodes.forEach { node ->
-        Text(
+        VmText(
             text = node.address,
-            style = MaterialTheme.typography.bodySmall.copy(
+            style = VmTheme.typography.bodySm.copy(
                 fontFamily = FontFamily.Monospace,
-                // Ltr keeps the digit groups in order; End then resolves against that Ltr
-                // paragraph to the right edge, which is where the rows above it start.
+                // Ltr keeps the digit groups in order.
                 textDirection = TextDirection.Ltr,
-                textAlign = TextAlign.End,
+                textAlign = labelEdge,
             ),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = VmTheme.colors.textSecondary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier

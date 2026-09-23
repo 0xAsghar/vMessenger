@@ -2,16 +2,14 @@ package ir.vmessenger.feature.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -27,16 +25,6 @@ import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.SystemUpdate
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
@@ -47,8 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -57,14 +43,22 @@ import ir.vmessenger.core.datastore.ThemeMode
 import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.ConfirmDialog
 import ir.vmessenger.core.designsystem.component.SettingsDivider
+import ir.vmessenger.core.designsystem.component.SettingsRow
 import ir.vmessenger.core.designsystem.component.SettingsSection
+import ir.vmessenger.core.designsystem.component.SettingsTrailing
 import ir.vmessenger.core.designsystem.component.UiMessageSnackbarEffect
 import ir.vmessenger.core.designsystem.component.UserHashText
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmChip
+import ir.vmessenger.core.designsystem.component.VmDialog
+import ir.vmessenger.core.designsystem.component.VmIconButton
+import ir.vmessenger.core.designsystem.component.VmProgressIndicator
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 @Suppress("LongParameterList") // one entry per destination the settings tab can reach
 private data class SettingsNavigation(
@@ -150,10 +144,12 @@ fun SettingsRoute(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
     ) { uri -> viewModel.exportTo(uri) }
 
+    val scroll = rememberScrollState()
     VMessengerScaffold(
         title = stringResource(R.string.settings_title),
         snackbarHost = { VmSnackbarHost(hostState = snackbar) },
         actions = { AboutAction(onClick = onNavigateToAbout) },
+        scrolled = scroll.canScrollBackward,
     ) { padding ->
         val navigation = SettingsNavigation(
             onDebug = onNavigateToDebug,
@@ -175,6 +171,7 @@ fun SettingsRoute(
             appLockViewModel = appLockViewModel,
             navigation = navigation,
             language = LanguageSetting(language, onLanguage),
+            scroll = scroll,
             modifier = Modifier.padding(padding),
         )
     }
@@ -231,11 +228,13 @@ private fun SettingsDialogs(
 }
 
 @Composable
+@Suppress("LongParameterList") // The two view models, two bundles, and the scroll the top bar reads.
 private fun SettingsContent(
     viewModel: SettingsViewModel,
     appLockViewModel: AppLockSettingsViewModel,
     navigation: SettingsNavigation,
     language: LanguageSetting,
+    scroll: ScrollState,
     modifier: Modifier = Modifier,
 ) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -244,12 +243,13 @@ private fun SettingsContent(
     val profile by viewModel.profile.collectAsStateWithLifecycle()
     val updateAvailable by viewModel.updateAvailable.collectAsStateWithLifecycle()
 
+    // No side padding: the sections run edge to edge and pad their own rows, as in Element X.
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(VmSpacing.xl),
+            .verticalScroll(scroll)
+            .padding(bottom = VmSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
     ) {
         profile?.let { ProfileHeader(profile = it, onClick = navigation.onIdentity) }
         SettingsLanguageSection(language = language.current, onLanguage = language.onSelect)
@@ -289,32 +289,16 @@ private fun SettingsBackupSection(
     onExport: () -> Unit,
 ) {
     SettingsSection(title = stringResource(R.string.settings_backup_section)) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(enabled = status !is BackupExportStatus.InProgress, onClick = onExport)
-                .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
-            verticalArrangement = Arrangement.spacedBy(VmSpacing.xs),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Backup,
-                    contentDescription = stringResource(R.string.settings_backup_icon),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = stringResource(R.string.settings_backup_export),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-            }
-            Text(
-                text = stringResource(R.string.settings_backup_export_body),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        SettingsRow(
+            label = stringResource(R.string.settings_backup_export),
+            icon = Icons.Outlined.Backup,
+            supporting = stringResource(R.string.settings_backup_export_body),
+            trailing = SettingsTrailing.None,
+            enabled = status !is BackupExportStatus.InProgress,
+            onClick = onExport,
+        )
+        // Under the row's label, not under its icon.
+        Column(modifier = Modifier.padding(start = STATUS_INDENT, end = VmSpacing.lg)) {
             BackupExportStatusText(status = status)
         }
     }
@@ -328,27 +312,25 @@ private fun BackupExportStatusText(status: BackupExportStatus) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
         ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(VmSizes.iconSm),
-                strokeWidth = VmSizes.progressStroke,
-            )
-            Text(
+            VmProgressIndicator(size = VmSizes.iconSm, color = VmTheme.colors.iconSecondary)
+            VmText(
                 text = stringResource(R.string.settings_backup_in_progress),
-                style = MaterialTheme.typography.bodyMedium,
+                style = VmTheme.typography.bodyMd,
+                color = VmTheme.colors.textSecondary,
             )
         }
-        BackupExportStatus.Saved -> Text(
+        BackupExportStatus.Saved -> VmText(
             text = stringResource(R.string.settings_backup_saved),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
+            style = VmTheme.typography.bodyMd,
+            color = VmTheme.colors.textSuccess,
         )
-        is BackupExportStatus.Failed -> Text(
+        is BackupExportStatus.Failed -> VmText(
             text = when (val failure = status.failure) {
                 is BackupExportFailure.Bundle -> failure.message
                 BackupExportFailure.Write -> stringResource(R.string.settings_backup_write_failed)
             },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error,
+            style = VmTheme.typography.bodyMd,
+            color = VmTheme.colors.textCritical,
         )
     }
 }
@@ -362,48 +344,29 @@ private fun SettingsThemeSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(VmSpacing.md),
+                .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
             horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
         ) {
             ThemeMode.entries.forEach { mode ->
-                FilterChip(
+                VmChip(
                     selected = themeMode == mode,
                     onClick = { onThemeMode(mode) },
-                    label = {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = mode.label(),
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                        }
-                    },
+                    label = mode.label(),
                     modifier = Modifier.weight(1f),
-                    border = FilterChipDefaults.filterChipBorder(
-                        enabled = true,
-                        selected = themeMode == mode,
-                    ),
                 )
             }
         }
     }
 }
 
-/**
- * The bar's one action. It sits in the actions slot, which resolves to the layout end — under this
- * app's RTL-only locale, the left of the bar.
- */
+/** The bar's one action. It sits in the actions slot, at the layout end of the bar. */
 @Composable
 private fun AboutAction(onClick: () -> Unit) {
-    IconButton(onClick = onClick) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
-            contentDescription = stringResource(R.string.settings_about),
-        )
-    }
+    VmIconButton(
+        icon = Icons.AutoMirrored.Outlined.HelpOutline,
+        contentDescription = stringResource(R.string.settings_about),
+        onClick = onClick,
+    )
 }
 
 /** Collected here rather than in [SettingsContent] so that one stays a list of sections. */
@@ -563,14 +526,21 @@ private fun ProfileHeader(profile: SettingsProfile, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = VmSpacing.sm),
+            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.lg),
     ) {
         Avatar(seed = profile.identityHash, name = profile.displayName, size = VmSizes.avatarLg)
         Column(verticalArrangement = Arrangement.spacedBy(VmSpacing.xxs)) {
-            Text(text = profile.displayName, style = MaterialTheme.typography.titleMedium)
-            UserHashText(text = profile.userHash, style = MaterialTheme.typography.bodySmall)
+            VmText(
+                text = profile.displayName,
+                style = VmTheme.typography.headingSm,
+                color = VmTheme.colors.textPrimary,
+            )
+            UserHashText(
+                text = profile.userHash,
+                style = VmTheme.typography.bodySm.copy(color = VmTheme.colors.textSecondary),
+            )
         }
     }
 }
@@ -582,29 +552,11 @@ private fun SettingsToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
-            .heightIn(min = VmSizes.touchTarget)
-            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(text = label, style = MaterialTheme.typography.bodyLarge)
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
+    SettingsRow(
+        label = label,
+        icon = icon,
+        trailing = SettingsTrailing.Switch(checked = checked, onCheckedChange = onCheckedChange),
+    )
 }
 
 @Composable
@@ -615,48 +567,18 @@ private fun SettingsActionRow(
     destructive: Boolean = false,
     badge: Boolean = false,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .heightIn(min = VmSizes.touchTarget)
-            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (destructive) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.weight(1f),
-        )
-        if (badge) NewVersionBadge()
-    }
-}
-
-/** A word, not a dot: "new version" says what is waiting without the user having to open it. */
-@Composable
-private fun NewVersionBadge() {
-    Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shape = MaterialTheme.shapes.small,
-    ) {
-        Text(
-            text = stringResource(R.string.settings_update_badge),
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = VmSpacing.sm, vertical = VmSpacing.xxs),
-        )
-    }
+    SettingsRow(
+        label = label,
+        icon = icon,
+        // A word, not a dot: "new version" says what is waiting without the user having to open it.
+        trailing = if (badge) {
+            SettingsTrailing.Badge(stringResource(R.string.settings_update_badge))
+        } else {
+            SettingsTrailing.None
+        },
+        destructive = destructive,
+        onClick = onClick,
+    )
 }
 
 @Composable
@@ -678,25 +600,20 @@ private fun WipeConfirmDialog(
 /** Modal, not dismissible: the wipe runs to the end and the process exits by itself. */
 @Composable
 private fun WipeProgressDialog() {
-    AlertDialog(
+    // A dismiss request that does nothing: neither back nor a tap outside can close it.
+    VmDialog(
         onDismissRequest = {},
-        properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
-        title = { Text(text = stringResource(R.string.settings_wipe_confirm_title)) },
-        text = {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(VmSizes.iconMd),
-                    strokeWidth = VmSizes.progressStroke,
-                )
-                Text(text = stringResource(R.string.settings_wipe_in_progress))
-            }
-        },
-        confirmButton = {},
-        shape = MaterialTheme.shapes.large,
-    )
+        title = stringResource(R.string.settings_wipe_confirm_title),
+        buttons = {},
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            VmProgressIndicator(size = VmSizes.iconMd)
+            VmText(text = stringResource(R.string.settings_wipe_in_progress))
+        }
+    }
 }
 
 @Composable
@@ -705,3 +622,6 @@ private fun ThemeMode.label(): String = when (this) {
     ThemeMode.DARK -> stringResource(R.string.theme_dark)
     ThemeMode.SYSTEM -> stringResource(R.string.theme_system)
 }
+
+/** Where a row's label starts: its side padding, its icon and the gap after it. */
+private val STATUS_INDENT = VmSpacing.lg + VmSpacing.xl + VmSpacing.lg

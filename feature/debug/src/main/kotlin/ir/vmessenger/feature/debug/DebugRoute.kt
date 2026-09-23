@@ -15,15 +15,6 @@ import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Terminal
-import androidx.compose.material3.Button
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,17 +31,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.SettingsDivider
+import ir.vmessenger.core.designsystem.component.SettingsRow
 import ir.vmessenger.core.designsystem.component.SettingsSection
+import ir.vmessenger.core.designsystem.component.SettingsTrailing
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmButton
+import ir.vmessenger.core.designsystem.component.VmButtonSize
+import ir.vmessenger.core.designsystem.component.VmIcon
+import ir.vmessenger.core.designsystem.component.VmOutlinedButton
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextButton
+import ir.vmessenger.core.designsystem.component.VmTextField
+import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
 import ir.vmessenger.core.designsystem.theme.UserHashTextStyle
+import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
-
-/** A tint, not a fill: the message has to stay readable on top of it. */
-private const val ERROR_TINT_ALPHA = 0.12f
-
-/** The code block is a quieter surface than the card it sits in, not a second card. */
-private const val CODE_SURFACE_ALPHA = 0.55f
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 @Composable
 fun DebugRoute(
@@ -63,17 +61,20 @@ fun DebugRoute(
         "adb forward tcp:46555 tcp:46555\nadb forward tcp:${state.forwardPort} tcp:${state.listenPort}"
     }
 
+    val scroll = rememberScrollState()
     VMessengerScaffold(
         title = stringResource(R.string.feature_debug_title),
         onNavigateBack = onNavigateBack,
+        scrolled = scroll.canScrollBackward,
     ) { padding ->
+        // No side padding: the sections run edge to edge and pad their own rows.
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(VmSpacing.xl),
+                .verticalScroll(scroll)
+                .padding(bottom = VmSpacing.lg),
+            verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
         ) {
             DebugNetworkStatusSection(state = state)
             DebugPathSection(state = state)
@@ -103,14 +104,13 @@ private fun DebugUpdateSection(baseUrl: String?, onBaseUrl: (String) -> Unit) {
             modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
             verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
         ) {
-            OutlinedTextField(
+            VmTextField(
                 value = draft,
                 onValueChange = { draft = it },
-                singleLine = true,
-                label = { Text(text = "http://10.0.2.2:8765 (blank = GitHub)") },
+                config = VmTextFieldConfig(label = "http://10.0.2.2:8765 (blank = GitHub)"),
                 modifier = Modifier.fillMaxWidth(),
             )
-            Button(onClick = { onBaseUrl(draft) }) { Text(text = "Apply") }
+            VmButton(text = "Apply", onClick = { onBaseUrl(draft) }, size = VmButtonSize.Medium)
         }
     }
 }
@@ -142,18 +142,18 @@ private fun DebugNetworkStatusSection(state: DebugUiState) {
         )
         state.lastError?.let { error ->
             SettingsDivider()
-            Surface(
+            VmSurface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
-                shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.error.copy(alpha = ERROR_TINT_ALPHA),
+                shape = VmShapes.field,
+                color = VmTheme.colors.bgCriticalSubtle,
             ) {
-                Text(
+                VmText(
                     text = error,
                     modifier = Modifier.padding(VmSpacing.md),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
+                    style = VmTheme.typography.bodyMd,
+                    color = VmTheme.colors.textCritical,
                 )
             }
         }
@@ -180,10 +180,10 @@ private fun DebugPathSection(state: DebugUiState) {
             SettingsDivider()
             Column(modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm)) {
                 state.recentPaths.take(6).forEach { entry ->
-                    Text(
+                    VmText(
                         text = entry,
-                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = VmTheme.typography.bodySm.copy(fontFamily = FontFamily.Monospace),
+                        color = VmTheme.colors.textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(vertical = VmSpacing.xxs),
@@ -225,12 +225,13 @@ private fun DebugP2PFlagsSection(
             onFlagChange(P2PFlag.REDUCE_DEFAULT_RELAY, it)
         }
         SettingsDivider()
-        TextButton(
+        VmTextButton(
+            text = "Reset P2P flags to defaults",
             onClick = onResetFlags,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text("Reset P2P flags to defaults")
-        }
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = VmSpacing.sm),
+        )
     }
 }
 
@@ -240,21 +241,7 @@ private fun DebugFlagRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = VmSizes.touchTarget)
-            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
+    SettingsRow(label = label, trailing = SettingsTrailing.Switch(checked, onCheckedChange))
 }
 
 @Composable
@@ -265,56 +252,28 @@ private fun DebugActionsSection(
     onNavigateToLogs: () -> Unit,
 ) {
     SettingsSection(title = stringResource(R.string.feature_debug_actions_section)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.feature_debug_dev_mode),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    text = stringResource(R.string.feature_debug_dev_mode_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(
-                checked = state.devMode,
-                onCheckedChange = onDevModeChange,
-            )
-        }
+        SettingsRow(
+            label = stringResource(R.string.feature_debug_dev_mode),
+            supporting = stringResource(R.string.feature_debug_dev_mode_hint),
+            trailing = SettingsTrailing.Switch(state.devMode, onDevModeChange),
+        )
         SettingsDivider()
         Column(
             modifier = Modifier.padding(VmSpacing.lg),
             verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
         ) {
-            Button(
+            VmButton(
+                text = stringResource(R.string.feature_debug_join_publish),
                 onClick = onJoinAndPublish,
+                leadingIcon = Icons.Outlined.CloudUpload,
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.CloudUpload,
-                    contentDescription = null,
-                    modifier = Modifier.padding(end = VmSpacing.sm),
-                )
-                Text(text = stringResource(R.string.feature_debug_join_publish))
-            }
-            OutlinedButton(
+            )
+            VmOutlinedButton(
+                text = stringResource(R.string.feature_debug_view_logs),
                 onClick = onNavigateToLogs,
+                leadingIcon = Icons.Outlined.Article,
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Article,
-                    contentDescription = null,
-                    modifier = Modifier.padding(end = VmSpacing.sm),
-                )
-                Text(text = stringResource(R.string.feature_debug_view_logs))
-            }
+            )
         }
     }
 }
@@ -329,29 +288,29 @@ private fun DebugAdbSection(adbCommands: String) {
                 .padding(start = VmSpacing.lg, end = VmSpacing.sm, top = VmSpacing.md, bottom = VmSpacing.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
+            VmIcon(
                 imageVector = Icons.Outlined.Terminal,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = VmTheme.colors.iconSecondary,
                 modifier = Modifier.padding(end = VmSpacing.sm),
             )
-            Text(
+            VmText(
                 text = stringResource(R.string.feature_debug_adb_instructions),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = VmTheme.typography.bodyMd,
+                color = VmTheme.colors.textSecondary,
             )
         }
-        Surface(
+        VmSurface(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
-            shape = MaterialTheme.shapes.small,
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = CODE_SURFACE_ALPHA),
+            shape = VmShapes.field,
+            color = VmTheme.colors.bgSubtle,
         ) {
-            Text(
+            VmText(
                 text = adbCommands,
                 modifier = Modifier.padding(VmSpacing.md),
-                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                style = VmTheme.typography.bodySm.copy(fontFamily = FontFamily.Monospace),
             )
         }
         Row(
@@ -360,14 +319,11 @@ private fun DebugAdbSection(adbCommands: String) {
                 .padding(end = VmSpacing.sm, bottom = VmSpacing.xs),
             horizontalArrangement = Arrangement.End,
         ) {
-            TextButton(onClick = { clipboard.setText(AnnotatedString(adbCommands)) }) {
-                Icon(
-                    imageVector = Icons.Outlined.ContentCopy,
-                    contentDescription = null,
-                    modifier = Modifier.padding(end = VmSpacing.sm),
-                )
-                Text(text = stringResource(R.string.feature_debug_copy_adb))
-            }
+            VmTextButton(
+                text = stringResource(R.string.feature_debug_copy_adb),
+                onClick = { clipboard.setText(AnnotatedString(adbCommands)) },
+                leadingIcon = Icons.Outlined.ContentCopy,
+            )
         }
     }
 }
@@ -391,29 +347,22 @@ private fun DebugStatusRow(
             modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
+            VmIcon(
                 imageVector = Icons.Outlined.Hub,
                 contentDescription = null,
-                tint = if (positive) {
-                    MaterialTheme.colorScheme.tertiary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                modifier = Modifier.padding(end = VmSpacing.md),
+                tint = if (positive) VmTheme.colors.iconSuccess else VmTheme.colors.iconSecondary,
+                modifier = Modifier.padding(end = VmSpacing.lg),
             )
-            Text(
+            VmText(
                 text = label,
-                style = MaterialTheme.typography.bodyLarge,
+                style = VmTheme.typography.bodyLg,
+                color = VmTheme.colors.textPrimary,
             )
         }
-        Text(
+        VmText(
             text = value,
-            style = if (monospaceValue) UserHashTextStyle else MaterialTheme.typography.bodyMedium,
-            color = if (positive) {
-                MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            style = if (monospaceValue) UserHashTextStyle else VmTheme.typography.bodyMd,
+            color = if (positive) VmTheme.colors.textPrimary else VmTheme.colors.textSecondary,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier

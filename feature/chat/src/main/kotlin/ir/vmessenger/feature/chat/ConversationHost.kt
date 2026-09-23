@@ -5,7 +5,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
@@ -21,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.designsystem.component.VmSnackbarHostState
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
 import ir.vmessenger.feature.chat.voice.MicButtonActions
 import ir.vmessenger.feature.chat.voice.VoiceBubbleHost
@@ -70,7 +70,7 @@ internal class ConversationSheetState(
 @Suppress("LongParameterList") // one field per screen-owned concern; a nested bag would only hide them
 internal class ConversationHost(
     val listState: LazyListState,
-    val snackbar: SnackbarHostState,
+    val snackbar: VmSnackbarHostState,
     val scope: CoroutineScope,
     val images: AttachmentImages,
     val actions: MessageActions,
@@ -145,7 +145,7 @@ private fun rememberVoiceBubbleHost(viewModel: ConversationViewModel): VoiceBubb
  * starts and then silently fails.
  */
 @Composable
-private fun rememberMicHost(viewModel: ConversationViewModel, snackbar: SnackbarHostState): MicHost {
+private fun rememberMicHost(viewModel: ConversationViewModel, snackbar: VmSnackbarHostState): MicHost {
     val permission = rememberRecordAudioPermission(snackbar)
     val locked = remember { mutableStateOf(false) }
     val slide = remember { mutableFloatStateOf(0f) }
@@ -186,7 +186,7 @@ private fun rememberMessageActions(
     viewModel: ConversationViewModel,
     onOpenImage: (String) -> Unit,
     actionTarget: MutableState<String?>,
-    snackbar: SnackbarHostState,
+    snackbar: VmSnackbarHostState,
     scope: CoroutineScope,
 ): MessageActions {
     val context = LocalContext.current
@@ -214,7 +214,7 @@ private fun rememberMessageActions(
 private fun rememberSheetState(
     viewModel: ConversationViewModel,
     actionTarget: MutableState<String?>,
-    snackbar: SnackbarHostState,
+    snackbar: VmSnackbarHostState,
     scope: CoroutineScope,
 ): ConversationSheetState {
     val clipboard = LocalClipboardManager.current

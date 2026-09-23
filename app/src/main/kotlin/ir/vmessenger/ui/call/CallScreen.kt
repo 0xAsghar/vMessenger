@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,7 +17,9 @@ import androidx.compose.ui.text.style.TextAlign
 import ir.vmessenger.R
 import ir.vmessenger.core.designsystem.component.VmButton
 import ir.vmessenger.core.designsystem.component.VmOutlinedButton
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.data.call.CallSession
 import ir.vmessenger.data.call.CallState
 
@@ -53,16 +53,16 @@ fun CallScreen(
 @Composable
 private fun CallHeader(session: CallSession) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
+        VmText(
             text = session.peerName,
-            style = MaterialTheme.typography.headlineMedium,
+            style = VmTheme.typography.headingLg,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(VmSpacing.sm))
-        Text(
+        VmText(
             text = stringResource(statusTextOf(session)),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodyLg,
+            color = VmTheme.colors.textSecondary,
             textAlign = TextAlign.Center,
         )
     }

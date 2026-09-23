@@ -2,6 +2,7 @@ package ir.vmessenger.feature.lock
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,11 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -26,18 +22,26 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.designsystem.component.VmIcon
+import ir.vmessenger.core.designsystem.component.VmProgressIndicator
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.format.VmTextFormat
+import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.data.lock.AppLockWipePolicy
 import ir.vmessenger.data.lock.LockState
 
-private val LockIconSize = 40.dp
+private val LockIconSize = 32.dp
+private val LockTileSize = 64.dp
 
 /** The wait is reported in whole seconds, rounded up, so it never reads as zero while it lasts. */
 private const val MILLIS_PER_SECOND = 1_000L
@@ -49,8 +53,9 @@ private const val KEYPAD_WIDTH_FRACTION = 0.88f
  * The lock, drawn over the whole app rather than navigated to.
  *
  * Everything here assumes it is the topmost layer: it is opaque, it swallows the back gesture, and
- * [Surface] swallows the touches that would otherwise land on the screen behind it. There is no
- * NavController in reach and there should not be — this is not a destination anyone can leave.
+ * it takes every touch that lands on it, so none reaches the screen behind — which is still
+ * composed during the brief cover before the timeout decides. There is no NavController in reach
+ * and there should not be — this is not a destination anyone can leave.
  *
  * [onUnlocked] fires once the coordinator says the app is open, including the case where there
  * turns out to be no PIN stored at all; a gate with no key behind it must not strand anyone.
@@ -65,7 +70,14 @@ fun AppLockScreen(onUnlocked: () -> Unit, modifier: Modifier = Modifier) {
     BackHandler(enabled = true) {
         // Deliberately nothing. Back is how a dialog is dismissed, and this is not a dialog.
     }
-    Surface(color = MaterialTheme.colorScheme.background, modifier = modifier.fillMaxSize()) {
+    VmSurface(
+        color = VmTheme.colors.bgCanvas,
+        // An empty handler still claims the touch: the hit stops here instead of reaching the
+        // screen underneath.
+        modifier = modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {},
+    ) {
         AppLockContent(
             state = state,
             onUnlock = viewModel::unlock,
@@ -114,15 +126,20 @@ private fun LockHeader(lockState: LockState) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
     ) {
-        Icon(
-            imageVector = Icons.Filled.Lock,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(LockIconSize),
-        )
-        Text(
+        VmSurface(shape = VmShapes.card, color = VmTheme.colors.bgSubtle) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(LockTileSize)) {
+                VmIcon(
+                    imageVector = Icons.Filled.Lock,
+                    contentDescription = null,
+                    tint = VmTheme.colors.iconPrimary,
+                    size = LockIconSize,
+                )
+            }
+        }
+        VmText(
             text = stringResource(R.string.app_lock_title),
-            style = MaterialTheme.typography.headlineSmall,
+            style = VmTheme.typography.headingMd,
+            color = VmTheme.colors.textPrimary,
         )
         ModeChip(strict = lockState == LockState.LockedStrict)
     }
@@ -136,25 +153,26 @@ private fun LockHeader(lockState: LockState) {
  */
 @Composable
 private fun ModeChip(strict: Boolean) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        shape = MaterialTheme.shapes.large,
+    VmSurface(
+        color = VmTheme.colors.bgSubtle,
+        contentColor = VmTheme.colors.textSecondary,
+        shape = VmShapes.pill,
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
-            modifier = Modifier.padding(horizontal = VmSpacing.md, vertical = VmSpacing.sm),
+            modifier = Modifier.padding(horizontal = VmSpacing.md, vertical = VmSpacing.xs),
         ) {
-            Icon(
+            VmIcon(
                 imageVector = if (strict) Icons.Filled.CloudOff else Icons.Filled.CloudDone,
                 contentDescription = null,
+                size = VmSizes.iconMd,
             )
-            Text(
+            VmText(
                 text = stringResource(
                     if (strict) R.string.app_lock_mode_strict else R.string.app_lock_mode_soft,
                 ),
-                style = MaterialTheme.typography.bodySmall,
+                style = VmTheme.typography.bodySm,
                 textAlign = TextAlign.Center,
             )
         }
@@ -167,10 +185,10 @@ private fun StatusLine(state: AppLockUiState) {
     when {
         state.checking -> CheckingRow()
         state.feedback != null -> FeedbackText(feedback = state.feedback, wipeArmed = state.wipeArmed)
-        else -> Text(
+        else -> VmText(
             text = stringResource(R.string.app_lock_prompt),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodyMd,
+            color = VmTheme.colors.textSecondary,
         )
     }
 }
@@ -181,14 +199,11 @@ private fun CheckingRow() {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
     ) {
-        CircularProgressIndicator(
-            strokeWidth = VmSizes.progressStroke,
-            modifier = Modifier.size(VmSizes.iconMd),
-        )
-        Text(
+        VmProgressIndicator(size = VmSizes.iconMd, color = VmTheme.colors.iconSecondary)
+        VmText(
             text = stringResource(R.string.app_lock_checking),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodyMd,
+            color = VmTheme.colors.textSecondary,
         )
     }
 }
@@ -205,13 +220,13 @@ private fun FeedbackText(feedback: UnlockFeedback, wipeArmed: Boolean) {
         UnlockFeedback.BiometricDone -> stringResource(R.string.app_lock_biometric_done)
         UnlockFeedback.BiometricFailed -> stringResource(R.string.app_lock_biometric_failed)
     }
-    Text(
+    VmText(
         text = text,
-        style = MaterialTheme.typography.bodyMedium,
+        style = VmTheme.typography.bodyMd,
         color = if (feedback is UnlockFeedback.BiometricDone) {
-            MaterialTheme.colorScheme.primary
+            VmTheme.colors.textSuccess
         } else {
-            MaterialTheme.colorScheme.error
+            VmTheme.colors.textCritical
         },
         textAlign = TextAlign.Center,
     )

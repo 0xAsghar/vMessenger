@@ -1,10 +1,6 @@
 package ir.vmessenger.feature.settings
 
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -13,8 +9,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import ir.vmessenger.core.designsystem.component.VmInputDialog
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextField
+import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
 
 internal const val BACKUP_PASSPHRASE_MIN_CHARS = 8
 
@@ -48,10 +46,7 @@ internal fun BackupPassphraseDialog(
         onDismiss = onDismiss,
         dismissLabel = stringResource(R.string.settings_backup_cancel),
     ) {
-        Text(
-            text = stringResource(R.string.settings_backup_passphrase_body),
-            style = MaterialTheme.typography.bodyMedium,
-        )
+        VmText(text = stringResource(R.string.settings_backup_passphrase_body))
         PassphraseField(
             value = passphrase,
             onValueChange = { passphrase = it },
@@ -76,15 +71,16 @@ private fun PassphraseField(
     label: String,
     error: String?,
 ) {
-    OutlinedTextField(
+    VmTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = Modifier.fillMaxWidth(),
-        label = { Text(label) },
-        isError = error != null,
-        supportingText = error?.let { { Text(it) } },
-        singleLine = true,
-        visualTransformation = PasswordVisualTransformation(),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        config = VmTextFieldConfig(
+            label = label,
+            isError = error != null,
+            supportingText = error,
+            isPassword = true,
+            keyboardType = KeyboardType.Password,
+        ),
     )
 }

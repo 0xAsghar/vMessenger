@@ -1,12 +1,12 @@
 package ir.vmessenger.text
 
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.ResolvedTextDirection
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.theme.RtlLayout
 import ir.vmessenger.core.designsystem.theme.VMessengerTheme
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -49,9 +49,9 @@ class BidiRenderingTest {
         compose.setContent {
             RtlLayout {
                 VMessengerTheme(darkTheme = false) {
-                    Text(
+                    VmText(
                         text = text,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = VmTheme.typography.bodyLg,
                         onTextLayout = { layout = it },
                     )
                 }

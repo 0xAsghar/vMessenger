@@ -10,10 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -27,7 +23,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.common.logging.LogLevel
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmButton
+import ir.vmessenger.core.designsystem.component.VmButtonSize
+import ir.vmessenger.core.designsystem.component.VmOutlinedButton
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import java.io.File
 
 @Composable
@@ -55,34 +56,32 @@ fun LogsRoute(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
             ) {
-                Button(
-                    onClick = {
-                        shareLogFile(context, viewModel.snapshotText())
-                    },
+                VmButton(
+                    text = stringResource(R.string.feature_logs_export_share),
+                    onClick = { shareLogFile(context, viewModel.snapshotText()) },
+                    size = VmButtonSize.Medium,
                     modifier = Modifier.weight(1f),
-                ) {
-                    Text(text = stringResource(R.string.feature_logs_export_share))
-                }
-                OutlinedButton(
+                )
+                VmOutlinedButton(
+                    text = stringResource(R.string.feature_logs_copy),
                     onClick = {
                         clipboard.setText(AnnotatedString(viewModel.snapshotText()))
                         Toast.makeText(context, copiedMessage, Toast.LENGTH_SHORT).show()
                     },
+                    size = VmButtonSize.Medium,
                     modifier = Modifier.weight(1f),
-                ) {
-                    Text(text = stringResource(R.string.feature_logs_copy))
-                }
-                OutlinedButton(
+                )
+                VmOutlinedButton(
+                    text = stringResource(R.string.feature_logs_clear),
                     onClick = { viewModel.clear() },
+                    size = VmButtonSize.Medium,
                     modifier = Modifier.weight(1f),
-                ) {
-                    Text(text = stringResource(R.string.feature_logs_clear))
-                }
+                )
             }
             if (entries.isEmpty()) {
-                Text(
+                VmText(
                     text = stringResource(R.string.feature_logs_empty),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = VmTheme.colors.textSecondary,
                 )
             } else {
                 LazyColumn(
@@ -90,13 +89,13 @@ fun LogsRoute(
                     verticalArrangement = Arrangement.spacedBy(VmSpacing.xs),
                 ) {
                     items(entries, key = { "${it.timestampUnixMs}-${it.tag}-${it.message}" }) { entry ->
-                        Text(
+                        VmText(
                             text = entry.formatLine(),
-                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            style = VmTheme.typography.bodySm.copy(fontFamily = FontFamily.Monospace),
                             color = when (entry.level) {
-                                LogLevel.ERROR -> MaterialTheme.colorScheme.error
-                                LogLevel.WARN -> MaterialTheme.colorScheme.tertiary
-                                else -> MaterialTheme.colorScheme.onBackground
+                                LogLevel.ERROR -> VmTheme.colors.textCritical
+                                LogLevel.WARN -> VmTheme.colors.textWarning
+                                else -> VmTheme.colors.textPrimary
                             },
                         )
                     }

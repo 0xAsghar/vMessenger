@@ -11,10 +11,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,9 +31,13 @@ import ir.vmessenger.core.designsystem.component.SkeletonList
 import ir.vmessenger.core.designsystem.component.UserHashText
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
+import ir.vmessenger.core.designsystem.component.VmSnackbarHostState
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextButton
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -108,9 +108,10 @@ private fun BlockedContactRowItem(
     ) {
         Avatar(seed = contact.identityHash, name = contact.name)
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            VmText(
                 text = contact.name,
-                style = MaterialTheme.typography.titleMedium,
+                style = VmTheme.typography.bodyLgMedium,
+                color = VmTheme.colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -120,9 +121,7 @@ private fun BlockedContactRowItem(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        TextButton(onClick = onUnblock) {
-            Text(text = stringResource(R.string.blocked_contacts_unblock))
-        }
+        VmTextButton(text = stringResource(R.string.blocked_contacts_unblock), onClick = onUnblock)
     }
 }
 
@@ -130,7 +129,7 @@ private fun BlockedContactRowItem(
 @Composable
 private fun UnblockedSnackbarEffect(
     events: Flow<String>,
-    hostState: SnackbarHostState,
+    hostState: VmSnackbarHostState,
 ) {
     var unblockedName by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(events) {

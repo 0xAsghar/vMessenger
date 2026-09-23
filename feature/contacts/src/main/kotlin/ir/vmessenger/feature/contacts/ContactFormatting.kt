@@ -7,22 +7,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.GppMaybe
 import androidx.compose.material.icons.outlined.LocationOn
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.component.VmIcon
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.format.VmDateFormat
 import ir.vmessenger.core.designsystem.format.VmTextFormat
+import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
-import ir.vmessenger.core.designsystem.theme.vm
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.domain.model.ContactRelationshipStatus
-import java.util.Locale
 
 private const val METERS_PER_KM = 1000.0
 private val BadgeIconSize = 16.dp
@@ -30,7 +29,7 @@ private val BadgeIconSize = 16.dp
 /** "۳۴۰ متر" / "۱٫۲ کیلومتر" — Persian digits, matching the rest of the UI. */
 @Composable
 internal fun distanceLabel(meters: Double): String = if (meters >= METERS_PER_KM) {
-    stringResource(R.string.contacts_distance_km, persianDecimal(meters / METERS_PER_KM))
+    stringResource(R.string.contacts_distance_km, VmTextFormat.oneDecimal(meters / METERS_PER_KM))
 } else {
     stringResource(R.string.contacts_distance_meters, VmTextFormat.digits(meters.toInt().toString()))
 }
@@ -80,15 +79,15 @@ internal fun ContactStatusChip(
     status: ContactRelationshipStatus,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
+    VmSurface(
         modifier = modifier,
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        shape = VmShapes.pill,
+        color = VmTheme.colors.bgSubtle,
+        contentColor = VmTheme.colors.textSecondary,
     ) {
-        Text(
+        VmText(
             text = statusLabel(status),
-            style = MaterialTheme.typography.labelMedium,
+            style = VmTheme.typography.bodyXsMedium,
             modifier = Modifier.padding(horizontal = VmSpacing.sm, vertical = VmSpacing.xxs),
         )
     }
@@ -113,18 +112,16 @@ internal fun ContactSubtitle(
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.xxs),
     ) {
         if (sharesLocation) {
-            Icon(
+            VmIcon(
                 imageVector = Icons.Outlined.LocationOn,
                 contentDescription = stringResource(R.string.contacts_location_shared),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(BadgeIconSize),
+                tint = VmTheme.colors.iconAccent,
+                size = BadgeIconSize,
             )
         }
         if (text != null) {
-            Text(
+            VmText(
                 text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -135,30 +132,28 @@ internal fun ContactSubtitle(
 /** Shield shown while the contact's identity key changed and the user has not accepted it. */
 @Composable
 internal fun KeyChangeShield(modifier: Modifier = Modifier) {
-    Icon(
+    VmIcon(
         imageVector = Icons.Outlined.GppMaybe,
         contentDescription = stringResource(R.string.contacts_key_change_pending),
-        tint = MaterialTheme.colorScheme.error,
-        modifier = modifier.size(BadgeIconSize),
+        tint = VmTheme.colors.iconCritical,
+        size = BadgeIconSize,
+        modifier = modifier,
     )
 }
 
 /** Blocked contacts keep their row on the blocked-contacts screen; this marks them there. */
 @Composable
 internal fun BlockedChip(modifier: Modifier = Modifier) {
-    Surface(
+    VmSurface(
         modifier = modifier,
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.vm.keyChangeWarning,
-        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        shape = VmShapes.pill,
+        color = VmTheme.colors.bgCriticalSubtle,
+        contentColor = VmTheme.colors.textCritical,
     ) {
-        Text(
+        VmText(
             text = stringResource(R.string.contacts_status_blocked),
-            style = MaterialTheme.typography.labelMedium,
+            style = VmTheme.typography.bodyXsMedium,
             modifier = Modifier.padding(horizontal = VmSpacing.sm, vertical = VmSpacing.xxs),
         )
     }
 }
-
-private fun persianDecimal(value: Double): String =
-    VmTextFormat.digits(String.format(Locale.US, "%.1f", value)).replace('.', '٫')

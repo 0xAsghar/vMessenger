@@ -5,14 +5,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -25,6 +25,7 @@ import ir.vmessenger.core.designsystem.component.SkeletonList
 import ir.vmessenger.core.designsystem.component.UiMessageSnackbarEffect
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.core.designsystem.component.VmExtendedFab
+import ir.vmessenger.core.designsystem.component.VmIconButton
 import ir.vmessenger.core.designsystem.component.VmSearchBar
 import ir.vmessenger.core.designsystem.component.VmSnackbarHost
 import ir.vmessenger.core.designsystem.component.rememberVmSnackbar
@@ -44,9 +45,11 @@ fun ContactsRoute(
     val snackbarHost = rememberVmSnackbar()
     UiMessageSnackbarEffect(messages = viewModel.messages, hostState = snackbarHost)
     BackHandler(enabled = state.searchActive) { viewModel.onSearchActiveChange(false) }
+    val listState = rememberLazyListState()
 
     VMessengerScaffold(
         title = stringResource(R.string.contacts_title),
+        scrolled = listState.canScrollBackward,
         titleContent = if (state.searchActive) {
             {
                 VmSearchBar(
@@ -79,6 +82,7 @@ fun ContactsRoute(
     ) { padding ->
         ContactsBody(
             state = state,
+            listState = listState,
             padding = padding,
             callbacks = ContactsListCallbacks(
                 onOpenContact = navigation.onOpenContact,
@@ -127,29 +131,27 @@ private fun RowScope.ContactsTopBarActions(
     onMyQr: () -> Unit,
     onScanQr: () -> Unit,
 ) {
-    IconButton(onClick = onSearch) {
-        Icon(
-            imageVector = Icons.Outlined.Search,
-            contentDescription = stringResource(R.string.contacts_search),
-        )
-    }
-    IconButton(onClick = onMyQr) {
-        Icon(
-            imageVector = Icons.Outlined.QrCode2,
-            contentDescription = stringResource(R.string.contacts_my_qr),
-        )
-    }
-    IconButton(onClick = onScanQr) {
-        Icon(
-            imageVector = Icons.Outlined.QrCodeScanner,
-            contentDescription = stringResource(R.string.contacts_scan_qr),
-        )
-    }
+    VmIconButton(
+        icon = Icons.Outlined.Search,
+        contentDescription = stringResource(R.string.contacts_search),
+        onClick = onSearch,
+    )
+    VmIconButton(
+        icon = Icons.Outlined.QrCode2,
+        contentDescription = stringResource(R.string.contacts_my_qr),
+        onClick = onMyQr,
+    )
+    VmIconButton(
+        icon = Icons.Outlined.QrCodeScanner,
+        contentDescription = stringResource(R.string.contacts_scan_qr),
+        onClick = onScanQr,
+    )
 }
 
 @Composable
 private fun ContactsBody(
     state: ContactsUiState,
+    listState: LazyListState,
     padding: PaddingValues,
     callbacks: ContactsListCallbacks,
     navigation: ContactsNavigation,
@@ -166,7 +168,7 @@ private fun ContactsBody(
             body = stringResource(R.string.contacts_search_empty_body),
             modifier = modifier,
         )
-        else -> ContactsList(state = state, callbacks = callbacks, modifier = modifier)
+        else -> ContactsList(state = state, listState = listState, callbacks = callbacks, modifier = modifier)
     }
 }
 

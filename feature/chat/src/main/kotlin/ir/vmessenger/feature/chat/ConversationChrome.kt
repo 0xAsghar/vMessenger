@@ -18,14 +18,7 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.SyncProblem
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -41,8 +34,13 @@ import ir.vmessenger.core.designsystem.component.ReplyPreview
 import ir.vmessenger.core.designsystem.component.SettingsRow
 import ir.vmessenger.core.designsystem.component.SettingsTrailing
 import ir.vmessenger.core.designsystem.component.VmBottomSheet
+import ir.vmessenger.core.designsystem.component.VmIcon
+import ir.vmessenger.core.designsystem.component.VmSmallFab
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /**
  * Avatar, name and the one line that matters: the members of a group, or — in a 1:1 chat —
@@ -71,17 +69,17 @@ internal fun ConversationTitle(header: ConversationHeaderUi, navigation: Convers
             contentDescription = description,
         )
         Column {
-            Text(
+            VmText(
                 text = header.title,
-                style = MaterialTheme.typography.titleMedium,
+                style = VmTheme.typography.bodyLgMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             subtitleText(header)?.let {
-                Text(
+                VmText(
                     text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = VmTheme.typography.bodySm,
+                    color = VmTheme.colors.textSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -116,8 +114,8 @@ internal fun ConversationBanners(header: ConversationHeaderUi, onOpenContact: (S
         ConversationBanner(
             icon = Icons.Outlined.Block,
             textRes = R.string.feature_chat_blocked_banner,
-            color = MaterialTheme.colorScheme.errorContainer,
-            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            color = VmTheme.colors.bgCriticalSubtle,
+            contentColor = VmTheme.colors.textCritical,
         )
     }
     when {
@@ -125,8 +123,8 @@ internal fun ConversationBanners(header: ConversationHeaderUi, onOpenContact: (S
         header.closed -> ConversationBanner(
             icon = Icons.Outlined.Lock,
             textRes = R.string.feature_chat_group_closed_banner,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = VmTheme.colors.bgSubtleStrong,
+            contentColor = VmTheme.colors.textSecondary,
         )
         // Only the creator can hand out the membership, and this one has stopped
         // answering. Messages still flow; who is in the group no longer moves, which
@@ -134,8 +132,8 @@ internal fun ConversationBanners(header: ConversationHeaderUi, onOpenContact: (S
         header.outOfSync -> ConversationBanner(
             icon = Icons.Outlined.SyncProblem,
             textRes = R.string.feature_chat_group_out_of_sync_banner,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = VmTheme.colors.bgSubtleStrong,
+            contentColor = VmTheme.colors.textSecondary,
         )
     }
 }
@@ -143,16 +141,16 @@ internal fun ConversationBanners(header: ConversationHeaderUi, onOpenContact: (S
 /** One shape for every notice above the message list: icon, one line, full width. */
 @Composable
 private fun ConversationBanner(icon: ImageVector, textRes: Int, color: Color, contentColor: Color) {
-    Surface(color = color, contentColor = contentColor, modifier = Modifier.fillMaxWidth()) {
+    VmSurface(color = color, contentColor = contentColor, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(VmSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VmSpacing.md),
         ) {
-            Icon(imageVector = icon, contentDescription = null)
-            Text(
+            VmIcon(imageVector = icon, contentDescription = null)
+            VmText(
                 text = stringResource(textRes),
-                style = MaterialTheme.typography.bodySmall,
+                style = VmTheme.typography.bodySm,
             )
         }
     }
@@ -161,16 +159,11 @@ private fun ConversationBanner(icon: ImageVector, textRes: Int, color: Color, co
 @Composable
 internal fun JumpToBottomFab(visible: Boolean, onClick: () -> Unit) {
     if (!visible) return
-    FloatingActionButton(
+    VmSmallFab(
+        icon = Icons.Outlined.KeyboardArrowDown,
+        contentDescription = stringResource(R.string.feature_chat_jump_to_bottom),
         onClick = onClick,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.KeyboardArrowDown,
-            contentDescription = stringResource(R.string.feature_chat_jump_to_bottom),
-        )
-    }
+    )
 }
 
 /** The composer's reply strip needs a rendered sender name, which only composition knows. */
@@ -192,8 +185,8 @@ internal fun rememberReplyPreview(reply: ReplyQuoteUi, contactName: String): Rep
  * Built to match `ContactActionsSheet`, which is the house pattern: an explicit sheet state, the
  * navigation-bar inset rather than a fixed bottom pad (which was short on gesture-navigation
  * devices), a header naming what is being acted on, design-system rows with a guaranteed touch
- * target, and destructive actions tinted through `LocalContentColor`. It previously used raw
- * `ListItem`s with none of that, so the same gesture produced two different-looking sheets.
+ * target, and destructive actions marked as such. It previously used raw `ListItem`s with none of
+ * that, so the same gesture produced two different-looking sheets.
  *
  * "Information" sits at the end, after the everyday actions and before the destructive one.
  */
@@ -221,23 +214,23 @@ internal fun MessageActionsSheet(
             SheetAction(R.string.feature_chat_share, Icons.Outlined.Share, actions.onDismiss, actions.onShare)
         }
         SheetAction(R.string.feature_chat_message_info, Icons.Outlined.Info, actions.onDismiss, actions.onInfo)
-        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.error) {
+        SheetAction(
+            R.string.feature_chat_delete_message,
+            Icons.Outlined.DeleteOutline,
+            actions.onDismiss,
+            { actions.onDelete(false) },
+            destructive = true,
+        )
+        // Only offered for our own messages, and worded as a request: a peer can ignore
+        // the control and nothing here can verify that they did not.
+        if (abilities.canDeleteForEveryone) {
             SheetAction(
-                R.string.feature_chat_delete_message,
-                Icons.Outlined.DeleteOutline,
+                R.string.feature_chat_delete_for_everyone,
+                Icons.Outlined.DeleteSweep,
                 actions.onDismiss,
-                { actions.onDelete(false) },
+                { actions.onDelete(true) },
+                destructive = true,
             )
-            // Only offered for our own messages, and worded as a request: a peer can ignore
-            // the control and nothing here can verify that they did not.
-            if (abilities.canDeleteForEveryone) {
-                SheetAction(
-                    R.string.feature_chat_delete_for_everyone,
-                    Icons.Outlined.DeleteSweep,
-                    actions.onDismiss,
-                    { actions.onDelete(true) },
-                )
-            }
         }
     }
 }
@@ -253,11 +246,18 @@ internal data class MessageAbilities(
 
 /** Names the message being acted on, the way the contact sheet names the contact. */
 @Composable
-private fun SheetAction(labelRes: Int, icon: ImageVector, onDismiss: () -> Unit, onAct: () -> Unit) {
+private fun SheetAction(
+    labelRes: Int,
+    icon: ImageVector,
+    onDismiss: () -> Unit,
+    onAct: () -> Unit,
+    destructive: Boolean = false,
+) {
     SettingsRow(
         label = stringResource(labelRes),
         icon = icon,
         trailing = SettingsTrailing.None,
+        destructive = destructive,
         onClick = {
             onDismiss()
             onAct()

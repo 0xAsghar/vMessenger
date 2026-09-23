@@ -1,14 +1,16 @@
 package ir.vmessenger.core.designsystem.component
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import ir.vmessenger.core.designsystem.theme.vm
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /** Person avatars are circles; group avatars are rounded squares. */
 enum class AvatarVariant { Person, Group }
@@ -28,7 +30,7 @@ object MessageBubbleDefaults {
     @Composable
     @ReadOnlyComposable
     fun colors(direction: BubbleDirection): MessageBubbleColors {
-        val vm = MaterialTheme.vm
+        val vm = VmTheme.colors
         return if (direction == BubbleDirection.Outgoing) {
             MessageBubbleColors(container = vm.bubbleOutgoing, content = vm.onBubbleOutgoing)
         } else {
@@ -71,4 +73,16 @@ data class VmTextFieldConfig(
     val isPassword: Boolean = false,
     val keyboardType: KeyboardType = KeyboardType.Text,
     val imeAction: ImeAction = ImeAction.Default,
+    /** Shows [supportingText] in the success colour: an input that has been checked and is good. */
+    val supportingIsSuccess: Boolean = false,
+    val minLines: Int = 1,
+    val maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
+    val readOnly: Boolean = false,
+    val capitalization: KeyboardCapitalization = KeyboardCapitalization.None,
 )
+
+/** How much room a button takes. Large for a screen's main action, medium inside dialogs and rows. */
+enum class VmButtonSize(val height: Dp, val horizontalPadding: Dp, val iconSize: Dp) {
+    Large(height = 48.dp, horizontalPadding = 24.dp, iconSize = 20.dp),
+    Medium(height = 40.dp, horizontalPadding = 16.dp, iconSize = 18.dp),
+}

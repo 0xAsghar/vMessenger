@@ -7,15 +7,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import ir.vmessenger.core.designsystem.component.SettingsSection
+import ir.vmessenger.core.designsystem.component.UserHashLabel
 import ir.vmessenger.core.designsystem.component.UserHashShareRow
 import ir.vmessenger.core.designsystem.component.UserHashText
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
-import ir.vmessenger.core.designsystem.R as DesignR
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /**
- * The hash, its label and the copy/share pair as one block.
+ * The hash, its label and the copy/share pair as one soft card.
  *
  * Onboarding and the identity screen both end on this, so they share it: the user should not
  * have to recognise two different presentations of the one string they hand to other people.
@@ -25,10 +26,7 @@ internal fun IdentityHashCard(
     userHash: String,
     modifier: Modifier = Modifier,
 ) {
-    SettingsSection(
-        title = stringResource(DesignR.string.user_hash_label),
-        modifier = modifier,
-    ) {
+    VmSurface(shape = VmShapes.card, color = VmTheme.colors.bgSubtle, modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -36,6 +34,7 @@ internal fun IdentityHashCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(VmSpacing.xs),
         ) {
+            UserHashLabel()
             UserHashText(text = userHash)
             UserHashShareRow(userHash = userHash)
         }

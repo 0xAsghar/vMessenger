@@ -6,9 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
@@ -19,8 +16,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.component.SectionHeader
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.format.VmDateFormat
+import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.core.map.CameraRequest
 import ir.vmessenger.core.map.MapCameraMode
 import ir.vmessenger.core.map.MapContent
@@ -79,8 +80,8 @@ internal fun ContactLocationCard(location: ContactLocation, modifier: Modifier =
     val callbacks = remember { VmMapCallbacks() }
     Column(modifier = modifier.fillMaxWidth()) {
         SectionHeader(title = stringResource(R.string.contact_detail_location_section))
-        Surface(
-            shape = MaterialTheme.shapes.large,
+        VmSurface(
+            shape = VmShapes.card,
             modifier = Modifier
                 .padding(horizontal = VmSpacing.lg)
                 .fillMaxWidth()
@@ -106,13 +107,13 @@ internal fun ContactLocationCard(location: ContactLocation, modifier: Modifier =
                 )
             }
         }
-        Text(
+        VmText(
             text = stringResource(
                 R.string.contact_detail_location_updated,
                 VmDateFormat.relative(location.sampledAtUnixMs),
             ),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodySm,
+            color = VmTheme.colors.textSecondary,
             modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.xs),
         )
     }

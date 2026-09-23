@@ -3,11 +3,6 @@ package ir.vmessenger.feature.contacts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,7 +11,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import ir.vmessenger.core.designsystem.component.ConfirmDialog
+import ir.vmessenger.core.designsystem.component.VmInputDialog
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextField
+import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /**
  * Renders whichever confirmation the state asks for.
@@ -81,34 +81,29 @@ private fun RenameContactDialog(
     var alias by rememberSaveable(currentName) { mutableStateOf(currentName) }
     val trimmed = alias.trim()
     val valid = trimmed.length in ContactActions.MIN_ALIAS_LENGTH..ContactActions.MAX_ALIAS_LENGTH
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = stringResource(R.string.contacts_rename_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(VmSpacing.sm)) {
-                OutlinedTextField(
-                    value = alias,
-                    onValueChange = { if (it.length <= ContactActions.MAX_ALIAS_LENGTH) alias = it },
-                    label = { Text(text = stringResource(R.string.contacts_rename_label)) },
-                    singleLine = true,
+    VmInputDialog(
+        title = stringResource(R.string.contacts_rename_title),
+        confirmLabel = stringResource(R.string.contacts_rename_save),
+        onConfirm = { onSave(trimmed) },
+        onDismiss = onDismiss,
+        confirmEnabled = valid,
+        dismissLabel = stringResource(R.string.contacts_cancel),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(VmSpacing.sm)) {
+            VmTextField(
+                value = alias,
+                onValueChange = { if (it.length <= ContactActions.MAX_ALIAS_LENGTH) alias = it },
+                config = VmTextFieldConfig(
+                    label = stringResource(R.string.contacts_rename_label),
                     isError = !valid,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    text = stringResource(R.string.contacts_rename_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(trimmed) }, enabled = valid) {
-                Text(text = stringResource(R.string.contacts_rename_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(text = stringResource(R.string.contacts_cancel)) }
-        },
-        shape = MaterialTheme.shapes.large,
-    )
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            VmText(
+                text = stringResource(R.string.contacts_rename_hint),
+                style = VmTheme.typography.bodySm,
+                color = VmTheme.colors.textSecondary,
+            )
+        }
+    }
 }

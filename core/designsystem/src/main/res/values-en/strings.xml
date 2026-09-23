@@ -13,6 +13,8 @@
     <string name="vm_cancel">Cancel</string>
     <string name="vm_close">Close</string>
     <string name="vm_retry">Try again</string>
+    <string name="vm_sheet_expand">Expand list</string>
+    <string name="vm_sheet_collapse">Collapse list</string>
 
     <!-- Chat list -->
     <string name="vm_chat_muted">Muted</string>

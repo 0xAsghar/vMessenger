@@ -46,6 +46,13 @@ class VmTextFormatTest {
     }
 
     @Test
+    fun `persian decimals and lists use persian punctuation`() {
+        assertEquals("۱٫۲", VmTextFormat.oneDecimal(1.24))
+        assertEquals("۳", VmTextFormat.oneDecimal(2.96))
+        assertEquals("علی، مریم", VmTextFormat.list(listOf("علی", "مریم")))
+    }
+
+    @Test
     fun `negative file size is clamped to zero`() {
         assertEquals("۰ بایت", VmTextFormat.fileSize(-1))
     }

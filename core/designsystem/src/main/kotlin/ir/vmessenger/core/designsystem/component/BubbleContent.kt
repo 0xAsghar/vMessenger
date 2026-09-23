@@ -8,18 +8,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.PlayCircleOutline
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,13 +29,16 @@ import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
-import kotlin.math.roundToInt
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 private val MediaMinWidth = 200.dp
 private val MediaMaxHeight = 280.dp
 private val PlayIconSize = 48.dp
-private const val SCRIM_ALPHA = 0.55f
-private const val PERCENT = 100f
+private val DurationShape = RoundedCornerShape(6.dp)
+
+/** Over a photo, whatever the app's theme: dark glass and white on it. */
+private val MediaScrim = Color.Black.copy(alpha = 0.55f)
+private val OnMedia = Color.White
 
 /** Plain text payload of a bubble. */
 @Composable
@@ -45,9 +46,9 @@ fun TextBubbleContent(
     text: String,
     modifier: Modifier = Modifier,
 ) {
-    Text(
+    VmText(
         text = text,
-        style = MaterialTheme.typography.bodyLarge,
+        style = VmTheme.typography.bodyLg,
         modifier = modifier,
     )
 }
@@ -99,11 +100,11 @@ fun VideoBubbleContent(
                     .heightIn(max = MediaMaxHeight),
             )
             if (progress == null) {
-                Icon(
+                VmIcon(
                     imageVector = Icons.Outlined.PlayCircleOutline,
                     contentDescription = stringResource(R.string.vm_bubble_video_play),
-                    tint = MaterialTheme.colorScheme.inverseOnSurface,
-                    modifier = Modifier.size(PlayIconSize),
+                    tint = OnMedia,
+                    size = PlayIconSize,
                 )
             }
             ProgressOverlay(progress)
@@ -131,22 +132,22 @@ fun FileBubbleContent(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
     ) {
-        Icon(
+        VmIcon(
             imageVector = Icons.Outlined.InsertDriveFile,
             contentDescription = stringResource(R.string.vm_bubble_file),
-            modifier = Modifier.size(VmSizes.avatarSm),
+            size = VmSizes.avatarSm,
         )
         Column(modifier = Modifier.weight(1f)) {
-            Text(
+            VmText(
                 text = name,
-                style = MaterialTheme.typography.bodyMedium,
+                style = VmTheme.typography.bodyMdMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
+            VmText(
                 text = VmDateFormat.fileSize(sizeBytes),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = VmTheme.typography.bodySm,
+                color = VmTheme.colors.textSecondary,
             )
         }
         if (progress != null) {
@@ -158,9 +159,9 @@ fun FileBubbleContent(
 @Composable
 private fun Caption(caption: String?) {
     if (caption.isNullOrBlank()) return
-    Text(
+    VmText(
         text = caption,
-        style = MaterialTheme.typography.bodyLarge,
+        style = VmTheme.typography.bodyLg,
         modifier = Modifier.padding(top = VmSpacing.xs),
     )
 }
@@ -177,17 +178,16 @@ private fun DurationBadge(durationMs: Long, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .padding(VmSpacing.xs)
-            .clip(MaterialTheme.shapes.extraSmall)
-            .background(MaterialTheme.colorScheme.inverseSurface.copy(alpha = SCRIM_ALPHA))
+            .clip(DurationShape)
+            .background(MediaScrim)
             .padding(horizontal = VmSpacing.xs),
     ) {
-        Text(
+        VmText(
             text = VmDateFormat.duration(durationMs),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.inverseOnSurface,
+            style = VmTheme.typography.bodyXsMedium,
+            color = OnMedia,
         )
     }
 }
 
-private fun progressLabel(progress: Float): String =
-    VmTextFormat.digits("${(progress * PERCENT).roundToInt()}٪")
+private fun progressLabel(progress: Float): String = VmTextFormat.percent(progress)

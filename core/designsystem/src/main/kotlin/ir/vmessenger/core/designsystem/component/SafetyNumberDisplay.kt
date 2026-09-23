@@ -3,8 +3,6 @@ package ir.vmessenger.core.designsystem.component
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -12,6 +10,7 @@ import androidx.compose.ui.res.stringResource
 import ir.vmessenger.core.designsystem.R
 import ir.vmessenger.core.designsystem.theme.UserHashTextStyle
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import java.security.MessageDigest
 
 @Composable
@@ -24,10 +23,11 @@ fun SafetyNumberDisplay(
         safetyFingerprint(localPublicKey, remotePublicKey)
     }
     Column(modifier = modifier.fillMaxWidth().padding(VmSpacing.lg)) {
-        Text(text = stringResource(R.string.vm_safety_number_title), style = MaterialTheme.typography.titleMedium)
-        Text(
+        VmText(text = stringResource(R.string.vm_safety_number_title), style = VmTheme.typography.bodyLgMedium)
+        VmText(
             text = fingerprint,
             style = UserHashTextStyle,
+            color = VmTheme.colors.textPrimary,
             modifier = Modifier.padding(top = VmSpacing.sm),
         )
     }

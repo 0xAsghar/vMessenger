@@ -1,6 +1,7 @@
 package ir.vmessenger.core.designsystem.theme
 
-import androidx.compose.material3.Typography
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -58,25 +59,57 @@ private fun vazir(
     ),
 )
 
-val VMessengerTypography = Typography(
-    displayLarge = vazir(size = 57, lineHeight = 64),
-    displayMedium = vazir(size = 45, lineHeight = 52),
-    displaySmall = vazir(size = 36, lineHeight = 44),
-    headlineLarge = vazir(size = 32, lineHeight = 40),
-    headlineMedium = vazir(size = 28, lineHeight = 36),
-    headlineSmall = vazir(size = 24, lineHeight = 32),
-    titleLarge = vazir(size = 22, lineHeight = 28, weight = FontWeight.Medium),
-    titleMedium = vazir(size = 16, lineHeight = 24, weight = FontWeight.Medium),
-    titleSmall = vazir(size = 14, lineHeight = 20, weight = FontWeight.Medium),
-    bodyLarge = vazir(size = 16, lineHeight = 24),
-    bodyMedium = vazir(size = 14, lineHeight = 20),
-    bodySmall = vazir(size = 12, lineHeight = 20),
-    labelLarge = vazir(size = 14, lineHeight = 20, weight = FontWeight.Medium),
-    labelMedium = vazir(size = 12, lineHeight = 20, weight = FontWeight.Medium),
-    labelSmall = vazir(size = 11, lineHeight = 18, weight = FontWeight.Medium),
+/**
+ * The app's type scale: four headings and four body sizes, each body size in a regular and a medium
+ * weight. Deliberately smaller than Material's fifteen roles — Element X runs on a scale this size,
+ * and a screen reads as designed when every piece of text on it comes from a short list.
+ *
+ * Sizes are a notch below Element's Inter values because Vazirmatn sets larger at the same point
+ * size; line heights are more generous than Latin-only scales need, because Persian's descenders
+ * and diacritics need the room.
+ */
+@Immutable
+@Suppress("LongParameterList") // A token bundle: one style per step of the scale.
+class VmTypography(
+    /** A screen's single largest line: onboarding headlines, the name on a profile. */
+    val headingXl: TextStyle,
+    val headingLg: TextStyle,
+    /** Section-sized headlines: a dialog title, an empty state. */
+    val headingMd: TextStyle,
+    /** Top bar titles. */
+    val headingSm: TextStyle,
+    /** List row titles, message text, large buttons. */
+    val bodyLg: TextStyle,
+    val bodyLgMedium: TextStyle,
+    /** The default for running text. */
+    val bodyMd: TextStyle,
+    val bodyMdMedium: TextStyle,
+    /** Supporting text, captions, timestamps in lists. */
+    val bodySm: TextStyle,
+    val bodySmMedium: TextStyle,
+    /** The smallest thing on screen: badges, timestamps inside bubbles. */
+    val bodyXs: TextStyle,
+    val bodyXsMedium: TextStyle,
 )
 
-/** Styles that sit outside the Material scale. */
+val VmDefaultTypography = VmTypography(
+    headingXl = vazir(size = 30, lineHeight = 44, weight = FontWeight.Bold),
+    headingLg = vazir(size = 26, lineHeight = 38, weight = FontWeight.Bold),
+    headingMd = vazir(size = 22, lineHeight = 32, weight = FontWeight.Bold),
+    headingSm = vazir(size = 19, lineHeight = 28, weight = FontWeight.Medium),
+    bodyLg = vazir(size = 16, lineHeight = 26),
+    bodyLgMedium = vazir(size = 16, lineHeight = 26, weight = FontWeight.Medium),
+    bodyMd = vazir(size = 14, lineHeight = 22),
+    bodyMdMedium = vazir(size = 14, lineHeight = 22, weight = FontWeight.Medium),
+    bodySm = vazir(size = 12, lineHeight = 18),
+    bodySmMedium = vazir(size = 12, lineHeight = 18, weight = FontWeight.Medium),
+    bodyXs = vazir(size = 11, lineHeight = 16),
+    bodyXsMedium = vazir(size = 11, lineHeight = 16, weight = FontWeight.Medium),
+)
+
+val LocalVmTypography = staticCompositionLocalOf { VmDefaultTypography }
+
+/** Styles that sit outside the scale. */
 object VmTextStyles {
     /** Timestamp inside a message bubble: tighter than label-small, but not tighter than the font. */
     val bubbleTime = TextStyle(

@@ -8,10 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -21,8 +17,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.vmessenger.core.designsystem.component.EmptyState
 import ir.vmessenger.core.designsystem.component.SkeletonList
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmDivider
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.format.VmDateFormat
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.feature.chat.R
 
 /**
@@ -66,7 +66,7 @@ fun GroupAuditRoute(
                 LazyColumn {
                     items(state.entries, key = { "${it.messageId}-${it.capturedAtUnixMs}" }) { row ->
                         AuditRow(row)
-                        HorizontalDivider()
+                        VmDivider()
                     }
                 }
             }
@@ -77,14 +77,14 @@ fun GroupAuditRoute(
 /** Kept on the screen rather than shown once: it is the justification, not a notice to dismiss. */
 @Composable
 private fun AuditDisclosure() {
-    Surface(
-        color = MaterialTheme.colorScheme.tertiaryContainer,
-        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+    VmSurface(
+        color = VmTheme.colors.bgWarningSubtle,
+        contentColor = VmTheme.colors.textPrimary,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Text(
+        VmText(
             text = stringResource(R.string.feature_chat_group_audit_screen_notice),
-            style = MaterialTheme.typography.bodySmall,
+            style = VmTheme.typography.bodySm,
             modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
         )
     }
@@ -98,7 +98,7 @@ private fun AuditRow(row: GroupAuditRow) {
             .fillMaxWidth()
             .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
     ) {
-        Text(
+        VmText(
             text = stringResource(
                 if (row.deleted) {
                     R.string.feature_chat_group_audit_entry_deleted
@@ -107,23 +107,23 @@ private fun AuditRow(row: GroupAuditRow) {
                 },
                 row.authorName ?: unknown,
             ),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodyMdMedium,
+            color = VmTheme.colors.textSecondary,
         )
         row.text?.let { text ->
-            Text(text = text, style = MaterialTheme.typography.bodyMedium)
+            VmText(text = text, style = VmTheme.typography.bodyMd)
         }
         row.attachmentName?.let { name ->
-            Text(
+            VmText(
                 text = stringResource(R.string.feature_chat_preview_file, name),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = VmTheme.typography.bodySm,
+                color = VmTheme.colors.textSecondary,
             )
         }
-        Text(
+        VmText(
             text = VmDateFormat.dayAndTime(row.capturedAtUnixMs),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodyXsMedium,
+            color = VmTheme.colors.textSecondary,
         )
     }
 }

@@ -1,5 +1,6 @@
 package ir.vmessenger.feature.about
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,9 +17,6 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lan
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Tag
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -35,12 +33,15 @@ import ir.vmessenger.core.designsystem.component.SettingsRow
 import ir.vmessenger.core.designsystem.component.SettingsSection
 import ir.vmessenger.core.designsystem.component.SettingsTrailing
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmIcon
+import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.core.designsystem.R as DesignR
 
-/** How much of the primary colour the wash behind the logo keeps at its centre. */
+/** How much of the accent the wash behind the logo keeps at its centre. */
 private const val LOGO_WASH_ALPHA = 0.16f
 
 @Composable
@@ -50,15 +51,18 @@ fun AboutRoute(
 ) {
     val developerModeStatus by viewModel.developerModeStatus.collectAsStateWithLifecycle()
     val nodes by viewModel.nodes.collectAsStateWithLifecycle()
+    val scroll = rememberScrollState()
 
     VMessengerScaffold(
         title = stringResource(R.string.feature_about_title),
         onNavigateBack = onNavigateBack,
+        scrolled = scroll.canScrollBackward,
     ) { padding ->
         AboutContent(
             viewModel = viewModel,
             status = developerModeStatus,
             nodes = nodes,
+            scroll = scroll,
             modifier = Modifier.padding(padding),
         )
     }
@@ -69,14 +73,16 @@ private fun AboutContent(
     viewModel: AboutViewModel,
     status: DeveloperModeStatus,
     nodes: AboutNodes,
+    scroll: ScrollState,
     modifier: Modifier = Modifier,
 ) {
+    // No side padding: the sections run edge to edge and pad their own rows.
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.lg),
-        verticalArrangement = Arrangement.spacedBy(VmSpacing.xl),
+            .verticalScroll(scroll)
+            .padding(vertical = VmSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
     ) {
         AboutHeader()
         AboutBuildSection(viewModel = viewModel, status = status)
@@ -89,7 +95,9 @@ private fun AboutContent(
 @Composable
 private fun AboutHeader() {
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = VmSpacing.lg),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
     ) {
@@ -101,7 +109,7 @@ private fun AboutHeader() {
                 .background(
                     brush = Brush.radialGradient(
                         listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = LOGO_WASH_ALPHA),
+                            VmTheme.colors.bgAccent.copy(alpha = LOGO_WASH_ALPHA),
                             Color.Transparent,
                         ),
                     ),
@@ -109,21 +117,22 @@ private fun AboutHeader() {
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
+            VmIcon(
                 painter = painterResource(DesignR.drawable.ic_vmessenger_logo),
                 contentDescription = stringResource(DesignR.string.vmessenger_logo),
-                modifier = Modifier.size(VmSizes.avatarLg),
-                tint = MaterialTheme.colorScheme.onBackground,
+                size = VmSizes.avatarLg,
+                tint = VmTheme.colors.textPrimary,
             )
         }
-        Text(
+        VmText(
             text = stringResource(R.string.feature_about_app_name),
-            style = MaterialTheme.typography.headlineSmall,
+            style = VmTheme.typography.headingMd,
+            color = VmTheme.colors.textPrimary,
         )
-        Text(
+        VmText(
             text = stringResource(R.string.feature_about_description),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = VmTheme.typography.bodyMd,
+            color = VmTheme.colors.textSecondary,
             textAlign = TextAlign.Center,
         )
     }

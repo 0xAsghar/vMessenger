@@ -6,9 +6,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -21,6 +18,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.R
+import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import kotlinx.coroutines.Dispatchers
@@ -78,14 +76,15 @@ fun StyledQrCode(
             }
         }.value
 
-        Surface(shape = MaterialTheme.shapes.large, color = style.backgroundColor) {
+        VmSurface(shape = VmShapes.card, color = style.backgroundColor) {
             Box(
                 modifier = Modifier
                     .padding(VmSpacing.md)
                     .size(side),
                 contentAlignment = Alignment.Center,
             ) {
-                if (render == null) CircularProgressIndicator() else QrImage(render, style)
+                // The plate is always light, whatever the theme, so the spinner is its own ink.
+                if (render == null) VmProgressIndicator(color = style.moduleColor) else QrImage(render, style)
             }
         }
     }

@@ -8,20 +8,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.MyLocation
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SmallFloatingActionButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import ir.vmessenger.core.designsystem.component.VmIcon
+import ir.vmessenger.core.designsystem.component.VmSmallFab
+import ir.vmessenger.core.designsystem.component.VmSurface
+import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.component.VmTextButton
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmElevation
+import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /** Floating summary of what is being shared, in either direction. */
 @Composable
@@ -37,16 +38,16 @@ internal fun SharingPill(sharing: SharingState, watcherCount: Int, modifier: Mod
         )
         else -> stringResource(R.string.feature_map_pill_off)
     }
-    Surface(
+    VmSurface(
         modifier = modifier,
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = VmShapes.pill,
+        color = VmTheme.colors.bgElevated,
+        contentColor = VmTheme.colors.textPrimary,
         shadowElevation = VmElevation.sheet,
     ) {
-        Text(
+        VmText(
             text = label,
-            style = MaterialTheme.typography.labelLarge,
+            style = VmTheme.typography.bodyMdMedium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = VmSpacing.md, vertical = VmSpacing.sm),
@@ -68,38 +69,29 @@ internal fun MapCameraButtons(onFollowMe: () -> Unit, onFitAll: (() -> Unit)?, m
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (onFitAll != null) {
-            SmallFloatingActionButton(
+            VmSmallFab(
+                icon = Icons.Outlined.CenterFocusStrong,
+                contentDescription = stringResource(R.string.feature_map_action_fit_all),
                 onClick = onFitAll,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Icon(
-                    Icons.Outlined.CenterFocusStrong,
-                    contentDescription = stringResource(R.string.feature_map_action_fit_all),
-                )
-            }
-        }
-        SmallFloatingActionButton(
-            onClick = onFollowMe,
-            containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = MaterialTheme.colorScheme.primary,
-        ) {
-            Icon(
-                Icons.Outlined.MyLocation,
-                contentDescription = stringResource(R.string.feature_map_action_my_location),
             )
         }
+        VmSmallFab(
+            icon = Icons.Outlined.MyLocation,
+            contentDescription = stringResource(R.string.feature_map_action_my_location),
+            onClick = onFollowMe,
+            tint = VmTheme.colors.iconAccent,
+        )
     }
 }
 
 /** Shown when the basemap could not be fetched; the pins are still drawn on the fallback style. */
 @Composable
 internal fun TilesErrorBanner(onRetry: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
+    VmSurface(
         modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = VmShapes.field,
+        color = VmTheme.colors.bgCriticalSubtle,
+        contentColor = VmTheme.colors.textPrimary,
         shadowElevation = VmElevation.sheet,
     ) {
         Row(
@@ -107,13 +99,13 @@ internal fun TilesErrorBanner(onRetry: () -> Unit, modifier: Modifier = Modifier
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm),
         ) {
-            Icon(Icons.Outlined.CloudOff, contentDescription = null)
-            Text(
+            VmIcon(Icons.Outlined.CloudOff, contentDescription = null, tint = VmTheme.colors.iconCritical)
+            VmText(
                 text = stringResource(R.string.feature_map_tiles_error),
-                style = MaterialTheme.typography.bodySmall,
+                style = VmTheme.typography.bodySm,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = onRetry) { Text(stringResource(R.string.feature_map_retry)) }
+            VmTextButton(text = stringResource(R.string.feature_map_retry), onClick = onRetry)
         }
     }
 }

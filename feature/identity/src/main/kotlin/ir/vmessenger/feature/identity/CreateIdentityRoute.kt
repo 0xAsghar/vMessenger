@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -22,8 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -34,8 +31,10 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.designsystem.component.VmSurface
 import ir.vmessenger.core.designsystem.format.VmTextFormat
 import ir.vmessenger.core.designsystem.theme.VmSpacing
+import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /**
  * Onboarding only ever moves forward, so every step enters from the same side. The timings match
@@ -55,17 +54,12 @@ fun CreateIdentityRoute(
     viewModel: CreateIdentityViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    // Insets are consumed by the content, not the Scaffold: `safeDrawingPadding` also keeps the
-    // step clear of the keyboard, which the default scaffold insets do not.
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        contentColor = MaterialTheme.colorScheme.onBackground,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-    ) { padding ->
+    // No bars, so no scaffold: `safeDrawingPadding` keeps the step clear of the system bars and of
+    // the keyboard alike.
+    VmSurface(color = VmTheme.colors.bgCanvas, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .safeDrawingPadding(),
         ) {
             AnimatedContent(
@@ -98,7 +92,7 @@ private fun OnboardingStep(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = VmSpacing.xl, vertical = VmSpacing.xxl),
+            .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.xxl),
         verticalArrangement = Arrangement.spacedBy(VmSpacing.xl, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -192,11 +186,7 @@ private fun StepIndicator(step: Int) {
 
 @Composable
 private fun StepDot(active: Boolean) {
-    val color = if (active) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.outlineVariant
-    }
+    val color = if (active) VmTheme.colors.bgActionPrimary else VmTheme.colors.bgSubtleStrong
     Box(
         modifier = Modifier
             .size(width = if (active) VmSpacing.lg else VmSpacing.sm, height = VmSpacing.sm)

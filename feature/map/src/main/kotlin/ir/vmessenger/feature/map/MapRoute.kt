@@ -9,20 +9,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material3.BottomSheetScaffold
-import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.designsystem.component.VmSheetScaffold
+import ir.vmessenger.core.designsystem.component.rememberVmSheetScaffoldState
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.location.DeviceLocationProvider
 import ir.vmessenger.core.location.LocationUpdateBus
@@ -61,7 +63,7 @@ private fun MapScreen(
     locationSource: DeviceLocationProvider,
     modifier: Modifier = Modifier,
 ) {
-    val scaffoldState = rememberBottomSheetScaffoldState()
+    val sheetState = rememberVmSheetScaffoldState()
     val scope = rememberCoroutineScope()
     // The puck is the only thing on this screen that needs a *live* fix, so the registration is
     // scoped to it — leaving the tab releases it even if the flag is still set.
@@ -72,23 +74,29 @@ private fun MapScreen(
         }
     }
     var pickerVisible by rememberSaveable { mutableStateOf(false) }
-    val callbacks = remember(actions, scaffoldState, scope) {
+    var peekPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    // Until the sharing row has been measured, a fixed guess; after, exactly the row.
+    val peek = if (peekPx == 0) SHEET_PEEK_HEIGHT else with(density) { peekPx.toDp() }
+    val callbacks = remember(actions, sheetState, scope) {
         VmMapCallbacks(
             onMarkerClick = { contactId ->
                 actions.onSelect(contactId)
-                scope.launch { scaffoldState.bottomSheetState.partialExpand() }
+                scope.launch { sheetState.collapse() }
             },
             onUserGesture = actions.onUserGesture,
             onStyleError = actions.onStyleError,
         )
     }
-    BottomSheetScaffold(
-        scaffoldState = scaffoldState,
-        sheetPeekHeight = SHEET_PEEK_HEIGHT,
-        sheetContent = { MapSheet(state, actions, permission) { pickerVisible = true } },
+    VmSheetScaffold(
+        sheetContent = {
+            MapSheet(state, actions, permission, onPeekMeasured = { peekPx = it }) { pickerVisible = true }
+        },
+        peekHeight = peek,
+        state = sheetState,
         modifier = modifier,
     ) {
-        // The padding is deliberately ignored: the sheet floats over a map that fills the tab.
+        // The sheet floats over a map that fills the tab.
         Box(modifier = Modifier.fillMaxSize()) {
             VmMapView(
                 content = rememberMapContent(state),
