@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.runtime.Composable
@@ -27,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import ir.vmessenger.core.designsystem.component.VmIconButton
 import ir.vmessenger.core.designsystem.component.VmText
+import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.VmTheme
 
 /**
@@ -57,13 +60,18 @@ fun ImageViewerRoute(
             icon = Icons.Outlined.Close,
             contentDescription = stringResource(R.string.feature_chat_image_close),
             onClick = onBack,
+            // On its own dark disc: a bare white cross vanished into any light photo behind it.
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .safeDrawingPadding(),
+                .safeDrawingPadding()
+                .padding(VmSpacing.xs)
+                .background(ViewerChrome, CircleShape),
             tint = Color.White,
         )
     }
 }
+
+private val ViewerChrome = Color.Black.copy(alpha = 0.45f)
 
 @Composable
 private fun ZoomableImage(model: Any?, onDismiss: () -> Unit) {

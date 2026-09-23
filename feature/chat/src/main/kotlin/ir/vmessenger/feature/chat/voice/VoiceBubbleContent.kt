@@ -18,7 +18,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -119,7 +121,7 @@ private fun MetaRow(
         )
         if (playback.unplayed) UnplayedDot()
         Spacer(modifier = Modifier.weight(1f))
-        if (showSpeed) SpeedChip(speed = playback.speed, onClick = onToggleSpeed)
+        SpeedChip(speed = playback.speed, visible = showSpeed, onClick = onToggleSpeed)
     }
 }
 
@@ -135,17 +137,29 @@ private fun UnplayedDot() {
     )
 }
 
-/** Tinted from the bubble's own content colour, so one chip works on either side of the chat. */
+/**
+ * Tinted from the bubble's own content colour, so one chip works on either side of the chat.
+ *
+ * Laid out even while hidden: it is taller than the duration beside it, and a chip that came and
+ * went with playback grew the bubble on Play and shrank it at the end, nudging the whole list.
+ */
 @Composable
-private fun SpeedChip(speed: VoiceSpeed, onClick: () -> Unit) {
+private fun SpeedChip(speed: VoiceSpeed, visible: Boolean, onClick: () -> Unit) {
     val label = stringResource(speedLabelRes(speed))
     val description = stringResource(R.string.feature_chat_voice_speed, label)
     VmSurface(
         onClick = onClick,
+        enabled = visible,
         shape = CircleShape,
         color = LocalVmContentColor.current.copy(alpha = CHIP_CONTAINER_ALPHA),
         contentColor = LocalVmContentColor.current,
-        modifier = Modifier.semantics { contentDescription = description },
+        modifier = if (visible) {
+            Modifier.semantics { contentDescription = description }
+        } else {
+            Modifier
+                .alpha(0f)
+                .clearAndSetSemantics { }
+        },
     ) {
         VmText(
             text = label,
