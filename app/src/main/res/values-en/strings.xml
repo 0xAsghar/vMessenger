@@ -60,6 +60,11 @@
     <string name="call_mute_short">Mute</string>
     <string name="call_speaker">Speaker</string>
     <string name="call_earpiece">Earpiece</string>
+    <string name="call_end_unreachable">%1$s can\'t be reached right now</string>
+    <string name="call_end_declined">%1$s declined the call</string>
+    <string name="call_end_busy">%1$s is on another call</string>
+    <string name="call_end_no_answer">No answer from %1$s</string>
+    <string name="call_end_failed">The call could not connect</string>
     <string name="call_needs_microphone">A voice call needs microphone permission.</string>
     <string name="call_unavailable">Calling this contact is not available.</string>
 </resources>

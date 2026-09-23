@@ -24,8 +24,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -66,12 +69,20 @@ class CallCoordinator @Inject constructor(
 ) {
     private val mutex = Mutex()
     private val _session = MutableStateFlow<CallSession?>(null)
+    private val _ended = MutableSharedFlow<CallEnd>(extraBufferCapacity = 1)
     private val scope = CoroutineScope(SupervisorJob() + dispatcher + loggingExceptionHandler(TAG))
 
     /** The one pending deadline of the state the call is in; replaced on every move. See [armTimeout]. */
     private var timeout: Job? = null
 
     val session: StateFlow<CallSession?> = _session.asStateFlow()
+
+    /**
+     * Endings the caller should hear about. A call screen used to simply close on an invite that
+     * never left, a decline, a busy line or no answer — the same silent exit for every one, after
+     * a minute of "Calling…" in the first case.
+     */
+    val ended: SharedFlow<CallEnd> = _ended.asSharedFlow()
 
     /** Private to this class by design; see [CallSession]. */
     private var mediaKey: ByteArray? = null
@@ -95,8 +106,15 @@ class CallCoordinator @Inject constructor(
             state = CallState.OutgoingRinging,
         )
         armTimeout()
-        send(contact, callId, Outgoing(CallSignalType.CALL_SIGNAL_TYPE_INVITE, keys.publicKey))
+        val invited = send(contact, callId, Outgoing(CallSignalType.CALL_SIGNAL_TYPE_INVITE, keys.publicKey))
         activityLogger.record(ActivityKind.CallPlaced)
+        if (invited is AppResult.Error) {
+            // Nobody to ring: the invite never left. Said now, rather than after a minute of
+            // "Calling…" to no one.
+            AppLogger.info(TAG, "invite undeliverable; ending call=$callId")
+            endQuietly(CallEndReason.Unreachable)
+            return invited
+        }
         AppLogger.info(TAG, "dialled contact=$contactId call=$callId")
         AppResult.Success(Unit)
     }
@@ -108,9 +126,12 @@ class CallCoordinator @Inject constructor(
      * are where the caller may connect — so the peer never learns where to reach this device for
      * audio until its user has answered.
      */
-    suspend fun accept() = mutex.withLock {
-        val current = _session.value ?: return
-        if (current.state != CallState.IncomingRinging) return
+    suspend fun accept() {
+        mutex.withLock { acceptLocked() }
+    }
+
+    private suspend fun acceptLocked() {
+        val current = _session.value?.takeIf { it.state == CallState.IncomingRinging } ?: return
         val contact = contactDao.getById(current.contactId) ?: return
         val keys = ephemeral ?: crypto.generateX25519KeyPair().also { ephemeral = it }
         val key = mediaKey
@@ -176,7 +197,7 @@ class CallCoordinator @Inject constructor(
             CallSignalType.CALL_SIGNAL_TYPE_BUSY,
             CallSignalType.CALL_SIGNAL_TYPE_CANCEL,
             CallSignalType.CALL_SIGNAL_TYPE_HANGUP,
-            -> onPeerEnded(callId)
+            -> onPeerEnded(callId, signal)
             else -> AppLogger.info(TAG, "ignored call signal type=${signal.type} call=$callId")
         }
     }
@@ -232,9 +253,33 @@ class CallCoordinator @Inject constructor(
         }
     }
 
-    private fun onPeerEnded(callId: String) {
-        if (_session.value?.callId != callId) return
+    private fun onPeerEnded(callId: String, signal: CallSignal) {
+        val current = _session.value ?: return
+        if (current.callId != callId) return
+        if (current.outgoing && current.state == CallState.OutgoingRinging) {
+            refusalOf(signal)?.let { report(current, it) }
+        }
         advance(CallEvent.EndedByPeer)
+        clear()
+    }
+
+    /** What a peer's ending of a call that was still ringing means to the caller, if anything. */
+    private fun refusalOf(signal: CallSignal): CallEndReason? = when {
+        signal.type == CallSignalType.CALL_SIGNAL_TYPE_BUSY ||
+            signal.rejectReason == CallRejectReason.CALL_REJECT_REASON_BUSY -> CallEndReason.Busy
+        signal.rejectReason == CallRejectReason.CALL_REJECT_REASON_TIMEOUT -> CallEndReason.NoAnswer
+        signal.type == CallSignalType.CALL_SIGNAL_TYPE_REJECT -> CallEndReason.Declined
+        else -> null
+    }
+
+    private fun report(session: CallSession, reason: CallEndReason) {
+        _ended.tryEmit(CallEnd(session.callId, session.peerName, reason))
+    }
+
+    /** Ends a call nothing was ever sent for, telling the caller why. */
+    private fun endQuietly(reason: CallEndReason) {
+        _session.value?.let { report(it, reason) }
+        advance(CallEvent.EndedHere)
         clear()
     }
 
@@ -308,6 +353,11 @@ class CallCoordinator @Inject constructor(
         contactDao.getById(session.contactId)?.let { contact ->
             send(contact, session.callId, Outgoing(type, reason = CallRejectReason.CALL_REJECT_REASON_TIMEOUT))
         }
+        when (session.state) {
+            CallState.OutgoingRinging -> report(session, CallEndReason.NoAnswer)
+            CallState.Connecting, CallState.Reconnecting -> report(session, CallEndReason.Failed)
+            else -> Unit
+        }
         advance(CallEvent.TimedOut)
         clear()
     }
@@ -346,8 +396,8 @@ class CallCoordinator @Inject constructor(
         val addresses: List<String> = emptyList(),
     )
 
-    private suspend fun send(contact: ContactEntity, callId: String, outgoing: Outgoing) {
-        val self = selfIdentityCache.get() ?: return
+    private suspend fun send(contact: ContactEntity, callId: String, outgoing: Outgoing): AppResult<Unit> {
+        val self = selfIdentityCache.get() ?: return AppResult.Error(AppError.NotFound("no identity to call from"))
         val signal = CallSignal.newBuilder()
             .setCallId(ByteString.copyFromUtf8(callId))
             .setType(outgoing.type)
@@ -367,7 +417,7 @@ class CallCoordinator @Inject constructor(
             .setCounter(1)
             .setCallSignal(signal)
             .build()
-        messaging.send(contact.id, self, peerOf(contact), envelope)
+        return messaging.send(contact.id, self, peerOf(contact), envelope)
     }
 
     private fun peerOf(contact: ContactEntity) = PeerIdentity(

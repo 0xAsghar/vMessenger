@@ -7,10 +7,12 @@ import ir.vmessenger.core.database.entity.ActivityKind
 import ir.vmessenger.core.datastore.ThemePreferences
 import ir.vmessenger.data.activity.ActivityLogger
 import ir.vmessenger.data.call.CallCoordinator
+import ir.vmessenger.data.call.CallEnd
 import ir.vmessenger.data.call.CallSession
 import ir.vmessenger.domain.repository.ContactRepository
 import ir.vmessenger.ui.ThemeChoice
 import ir.vmessenger.ui.themeChoice
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -55,6 +57,9 @@ class CallViewModel @Inject constructor(
                 ?: ByteArray(0)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(SUBSCRIBE_TIMEOUT_MS), ByteArray(0))
+
+    /** Endings the caller should hear about; the screen says why before it goes. */
+    val ended: SharedFlow<CallEnd> = callCoordinator.ended
 
     fun dial(contactId: String) = viewModelScope.launch { callCoordinator.dial(contactId) }
 

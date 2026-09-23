@@ -62,7 +62,10 @@ class CallNotificationManager @Inject constructor(
 
     /** The ringing notification, with the answer and decline buttons the platform draws for calls. */
     fun showIncoming(callId: String, peerName: String) {
-        val notification = NotificationCompat.Builder(context, CHANNEL_CALL_INCOMING)
+        // Built on the app's language, not just worded in it: below Android 12 the compat call style
+        // swaps in its own "Incoming call" and answer/decline labels, resolved against the builder's
+        // context — which, as the injected application context, spoke the device's language.
+        val notification = NotificationCompat.Builder(context.localised(), CHANNEL_CALL_INCOMING)
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setContentTitle(peerName)
             .setContentText(text(R.string.notification_call_incoming))
@@ -90,7 +93,7 @@ class CallNotificationManager @Inject constructor(
      * the foreground service's notification and the service must be the one to present it.
      */
     fun buildOngoing(callId: String, peerName: String, connecting: Boolean): Notification =
-        NotificationCompat.Builder(context, CHANNEL_CALL_ONGOING)
+        NotificationCompat.Builder(context.localised(), CHANNEL_CALL_ONGOING)
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setContentTitle(peerName)
             .setContentText(

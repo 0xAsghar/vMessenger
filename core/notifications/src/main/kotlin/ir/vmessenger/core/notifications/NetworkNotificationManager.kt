@@ -30,7 +30,7 @@ class NetworkNotificationManager @Inject constructor(
     }
 
     fun buildForegroundNotification(): Notification =
-        NotificationCompat.Builder(context, CHANNEL_NETWORK)
+        NotificationCompat.Builder(context.localised(), CHANNEL_NETWORK)
             .setSmallIcon(android.R.drawable.ic_menu_share)
             .setContentTitle(APP_NAME)
             .setContentText(context.localised().getString(R.string.notification_network_connected))

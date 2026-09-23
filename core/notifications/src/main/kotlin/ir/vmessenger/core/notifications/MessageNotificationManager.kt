@@ -125,7 +125,7 @@ class MessageNotificationManager @Inject constructor(
             .build()
 
     private fun baseBuilder(): NotificationCompat.Builder =
-        NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+        NotificationCompat.Builder(context.localised(), CHANNEL_MESSAGES)
             .setSmallIcon(android.R.drawable.ic_dialog_email)
             .setAutoCancel(true)
 

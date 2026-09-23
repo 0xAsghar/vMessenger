@@ -3,6 +3,7 @@ package ir.vmessenger.data.call
 import com.google.protobuf.ByteString
 import com.goterl.lazysodium.LazySodiumJava
 import com.goterl.lazysodium.SodiumJava
+import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.crypto.LazysodiumCryptoEngine
 import ir.vmessenger.core.proto.app.v1.CallEndpoint
 import ir.vmessenger.core.proto.app.v1.CallRejectReason
@@ -15,13 +16,17 @@ import ir.vmessenger.data.network.InboundFixtures
 import ir.vmessenger.data.network.SelfIdentityCache
 import ir.vmessenger.data.repository.FakeContactDao
 import ir.vmessenger.data.repository.FakeIdentityRepository
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CallCoordinatorTest {
@@ -42,6 +47,50 @@ class CallCoordinatorTest {
         assertNull(calls.session.value)
         assertEquals(CallSignalType.CALL_SIGNAL_TYPE_CANCEL, lastSignal().type)
         assertEquals(CallRejectReason.CALL_REJECT_REASON_TIMEOUT, lastSignal().rejectReason)
+    }
+
+    @Test
+    fun `an invite that cannot be delivered ends the call at once, and says why`() = runTest {
+        val calls = coordinator()
+        val ends = endsOf(calls)
+        messaging.sendError = AppError.Network("peer not listening")
+
+        calls.dial(CONTACT)
+
+        assertNull(calls.session.value)
+        assertEquals(listOf(CallEndReason.Unreachable), ends.map { it.reason })
+    }
+
+    @Test
+    fun `the caller hears why a ringing call ended`() = runTest {
+        val calls = coordinator()
+        val ends = endsOf(calls)
+
+        calls.dial(CONTACT)
+        calls.handleSignal(CONTACT, signal(calls.callId(), CallSignalType.CALL_SIGNAL_TYPE_REJECT))
+        calls.dial(CONTACT)
+        calls.handleSignal(CONTACT, signal(calls.callId(), CallSignalType.CALL_SIGNAL_TYPE_BUSY))
+        calls.dial(CONTACT)
+        passes(61_000)
+
+        assertEquals(
+            listOf(CallEndReason.Declined, CallEndReason.Busy, CallEndReason.NoAnswer),
+            ends.map { it.reason },
+        )
+    }
+
+    @Test
+    fun `a hang-up in progress is no news`() = runTest {
+        val calls = coordinator()
+        val ends = endsOf(calls)
+        calls.dial(CONTACT)
+        calls.handleSignal(CONTACT, signal(calls.callId(), CallSignalType.CALL_SIGNAL_TYPE_ACCEPT))
+        calls.onMediaEvent(CallEvent.MediaUp)
+
+        calls.handleSignal(CONTACT, signal(calls.callId(), CallSignalType.CALL_SIGNAL_TYPE_HANGUP))
+
+        assertNull(calls.session.value)
+        assertTrue(ends.isEmpty())
     }
 
     @Test
@@ -107,6 +156,12 @@ class CallCoordinatorTest {
             activityLogger = testActivityLogger(),
             dispatcher = StandardTestDispatcher(testScheduler),
         )
+    }
+
+    private fun TestScope.endsOf(calls: CallCoordinator): List<CallEnd> {
+        val ends = mutableListOf<CallEnd>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { calls.ended.toList(ends) }
+        return ends
     }
 
     private fun TestScope.passes(millis: Long) {

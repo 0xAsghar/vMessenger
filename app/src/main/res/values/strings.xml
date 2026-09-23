@@ -60,6 +60,11 @@
     <string name="call_mute_short">بی‌صدا</string>
     <string name="call_speaker">بلندگو</string>
     <string name="call_earpiece">گوشی</string>
+    <string name="call_end_unreachable">%1$s اکنون در دسترس نیست</string>
+    <string name="call_end_declined">%1$s تماس را رد کرد</string>
+    <string name="call_end_busy">%1$s در تماس دیگری است</string>
+    <string name="call_end_no_answer">%1$s پاسخ نداد</string>
+    <string name="call_end_failed">تماس برقرار نشد</string>
     <string name="call_needs_microphone">برای تماس صوتی به اجازه‌ی میکروفون نیاز است.</string>
     <string name="call_unavailable">تماس با این مخاطب در دسترس نیست.</string>
 </resources>

@@ -18,11 +18,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import ir.vmessenger.app.locale.AppLocaleController
+import ir.vmessenger.core.common.text.BidiText
 import ir.vmessenger.core.designsystem.component.VmSurface
 import ir.vmessenger.core.designsystem.theme.RtlLayout
 import ir.vmessenger.core.designsystem.theme.VMessengerTheme
 import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.core.notifications.CallNotificationManager
+import ir.vmessenger.data.call.CallEnd
+import ir.vmessenger.data.call.CallEndReason
 import ir.vmessenger.ui.appDarkTheme
 import ir.vmessenger.ui.call.CallActions
 import ir.vmessenger.ui.call.CallScreen
@@ -134,10 +137,30 @@ class CallActivity : AppCompatActivity() {
 
     private fun observeCallEnd() {
         lifecycleScope.launch {
+            viewModel.ended.collect(::sayWhy)
+        }
+        lifecycleScope.launch {
             viewModel.session.collect { session ->
                 if (session == null || !session.state.onScreen) finish()
             }
         }
+    }
+
+    /**
+     * Why the call ended, as the screen goes. Worded through this activity, which carries the app's
+     * language below Android 13 where the application context does not; shown on the application
+     * context, so it outlives the finish that follows.
+     */
+    private fun sayWhy(end: CallEnd) {
+        val name = BidiText.isolate(end.peerName)
+        val text = when (end.reason) {
+            CallEndReason.Unreachable -> getString(R.string.call_end_unreachable, name)
+            CallEndReason.Declined -> getString(R.string.call_end_declined, name)
+            CallEndReason.Busy -> getString(R.string.call_end_busy, name)
+            CallEndReason.NoAnswer -> getString(R.string.call_end_no_answer, name)
+            CallEndReason.Failed -> getString(R.string.call_end_failed)
+        }
+        Toast.makeText(applicationContext, text, Toast.LENGTH_LONG).show()
     }
 
     private fun showOverLockScreen() {
