@@ -24,6 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -268,6 +269,47 @@ class RelayNodeServerTest {
         }
     }
 
+    /**
+     * What a call's audio relies on (the app's CallMediaService): a dialer-chosen circuit name reaches
+     * the listener verbatim, since the listener routes a call's circuits by it; small frames cross in
+     * order and unchanged in both directions; and one end hanging up closes the other at once, rather
+     * than leaving it to idle out while a call waits on it.
+     */
+    @Test
+    fun `a named circuit carries a call's frames unchanged, and one end's close closes the other`() {
+        val state = newState()
+        val id = identity()
+        val name = "vmcall-" + "ab".repeat(16) + "-3"
+        val frames = List(CALL_FRAMES) { index -> ByteArray(4 + index) { (index * 7 + it).toByte() } }
+        relayTest(state) { client ->
+            client.webSocket("/relay") {
+                sendBytes(listenerHello(id))
+                awaitUntil { state.listeners.size == 1 }
+                val dialer = launch {
+                    client.webSocket("/relay") {
+                        sendBytes(dialerHello(id.hash, circuitId = name))
+                        assertEquals(RelayEventType.RELAY_EVENT_TYPE_READY, readEvent().type)
+                        frames.forEach { sendBytes(it) }
+                        frames.forEach { assertArrayEquals(it, readBinary()) }
+                    }
+                }
+                val incomingEvent = readEvent()
+                assertEquals(RelayEventType.RELAY_EVENT_TYPE_INCOMING, incomingEvent.type)
+                assertEquals(name, incomingEvent.circuitId)
+                client.webSocket("/relay") {
+                    sendBytes(acceptHello(name))
+                    assertEquals(RelayEventType.RELAY_EVENT_TYPE_READY, readEvent().type)
+                    frames.forEach { assertArrayEquals(it, readBinary()) }
+                    frames.forEach { sendBytes(it) }
+                    dialer.join()
+                    val reason = withTimeout(READ_TIMEOUT_MS) { closeReason.await() }
+                    assertEquals("peer closed", reason?.message)
+                }
+            }
+            awaitUntil { state.stats.activeCircuits.get() == 0 && state.pendingDialers.isEmpty() }
+        }
+    }
+
     @Test
     fun `dial without accept times out`() {
         val state = newState(NodeConfig(pendingDialerTtlMs = 200))
@@ -371,6 +413,9 @@ class RelayNodeServerTest {
 
     private companion object {
         const val READ_TIMEOUT_MS = 5_000L
+
+        /** A second of audio at fifty frames a second. */
+        const val CALL_FRAMES = 50
         const val QUIET_MS = 300L
         const val POLL_MS = 10L
         const val TEN_MINUTES_MS = 10L * 60 * 1000

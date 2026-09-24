@@ -814,6 +814,8 @@ Rejection messages a dialer can receive (`DialHandler.kt`):
 
 **The one string the client matches literally** is `Peer not listening on relay` (`RelayDns.isPeerNotListening`); everything else is surfaced as a generic relay error. `RelayWire.reject` sends an `ERROR` event and then closes with `VIOLATED_POLICY`.
 
+**What 2.0 relies on, unchanged since 1.x.** Calls (§18) use the relay without a node change, through three behaviours the node already had and that `RelayNodeServerTest` now pins: a dialer's `circuit_id` reaches the listener in `INCOMING` verbatim (a blank one is replaced by a UUID), which is what lets a listener route a call's circuits by name; binary frames cross a circuit in order and unchanged in both directions; and when one end of a circuit closes, the node closes the other with `peer closed` rather than leaving it to the idle timeout. The client answers that close (`RelayTransport`), so the far end of a circuit learns at once that it is gone. A 2.0.0-beta.1 app therefore needs no relay upgrade.
+
 The listener lookup keys on the 16-byte routing prefix (`IdentityHashMatcher.routingKeyHex`), so a peer added by User Hash — which carries only that prefix — can still be dialed. Circuits idle out after `circuitIdleTimeoutMs` (default 600 000 ms). The relay only ever forwards opaque binary frames; it holds no session key.
 
 ---
