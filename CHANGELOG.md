@@ -44,8 +44,11 @@ or honour a message timer.
 
 - **Self-destructing messages.** A timer set on a conversation stamps each message with an absolute
   deadline, and every device that holds a copy deletes it when that passes — there is no server to
-  withhold anything. Like delete-for-everyone, it is best-effort against a recipient who does not
-  want to comply, and the app says so where it is offered.
+  withhold anything. That includes a sealed store-and-forward copy parked on another device for a
+  recipient who is offline: it is held until the message's deadline or the mailbox's own day,
+  whichever comes first, and a message already past its deadline is never parked at all. Like
+  delete-for-everyone, it is best-effort against a recipient who does not want to comply, and the
+  app says so where it is offered.
 
 - **Multi-image albums.** Photos picked together are sent as one album, in order, with per-image
   progress; a failure affects only the image that failed.

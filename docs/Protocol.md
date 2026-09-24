@@ -499,10 +499,11 @@ is stored as a tombstone and applied when the message lands.
 | Scope | whichever `content` arm the envelope carries, not only `chat` |
 | Stamped by | the sender, from the chat's timer — off, 1 h, 24 h or 7 d (`ConversationTimerAction`) — and stored on the row as `message.expiresAtUnixMs`, copied onto the envelope by `OutboxDispatcher.applyExpiry` |
 
-There is no server, so **every recipient device enforces the deadline itself**, at three points:
+There is no server, so **the devices enforce the deadline themselves**, at four points:
 
 - **On arrival** (`IncomingMessageCollector`): an envelope whose deadline has already passed — a slow hop, or a mailbox blob replayed after the fact — is never surfaced. A `DELIVERED` receipt is still enqueued, so the sender stops re-sending something that was meant to be gone.
 - **Before a send** (`OutboxDispatcher.processItem`): a queued row whose timer ran out before delivery is dropped from the outbox rather than transmitted.
+- **On a holder** (`MailboxService.enqueueForRecipient`): a sealed store-and-forward copy (§11) carries `expires_at_unix_ms = min(now + 24 h, deadline)`, and every device that stores it purges by that and refuses to hand it out past it — so a parked copy of a timed message lives no longer than the message. A message already past its deadline is not parked at all.
 - **On a sweep** (`ExpiryPurgeWorker`, `PurgeExpiredMessagesUseCase`): expired rows are erased every 15 minutes — the shortest period WorkManager allows — and the worker is a no-op while the strict app lock holds the database shut. It is a backstop for a device left unopened: the worst case is that an expired row lingers on disk until the next sweep, never that it is shown.
 
 A 1.0.x or 1.1.2 peer ignores the unknown scalar, so a timed message simply does not self-destruct on an older client. Nor can anything here verify that a peer of any version honoured it: like delete-for-everyone (§8.6), the deadline is **best-effort against an adversarial peer** — it is enforced on the devices that choose to, and a modified client can keep the plaintext.
@@ -699,6 +700,7 @@ message MailboxInner {
 - The inner signature is Ed25519 by the sender's identity key over `"vmessenger-mailbox-v2" || lp(recipient_identity_hash) || SHA256(envelope)`, binding the envelope to its intended recipient so a blob cannot be re-addressed.
 - `blob_id = hex(SHA256(sealed_payload))[0..32)` — content-addressed; a sender-chosen id is ignored by the storing peer.
 - `MailboxPut` is accepted only from approved contacts; `MailboxList` / `MailboxFetch` / `MailboxDelete` only ever touch blobs addressed to the authenticated session peer. A per-sender quota is backed by `mailbox_blob.senderIdentityHash`.
+- `expires_at_unix_ms` is set by the sender to `min(now + 24 h, the message's own deadline)` (§8.7) and capped again at `now + 24 h` by the storing peer, which purges by it and never hands a blob out past it.
 - **Limitation:** mailbox delivery is a sealed box, not a ratcheted session, so it has **no forward secrecy**. Anyone who later obtains the recipient's long-term X25519 static key can decrypt every blob that was stored under it. The TTL (24 h) bounds how much there is to obtain.
 - **Limitation:** a host learns that *someone* holds a message for a given routing key, and roughly when. The content stays sealed, but that association is metadata the direct path does not emit. Hosts are therefore limited to approved contacts, and the quotas above bound how much any one peer can be asked to carry.
 

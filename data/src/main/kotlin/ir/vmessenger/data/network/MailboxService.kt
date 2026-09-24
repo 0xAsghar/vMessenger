@@ -21,10 +21,15 @@ import javax.inject.Singleton
 /**
  * Store-and-forward for sealed offline blobs.
  *
- * Kept safe even though the feature flag defaults off: only APPROVED,
- * non-blocked session peers may store blobs here, each sender is capped per
- * 24 h, ids are content-addressed and every payload is a [MailboxSeal] box the
- * storing peer cannot read or re-address.
+ * On by default ([P2PConfig.storeAndForwardEnabled]), and kept safe: only
+ * APPROVED, non-blocked session peers may store blobs here, each sender is
+ * capped per 24 h, ids are content-addressed and every payload is a
+ * [MailboxSeal] box the storing peer cannot read or re-address.
+ *
+ * A blob's `expiresAtUnixMs` is what every holder purges by and refuses to hand
+ * out past, so it is the one place a timed message's deadline can be enforced
+ * away from the two ends: [enqueueForRecipient] never lets a parked copy
+ * outlive the message it carries.
  */
 @Singleton
 class MailboxService @Inject constructor(
@@ -94,22 +99,25 @@ class MailboxService @Inject constructor(
     /**
      * Seals [envelope] for [peer] with our identity key and queues it locally.
      * Returns false (nothing queued) when the flag is off, the peer's static
-     * key is unknown, or our own keys are unavailable.
+     * key is unknown, our own keys are unavailable, or the message has already
+     * passed its self-destruct deadline — it would only be dropped unread.
      */
     suspend fun enqueueForRecipient(
         peer: PeerIdentity,
         envelope: MessageEnvelope,
         ttlMs: Long = DEFAULT_TTL_MS,
     ): Boolean {
-        val sealed = sealForPeer(peer, envelope) ?: return false
         val now = System.currentTimeMillis()
+        val expiresAt = parkedUntil(envelope, now, ttlMs)
+        val sealed = if (expiresAt > now) sealForPeer(peer, envelope) else null
+        if (sealed == null) return false
         val blobId = mailboxSeal.blobId(sealed.payload)
         mailboxDao.upsert(
             MailboxBlobEntity(
                 blobId = blobId,
                 recipientIdentityHash = peer.identityHash,
                 sealedPayload = sealed.payload,
-                expiresAtUnixMs = now + ttlMs,
+                expiresAtUnixMs = expiresAt,
                 createdAtUnixMs = now,
                 senderIdentityHash = sealed.senderIdentityHash,
             ),
@@ -161,6 +169,16 @@ class MailboxService @Inject constructor(
     }
 
     private class SealedForPeer(val payload: ByteArray, val senderIdentityHash: ByteArray)
+
+    /**
+     * How long a parked copy of [envelope] may be held: the mailbox's own limit, or the message's
+     * self-destruct deadline when that comes first. The copy used to take the full day regardless,
+     * so a one-hour message could sit sealed on a holder long after it was gone from both ends.
+     */
+    private fun parkedUntil(envelope: MessageEnvelope, now: Long, ttlMs: Long): Long {
+        val deadline = envelope.expiresAtUnixMs.takeIf { it > 0 } ?: Long.MAX_VALUE
+        return minOf(now + ttlMs, deadline)
+    }
 
     companion object {
         const val MAX_BLOB_BYTES = 256 * 1024
