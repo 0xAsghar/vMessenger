@@ -496,15 +496,16 @@ is stored as a tombstone and applied when the message lands.
 | Property | Value |
 |---|---|
 | Meaning | absolute UTC epoch ms at which the message expires; `0`/unset means it never does |
-| Scope | whichever `content` arm the envelope carries, not only `chat` |
-| Stamped by | the sender, from the chat's timer — off, 1 h, 24 h or 7 d (`ConversationTimerAction`) — and stored on the row as `message.expiresAtUnixMs`, copied onto the envelope by `OutboxDispatcher.applyExpiry` |
+| Scope | whichever `content` arm the envelope carries, not only `chat`. Sent today on a `chat` envelope and on an attachment's `AttachmentInfo` header — photos, albums, files and voice alike; chunks carry no deadline, the header's governs the transfer |
+| Stamped by | the sender, from the chat's timer (`ConversationTimerAction`, `MessageTimer`): off, 1 h, 24 h, 7 d — each message `now + duration` — or a chosen date and time, which gives every message sent before it that same moment and switches itself off once it passes. Stored on the row as `message.expiresAtUnixMs`, copied onto the envelope by `applyExpiry` (`OutboxDispatcher`, `AttachmentSender`) |
 
-There is no server, so **the devices enforce the deadline themselves**, at four points:
+There is no server, so **the devices enforce the deadline themselves**, at five points:
 
-- **On arrival** (`IncomingMessageCollector`): an envelope whose deadline has already passed — a slow hop, or a mailbox blob replayed after the fact — is never surfaced. A `DELIVERED` receipt is still enqueued, so the sender stops re-sending something that was meant to be gone.
+- **On arrival** (`IncomingMessageCollector`, `AttachmentReceiver`): an envelope whose deadline has already passed — a slow hop, or a mailbox blob replayed after the fact — is never surfaced. A `DELIVERED` receipt is still enqueued, so the sender stops re-sending something that was meant to be gone. A file keeps its header's deadline while its chunks arrive, and one whose deadline passes mid-transfer is discarded rather than stored.
 - **Before a send** (`OutboxDispatcher.processItem`): a queued row whose timer ran out before delivery is dropped from the outbox rather than transmitted.
 - **On a holder** (`MailboxService.enqueueForRecipient`): a sealed store-and-forward copy (§11) carries `expires_at_unix_ms = min(now + 24 h, deadline)`, and every device that stores it purges by that and refuses to hand it out past it — so a parked copy of a timed message lives no longer than the message. A message already past its deadline is not parked at all.
-- **On a sweep** (`ExpiryPurgeWorker`, `PurgeExpiredMessagesUseCase`): expired rows are erased every 15 minutes — the shortest period WorkManager allows — and the worker is a no-op while the strict app lock holds the database shut. It is a backstop for a device left unopened: the worst case is that an expired row lingers on disk until the next sweep, never that it is shown.
+- **At the deadline** (`MessageExpiryScheduler`): while the network stack is up, the app waits for the soonest deadline on the device (`MessageDao.observeNextExpiry`) and erases what is due at that moment, re-arming for the next. The wait is taken a minute at a time against the wall clock, since a coroutine delay does not count deep sleep. It stops with the network — on a strict lock, for instance — and purges whatever came due as soon as it starts again.
+- **On a sweep** (`ExpiryPurgeWorker`, `PurgeExpiredMessagesUseCase`): expired rows are erased every 15 minutes — the shortest period WorkManager allows — and the worker is a no-op while the strict app lock holds the database shut. It is the backstop for a process that is not running: the worst case is that an expired row lingers on disk until the next sweep. Before 2.0.0-beta.1 this was the only mechanism, and an expired message stayed on screen until it ran.
 
 A 1.0.x or 1.1.2 peer ignores the unknown scalar, so a timed message simply does not self-destruct on an older client. Nor can anything here verify that a peer of any version honoured it: like delete-for-everyone (§8.6), the deadline is **best-effort against an adversarial peer** — it is enforced on the devices that choose to, and a modified client can keep the plaintext.
 

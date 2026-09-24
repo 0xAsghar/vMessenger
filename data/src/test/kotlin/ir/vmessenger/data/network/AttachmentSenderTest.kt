@@ -57,6 +57,21 @@ class AttachmentSenderTest {
     }
 
     @Test
+    fun aTimedAttachmentsHeaderCarriesItsDeadline() = runTest {
+        val batchSender = FakeAttachmentBatchSender()
+        val sender = AttachmentSender(batchSender, contentSource, tracker)
+        val (message, file) = queued(withDigest = true)
+
+        sender.sendTransfer("a", self, peer, message.copy(expiresAtUnixMs = DEADLINE), file)
+
+        val batch = batchSender.batches.single()
+        assertEquals(DEADLINE, batch.first().expiresAtUnixMs)
+        // An untimed file says nothing at all, which a 1.1.2 peer and this one both read as "never".
+        sender.sendTransfer("a", self, peer, message, file)
+        assertEquals(0L, batchSender.batches.last().first().expiresAtUnixMs)
+    }
+
+    @Test
     fun digestComputedWhenRowLacksIt() = runTest {
         val batchSender = FakeAttachmentBatchSender()
         val sender = AttachmentSender(batchSender, contentSource, tracker)
@@ -140,4 +155,8 @@ class AttachmentSenderTest {
     }
 
     private fun sha256(bytes: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(bytes)
+
+    private companion object {
+        const val DEADLINE = 1_750_000_000_000L
+    }
 }

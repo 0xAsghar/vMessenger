@@ -53,11 +53,23 @@ interface ConversationRepository {
     /**
      * Queues a photo/video/file for delivery. [sourceUri] is a content Uri from
      * the system picker; the file is copied (encrypted) into app-private storage first.
+     * [expiresAtUnixMs] makes it self-destruct, exactly as it does a text message.
      */
-    suspend fun sendAttachment(conversationId: String, sourceUri: String): AppResult<String>
+    suspend fun sendAttachment(
+        conversationId: String,
+        sourceUri: String,
+        expiresAtUnixMs: Long? = null,
+    ): AppResult<String>
 
-    /** Sends the picked images as one album sharing an id; a single item is a normal attachment. */
-    suspend fun sendAlbum(conversationId: String, sourceUris: List<String>): AppResult<String>
+    /**
+     * Sends the picked images as one album sharing an id; a single item is a normal attachment.
+     * Every image carries the same [expiresAtUnixMs], so an album disappears as one.
+     */
+    suspend fun sendAlbum(
+        conversationId: String,
+        sourceUris: List<String>,
+        expiresAtUnixMs: Long? = null,
+    ): AppResult<String>
 
     /**
      * Queues a recorded voice message. [filePath] is a plaintext file the recorder
@@ -70,6 +82,7 @@ interface ConversationRepository {
         filePath: String,
         durationMs: Long,
         waveform: ByteArray,
+        expiresAtUnixMs: Long? = null,
     ): AppResult<String>
     suspend fun markConversationRead(conversationId: String)
 

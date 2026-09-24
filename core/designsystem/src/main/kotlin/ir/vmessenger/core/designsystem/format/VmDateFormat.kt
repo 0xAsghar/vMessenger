@@ -31,6 +31,8 @@ object VmDateFormat {
     private const val PATTERN_DAY_MONTH_YEAR = "d MMMM y"
     private const val PATTERN_SHORT_DATE = "d MMM"
     private const val PATTERN_SHORT_DATE_YEAR = "d MMM y"
+    private const val PATTERN_MONTH_YEAR = "MMMM y"
+    private const val PATTERN_FULL_DATE = "EEEE d MMMM y"
 
     private const val DAY_TIME_SEPARATOR_FA = "، "
     private const val DAY_TIME_SEPARATOR_EN = ", "
@@ -39,7 +41,7 @@ object VmDateFormat {
     private val englishLocale = ULocale("en_US")
 
     /** The ICU locale for the app's language; carries the calendar as well as the digits. */
-    private fun locale(): ULocale =
+    internal fun locale(): ULocale =
         if (VmLocale.current == VmLocale.En) englishLocale else persianLocale
 
     private fun today(): String = if (VmLocale.current == VmLocale.En) TODAY_EN else TODAY_FA
@@ -82,6 +84,21 @@ object VmDateFormat {
         val separator = if (VmLocale.current == VmLocale.En) DAY_TIME_SEPARATOR_EN else DAY_TIME_SEPARATOR_FA
         return "${daySeparator(ms, nowMs)}$separator${format(PATTERN_TIME, ms)}"
     }
+
+    /** `مهر ۱۴۰۵` / `October 2026` — the heading of a month in a date picker. */
+    fun monthAndYear(ms: Long): String = format(PATTERN_MONTH_YEAR, ms)
+
+    /** `شنبه ۱۲ مهر ۱۴۰۵، ۱۴:۰۵` — one moment in full, with nothing left to infer. */
+    fun fullDateAndTime(ms: Long): String {
+        val separator = if (VmLocale.current == VmLocale.En) DAY_TIME_SEPARATOR_EN else DAY_TIME_SEPARATOR_FA
+        return "${format(PATTERN_FULL_DATE, ms)}$separator${format(PATTERN_TIME, ms)}"
+    }
+
+    /** `شنبه ۱۲ مهر ۱۴۰۵` — a day in full; what a screen reader says for a day in a date picker. */
+    fun fullDate(ms: Long): String = format(PATTERN_FULL_DATE, ms)
+
+    /** `۱۲` — a number as the app writes it, for a day in a calendar grid or a field of a time. */
+    fun number(value: Int, minDigits: Int = 1): String = VmTextFormat.digits(value.toString().padStart(minDigits, '0'))
 
     /** `۱٫۲ مگابایت` — see [VmTextFormat.fileSize]. */
     fun fileSize(bytes: Long): String = VmTextFormat.fileSize(bytes)

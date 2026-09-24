@@ -118,13 +118,23 @@ class ConversationRepositoryImpl @Inject constructor(
         expiresAtUnixMs: Long?,
     ): AppResult<String> = writer.sendText(conversationId, text, replyToMessageId, expiresAtUnixMs)
 
-    override suspend fun sendAttachment(conversationId: String, sourceUri: String): AppResult<String> =
-        queueAttachment(conversationId) { attachmentStore.copyFromUri(sourceUri) }
+    override suspend fun sendAttachment(
+        conversationId: String,
+        sourceUri: String,
+        expiresAtUnixMs: Long?,
+    ): AppResult<String> =
+        queueAttachment(conversationId, AttachmentExtras(expiresAtUnixMs = expiresAtUnixMs)) {
+            attachmentStore.copyFromUri(sourceUri)
+        }
 
-    override suspend fun sendAlbum(conversationId: String, sourceUris: List<String>): AppResult<String> {
+    override suspend fun sendAlbum(
+        conversationId: String,
+        sourceUris: List<String>,
+        expiresAtUnixMs: Long?,
+    ): AppResult<String> {
         if (sourceUris.size <= 1) {
             return sourceUris.firstOrNull()
-                ?.let { sendAttachment(conversationId, it) }
+                ?.let { sendAttachment(conversationId, it, expiresAtUnixMs) }
                 ?: AppResult.Error(AppError.AttachmentFailed)
         }
         // One shared id, one message per image, imported in pick order so the grid keeps it. Each
@@ -132,9 +142,8 @@ class ConversationRepositoryImpl @Inject constructor(
         val albumId = UUID.randomUUID().toString()
         var last: AppResult<String> = AppResult.Error(AppError.AttachmentFailed)
         sourceUris.forEachIndexed { index, uri ->
-            last = queueAttachment(conversationId, album = AlbumRef(albumId, index)) {
-                attachmentStore.copyFromUri(uri)
-            }
+            val extras = AttachmentExtras(album = AlbumRef(albumId, index), expiresAtUnixMs = expiresAtUnixMs)
+            last = queueAttachment(conversationId, extras) { attachmentStore.copyFromUri(uri) }
         }
         return last
     }
@@ -144,7 +153,11 @@ class ConversationRepositoryImpl @Inject constructor(
         filePath: String,
         durationMs: Long,
         waveform: ByteArray,
-    ): AppResult<String> = queueAttachment(conversationId, durationMs, waveform) {
+        expiresAtUnixMs: Long?,
+    ): AppResult<String> = queueAttachment(
+        conversationId,
+        AttachmentExtras(durationMs = durationMs, waveform = waveform, expiresAtUnixMs = expiresAtUnixMs),
+    ) {
         // The recorder wrote plaintext into the cache; importing encrypts it into
         // app-private storage and deletes the temporary file.
         attachmentStore.importFile(File(filePath), VOICE_MIME_TYPE, voiceFileName())
@@ -157,9 +170,7 @@ class ConversationRepositoryImpl @Inject constructor(
      */
     private suspend fun queueAttachment(
         conversationId: String,
-        durationMs: Long? = null,
-        waveform: ByteArray? = null,
-        album: AlbumRef? = null,
+        extras: AttachmentExtras,
         copy: suspend () -> CopiedAttachment,
     ): AppResult<String> {
         val copied = runCatching { copy() }.getOrElse {
@@ -168,7 +179,7 @@ class ConversationRepositoryImpl @Inject constructor(
         }
         val messageId = UUID.randomUUID().toString()
         // Only images grid: a video or a file picked in the same batch stays a standalone bubble.
-        val inAlbum = album?.takeIf { copied.contentType == MessageContentType.IMAGE }
+        val inAlbum = extras.album?.takeIf { copied.contentType == MessageContentType.IMAGE }
         val result = writer.queue(
             MessageEntity(
                 messageId = messageId,
@@ -188,10 +199,11 @@ class ConversationRepositoryImpl @Inject constructor(
                 attachmentPath = copied.file.absolutePath,
                 attachmentSha256 = copied.sha256,
                 attachmentEncrypted = true,
-                attachmentDurationMs = durationMs,
-                attachmentWaveform = waveform,
+                attachmentDurationMs = extras.durationMs,
+                attachmentWaveform = extras.waveform,
                 albumId = inAlbum?.id,
                 albumIndex = inAlbum?.index,
+                expiresAtUnixMs = extras.expiresAtUnixMs,
             ),
         )
         AppLogger.info("Messaging", "outgoing attachment queued messageId=$messageId size=${copied.sizeBytes}")
@@ -200,6 +212,14 @@ class ConversationRepositoryImpl @Inject constructor(
 
     /** One member of an album being sent: the shared id and this image's place in it. */
     private data class AlbumRef(val id: String, val index: Int)
+
+    /** What one kind of attachment adds to the row: a voice note's shape, an album slot, a deadline. */
+    private class AttachmentExtras(
+        val durationMs: Long? = null,
+        val waveform: ByteArray? = null,
+        val album: AlbumRef? = null,
+        val expiresAtUnixMs: Long? = null,
+    )
 
     override suspend fun markConversationRead(conversationId: String) = readMarker.markRead(conversationId)
 

@@ -70,12 +70,16 @@ class AttachmentReceiver @Inject constructor(
 
     private class Pending(
         val contactId: String,
-        val messageId: String,
-        val info: AttachmentInfo,
+        header: MessageEnvelope,
         val staging: IncomingStaging,
         startedAt: Long,
         val target: InboundTarget,
     ) {
+        val messageId: String = header.messageId.toStringUtf8()
+        val info: AttachmentInfo = header.attachmentInfo
+
+        /** The sender's self-destruct deadline, from the header; null when the file is not timed. */
+        val expiresAtUnixMs: Long? = header.expiresAtUnixMs.takeIf { it > 0 }
         val mutex = Mutex()
         val received = BitSet(info.chunkCount)
         var receivedBytes = 0L
@@ -124,14 +128,23 @@ class AttachmentReceiver @Inject constructor(
     /** Number of transfers currently being assembled (diagnostics/tests). */
     fun pendingCount(): Int = pending.size
 
-    /** Returns true when the transfer was already delivered and only needs a fresh receipt. */
-    @Suppress("ReturnCount") // duplicate, rejected header, cap reached: each is a distinct early exit
+    /**
+     * Returns true when there is nothing to receive and the sender only needs a fresh receipt: the
+     * transfer was already delivered, or it arrives past its own self-destruct deadline.
+     */
+    @Suppress("ReturnCount") // duplicate, expired, rejected header, cap reached: each a distinct early exit
     suspend fun handleInfo(contactId: String, envelope: MessageEnvelope): Boolean {
         val info = envelope.attachmentInfo
         val messageId = envelope.messageId.toStringUtf8()
         val key = transferKey(info.transferId.toByteArray())
         if (messageId.isNotBlank() && messageDao.getById(messageId) != null) {
             AppLogger.info("Attachment", "duplicate transfer for delivered messageId=$messageId")
+            return true
+        }
+        val expiresAt = envelope.expiresAtUnixMs.takeIf { it > 0 }
+        if (messageId.isNotBlank() && expiresAt != null && expiresAt <= clock()) {
+            // Acknowledged so the sender stops, never staged: it was meant to be gone by now.
+            AppLogger.info("Attachment", "transfer already past its deadline messageId=$messageId")
             return true
         }
         // Resolved here, not at send time: a transfer addressed to a group the
@@ -150,7 +163,7 @@ class AttachmentReceiver @Inject constructor(
             if (existing == null && !admits(contactId)) return false
             existing?.let { discard(it) }
             val staging = store.newIncomingStaging(info.totalSize, info.chunkCount, AttachmentSender.CHUNK_BYTES)
-            val transfer = Pending(contactId, messageId, info, staging, clock(), target)
+            val transfer = Pending(contactId, envelope, staging, clock(), target)
             pending[key] = transfer
             existing != null
         }
@@ -219,13 +232,8 @@ class AttachmentReceiver @Inject constructor(
     /** Has the store verify the digest and encrypt the staged chunks into place, then persists the message. */
     private suspend fun complete(key: String, transfer: Pending): CompletedAttachment? {
         transfer.mutex.withLock { transfer.closed = true }
-        val imported = runCatching {
-            store.importStaged(transfer.staging, transfer.info.fileName, transfer.info.sha256.toByteArray())
-        }
-        val stored = imported.getOrNull()
+        val stored = importUnlessExpired(transfer)
         if (stored == null) {
-            val reason = imported.exceptionOrNull()?.message ?: "sha256 mismatch"
-            AppLogger.warn("Attachment", "transfer discarded messageId=${transfer.messageId}: $reason")
             remove(key, transfer)
             return null
         }
@@ -236,6 +244,27 @@ class AttachmentReceiver @Inject constructor(
             "transfer complete messageId=${transfer.messageId} bytes=${transfer.receivedBytes} sha256 ok",
         )
         return materialize(transfer, stored)
+    }
+
+    /**
+     * The verified, encrypted file; null — said in the log — when the digest does not match, or when
+     * the sender's deadline passed while the file was still arriving and it would be erased on sight.
+     */
+    private suspend fun importUnlessExpired(transfer: Pending): File? {
+        val deadline = transfer.expiresAtUnixMs
+        if (deadline != null && deadline <= clock()) {
+            AppLogger.info("Attachment", "transfer expired in flight messageId=${transfer.messageId}")
+            return null
+        }
+        val imported = runCatching {
+            store.importStaged(transfer.staging, transfer.info.fileName, transfer.info.sha256.toByteArray())
+        }
+        return imported.getOrNull().also { stored ->
+            if (stored == null) {
+                val reason = imported.exceptionOrNull()?.message ?: "sha256 mismatch"
+                AppLogger.warn("Attachment", "transfer discarded messageId=${transfer.messageId}: $reason")
+            }
+        }
     }
 
     private suspend fun materialize(transfer: Pending, stored: File): CompletedAttachment {
@@ -271,6 +300,7 @@ class AttachmentReceiver @Inject constructor(
                 attachmentWaveform = info.waveform.toByteArray().takeIf { it.size == WAVEFORM_BUCKETS },
                 albumId = albumId,
                 albumIndex = albumId?.let { info.albumIndex },
+                expiresAtUnixMs = transfer.expiresAtUnixMs,
             ),
         )
         conversationDao.getById(conversationId)?.let { conv ->

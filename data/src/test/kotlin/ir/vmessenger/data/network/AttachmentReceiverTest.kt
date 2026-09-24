@@ -91,6 +91,39 @@ class AttachmentReceiverTest {
     }
 
     @Test
+    fun aTimedFileLandsWithTheSendersDeadline() = runTest(dispatcher) {
+        receiver.handleInfo("a", header("m1", expiresAt = now + 60_000))
+
+        for (index in 0 until chunkCount) receiver.handleChunk("a", chunk("m1", index))
+
+        assertEquals(now + 60_000, messageDao.getById("m1")!!.expiresAtUnixMs)
+    }
+
+    @Test
+    fun aFileAlreadyPastItsDeadlineIsAcknowledgedAndNeverStaged() = runTest(dispatcher) {
+        assertTrue(receiver.handleInfo("a", header("m1", expiresAt = now - 1)))
+
+        assertEquals(0, receiver.pendingCount())
+        assertNull(receiver.handleChunk("a", chunk("m1", 0)))
+        assertTrue(store.stagingDir.listFiles().isNullOrEmpty())
+    }
+
+    @Test
+    fun aDeadlineThatPassesMidTransferDiscardsTheFile() = runTest(dispatcher) {
+        receiver.handleInfo("a", header("m1", expiresAt = now + 1_000))
+        receiver.handleChunk("a", chunk("m1", 0))
+        receiver.handleChunk("a", chunk("m1", 1))
+
+        now += 2_000
+        val done = receiver.handleChunk("a", chunk("m1", 2))
+
+        assertNull(done)
+        assertNull(messageDao.getById("m1"))
+        assertTrue(store.imported.isEmpty())
+        assertTrue(store.stagingDir.listFiles().isNullOrEmpty())
+    }
+
+    @Test
     fun duplicateIgnored() = runTest(dispatcher) {
         receiver.handleInfo("a", header("m1"))
 
@@ -222,11 +255,16 @@ class AttachmentReceiverTest {
         assertEquals(0, receiver.pendingCount())
     }
 
-    private fun header(messageId: String, sha256: ByteArray = sha256(payload)): MessageEnvelope =
+    private fun header(
+        messageId: String,
+        sha256: ByteArray = sha256(payload),
+        expiresAt: Long = 0L,
+    ): MessageEnvelope =
         MessageEnvelope.newBuilder()
             .setMessageId(ByteString.copyFromUtf8(messageId))
             .setSentAtUnixMs(now)
             .setCounter(1)
+            .setExpiresAtUnixMs(expiresAt)
             .setAttachmentInfo(
                 AttachmentInfo.newBuilder()
                     .setTransferId(ByteString.copyFromUtf8(messageId))

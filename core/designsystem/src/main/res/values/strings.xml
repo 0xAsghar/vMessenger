@@ -100,4 +100,16 @@
     <string name="vm_error_node_bootstrap_malformed">آدرس بوت‌استرپ باید با wss:// شروع شود و نام میزبان داشته باشد</string>
     <string name="vm_error_node_insecure">اتصال ناامن (ws:// یا host:port) فقط در نسخهٔ توسعه و برای گره‌های محلی مجاز است</string>
     <string name="vm_error_node_built_in">گرهٔ پیش‌فرض قابل حذف نیست؛ می‌توانید آن را غیرفعال کنید</string>
+
+    <!-- Date and time picker -->
+    <string name="vm_picker_previous_month">ماه قبل</string>
+    <string name="vm_picker_next_month">ماه بعد</string>
+    <string name="vm_picker_hour">ساعت</string>
+    <string name="vm_picker_minute">دقیقه</string>
+    <string name="vm_picker_hour_later">یک ساعت بعد</string>
+    <string name="vm_picker_hour_earlier">یک ساعت قبل</string>
+    <string name="vm_picker_minutes_later">پنج دقیقه بعد</string>
+    <string name="vm_picker_minutes_earlier">پنج دقیقه قبل</string>
+    <string name="vm_picker_in_past">این زمان گذشته است؛ زمانی در آینده انتخاب کنید.</string>
+    <string name="vm_picker_too_late">این زمان دورتر از حد مجاز است.</string>
 </resources>

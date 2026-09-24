@@ -103,6 +103,11 @@
     <string name="feature_chat_timer_1h">1 hour</string>
     <string name="feature_chat_timer_24h">24 hours</string>
     <string name="feature_chat_timer_7d">7 days</string>
+    <string name="feature_chat_timer_at">At a date and time…</string>
+    <string name="feature_chat_timer_at_chosen">At %1$s</string>
+    <string name="feature_chat_timer_at_title">Delete at a date and time</string>
+    <string name="feature_chat_timer_at_body">Every message you send in this chat from now until then disappears at that moment.</string>
+    <string name="feature_chat_timer_at_confirm">Set</string>
     <string name="feature_chat_call_start">Voice call</string>
     <!-- Group-admin review of edited and deleted messages (§3.2). Disclosed to every member. -->
     <string name="feature_chat_group_audit_banner">Admins of this group can review edited and deleted messages.</string>

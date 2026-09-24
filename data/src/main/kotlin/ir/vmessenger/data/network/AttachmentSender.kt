@@ -241,6 +241,8 @@ class AttachmentSender @Inject constructor(
         .setSentAtUnixMs(message.createdAtUnixMs)
         .setCounter(1)
         .applyGroup(groupId)
+        // On the header only: it is what the receiver turns into a message row. Chunks are bytes.
+        .applyExpiry(message.expiresAtUnixMs)
         .setAttachmentInfo(message.info(plan, transferId))
         .build()
 

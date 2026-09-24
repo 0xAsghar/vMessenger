@@ -17,5 +17,7 @@ class SendVoiceUseCase @Inject constructor(
         filePath: String,
         durationMs: Long,
         waveform: ByteArray,
-    ): AppResult<String> = conversationRepository.sendVoice(conversationId, filePath, durationMs, waveform)
+        expiresAtUnixMs: Long? = null,
+    ): AppResult<String> =
+        conversationRepository.sendVoice(conversationId, filePath, durationMs, waveform, expiresAtUnixMs)
 }

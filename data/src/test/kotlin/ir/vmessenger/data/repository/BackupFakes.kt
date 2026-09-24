@@ -30,7 +30,9 @@ import ir.vmessenger.domain.model.NetworkNodeRole
 import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.domain.repository.NodeManagementRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 
 /** In-memory stand-in for the Keystore-backed repository; keeps plaintext keys so a test can compare them. */
 @Suppress("TooManyFunctions") // mirrors the full IdentityRepository contract
@@ -250,16 +252,24 @@ class FakeMessageDao(
 ) : MessageDao {
     val messages = mutableListOf<MessageEntity>()
 
+    /** Bumped by inserts and deletes, so [observeNextExpiry] re-emits the way Room's invalidation does. */
+    private val changes = MutableStateFlow(0)
+
     /** INSERT OR IGNORE semantics, like the real DAO. */
     override suspend fun insert(message: MessageEntity) {
         if (messages.none { it.messageId == message.messageId }) messages += message
+        changes.value++
     }
 
     /** A real UPDATE: it replaces the row in place and never removes and re-adds it. */
     override suspend fun update(message: MessageEntity) {
         val index = messages.indexOfFirst { it.messageId == message.messageId }
         if (index >= 0) messages[index] = message
+        changes.value++
     }
+
+    override fun observeNextExpiry(): Flow<Long?> =
+        changes.map { messages.mapNotNull { it.expiresAtUnixMs }.minOrNull() }
 
     override fun observeConversation(cid: String): Flow<List<MessageEntity>> =
         flowOf(messages.filter { it.conversationId == cid }.sortedBy { it.createdAtUnixMs })
@@ -321,10 +331,12 @@ class FakeMessageDao(
 
     override suspend fun deleteById(messageId: String) {
         messages.removeAll { it.messageId == messageId }
+        changes.value++
     }
 
     override suspend fun deleteByConversation(cid: String) {
         messages.removeAll { it.conversationId == cid }
+        changes.value++
     }
 
     /** The total order the real query uses: newest first, message id as tiebreaker. */

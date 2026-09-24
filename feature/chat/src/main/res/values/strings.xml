@@ -103,6 +103,11 @@
     <string name="feature_chat_timer_1h">۱ ساعت</string>
     <string name="feature_chat_timer_24h">۲۴ ساعت</string>
     <string name="feature_chat_timer_7d">۷ روز</string>
+    <string name="feature_chat_timer_at">در تاریخ و ساعت مشخص…</string>
+    <string name="feature_chat_timer_at_chosen">در %1$s</string>
+    <string name="feature_chat_timer_at_title">حذف در تاریخ و ساعت مشخص</string>
+    <string name="feature_chat_timer_at_body">هر پیامی که از حالا تا آن زمان در این گفتگو بفرستید، در همان لحظه حذف می‌شود.</string>
+    <string name="feature_chat_timer_at_confirm">تنظیم</string>
     <string name="feature_chat_call_start">تماس صوتی</string>
     <!-- Group-admin review of edited and deleted messages (§3.2). Disclosed to every member. -->
     <string name="feature_chat_group_audit_banner">مدیران این گروه می‌توانند پیام‌های ویرایش‌شده و حذف‌شده را بازبینی کنند.</string>

@@ -252,6 +252,10 @@ interface MessageDao {
     @Query("SELECT messageId FROM message WHERE expiresAtUnixMs IS NOT NULL AND expiresAtUnixMs <= :now")
     suspend fun expiredMessageIds(now: Long): List<String>
 
+    /** The soonest self-destruct deadline on the device, or null; re-emitted whenever messages change. */
+    @Query("SELECT MIN(expiresAtUnixMs) FROM message WHERE expiresAtUnixMs IS NOT NULL")
+    fun observeNextExpiry(): Flow<Long?>
+
     @Query(
         "SELECT messageId FROM message WHERE conversationId = :cid AND direction = 'INCOMING' AND status != 'READ'",
     )

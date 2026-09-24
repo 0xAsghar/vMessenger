@@ -86,7 +86,7 @@ private fun ConversationScreen(
         actions = {
             ConversationCallAction(header = state.header, onStartCall = navigation.onStartCall)
             ConversationTimerAction(
-                selectedMs = state.composer.timerMs,
+                selected = state.composer.timer,
                 onSelect = viewModel::onSelectTimer,
             )
         },

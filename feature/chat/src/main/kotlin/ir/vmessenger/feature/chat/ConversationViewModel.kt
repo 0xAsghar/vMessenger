@@ -144,7 +144,7 @@ class ConversationViewModel @Inject constructor(
         scope = viewModelScope,
         ports = VoiceSession.VoicePorts(
             send = { recording ->
-                sendVoice(conversationId, recording.filePath, recording.durationMs, recording.waveform)
+                sendVoice(conversationId, recording.filePath, recording.durationMs, recording.waveform, deadlineNow())
             },
             open = ::exportVoice,
             upNext = ::voiceMessagesAfter,
@@ -161,17 +161,18 @@ class ConversationViewModel @Inject constructor(
         .map<List<ChatMessage>, ImmutableList<ChatItem>?> { window -> buildItems(window) }
         .onStart { emit(null) }
 
-    /** Self-destruct duration applied to new messages here; sticky per screen session, null = off. */
-    private val timerMs = MutableStateFlow<Long?>(null)
+    /** When new messages here erase themselves; sticky per screen session, null = off. */
+    private val timer = MutableStateFlow<MessageTimer?>(null)
+    private var timerEndJob: Job? = null
 
     private val composer: Flow<ComposerUiState> = combine(
         typedText,
         observeDraft(conversationId),
         replyTo,
         editing,
-        timerMs,
-    ) { typed, saved, reply, edited, timer ->
-        ComposerUiState(text = typed ?: saved, replyTo = reply, editingMessageId = edited, timerMs = timer)
+        timer,
+    ) { typed, saved, reply, edited, chosen ->
+        ComposerUiState(text = typed ?: saved, replyTo = reply, editingMessageId = edited, timer = chosen)
     }
 
     private val progress: Flow<Map<String, AttachmentProgress>> =
@@ -233,21 +234,47 @@ class ConversationViewModel @Inject constructor(
         replyTo.value = null
         editing.value = null
         draftJob?.cancel()
+        // Taken now, not inside the launch: the moment of pressing Send is when the message was sent.
+        val deadline = deadlineNow()
         viewModelScope.launch {
             saveDraft(conversationId, "")
             // Same button, because it is the same act from the user's side: they are done typing.
             if (edited != null) {
                 conversationRepository.editMessage(edited, text)
             } else {
-                val expiry = timerMs.value?.let { System.currentTimeMillis() + it }
-                sendMessage(conversationId, text, quoted, expiry)
+                sendMessage(conversationId, text, quoted, deadline)
             }
         }
     }
 
-    /** Sets the self-destruct timer applied to new messages in this chat; null turns it off. */
-    fun onSelectTimer(ttlMs: Long?) {
-        timerMs.value = ttlMs
+    /**
+     * Sets when new messages in this chat erase themselves; null turns it off.
+     *
+     * A date-and-time timer has an end of its own: once its moment passes there is nothing left for
+     * it to apply, so it switches itself off rather than leave the header claiming a timer is set.
+     * The wait is re-measured against the wall clock, which keeps counting while the device sleeps.
+     */
+    fun onSelectTimer(choice: MessageTimer?) {
+        timer.value = choice
+        timerEndJob?.cancel()
+        if (choice is MessageTimer.At) {
+            timerEndJob = viewModelScope.launch {
+                var remaining = choice.atUnixMs - System.currentTimeMillis()
+                while (remaining > 0) {
+                    delay(remaining.coerceAtMost(TIMER_CHECK_MS))
+                    remaining = choice.atUnixMs - System.currentTimeMillis()
+                }
+                timer.compareAndSet(choice, null)
+            }
+        }
+    }
+
+    /** The deadline for a message sent now, or null; a date that has already passed switches the timer off. */
+    private fun deadlineNow(): Long? {
+        val current = timer.value ?: return null
+        val deadline = current.deadlineFor(System.currentTimeMillis())
+        if (deadline == null) timer.compareAndSet(current, null)
+        return deadline
     }
 
     /** Loads a sent message back into the composer; [onSend] then applies it instead of sending. */
@@ -272,7 +299,8 @@ class ConversationViewModel @Inject constructor(
      */
     fun onAttachmentsPicked(uris: List<String>) {
         if (uris.isEmpty()) return
-        viewModelScope.launch { conversationRepository.sendAlbum(conversationId, uris) }
+        val deadline = deadlineNow()
+        viewModelScope.launch { conversationRepository.sendAlbum(conversationId, uris, deadline) }
     }
 
     fun onReply(messageId: String) {
@@ -434,6 +462,7 @@ class ConversationViewModel @Inject constructor(
         const val SUBSCRIBE_TIMEOUT_MS = 5_000L
         const val HIGHLIGHT_DURATION_MS = 2_000L
         const val DRAFT_DEBOUNCE_MS = 400L
+        const val TIMER_CHECK_MS = 60_000L
     }
 }
 

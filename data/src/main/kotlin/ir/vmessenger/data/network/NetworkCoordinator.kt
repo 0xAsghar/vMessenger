@@ -15,6 +15,7 @@ import ir.vmessenger.core.database.entity.ActivityKind
 import ir.vmessenger.data.activity.ActivityLogger
 import ir.vmessenger.data.di.IoDispatcher
 import ir.vmessenger.data.repository.ContactRepositoryImpl
+import ir.vmessenger.data.repository.MessageExpiryScheduler
 import ir.vmessenger.data.repository.conflictsWithPinnedStaticKey
 import ir.vmessenger.data.repository.findByIdentityHash
 import ir.vmessenger.data.repository.findContactForInbound
@@ -48,6 +49,7 @@ class NetworkCoordinator @Inject constructor(
     private val outboxDispatcher: OutboxDispatcher,
     private val contactRequestRetryWorker: ContactRequestRetryWorker,
     private val pendingRevokeWorker: PendingRevokeWorker,
+    private val messageExpiryScheduler: MessageExpiryScheduler,
     private val endpointAnnouncer: EndpointAnnouncer,
     private val identityRepository: IdentityRepository,
     private val selfIdentityCache: SelfIdentityCache,
@@ -140,6 +142,10 @@ class NetworkCoordinator @Inject constructor(
         outboxDispatcher.start()
         contactRequestRetryWorker.start()
         pendingRevokeWorker.start()
+        // In the coordinator's scope, so stop() cancels it with everything else: a strict lock
+        // pauses expiry the way it pauses the periodic sweep, and the first start after the unlock
+        // purges whatever came due in the meantime.
+        scope.launch { messageExpiryScheduler.run() }
         messagingService.startListening(listenPort)
         AppLogger.info("Network", "TCP listener started on $listenPort")
         if (ir.vmessenger.core.common.network.P2PConfig.dhtParticipationEnabled) {
