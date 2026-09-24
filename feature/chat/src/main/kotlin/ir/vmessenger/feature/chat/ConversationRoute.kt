@@ -237,7 +237,7 @@ private fun ConversationEffects(
     host: ConversationHost,
 ) {
     val scrollTarget by viewModel.scrollToMessageId.collectAsStateWithLifecycle()
-    val newestId = (state.items.firstOrNull() as? ChatItem.Message)?.messageId
+    val newestId = state.items.firstOrNull()?.newestMessageId
     val nearTop by remember {
         derivedStateOf {
             val info = host.listState.layoutInfo
@@ -253,7 +253,7 @@ private fun ConversationEffects(
         }
     }
     LaunchedEffect(scrollTarget, state.items) {
-        val index = scrollTarget?.let { target -> state.items.indexOfFirst { it.key == target } } ?: -1
+        val index = scrollTarget?.let { target -> state.items.indexOfFirst { it.draws(target) } } ?: -1
         if (index >= 0) {
             host.listState.animateScrollToItem(index)
             viewModel.onScrollHandled()

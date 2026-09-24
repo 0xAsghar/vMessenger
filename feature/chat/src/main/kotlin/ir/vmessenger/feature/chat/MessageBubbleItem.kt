@@ -85,7 +85,7 @@ internal fun MessageBubbleItem(
                 }
                 .semantics { ticksLabel?.let { stateDescription = it } },
         ) {
-            SenderLabel(item)
+            SenderLabel(name = item.senderName?.takeIf { item.startsSenderRun }, seed = item.senderSeed)
             BubbleBody(
                 item = item,
                 contactName = contactName,
@@ -103,22 +103,23 @@ internal fun MessageBubbleItem(
             )
         }
         if (item.failed) {
-            FailureLine(item = item, onRetry = actions.onRetry)
+            FailureLine(outgoing = item.outgoing, errorCode = item.errorCode) { actions.onRetry(item.messageId) }
         }
     }
 }
 
 /**
- * Who sent this, in a group. Only on the first bubble of a run: repeating the name above
- * every message of the same person is noise, and the colour already carries the identity.
+ * Who sent this, in a group. Only on the first bubble of a run — the caller passes a null [name]
+ * everywhere else: repeating it above every message of the same person is noise, and the colour
+ * already carries the identity.
  */
 @Composable
-private fun SenderLabel(item: ChatItem.Message) {
-    val name = item.senderName?.takeIf { item.startsSenderRun } ?: return
+internal fun SenderLabel(name: String?, seed: IdentitySeed?) {
+    if (name == null) return
     VmText(
         text = name,
         style = VmTheme.typography.bodySmMedium,
-        color = item.senderSeed?.let { VmTheme.colors.senderColor(it.bytes) }
+        color = seed?.let { VmTheme.colors.senderColor(it.bytes) }
             ?: VmTheme.colors.textSecondary,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -233,26 +234,28 @@ private fun AttachmentBody(
     }
 }
 
+/** Why a send failed, and the retry, on the bubble's own side underneath it. */
 @Composable
-private fun FailureLine(item: ChatItem.Message, onRetry: (String) -> Unit) {
+internal fun FailureLine(outgoing: Boolean, errorCode: String?, onRetry: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = VmSpacing.md),
-        horizontalArrangement = if (item.outgoing) Arrangement.End else Arrangement.Start,
+        horizontalArrangement = if (outgoing) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         VmText(
-            text = sendErrorText(item.errorCode),
+            text = sendErrorText(errorCode),
             style = VmTheme.typography.bodyXsMedium,
             color = VmTheme.colors.textCritical,
         )
-        VmTextButton(text = stringResource(R.string.feature_chat_retry), onClick = { onRetry(item.messageId) })
+        VmTextButton(text = stringResource(R.string.feature_chat_retry), onClick = onRetry)
     }
 }
 
+/** What a quote says about the message it quotes: its words, or what kind of thing it is. */
 @Composable
-private fun quotePreview(reply: ReplyQuoteUi): String = when (reply.kind) {
+internal fun quotePreview(reply: ReplyQuoteUi): String = when (reply.kind) {
     MessagePreviewKind.IMAGE -> stringResource(R.string.feature_chat_preview_image)
     MessagePreviewKind.VIDEO -> stringResource(R.string.feature_chat_preview_video)
     MessagePreviewKind.FILE -> stringResource(R.string.feature_chat_preview_file, VmTextFormat.isolate(reply.preview))
@@ -267,7 +270,7 @@ private fun quotePreview(reply: ReplyQuoteUi): String = when (reply.kind) {
 
 /** The delivery state as a sentence, for `stateDescription` on the bubble. */
 @Composable
-private fun ticksLabel(state: DeliveryTicksState): String = stringResource(
+internal fun ticksLabel(state: DeliveryTicksState): String = stringResource(
     when (state) {
         DeliveryTicksState.QUEUED -> DesignSystemR.string.vm_tick_queued
         DeliveryTicksState.SENT -> DesignSystemR.string.vm_tick_sent

@@ -39,6 +39,8 @@ internal fun MessageEntity.toChatMessage(): ChatMessage = ChatMessage(
     editedAtUnixMs = editedAtUnixMs,
     deleted = contentType == MessageContentType.DELETED,
     expiresAtUnixMs = expiresAtUnixMs,
+    albumId = albumId,
+    albumIndex = albumIndex,
 )
 
 internal fun MessageWithReply.toChatMessage(): ChatMessage =

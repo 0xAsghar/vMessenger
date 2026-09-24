@@ -87,6 +87,20 @@ class ChatProjectionTest {
     }
 
     @Test
+    fun anAlbumsImagesCarryTheirAlbumAndPlaceInIt() = runTest {
+        messageDao.insert(message("p1", createdAt = 10L).copy(albumId = "a", albumIndex = 1))
+        messageDao.insert(message("solo", createdAt = 20L))
+
+        val window = messageDao.observeConversation(CONVERSATION_ID, limit = 2).first()
+        val (solo, member) = window.map { it.toChatMessage() }
+
+        assertEquals("a", member.albumId)
+        assertEquals(1, member.albumIndex)
+        assertNull(solo.albumId)
+        assertNull(solo.albumIndex)
+    }
+
+    @Test
     fun replyToAMessageOutsideTheConversationDoesNotResolve() = runTest {
         // The other conversation's message must never leak into this chat's quote.
         messageDao.insert(

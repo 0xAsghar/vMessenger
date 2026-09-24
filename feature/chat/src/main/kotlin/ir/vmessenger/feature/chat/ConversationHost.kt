@@ -270,15 +270,12 @@ private fun rememberAttachmentPicker(onPicked: (List<String>) -> Unit): Attachme
 }
 
 /** True when the message is one of ours; decides whether per-member delivery info is offered. */
-internal fun ConversationUiState.isOutgoing(messageId: String): Boolean = items
-    .filterIsInstance<ChatItem.Message>()
-    .firstOrNull { it.messageId == messageId }
-    ?.outgoing == true
+internal fun ConversationUiState.isOutgoing(messageId: String): Boolean = items.message(messageId)?.outgoing == true
 
 /** Body of one message, used by the copy action and by the sheet to hide it when empty. */
 /** What the long-press sheet may offer for one message, decided in one place. */
 internal fun ConversationUiState.abilitiesFor(messageId: String): MessageAbilities {
-    val message = items.filterIsInstance<ChatItem.Message>().firstOrNull { it.messageId == messageId }
+    val message = items.message(messageId)
     val text = message?.text.orEmpty()
     val alive = message != null && !message.deleted
     return MessageAbilities(
@@ -294,15 +291,7 @@ internal fun ConversationUiState.abilitiesFor(messageId: String): MessageAbiliti
 }
 
 /** MIME type of a message's attachment, for the share chooser; blank when it has none. */
-internal fun ConversationUiState.attachmentMimeOf(messageId: String): String = items
-    .filterIsInstance<ChatItem.Message>()
-    .firstOrNull { it.messageId == messageId }
-    ?.attachment
-    ?.mimeType
-    .orEmpty()
+internal fun ConversationUiState.attachmentMimeOf(messageId: String): String =
+    items.message(messageId)?.attachment?.mimeType.orEmpty()
 
-internal fun ConversationUiState.textOf(messageId: String): String = items
-    .filterIsInstance<ChatItem.Message>()
-    .firstOrNull { it.messageId == messageId }
-    ?.text
-    .orEmpty()
+internal fun ConversationUiState.textOf(messageId: String): String = items.message(messageId)?.text.orEmpty()

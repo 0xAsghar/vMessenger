@@ -134,7 +134,68 @@ sealed interface ChatItem {
                 null -> "msg-text"
             }
     }
+
+    /**
+     * Images sent together, drawn as one grid rather than a column of separate bubbles.
+     *
+     * [images] are in the order they were picked; each keeps its own row, transfer, failure and
+     * long-press, so the grid is only a way of drawing them. What the bubble says about itself
+     * comes from them: the time is the newest arrival's, the ticks the least advanced.
+     */
+    @Immutable
+    data class Album(
+        val images: ImmutableList<Message>,
+        /** The run's oldest row, which stays put as later images land: a stable list key. */
+        val anchorMessageId: String,
+        /** The run's newest row: what the list follows as images arrive. */
+        val newestMessageId: String,
+        /** In a group, whether the sender's name goes on this bubble; see [Message.startsSenderRun]. */
+        val startsSenderRun: Boolean,
+    ) : ChatItem {
+        override val key: String get() = "album-$anchorMessageId"
+        override val contentType: String get() = "msg-album"
+
+        val first: Message get() = images.first()
+        val newest: Message get() = images.first { it.messageId == newestMessageId }
+
+        /** Failed if any image failed; otherwise no further along than the slowest image. */
+        val ticks: DeliveryTicksState?
+            get() = if (images.any { it.failed }) {
+                DeliveryTicksState.FAILED
+            } else {
+                images.mapNotNull { it.ticks }.minByOrNull { it.ordinal }
+            }
+
+        operator fun contains(messageId: String): Boolean = images.any { it.messageId == messageId }
+    }
 }
+
+/** Every message on screen, an album's images included, in list order. */
+internal fun List<ChatItem>.messages(): Sequence<ChatItem.Message> = asSequence().flatMap { item ->
+    when (item) {
+        is ChatItem.Message -> sequenceOf(item)
+        is ChatItem.Album -> item.images.asSequence()
+        is ChatItem.Day, is ChatItem.System -> emptySequence()
+    }
+}
+
+/** The message with this id, wherever it is drawn; null when it is not on screen. */
+internal fun List<ChatItem>.message(messageId: String): ChatItem.Message? =
+    messages().firstOrNull { it.messageId == messageId }
+
+/** Whether this row draws the message: the row itself, or the album it is part of. */
+internal fun ChatItem.draws(messageId: String): Boolean = when (this) {
+    is ChatItem.Album -> messageId in this
+    else -> key == messageId
+}
+
+/** The newest message a row draws, for following the list as messages arrive. */
+internal val ChatItem.newestMessageId: String?
+    get() = when (this) {
+        is ChatItem.Message -> messageId
+        is ChatItem.Album -> newestMessageId
+        is ChatItem.Day, is ChatItem.System -> null
+    }
 
 /** Composer state the screen owns: draft text, the message being replied to, and whether sending is allowed. */
 @Immutable

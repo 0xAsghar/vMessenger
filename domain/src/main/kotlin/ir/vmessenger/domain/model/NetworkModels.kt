@@ -51,6 +51,12 @@ data class ChatMessage(
     val lastError: String? = null,
     /** Absolute UTC time a self-destructing message vanishes; null for a message with no timer. */
     val expiresAtUnixMs: Long? = null,
+    /**
+     * Images sent together share an album id, and [albumIndex] is this one's place in the pick
+     * order. Both null for anything sent on its own, and for every message from a 1.x sender.
+     */
+    val albumId: String? = null,
+    val albumIndex: Int? = null,
 )
 
 /** How a message renders in a one-line preview (chat list row, reply quote). */

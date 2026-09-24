@@ -279,9 +279,7 @@ class ConversationViewModel @Inject constructor(
 
     /** Loads a sent message back into the composer; [onSend] then applies it instead of sending. */
     fun onEditMessage(messageId: String) {
-        val message = uiState.value.items
-            .filterIsInstance<ChatItem.Message>()
-            .firstOrNull { it.messageId == messageId } ?: return
+        val message = uiState.value.items.message(messageId) ?: return
         replyTo.value = null
         editing.value = messageId
         typedText.value = message.text
@@ -304,10 +302,7 @@ class ConversationViewModel @Inject constructor(
     }
 
     fun onReply(messageId: String) {
-        replyTo.value = uiState.value.items
-            .filterIsInstance<ChatItem.Message>()
-            .firstOrNull { it.messageId == messageId }
-            ?.toQuote()
+        replyTo.value = uiState.value.items.message(messageId)?.toQuote()
     }
 
     fun onClearReply() {
@@ -410,7 +405,7 @@ class ConversationViewModel @Inject constructor(
      * is newest-first, so that is *earlier* in it) and not yet played.
      */
     private fun voiceMessagesAfter(messageId: String): List<String> {
-        val items = uiState.value.items.filterIsInstance<ChatItem.Message>()
+        val items = uiState.value.items.messages().toList()
         val index = items.indexOfFirst { it.messageId == messageId }
         if (index <= 0) return emptyList()
         return items.take(index).reversed()
@@ -470,23 +465,68 @@ class ConversationViewModel @Inject constructor(
  * Turns the newest-first window into the rendered list. A day separator is emitted *after*
  * the oldest message of each day, because `reverseLayout` draws increasing indices upwards,
  * which puts the separator above the day it introduces.
+ *
+ * Consecutive images of one album become a single grid item; see [albumRunLength].
  */
 private fun buildItems(messages: List<ChatMessage>): ImmutableList<ChatItem> {
     val now = System.currentTimeMillis()
     val items = ArrayList<ChatItem>(messages.size + DAY_SEPARATOR_HEADROOM)
-    messages.forEachIndexed { index, message ->
+    var index = 0
+    while (index < messages.size) {
+        val message = messages[index]
         val day = dayKey(message.createdAtUnixMs)
-        val older = messages.getOrNull(index + 1)
-        items += if (message.isSystemEvent) {
-            ChatItem.System(message.messageId, message.text)
-        } else {
-            message.toItem(startsSenderRun = message.startsRunAfter(older, day))
+        val oldestIndex = index + albumRunLength(messages, index, day) - 1
+        val older = messages.getOrNull(oldestIndex + 1)
+        items += when {
+            message.isSystemEvent -> ChatItem.System(message.messageId, message.text)
+            oldestIndex > index -> albumItem(messages.subList(index, oldestIndex + 1), older, day)
+            else -> message.toItem(startsSenderRun = message.startsRunAfter(older, day))
         }
         if (older == null || day != dayKey(older.createdAtUnixMs)) {
             items += ChatItem.Day(day, VmDateFormat.daySeparator(message.createdAtUnixMs, now))
         }
+        index = oldestIndex + 1
     }
     return items.toImmutableList()
+}
+
+/**
+ * How many messages from [start] on are one album's images, drawn together; 1 for anything else.
+ *
+ * Only a consecutive run: an album whose images arrived with other messages between them draws as
+ * more than one grid, rather than pulling a later image back above what was said after it. A day
+ * boundary ends a run too, since a separator is about to be drawn there.
+ */
+internal fun albumRunLength(messages: List<ChatMessage>, start: Int, day: Int): Int {
+    val first = messages[start]
+    if (first.albumId == null || !first.drawsInAlbum()) return 1
+    var end = start + 1
+    while (end < messages.size && messages[end].continuesAlbumOf(first, day)) end++
+    return end - start
+}
+
+private fun ChatMessage.drawsInAlbum(): Boolean =
+    !deleted && !isSystemEvent && attachment?.type == AttachmentType.IMAGE
+
+private fun ChatMessage.continuesAlbumOf(first: ChatMessage, day: Int): Boolean =
+    albumId == first.albumId &&
+        drawsInAlbum() &&
+        direction == first.direction &&
+        senderIdentityHash == first.senderIdentityHash &&
+        dayKey(createdAtUnixMs) == day
+
+/** [run] is newest first, as the window is; the grid shows it in the order it was picked. */
+private fun albumItem(run: List<ChatMessage>, older: ChatMessage?, day: Int): ChatItem.Album {
+    val oldest = run.last()
+    return ChatItem.Album(
+        images = run
+            .sortedWith(compareBy<ChatMessage> { it.albumIndex ?: Int.MAX_VALUE }.thenBy { it.createdAtUnixMs })
+            .map { it.toItem(startsSenderRun = false) }
+            .toImmutableList(),
+        anchorMessageId = oldest.messageId,
+        newestMessageId = run.first().messageId,
+        startsSenderRun = oldest.startsRunAfter(older, day),
+    )
 }
 
 /**
@@ -508,7 +548,7 @@ private fun pendingIncoming(
     transfers: Map<String, AttachmentProgress>,
 ): ImmutableList<String> {
     if (transfers.isEmpty()) return persistentListOf()
-    val known = items.orEmpty().filterIsInstance<ChatItem.Message>().mapTo(HashSet()) { it.messageId }
+    val known = items.orEmpty().messages().mapTo(HashSet()) { it.messageId }
     return transfers
         .filter { (id, value) -> value.direction == MessageDirection.INCOMING && id !in known }
         .keys
@@ -519,7 +559,7 @@ private const val DAY_SEPARATOR_HEADROOM = 4
 private const val DAYS_PER_YEAR_SLOT = 1_000
 
 /** Calendar day in the device time zone; Jalali and Gregorian share midnight, so this groups both. */
-private fun dayKey(ms: Long): Int {
+internal fun dayKey(ms: Long): Int {
     val calendar = Calendar.getInstance()
     calendar.timeInMillis = ms
     return calendar.get(Calendar.YEAR) * DAYS_PER_YEAR_SLOT + calendar.get(Calendar.DAY_OF_YEAR)

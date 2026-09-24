@@ -55,7 +55,9 @@ or honour a message timer.
   not want to comply, and the app says so where it is offered.
 
 - **Multi-image albums.** Photos picked together are sent as one album, in order, with per-image
-  progress; a failure affects only the image that failed.
+  progress; a failure affects only the image that failed. An album is drawn as one grid in one
+  bubble — rows of two or three, with one time and one set of ticks — and each photo in it still
+  opens, replies and long-presses on its own.
 
 - **Share into a conversation.** vMessenger appears in other apps' share sheets, for text and for
   files, and shared content lands in the conversation you pick. Messages can be shared out the same

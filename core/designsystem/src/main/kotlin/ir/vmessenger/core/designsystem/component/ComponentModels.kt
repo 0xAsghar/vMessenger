@@ -89,3 +89,14 @@ enum class VmButtonSize(val height: Dp, val horizontalPadding: Dp, val iconSize:
     Large(height = 48.dp, horizontalPadding = 24.dp, iconSize = 20.dp),
     Medium(height = 40.dp, horizontalPadding = 16.dp, iconSize = 18.dp),
 }
+
+/** One photo of an album, as the grid draws it. */
+@Immutable
+class AlbumTile(
+    /** What the image loader decodes; null while there is nothing to decode yet. */
+    val model: Any?,
+    /** Transfer progress while it runs, null otherwise. */
+    val progress: Float?,
+    /** Its send failed: the tile says so, and the bubble offers the retry. */
+    val failed: Boolean,
+)

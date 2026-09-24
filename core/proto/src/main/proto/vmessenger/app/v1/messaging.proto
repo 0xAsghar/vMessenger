@@ -200,8 +200,9 @@ message AttachmentInfo {
   int64 duration_ms = 9;
   // 64 amplitude buckets (one byte each, 0..255) drawn as the voice waveform.
   bytes waveform = 10;
-  // Album grouping: images sent together share one album_id, are ordered by album_index (0-based),
-  // and album_count is the total, so the receiver can lay the grid out before every image lands.
+  // Album grouping: images sent together share one album_id and are ordered by album_index (0-based).
+  // album_count is meant to carry the total, so a receiver could lay the grid out before every image
+  // lands; 2.0.0-beta.1 does not set it (0) and does not read it.
   // An empty album_id is a standalone attachment. A 1.0.x peer ignores these and shows each image as
   // its own bubble — a graceful downgrade.
   bytes album_id = 11;

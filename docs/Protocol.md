@@ -539,7 +539,7 @@ message AttachmentInfo {
   bytes waveform = 10;          // exactly 64 amplitude buckets, one byte each (0..255)
   bytes album_id = 11;          // images sent together share one id; empty = standalone
   int32 album_index = 12;       // 0-based position within the album
-  int32 album_count = 13;       // total images in the album
+  int32 album_count = 13;       // total images in the album; defined, not yet sent (0)
 }
 
 message AttachmentChunk { bytes transfer_id = 1; int32 index = 2; bytes data = 3; }
@@ -563,7 +563,7 @@ Receiver rules: chunks may arrive in any order (a `BitSet` tracks arrivals, dupl
 
 Chunks are libsodium `secretstream_xchacha20poly1305` frames of at most 64 KiB plaintext, the last tagged FINAL so truncation is detected. The per-file key is `HKDF-SHA256(master, salt = fileId, info = "vmessenger-attachment-v1")`, so a key or header swapped in from another file fails to open. `message.attachmentEncrypted` records whether a stored file is in this container.
 
-**Albums** are three header fields and no new transfer mechanics: images chosen together share one `album_id` (16 random bytes), are ordered by `album_index` from 0, and carry the `album_count` the grid will hold (`AttachmentSender`, `AttachmentReceiver`). Each image is still its own transfer with its own `transfer_id`, chunks and SHA-256; the grouping only lets the receiver lay the grid out before every image has landed. A peer that predates the fields ignores them and shows each image as its own bubble — a graceful downgrade, not a failure.
+**Albums** are header fields and no new transfer mechanics: images chosen together share one `album_id` (the UTF-8 of a random UUID, 36 bytes) and are ordered by `album_index` from 0 (`AttachmentSender`, `AttachmentReceiver`); only images are grouped, so a video or file picked in the same batch goes as a standalone attachment. Each image is still its own transfer with its own `transfer_id`, chunks and SHA-256, and its own message row. The receiver draws a consecutive run of one album's images as a single grid in a single bubble (`albumRunLength`, `AlbumGridContent`): rows of two or three, one time, and the least advanced image's ticks; each image still opens, replies and long-presses on its own. An image still arriving shows as its own progress bubble until it lands and joins the grid, and images with other messages between them draw as more than one grid rather than reordering the conversation. `album_count` is defined for laying out the whole grid before every image has landed, but no sender sets it yet and nothing reads it. A peer that predates the fields ignores them and shows each image as its own bubble — a graceful downgrade, not a failure.
 
 **Voice messages** are an attachment of kind `AUDIO` (AAC in an MP4 container, 16 kHz mono). `duration_ms` and `waveform` travel in the *header*, not with the audio, so the receiving bubble has its full shape and length while the file is still arriving. A waveform that is not exactly 64 bytes is discarded rather than drawn. The recording itself is written plaintext to the cache and is encrypted into app-private storage by `AttachmentStore.importFile`, which deletes the plaintext source — nothing readable outlives the recording.
 

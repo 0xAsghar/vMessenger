@@ -31,6 +31,7 @@
     <!-- Message bubbles -->
     <string name="vm_bubble_edited">Edited</string>
     <string name="vm_bubble_timed">Timed message</string>
+    <string name="vm_album_image">Image %1$s of %2$s</string>
     <string name="vm_bubble_image">Image</string>
     <string name="vm_bubble_video">Video</string>
     <string name="vm_bubble_video_play">Play video</string>

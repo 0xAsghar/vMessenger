@@ -170,11 +170,13 @@ internal fun JumpToBottomFab(visible: Boolean, onClick: () -> Unit) {
 @Composable
 internal fun rememberReplyPreview(reply: ReplyQuoteUi, contactName: String): ReplyPreview {
     val self = stringResource(R.string.feature_chat_reply_self)
-    return remember(reply, contactName, self) {
+    // The same words the quote will have in the bubble: "Photo", not the photo's file name.
+    val preview = quotePreview(reply)
+    return remember(reply, contactName, self, preview) {
         ReplyPreview(
             messageId = reply.messageId,
             senderName = if (reply.senderIsMe) self else contactName,
-            preview = reply.preview,
+            preview = preview,
         )
     }
 }

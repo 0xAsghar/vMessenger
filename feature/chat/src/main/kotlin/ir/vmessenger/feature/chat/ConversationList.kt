@@ -121,6 +121,19 @@ internal fun ConversationMessageList(
                         highlighted = item.messageId == state.highlightedMessageId,
                     )
                 }
+                // Swiping an album quotes its first photo, the one the grid starts with.
+                is ChatItem.Album -> SwipeToReply(
+                    onReply = { actions.onReply(item.first.messageId) },
+                    modifier = animated,
+                ) {
+                    AlbumBubbleItem(
+                        album = item,
+                        progress = state.attachmentProgress,
+                        actions = actions,
+                        images = images,
+                        highlighted = state.highlightedMessageId?.let { it in item } == true,
+                    )
+                }
             }
         }
     }
