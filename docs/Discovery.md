@@ -94,14 +94,14 @@ When scanning is impractical, users exchange a User Hash out-of-band (spoken, me
 
 - Derivation: `identity hash = SHA-256(Ed25519 public key)`. The User Hash is a human-readable, checksummed encoding of that identity hash.
 - Encoding goals: typable, unambiguous (avoid easily confused characters), checksummed to catch typos, and chunked for readability.
-- Format v2 (`core/common/.../encoding/UserHashEncoder.kt`): `vm2-` followed by Crockford base32 of `prefix16 || SHA256("vmessenger-userhash-v2" || prefix16)[0..2)`, grouped `5-5-5-5-5-4` (29 symbols), e.g. `vm2-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXX`. The checksum covers all 16 prefix bytes and decoding is canonical-only (leftover pad bits must be zero). Only the `vm2-` prefix is accepted; a `vm1-` string fails with reason `missing_prefix`.
+- Format v2 (`core/common/.../encoding/UserHashEncoder.kt`): `vm-` followed by Crockford base32 of `prefix16 || SHA256("vmessenger-userhash-v2" || prefix16)[0..2)`, grouped `5-5-5-5-5-4` (29 symbols), e.g. `vm-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXX`. The checksum covers all 16 prefix bytes and decoding is canonical-only (leftover pad bits must be zero). `vm-` and the older `vm2-` (written before 2.0.0-beta.1, and by 1.1.2) are accepted; a `vm1-` string fails with reason `missing_prefix`.
 
 ```mermaid
 flowchart LR
   Pk["Ed25519 public key"] --> Sha["SHA-256"]
   Sha --> Idh["identity hash (32 bytes)"]
   Idh --> Enc["Crockford Base32 + checksum + grouping"]
-  Enc --> UH["User Hash: vm2-XXXXX-XXXXX-..."]
+  Enc --> UH["User Hash: vm-XXXXX-XXXXX-..."]
 ```
 
 - Security note: the User Hash carries the first 16 bytes of `SHA256(identity_pub)`, so all routing tables key on that prefix (`IdentityHashMatcher.routingKeyHex`). A hash-only contact is matched on the prefix during the handshake and the full identity key is adopted from the first authenticated session, then pinned. There is **no** out-of-band safety-number screen — pairing is trust-on-first-use (see [Security.md](Security.md) "Known limitations").

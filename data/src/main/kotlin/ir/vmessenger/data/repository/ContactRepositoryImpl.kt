@@ -268,10 +268,10 @@ class ContactRepositoryImpl @Inject constructor(
     }
 
     /**
-     * One-off pass (run from `NetworkCoordinator.start`) that re-encodes every contact's user hash in the
-     * current canonical form (`vm2-`), so contacts added under 0.x keep a valid, decodable string after an
-     * in-place dev upgrade. Hash-only contacts carry a 16-byte prefix padded with zeros, which the encoder
-     * accepts. Returns the number of rows rewritten.
+     * One-off pass (run from `NetworkCoordinator.start`) that re-encodes every contact's user hash in
+     * the current canonical form (`vm-`), so contacts added under an earlier form (`vm2-`, or 0.x
+     * `vm1-`) show the same ID the contact now shares. Hash-only contacts carry a 16-byte prefix
+     * padded with zeros, which the encoder accepts. Returns the number of rows rewritten.
      */
     suspend fun normalizeUserHashes(): Int {
         var updated = 0
@@ -282,7 +282,7 @@ class ContactRepositoryImpl @Inject constructor(
                 updated++
             }
         }
-        if (updated > 0) AppLogger.info("Contact", "normalized $updated contact user hash(es) to vm2")
+        if (updated > 0) AppLogger.info("Contact", "normalized $updated contact user hash(es) to vm")
         return updated
     }
 

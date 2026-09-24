@@ -42,7 +42,7 @@ What changed in 1.0 is in [CHANGELOG.md](CHANGELOG.md).
 
 ## How it works
 
-1. The device generates an Ed25519 identity locally, derives its identity hash and a `vm2-…` User Hash, and picks a display name.
+1. The device generates an Ed25519 identity locally, derives its identity hash and a `vm-…` User Hash, and picks a display name.
 2. Two users pair by exchanging long-term public keys — by QR (in person) or by User Hash — and either way the other side approves a contact request.
 3. To be reachable, a device joins the DHT through bootstrap nodes and publishes a signed, expiring endpoint record (20-minute TTL, re-announced every 10 minutes).
 4. To message a contact, the app resolves endpoints (local cache first, then the DHT), tries direct TCP, and falls back to an encrypted relay circuit.
@@ -71,7 +71,7 @@ The DHT stores routing metadata only. It never stores messages, contacts, privat
 
 Implemented and verified on two emulators (see [docs/Testing.md](docs/Testing.md) §4):
 
-- **Identity** — Ed25519 + X25519 static key pair, display name, `vm2-` User Hash with a full-prefix checksum.
+- **Identity** — Ed25519 + X25519 static key pair, display name, `vm-` User Hash with a full-prefix checksum (`vm2-`, the form before 2.0.0-beta.1, still decodes).
 - **Pairing** — signed QR descriptor (transcript v2) for in-person adds and User Hash adds, both approved by the other side, with deterministic request ids, a retry worker that reaches peers who were offline, and a repeat-request cap.
 - **Messaging** — 1:1 end-to-end encrypted chat with replies, delivery and read receipts (batched), a persistent encrypted outbox with backoff and a 24-hour retry window.
 - **Groups** — client-side fan-out over the existing pairwise sessions, with creator-authoritative versioned membership, gap detection and snapshot recovery, system lines for membership changes, and a closed group that keeps its history. A group message's single tick is aggregated from per-recipient state; a long press opens a per-member delivered/read sheet.

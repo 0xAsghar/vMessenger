@@ -23,7 +23,7 @@ class UserHashEncoderTest {
     fun encodeDecodeRoundTrip() {
         val hash = ByteArray(16) { it.toByte() }
         val encoded = UserHashEncoder.encode(hash)
-        assertTrue(encoded.startsWith("vm2-"))
+        assertTrue(encoded.startsWith("vm-"))
         val decoded = UserHashEncoder.decode(encoded)
         assertNotNull(decoded)
         assertEquals(16, decoded!!.size)
@@ -33,10 +33,10 @@ class UserHashEncoderTest {
     @Test
     fun encodedLengthIs29() {
         val encoded = UserHashEncoder.encode(ByteArray(32) { (it * 7).toByte() })
-        val groups = encoded.removePrefix("vm2-").split("-")
+        val groups = encoded.removePrefix("vm-").split("-")
         assertEquals(listOf(5, 5, 5, 5, 5, 4), groups.map { it.length })
         assertEquals(29, groups.sumOf { it.length })
-        assertEquals("vm2-".length + 29 + 5, encoded.length)
+        assertEquals("vm-".length + 29 + 5, encoded.length)
     }
 
     @Test
@@ -49,25 +49,25 @@ class UserHashEncoderTest {
     }
 
     @Test
-    fun decodeAcceptsBothVm2AndShortVmPrefix() {
+    fun theOlderVm2FormStillDecodesToTheSameIdentity() {
+        // Every ID written before 2.0.0-beta.1, and every one a 1.1.2 peer still shares.
         val hash = ByteArray(16) { it.toByte() }
-        val vm2 = UserHashEncoder.encode(hash)
-        val vm = "vm-" + vm2.removePrefix("vm2-")
-        assertTrue(vm2.startsWith("vm2-"))
-        val decodedVm = UserHashEncoder.decode(vm)
-        assertNotNull(decodedVm)
-        assertTrue(decodedVm!!.contentEquals(hash))
-        assertEquals("ok", UserHashEncoder.decodeFailureReason(vm))
+        val vm = UserHashEncoder.encode(hash)
+        val vm2 = "vm2-" + vm.removePrefix("vm-")
+        val decodedVm2 = UserHashEncoder.decode(vm2)
+        assertNotNull(decodedVm2)
+        assertTrue(decodedVm2!!.contentEquals(hash))
+        assertEquals("ok", UserHashEncoder.decodeFailureReason(vm2))
         // Both prefixes of the same identity decode to the same bytes — the body is prefix-independent.
-        assertTrue(UserHashEncoder.decode(vm2)!!.contentEquals(decodedVm))
+        assertTrue(UserHashEncoder.decode(vm)!!.contentEquals(decodedVm2))
     }
 
     @Test
-    fun shortVmPrefixToleratesUppercaseAndUnicodeDashes() {
+    fun theOlderVm2FormToleratesUppercaseAndUnicodeDashes() {
         val hash = ByteArray(16) { (it * 3 + 1).toByte() }
-        val vm = "vm-" + UserHashEncoder.encode(hash).removePrefix("vm2-")
-        assertTrue(UserHashEncoder.isValid(vm.uppercase()))
-        assertTrue(UserHashEncoder.isValid(vm.replace('-', '–')))
+        val vm2 = "vm2-" + UserHashEncoder.encode(hash).removePrefix("vm-")
+        assertTrue(UserHashEncoder.isValid(vm2.uppercase()))
+        assertTrue(UserHashEncoder.isValid(vm2.replace('-', '–')))
     }
 
     @Test
@@ -95,9 +95,10 @@ class UserHashEncoderTest {
         val encoded = UserHashEncoder.encode(ByteArray(16) { (it + 1).toByte() })
         // The first base32 symbol carries the top five bits of prefix byte 0; v1's XOR over the
         // last two bytes would not notice this flip, the v2 SHA-256 checksum must.
-        val first = encoded[4]
+        val start = "vm-".length
+        val first = encoded[start]
         val replacement = if (first == '0') '1' else '0'
-        val flipped = encoded.substring(0, 4) + replacement + encoded.substring(5)
+        val flipped = encoded.substring(0, start) + replacement + encoded.substring(start + 1)
         assertNull(UserHashEncoder.decode(flipped))
         assertEquals("checksum_mismatch", UserHashEncoder.decodeFailureReason(flipped))
     }
@@ -108,7 +109,7 @@ class UserHashEncoderTest {
         val expected = MessageDigest.getInstance("SHA-256")
             .digest("vmessenger-userhash-v2".toByteArray() + prefix)
             .copyOf(2)
-        val payload = crockfordDecode(UserHashEncoder.encode(prefix).removePrefix("vm2-").replace("-", ""))
+        val payload = crockfordDecode(UserHashEncoder.encode(prefix).removePrefix("vm-").replace("-", ""))
         assertEquals(18, payload.size)
         assertTrue(prefix.contentEquals(payload.copyOf(16)))
         assertTrue(expected.contentEquals(payload.copyOfRange(16, 18)))
@@ -134,11 +135,11 @@ class UserHashEncoderTest {
     @Test
     fun vm1Rejected() {
         val encoded = UserHashEncoder.encode(ByteArray(16) { it.toByte() })
-        val legacy = "vm1-" + encoded.removePrefix("vm2-")
+        val legacy = "vm1-" + encoded.removePrefix("vm-")
         assertNull(UserHashEncoder.decode(legacy))
         assertEquals("missing_prefix", UserHashEncoder.decodeFailureReason(legacy))
-        assertNull(UserHashEncoder.decode(encoded.removePrefix("vm2-")))
-        assertEquals("missing_prefix", UserHashEncoder.decodeFailureReason(encoded.removePrefix("vm2-")))
+        assertNull(UserHashEncoder.decode(encoded.removePrefix("vm-")))
+        assertEquals("missing_prefix", UserHashEncoder.decodeFailureReason(encoded.removePrefix("vm-")))
     }
 
     @Test

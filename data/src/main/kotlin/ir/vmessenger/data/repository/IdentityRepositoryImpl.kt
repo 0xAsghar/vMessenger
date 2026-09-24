@@ -187,15 +187,16 @@ class IdentityRepositoryImpl @Inject constructor(
     )
 
     /**
-     * Re-encodes the stored user hash whenever the encoder's canonical form changes (0.x `vm1-` strings
-     * become `vm2-` on first read); the identity hash itself is the source of truth and never changes.
+     * Re-encodes the stored user hash whenever the encoder's canonical form changes (`vm2-` strings
+     * become `vm-` on first read, as 0.x `vm1-` ones became `vm2-`); the identity hash itself is the
+     * source of truth and never changes.
      */
     private suspend fun migrateUserHashIfNeeded(entity: IdentityEntity): IdentityEntity {
         val fixed = UserHashEncoder.encode(entity.identityHash)
         if (fixed == entity.userHash) return entity
         val updated = entity.copy(userHash = fixed)
         identityDao.insertIdentity(updated)
-        AppLogger.info("Identity", "migrated userHash to current encoding (vm2)")
+        AppLogger.info("Identity", "migrated userHash to current encoding (vm)")
         return updated
     }
 

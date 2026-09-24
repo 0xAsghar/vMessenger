@@ -440,7 +440,7 @@ message PairingDescriptor {
 
 `verify` accepts only `version == 2`, requires a 32-byte identity key, and checks that the embedded `user_hash` decodes to a prefix of `SHA256(identity_pub)`.
 
-**User Hash format v2** (`core/common/.../encoding/UserHashEncoder.kt`): `vm2-` followed by Crockford base32 of `prefix16 || SHA256("vmessenger-userhash-v2" || prefix16)[0..2)`, grouped `5-5-5-5-5-4` (29 symbols). The checksum covers all 16 prefix bytes; v1 only XOR-ed the last two. Decoding is canonical-only — leftover pad bits must be zero — and a `vm1-` string fails with reason `missing_prefix`.
+**User Hash format v2** (`core/common/.../encoding/UserHashEncoder.kt`): `vm-` (written since 2.0.0-beta.1; `vm2-`, written before it, still decodes to the same identity) followed by Crockford base32 of `prefix16 || SHA256("vmessenger-userhash-v2" || prefix16)[0..2)`, grouped `5-5-5-5-5-4` (29 symbols). The checksum covers all 16 prefix bytes; v1 only XOR-ed the last two. Decoding is canonical-only — leftover pad bits must be zero — and a `vm1-` string fails with reason `missing_prefix`.
 
 Contact requests (`ContactRequest` / `ContactResponse`, fields 27–28) carry display strings only. `data/.../network/ContactRequestHandler.kt`:
 

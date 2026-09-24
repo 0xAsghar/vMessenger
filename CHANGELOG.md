@@ -85,9 +85,10 @@ or honour a message timer.
 
 ### Changed
 
-- **`vm-` user IDs are now accepted** anywhere a `vm2-` ID was. The app still *writes* `vm2-`; the
-  switch to writing `vm-` waits until every install in use can read it, so nobody is handed an ID
-  their contact's app cannot decode.
+- **User IDs now start with `vm-`** instead of `vm2-`, and both forms are accepted anywhere an ID is
+  entered. Your own ID and your contacts' switch to `vm-` on their own. **Someone still on 1.1.2
+  cannot type or paste a `vm-` ID** — adding each other by QR code still works in both directions,
+  and so does everything after the contact is added.
 
 - **The notification permission is explained before it is requested,** once, in the app's own words,
   and dismissing the explanation counts as an answer instead of asking again on the next launch.

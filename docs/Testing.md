@@ -157,7 +157,7 @@ App logs are written to `/data/data/ir.vmessenger.android/files/logs/*.log` (rea
 
 `uiautomator dump` plus a small helper that prints the tap centre for a text or class match (it resolves to the enclosing clickable). Dialogs shift when the IME opens — re-dump before each tap. RTL `AlertDialog` buttons land far to the left.
 
-Typical flow: Intro "شروع" → name field → "ساخت هویت" → the hash text matches `^vm2-` → "ادامه"; Contacts FAB → hash field → "افزودن"; on the peer, the overlay's "تأیید".
+Typical flow: Intro "شروع" → name field → "ساخت هویت" → the hash text matches `^vm-` → "ادامه"; Contacts FAB → hash field → "افزودن"; on the peer, the overlay's "تأیید".
 
 ### 3.7 Two traps
 
@@ -172,7 +172,7 @@ This is what was actually run on the two emulators for the protocol-v2 / securit
 
 | Scenario | Result |
 |---|---|
-| Identity v2 | `vm2-` hashes on both devices |
+| Identity v2 | `vm-` hashes on both devices |
 | Handshake v2 | `handshake v2 ok … dh=3` in both roles (initiator and responder) |
 | Pairing by hash | request → approve → mutual `APPROVED` over the relay |
 | Provisional rebind | `inbound session rebound to contact=…`; first post-approval message delivered with no rejection; receipt in ~200 ms (previously ~18 s) |

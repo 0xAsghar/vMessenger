@@ -98,7 +98,7 @@ Single row, `id = 0`.
 | `id` | INTEGER | PK, 0 |
 | `ed25519Public` | BLOB | identity public key |
 | `identityHash` | BLOB | `SHA256(ed25519Public)` |
-| `userHash` | TEXT | `vm2-…` form ([Protocol.md](Protocol.md) §8.5) |
+| `userHash` | TEXT | `vm-…` form, re-encoded on read from the older `vm2-…` ([Protocol.md](Protocol.md) §8.5) |
 | `displayName` | TEXT | default `""` |
 | `x25519StaticPublic` | BLOB | static DH public key |
 | `createdAtUnixMs` | INTEGER | |

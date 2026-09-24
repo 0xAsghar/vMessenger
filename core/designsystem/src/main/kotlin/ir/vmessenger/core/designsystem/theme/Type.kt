@@ -123,7 +123,7 @@ object VmTextStyles {
 
 /**
  * Ltr rather than Content: an identity hash is an opaque identifier, not prose, and must never take
- * its direction from what happens to be inside it. `vm2-ABCDE-12345-…` mixes Latin letters, digits
+ * its direction from what happens to be inside it. `vm-ABCDE-12345-…` mixes Latin letters, digits
  * and neutral hyphens, and under a forced-RTL paragraph the digit groups and their separators
  * visually reordered — so two people comparing hashes out of band saw different strings.
  */
