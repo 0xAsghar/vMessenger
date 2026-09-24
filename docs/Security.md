@@ -296,26 +296,27 @@ install that still opens rather than one that opens with neither key.
 
 ## 9. Secure wipe
 
-`data/.../wipe/SecureWipePlan.kt` and `SecureWipeCoordinator.kt`. Nine ordered steps:
+`data/.../wipe/SecureWipePlan.kt` and `SecureWipeCoordinator.kt`. Ten ordered steps:
 
 | # | Step | Action |
 |---|---|---|
-| 1 | `network` | `NetworkCoordinator.stop()` — first, so nothing writes new data into storage that is about to be deleted |
-| 2 | `location` | stop the location foreground service |
-| 3 | `notifications` | `cancelAll()` |
-| 4 | `database` | `clearAllTables()` then `close()` |
-| 5 | `database-files` | delete `vmessenger.db` and its `-wal` / `-shm` / `-journal` siblings |
-| 6 | `files` | delete `files/attachments`, `files/logs` and everything in `cacheDir` |
-| 7 | `preferences` | clear every DataStore: draft, security, privacy, p2p, discovery, theme, contact-retry, the updater store, and the app lock's own store |
-| 8 | `memory` | zeroize cached identity, DB passphrase and attachment key; clear log buffer, network path tracker, pinned relay IPs; reset `P2PConfig` |
-| 9 | `keystore` | delete **both** aliases — `vmessenger_master` and strict mode's `vmessenger_app_lock` — **last**, because every earlier step may still need to decrypt |
+| 1 | `background-work` | cancel the periodic WorkManager jobs (network keep-alive, expiry purge) — the keep-alive exists to bring the network back, so left enqueued it could restart it mid-wipe |
+| 2 | `network` | `NetworkCoordinator.stop()` — before any deletion, so nothing writes new data into storage that is about to be deleted |
+| 3 | `location` | stop the location foreground service |
+| 4 | `notifications` | `cancelAll()` |
+| 5 | `database` | `clearAllTables()` then `close()` |
+| 6 | `database-files` | delete `vmessenger.db` and its `-wal` / `-shm` / `-journal` siblings |
+| 7 | `files` | delete `files/attachments`, `files/logs`, everything in `cacheDir`, and the files the removed in-app updater left behind (`LegacyUpdaterCleanup`) |
+| 8 | `preferences` | clear every DataStore: draft, security, privacy, p2p, discovery, theme, node-setup, contact-retry, and the app lock's own store |
+| 9 | `memory` | zeroize cached identity, DB passphrase and attachment key; clear log buffer, network path tracker, pinned relay IPs; reset `P2PConfig` |
+| 10 | `keystore` | delete **both** aliases — `vmessenger_master` and strict mode's `vmessenger_app_lock` — **last**, because every earlier step may still need to decrypt |
 
 Properties:
 
 - **Every step runs even if an earlier one throws.** Stopping at the first failure would leave data behind. The failed step names are logged.
 - **Cancellation is rethrown, not swallowed**, and the whole wipe runs under `NonCancellable` on the IO dispatcher — a half-done wipe that destroyed the Keystore key while the wrapped passphrase survived would leave an unopenable install with no way back.
-- Destroying the master key alone makes every leftover wrapped blob undecryptable, so even a failure in steps 4–7 still ends with unreadable data.
-- The app lock's store was added to step 7 in 1.1 after it was found to survive a wipe. Two things were left behind: the PIN verifier, which is an offline-crackable record of a 4–6 digit secret the user may reuse elsewhere; and, under strict mode, a wrapped passphrase whose presence makes the passphrase source refuse to mint a new one — so the next start threw on a database that no longer existed.
+- Destroying the master key alone makes every leftover wrapped blob undecryptable, so even a failure in steps 5–8 still ends with unreadable data.
+- The app lock's store was added to the preferences step in 1.1 after it was found to survive a wipe. Two things were left behind: the PIN verifier, which is an offline-crackable record of a 4–6 digit secret the user may reuse elsewhere; and, under strict mode, a wrapped passphrase whose presence makes the passphrase source refuse to mint a new one — so the next start threw on a database that no longer existed.
 - The process then exits and is relaunched by an inexact `AlarmManager` alarm ~300 ms later (the app does not request `SCHEDULE_EXACT_ALARM`).
 
 **Known limitation:** Android's background-activity-start restriction means the relaunch does not bring the app to the foreground. The data is destroyed and the service restarts, but the user has to tap the launcher icon, which then opens onboarding.

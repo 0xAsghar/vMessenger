@@ -9,8 +9,8 @@ import ir.vmessenger.core.designsystem.format.VmTextFormat
 import kotlin.reflect.KClass
 
 /**
- * Every [AppError] that carries no parameters maps straight to a Persian string. Keeping the
- * mapping in a table (instead of a 25-branch `when`) keeps the lookup complexity at one and
+ * Every [AppError] that carries no parameters maps straight to a string. Keeping the
+ * mapping in a table (instead of a two-dozen-branch `when`) keeps the lookup complexity at one and
  * makes a forgotten error obvious: it falls back to the generic text.
  */
 private val ERROR_TEXT: Map<KClass<out AppError>, Int> = mapOf(
@@ -35,10 +35,6 @@ private val ERROR_TEXT: Map<KClass<out AppError>, Int> = mapOf(
     AppError.GroupClosed::class to R.string.vm_error_group_closed,
     AppError.NotGroupCreator::class to R.string.vm_error_not_group_creator,
     AppError.NoReachableMembers::class to R.string.vm_error_no_reachable_members,
-    AppError.UpdateRateLimited::class to R.string.vm_error_update_rate_limited,
-    AppError.UpdateChecksumMismatch::class to R.string.vm_error_update_checksum_mismatch,
-    AppError.UpdateSignatureMismatch::class to R.string.vm_error_update_signature_mismatch,
-    AppError.UpdateNoAsset::class to R.string.vm_error_update_no_asset,
     AppError.BuiltInNodeRemoval::class to R.string.vm_error_node_built_in,
 )
 

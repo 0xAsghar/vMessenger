@@ -24,7 +24,6 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
@@ -70,7 +69,6 @@ private data class SettingsNavigation(
     val onBackup: () -> Unit,
     val onBlockedContacts: () -> Unit,
     val onActivityLog: () -> Unit,
-    val onUpdate: () -> Unit,
     /** Both open the lock module's PIN screen, which lives outside this module. */
     val onSetUpAppLock: () -> Unit,
     val onChangeAppLockPin: () -> Unit,
@@ -124,7 +122,6 @@ fun SettingsRoute(
      */
     language: VmLocale = VmLocale.current,
     onLanguage: (VmLocale) -> Unit = {},
-    onNavigateToUpdate: () -> Unit = {},
     /**
      * Collects a PIN. Supplied by :app from :feature:lock, so settings never depends on it —
      * null means the user cancelled, and the caller owns and zeroes the array.
@@ -158,7 +155,6 @@ fun SettingsRoute(
             onIdentity = onNavigateToIdentity,
             onBlockedContacts = onNavigateToBlockedContacts,
             onActivityLog = onNavigateToActivityLog,
-            onUpdate = onNavigateToUpdate,
             onSetUpAppLock = { askingForPin = true },
             onChangeAppLockPin = { askingForPin = true },
             onSecureWipe = { showWipeDialog = true },
@@ -242,7 +238,6 @@ private fun SettingsContent(
     val backupStatus by viewModel.backupExportStatus.collectAsStateWithLifecycle()
     val developerToolsVisible by viewModel.developerToolsVisible.collectAsStateWithLifecycle()
     val profile by viewModel.profile.collectAsStateWithLifecycle()
-    val updateAvailable by viewModel.updateAvailable.collectAsStateWithLifecycle()
 
     // No side padding: the sections run edge to edge and pad their own rows, as in Element X.
     Column(
@@ -279,7 +274,6 @@ private fun SettingsContent(
                 )
             }
         }
-        SettingsUpdateSection(available = updateAvailable, onUpdate = navigation.onUpdate)
         SettingsBackupSection(status = backupStatus, onExport = navigation.onBackup)
     }
 }
@@ -505,18 +499,6 @@ private fun isIgnoringBatteryOptimizations(context: android.content.Context): Bo
     return powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
 }
 
-@Composable
-private fun SettingsUpdateSection(available: Boolean, onUpdate: () -> Unit) {
-    SettingsSection(title = stringResource(R.string.settings_update_section)) {
-        SettingsActionRow(
-            label = stringResource(R.string.settings_update_row),
-            icon = Icons.Outlined.SystemUpdate,
-            onClick = onUpdate,
-            badge = available,
-        )
-    }
-}
-
 /**
  * Who this device is. The user hash is the one thing they hand to other people, so it sits in
  * the header rather than a screen deeper; tapping opens the identity screen with the QR.
@@ -566,17 +548,11 @@ private fun SettingsActionRow(
     icon: ImageVector,
     onClick: () -> Unit,
     destructive: Boolean = false,
-    badge: Boolean = false,
 ) {
     SettingsRow(
         label = label,
         icon = icon,
-        // A word, not a dot: "new version" says what is waiting without the user having to open it.
-        trailing = if (badge) {
-            SettingsTrailing.Badge(stringResource(R.string.settings_update_badge))
-        } else {
-            SettingsTrailing.None
-        },
+        trailing = SettingsTrailing.None,
         destructive = destructive,
         onClick = onClick,
     )

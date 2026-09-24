@@ -85,9 +85,6 @@ sealed interface VmRoute {
     data object About : VmRoute
 
     @Serializable
-    data object Update : VmRoute
-
-    @Serializable
     data object BlockedContacts : VmRoute
 
     /** The user's own record of what they did to this app; see §10. */

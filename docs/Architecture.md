@@ -191,7 +191,7 @@ flowchart TD
 
 `feature:map` is the one feature module that depends on `data`, because live-location sharing is driven by `LocationSharingCoordinator` rather than by a use case. Map rendering itself is factored out into `core:map` (MapLibre wrapper, camera, marker layer, location puck), which `feature:map` and the chat location preview both consume.
 
-Three module changes are recent enough to note explicitly. `core:storage` has been removed — it never held anything but a placeholder, and encrypted blob storage lives in `data` alongside the attachment pipeline. `feature:location` was replaced by the `core:map` / `feature:map` pair. And `core:update` was added for the in-app updater: release lookup, asset selection, checksum and signer verification, download and install, consumed by the update screen in `feature:settings`.
+Three module changes are recent enough to note explicitly. `core:storage` has been removed — it never held anything but a placeholder, and encrypted blob storage lives in `data` alongside the attachment pipeline. `feature:location` was replaced by the `core:map` / `feature:map` pair. And `core:update`, the in-app updater, was removed after 2.0.0-beta.1: the app no longer contacts GitHub, and a new build is installed by hand over the old one. `LegacyUpdaterCleanup` in `data` deletes the files it left on installs that ran it.
 
 Key rules:
 

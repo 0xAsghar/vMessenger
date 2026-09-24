@@ -189,9 +189,9 @@ on, which is why they live here rather than being formatted at each call site.
 
 Error text follows the same discipline.
 [`AppErrorText.kt`](../core/designsystem/src/main/kotlin/ir/vmessenger/core/designsystem/error/AppErrorText.kt)
-maps twenty-four parameterless `AppError` types to string resources, with three parameterised
-branches for `AttachmentTooLarge`, `GroupFull` and `ProtocolVersion`, and a fallback for anything
-unrecognised. This is what lets the data layer return a stable error code while the UI owns the
+maps twenty-two parameterless `AppError` types to string resources, with four parameterised
+branches for `AttachmentTooLarge`, `GroupFull`, `ProtocolVersion` and `NodeAddressRejected`, and a
+fallback for anything unrecognised. This is what lets the data layer return a stable error code while the UI owns the
 wording.
 
 ---
@@ -271,7 +271,7 @@ flowchart TD
   Outer --> Chat["chatGraph: Conversation, NewChat,<br/>NewGroup, GroupInfo, ImageViewer"]
   Outer --> Cont["contactsGraph: ContactDetail,<br/>BlockedContacts"]
   Outer --> Pair["pairingGraph: PairingMyQr,<br/>PairingScan, PairingHash"]
-  Outer --> Set["settingsGraph: Identity, About,<br/>Nodes, NodesScan, Update"]
+  Outer --> Set["settingsGraph: Identity, About,<br/>Nodes, NodesScan"]
   Outer --> Dev["developerToolsGraph: Debug, Logs<br/>(behind DeveloperToolsGate)"]
   Home --> Inner["HomeTabNavHost<br/>(inner graph, four tabs only)"]
   Inner --> T1["ChatsTab → ChatRoute"]
@@ -292,7 +292,7 @@ placeholder that redirects. It registers `Onboarding` inline and delegates every
 | [`ChatGraph.kt`](../app/src/main/kotlin/ir/vmessenger/navigation/ChatGraph.kt) | `Conversation`, `NewChat`, `NewGroup`, `GroupInfo`, `ImageViewer` |
 | [`ContactsGraph.kt`](../app/src/main/kotlin/ir/vmessenger/navigation/ContactsGraph.kt) | `ContactDetail`, `BlockedContacts` |
 | [`PairingGraph.kt`](../app/src/main/kotlin/ir/vmessenger/navigation/PairingGraph.kt) | `PairingMyQr`, `PairingScan`, `PairingHash` |
-| [`SettingsGraph.kt`](../app/src/main/kotlin/ir/vmessenger/navigation/SettingsGraph.kt) | `settingsGraph`: `Identity`, `About`, `Nodes`, `NodesScan`, `Update`; `developerToolsGraph`: `Debug`, `Logs` |
+| [`SettingsGraph.kt`](../app/src/main/kotlin/ir/vmessenger/navigation/SettingsGraph.kt) | `settingsGraph`: `Identity`, `About`, `Nodes`, `NodesScan`; `developerToolsGraph`: `Debug`, `Logs` |
 
 `HomeGraph` is the bridge between the two hosts. It converts the outer `NavController` into a
 `HomeNavigation` bundle of fourteen callbacks
@@ -429,8 +429,7 @@ without this screen they were invisible and permanently unblockable.
 Backup export is not a destination of its own — it is a section of `SettingsRoute` plus
 `BackupPassphraseDialog`, because the flow is one passphrase prompt and a status line rather than a
 screen. Restore is on the other side of the app's life cycle and lives in `CreateIdentityRoute`
-(§5.1). The in-app updater is a destination: `update/UpdateRoute` with its `UpdateViewModel`, plus an
-`UpdateBanner` that `SettingsRoute` surfaces when a newer build is available.
+(§5.1).
 
 ### 5.7 `feature:debug` and `feature:about`
 

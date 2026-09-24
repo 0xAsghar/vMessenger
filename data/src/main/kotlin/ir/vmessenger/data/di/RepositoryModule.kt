@@ -24,7 +24,6 @@ import ir.vmessenger.data.repository.IdentityRepositoryImpl
 import ir.vmessenger.data.repository.LocationAccessRepositoryImpl
 import ir.vmessenger.data.repository.LocationRepositoryImpl
 import ir.vmessenger.data.repository.PairingRepositoryImpl
-import ir.vmessenger.data.update.UpdateRepositoryImpl
 import ir.vmessenger.domain.repository.ContactRepository
 import ir.vmessenger.domain.repository.ContactRequestRepository
 import ir.vmessenger.domain.repository.ContactRequestSender
@@ -37,7 +36,6 @@ import ir.vmessenger.domain.repository.LocationAccessRepository
 import ir.vmessenger.domain.repository.LocationRepository
 import ir.vmessenger.domain.repository.NodeManagementRepository
 import ir.vmessenger.domain.repository.PairingRepository
-import ir.vmessenger.domain.repository.UpdateRepository
 import ir.vmessenger.network.messaging.SessionPostHandshakeHandler
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -118,10 +116,6 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindSessionPostHandshakeHandler(impl: P2PSessionHooks): SessionPostHandshakeHandler
-
-    @Binds
-    @Singleton
-    abstract fun bindUpdateRepository(impl: UpdateRepositoryImpl): UpdateRepository
 }
 
 @Module

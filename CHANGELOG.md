@@ -11,6 +11,17 @@ Two version numbers move independently of this file and are stated where they ma
 protocol major** (currently 2, [docs/Protocol.md](docs/Protocol.md)) and the **database schema
 version** (currently 24, [docs/Database.md](docs/Database.md)).
 
+## [Unreleased]
+
+### Removed
+
+- **The in-app updater.** The app no longer contacts GitHub to look for, download or install a new
+  build; install a newer APK by hand over the old one (same signing certificate, so data is kept).
+  The Update screen, the Settings badge, the Home banner, the Debug base-URL override and the
+  `REQUEST_INSTALL_PACKAGES` permission are gone. On the first start after upgrading, the updater's
+  leftovers — its preferences file and any downloaded APKs in the cache — are deleted, and a secure
+  wipe deletes them too.
+
 ## [2.0.0-beta.1] - 2026-09-22
 
 The V2 release: voice calls, English alongside Persian, and a batch of messaging, location and

@@ -14,7 +14,6 @@ dependencies {
     implementation(project(":network:messaging"))
     implementation(project(":core:common"))
     implementation(project(":core:datastore"))
-    implementation(project(":core:update"))
     implementation(project(":core:designsystem"))
     implementation(libs.compose.material.icons.extended)
     implementation(libs.androidx.core.ktx)

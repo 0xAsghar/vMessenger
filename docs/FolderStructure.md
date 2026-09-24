@@ -53,7 +53,6 @@ flowchart TD
     cMap["core:map"]
     cNotif["core:notifications"]
     cDesign["core:designsystem"]
-    cUpdate["core:update"]
   end
 
   app --> featureLayer
@@ -71,7 +70,6 @@ flowchart TD
   fMap --> cMap
   cMap --> cLoc
   cMap --> cDesign
-  data --> cUpdate
   networkLayer --> cCrypto
   networkLayer --> cProto
   networkLayer --> cCommon
@@ -102,7 +100,6 @@ The project brief lists conceptual modules. Each maps to one or more Gradle modu
 | Utilities | `core:common` |
 | Notifications | `core:notifications` |
 | Settings | `feature:settings`, `core:datastore` |
-| Updates | `core:update` (release lookup, verification, install), `feature:settings` (UI) |
 | Testing | test sources in every module; `./gradlew unitTests` aggregates them (see [Testing.md](Testing.md)) |
 
 Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pieces of "Networking" are first-class modules (`network:dht`, `network:bootstrap`).
@@ -117,7 +114,7 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 
 ### domain
 - Pure Kotlin. Entities, value objects, repository interfaces, use cases. No Android, no framework.
-- Use cases are grouped by area under `domain/usecase/` — `chat/`, `group/`, `update/` and the rest — so a feature's surface is visible from the package list.
+- Use cases are grouped by area under `domain/usecase/` — `chat/`, `group/`, `nodes/` and the rest — so a feature's surface is visible from the package list.
 - Depends on: `core:common` only.
 
 ### data
@@ -147,7 +144,7 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 - This is the only feature module that depends on `data`; the reason is recorded in [Architecture.md](Architecture.md) Section 6.
 
 ### feature:settings
-- Settings UI (appearance, privacy, network nodes, identity, backup export), the blocked-contacts screen, the node QR scanner, the in-app update screen and its banner, and the entry points to Debug and About.
+- Settings UI (appearance, privacy, network nodes, identity, backup export), the blocked-contacts screen, the node QR scanner, and the entry points to Debug and About.
 - Depends on: `domain`, `core:designsystem`, `core:datastore`, `core:common`.
 
 ### feature:debug
@@ -197,10 +194,6 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 ### core:map
 - The MapLibre wrapper the app renders through: `VmMapView` and `MapViewCache`, `MapController` and `MapCamera`, the marker layer and its bitmap generation (`MarkerLayer`, `MarkerBitmaps`, `MarkerCanvas`), the own-position puck (`MapPuck`), the style descriptor (`MapStyle`) and a `BusLocationEngine` that feeds MapLibre from `LocationUpdateBus`.
 - Depends on: `domain`, `core:common`, and — as `api` dependencies, since callers use their types — `core:designsystem`, `core:location` and the MapLibre Android SDK.
-
-### core:update
-- The in-app updater's non-UI half: `GitHubReleaseApi` (release lookup), `AssetSelector` (per-ABI APK choice), `SemVer`, `ChecksumFile` and `SigningInfoReader` (verifying the download against the release's published checksums and signer), `UpdateDownloader`, `UpdateInstaller` (hands the package installer a FileProvider content URI) and `UpdatePreferences`. The screen that drives it lives in `feature:settings`.
-- Depends on: `core:common`, OkHttp, kotlinx-serialization, DataStore. It is consumed by `data` (as an `api` dependency), which implements `domain`'s `UpdateRepository` over it, so `feature:settings` reaches the updater through use cases like every other feature.
 
 ### core:datastore
 - Jetpack DataStore for non-sensitive preferences; encrypted handling for sensitive flags.
@@ -299,7 +292,7 @@ vMessenger/
   network/
     discovery/  dht/  bootstrap/  transport/  messaging/
   core/
-    common/  crypto/  proto/  database/  datastore/  location/  map/  notifications/  designsystem/  update/
+    common/  crypto/  proto/  database/  datastore/  location/  map/  notifications/  designsystem/
   node/                        <- standalone JVM bootstrap/DHT + relay node (`:node` Gradle module)
   deploy/                      <- nginx + systemd templates for a node host
   scripts/                     <- setup-node.sh, emulator-connect.sh, p2p-terminal-check.sh, sign-node-record

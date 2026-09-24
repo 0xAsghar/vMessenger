@@ -15,7 +15,6 @@ import ir.vmessenger.core.datastore.ThemePreferences
 import ir.vmessenger.domain.usecase.identity.ExportIdentityBackupUseCase
 import ir.vmessenger.domain.usecase.identity.ObserveIdentityUseCase
 import ir.vmessenger.domain.usecase.settings.SecureWipeUseCase
-import ir.vmessenger.domain.usecase.update.ObserveUpdateStatusUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -78,7 +77,6 @@ class SettingsViewModel @Inject constructor(
     private val exportIdentityBackupUseCase: ExportIdentityBackupUseCase,
     private val secureWipeUseCase: SecureWipeUseCase,
     observeIdentity: ObserveIdentityUseCase,
-    observeUpdateStatus: ObserveUpdateStatusUseCase,
 ) : ViewModel() {
     /**
      * The profile header. Null only in the instant between a secure wipe and the app
@@ -89,14 +87,6 @@ class SettingsViewModel @Inject constructor(
             identity?.let { SettingsProfile(it.displayName, it.userHash, it.identityHash) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
-    /**
-     * Whether the last update check found something. Read from stored state, never from the
-     * network, so opening settings costs nothing.
-     */
-    val updateAvailable: StateFlow<Boolean> = observeUpdateStatus()
-        .map { it.hasUpdate }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val themeMode: StateFlow<ThemeMode> = themePreferences.themeMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThemeMode.SYSTEM)

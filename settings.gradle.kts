@@ -40,7 +40,6 @@ include(":core:location")
 include(":core:map")
 include(":core:notifications")
 include(":core:designsystem")
-include(":core:update")
 include(":core:audio")
 
 include(":network:discovery")

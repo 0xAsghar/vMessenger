@@ -43,8 +43,6 @@ import ir.vmessenger.feature.contacts.ContactsRoute
 import ir.vmessenger.feature.lock.PinSetupDialog
 import ir.vmessenger.feature.map.MapRoute
 import ir.vmessenger.feature.settings.SettingsRoute
-import ir.vmessenger.feature.settings.update.UpdateBanner
-import ir.vmessenger.feature.settings.update.UpdateBannerViewModel
 import ir.vmessenger.navigation.VmRoute
 import ir.vmessenger.ui.network.AppAlertBanner
 import ir.vmessenger.ui.network.LocalAppAlertHost
@@ -79,7 +77,6 @@ fun HomeRoute(
     navigation: HomeNavigation = HomeNavigation(),
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel(),
-    bannerViewModel: UpdateBannerViewModel = hiltViewModel(),
 ) {
     val navController = rememberNavController()
     val startedConversationId by viewModel.openConversationId.collectAsStateWithLifecycle()
@@ -109,28 +106,19 @@ fun HomeRoute(
                 .padding(padding)
                 .consumeWindowInsets(padding),
         ) {
-            // Above the tabs, not inside one: an update and an alert are about the app, not about
-            // whichever tab the user happens to be on. The topmost of them takes the top inset —
-            // and the tabs below, whose own app bars would otherwise take it again, are told it is
-            // spent. The *safe-drawing* top, the one the app bars use: on a phone whose camera
-            // cutout runs below its status bar, consuming the status bar alone left a gap.
-            val updateVersion by bannerViewModel.availableVersion.collectAsStateWithLifecycle()
+            // Above the tabs, not inside one: an alert is about the app, not about whichever tab
+            // the user happens to be on. It takes the top inset — and the tabs below, whose own app
+            // bars would otherwise take it again, are told it is spent. The *safe-drawing* top, the
+            // one the app bars use: on a phone whose camera cutout runs below its status bar,
+            // consuming the status bar alone left a gap.
             val alertHost = LocalAppAlertHost.current
             val alert = alertHost?.let { visibleAppAlert(it) }
-            updateVersion?.let { version ->
-                UpdateBanner(
-                    version = version,
-                    onOpen = navigation.onNavigateToUpdate,
-                    onDismiss = bannerViewModel::dismiss,
-                    modifier = Modifier.windowInsetsPadding(TopInsets),
-                )
-            }
             AppAlertBanner(
                 alert = alert,
                 onDismiss = { alertHost?.dismiss(it) },
-                modifier = if (updateVersion == null) Modifier.windowInsetsPadding(TopInsets) else Modifier,
+                modifier = Modifier.windowInsetsPadding(TopInsets),
             )
-            val bannerOnTop = updateVersion != null || alert != null
+            val bannerOnTop = alert != null
             HomeTabNavHost(
                 navController = navController,
                 navigation = navigation,
@@ -216,7 +204,6 @@ private fun HomeTabNavHost(
                 onNavigateToBlockedContacts = navigation.onNavigateToBlockedContacts,
                 onNavigateToActivityLog = navigation.onNavigateToActivityLog,
                 onLanguage = onLanguage,
-                onNavigateToUpdate = navigation.onNavigateToUpdate,
                 pinDialog = { onDone -> PinSetupDialog(onDone = onDone) },
             )
         }

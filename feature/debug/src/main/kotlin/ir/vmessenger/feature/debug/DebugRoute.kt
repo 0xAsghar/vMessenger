@@ -17,10 +17,7 @@ import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -34,14 +31,11 @@ import ir.vmessenger.core.designsystem.component.SettingsSection
 import ir.vmessenger.core.designsystem.component.SettingsTrailing
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
 import ir.vmessenger.core.designsystem.component.VmButton
-import ir.vmessenger.core.designsystem.component.VmButtonSize
 import ir.vmessenger.core.designsystem.component.VmIcon
 import ir.vmessenger.core.designsystem.component.VmOutlinedButton
 import ir.vmessenger.core.designsystem.component.VmSurface
 import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.component.VmTextButton
-import ir.vmessenger.core.designsystem.component.VmTextField
-import ir.vmessenger.core.designsystem.component.VmTextFieldConfig
 import ir.vmessenger.core.designsystem.foundation.rememberCopyToClipboard
 import ir.vmessenger.core.designsystem.theme.UserHashTextStyle
 import ir.vmessenger.core.designsystem.theme.VmShapes
@@ -88,28 +82,7 @@ fun DebugRoute(
                 onJoinAndPublish = viewModel::joinAndPublish,
                 onNavigateToLogs = onNavigateToLogs,
             )
-            DebugUpdateSection(baseUrl = state.updateBaseUrl, onBaseUrl = viewModel::setUpdateBaseUrl)
             DebugAdbSection(adbCommands = adbCommands)
-        }
-    }
-}
-
-/** Release-server override, so the updater can be exercised against a local fake. */
-@Composable
-private fun DebugUpdateSection(baseUrl: String?, onBaseUrl: (String) -> Unit) {
-    var draft by rememberSaveable(baseUrl) { mutableStateOf(baseUrl.orEmpty()) }
-    SettingsSection(title = "Update base URL") {
-        Column(
-            modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
-            verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
-        ) {
-            VmTextField(
-                value = draft,
-                onValueChange = { draft = it },
-                config = VmTextFieldConfig(label = "http://10.0.2.2:8765 (blank = GitHub)"),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            VmButton(text = "Apply", onClick = { onBaseUrl(draft) }, size = VmButtonSize.Medium)
         }
     }
 }

@@ -4,5 +4,4 @@
     <!-- Plaintext copies decrypted for ACTION_VIEW; purged at start and 10 min after export. -->
     <cache-path name="attachments_view" path="attachments-view/" />
     <cache-path name="log_export" path="log-export/" />
-    <cache-path name="updates" path="updates/" />
 </paths>

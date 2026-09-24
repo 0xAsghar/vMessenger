@@ -92,10 +92,6 @@
     <string name="vm_error_group_closed">This group has been closed</string>
     <string name="vm_error_not_group_creator">Only the group creator can make this change</string>
     <string name="vm_error_no_reachable_members">No members of the group can be reached</string>
-    <string name="vm_error_update_rate_limited">Too many requests; try again shortly</string>
-    <string name="vm_error_update_checksum_mismatch">The downloaded file is damaged</string>
-    <string name="vm_error_update_signature_mismatch">The signature of the new version does not match the installed version</string>
-    <string name="vm_error_update_no_asset">No installer file has been published for this device</string>
     <string name="vm_error_node_blank">The node address is empty</string>
     <string name="vm_error_node_relay_malformed">A relay address must start with wss:// and include a host name</string>
     <string name="vm_error_node_bootstrap_malformed">A bootstrap address must start with wss:// and include a host name</string>

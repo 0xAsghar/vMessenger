@@ -14,6 +14,7 @@ import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.NodeAddressPolicy
 import ir.vmessenger.core.database.DatabaseKeyProvider
+import ir.vmessenger.data.cleanup.LegacyUpdaterCleanup
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -59,6 +60,9 @@ class VMessengerApplication : Application(), Configuration.Provider {
         appLocaleController.sync()
         startKeepAliveWork()
         startExpiryPurgeWork()
+        applicationScope.launch {
+            if (LegacyUpdaterCleanup.run(filesDir, cacheDir)) AppLogger.info(TAG, "removed the old updater's files")
+        }
         // The passphrase is unwrapped from the Keystore, which can take hundreds
         // of milliseconds on first use — never on the main thread. The network
         // service is started only once a key exists, since everything it does

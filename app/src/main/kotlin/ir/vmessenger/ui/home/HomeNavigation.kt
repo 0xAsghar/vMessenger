@@ -24,7 +24,6 @@ data class HomeNavigation(
     val onNavigateToIdentity: () -> Unit = {},
     val onNavigateToNodes: () -> Unit = {},
     val onNavigateToAbout: () -> Unit = {},
-    val onNavigateToUpdate: () -> Unit = {},
     val onNavigateToBlockedContacts: () -> Unit = {},
     val onNavigateToActivityLog: () -> Unit = {},
     val onNavigateToDebug: () -> Unit = {},

@@ -149,8 +149,8 @@ jobs:
             echo "::error::release APK is debug-signed"
             exit 1
           fi
-          # Every ABI must carry the same signer, or the in-app updater cannot offer an
-          # upgrade: Android refuses to replace an app with one signed by another key.
+          # Every ABI must carry the same signer, or installing it over an earlier release
+          # fails: Android refuses to replace an app with one signed by another key.
           #
           # Counted per APK, not per line. apksigner prints one digest line per signature
           # scheme range, so an APK signed v1+v2+v3 contributes several identical lines —

@@ -14,7 +14,6 @@ import ir.vmessenger.feature.debug.LogsRoute
 import ir.vmessenger.feature.identity.IdentityRoute
 import ir.vmessenger.feature.settings.NodeQrScannerRoute
 import ir.vmessenger.feature.settings.NodesRoute
-import ir.vmessenger.feature.settings.update.UpdateRoute
 /** Everything reachable from the settings tab, as full screens outside the tab shell. */
 internal fun NavGraphBuilder.settingsGraph(navController: NavHostController) {
     composable<VmRoute.Identity> { entry ->
@@ -34,9 +33,6 @@ internal fun NavGraphBuilder.settingsGraph(navController: NavHostController) {
             onDone = { navController.popIfCurrent(entry) },
             onNavigateBack = { navController.popIfCurrent(entry) },
         )
-    }
-    composable<VmRoute.Update> { entry ->
-        UpdateRoute(onBack = { navController.popIfCurrent(entry) })
     }
 }
 

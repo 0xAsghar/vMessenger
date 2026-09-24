@@ -82,7 +82,6 @@ Implemented and verified on two emulators (see [docs/Testing.md](docs/Testing.md
 - **Multi-node network** — database-backed bootstrap and relay lists with health ranking and a trust tier (built-in / user / official / community); add, enable, share and import nodes with `vmnode:bootstrap:…` / `vmnode:relay:…` links or QR.
 - **Security** — MITM-resistant v2 handshake, per-contact X25519 key pinning, inbound authorization on every envelope kind, SQLCipher database, Keystore-wrapped keys (StrongBox where available), `FLAG_SECURE`, private lock-screen notifications, boot-restart of the network service, and a complete secure wipe. See [docs/Security.md](docs/Security.md).
 - **Backup** — passphrase-protected identity/contacts backup bundle (Argon2id13 + XChaCha20-Poly1305).
-- **In-app updates** — checks GitHub Releases, picks the APK matching the device ABI, verifies it against the release's published checksums and signer before handing it to the package installer.
 - **Reference node** — a JVM bootstrap/DHT + relay node anyone can run ([docs/Deployment.md](docs/Deployment.md)).
 
 Not implemented: voice or video calls, Bluetooth / Wi-Fi Direct / mesh transports, geofencing, location analytics, SOS mode, a plugin system.
@@ -102,10 +101,9 @@ The cryptographic and metadata gaps are enumerated as **L1–L14 in [docs/Securi
 - **Contact keys are trust-on-first-use**, and a contact whose key changes stays unreachable because nothing calls `acceptKeyChange` (L4, L5).
 - **A group's membership is whatever its creator says it is.** There is no group key, no admin transfer and no member-side veto, and the fan-out pattern itself tells a relay which peers form a group (L12, L13).
 
-Two more, outside that table:
+One more, outside that table:
 
 - **The operator trust anchor is a placeholder.** `NetworkConfig.OPERATOR_ED25519_PUBLIC_KEY_HEX` is 64 zeros, so no `SignedNodeRecord` can ever be marked `OFFICIAL`. It must be set before release.
-- **The in-app updater trusts GitHub as a distribution channel.** It verifies the download against the release's published checksums and signer, but the release metadata itself is fetched over TLS from GitHub rather than being signed by the project.
 
 ### Networking
 

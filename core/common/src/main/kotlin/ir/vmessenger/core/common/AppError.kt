@@ -54,10 +54,4 @@ sealed class AppError(open val message: String) {
         AppError("node address rejected: $rejection")
 
     data object BuiltInNodeRemoval : AppError("a built-in node cannot be removed, only turned off")
-
-    // Updater -----------------------------------------------------------------
-    data object UpdateRateLimited : AppError("release API rate limit reached")
-    data object UpdateChecksumMismatch : AppError("downloaded artifact checksum mismatch")
-    data object UpdateSignatureMismatch : AppError("release signer differs from the installed one")
-    data object UpdateNoAsset : AppError("release carries no asset for this ABI")
 }

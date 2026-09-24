@@ -231,7 +231,7 @@ Triggered by a `v*` tag (publishes) or by a change to `gradle/version.properties
 7. **Signature verification** with `apksigner` from the newest installed build-tools:
    - `apksigner verify --print-certs` for each APK into `dist/SIGNING.txt`;
    - the build **fails** if any certificate is `CN=Android Debug`;
-   - the build **fails** unless every APK has exactly one `Signer #1` digest and all of them are identical — the in-app updater breaks if the ABI variants are signed by different certificates.
+   - the build **fails** unless every APK has exactly one `Signer #1` digest and all of them are identical — Android refuses to install one ABI's APK over another's if they are signed by different certificates.
 8. **Publish** as GitHub Release assets (not Actions artifacts, which are quota-limited): the APKs, their `.sha256` files, the node tarball, `SHA256SUMS.txt`, `SIGNING.txt` and the mapping file. A tag containing `-rc`, `-beta` or `-alpha` is marked pre-release and does not become `latest`.
 
 ### Verifying a downloaded release by hand
