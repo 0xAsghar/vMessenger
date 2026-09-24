@@ -11,7 +11,15 @@
 # One-line install on Ubuntu/Debian (downloads the latest node tarball from GitHub Releases):
 #   curl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/setup-node.sh | sudo bash -s --
 #
+# Machine mode (--from-app) is what the app's "New node" drives over SSH. It never touches GitHub:
+# the app uploads this script, the templates and the node tarball as a bundle, and the install runs
+# detached under systemd so a dropped connection cannot kill it. See docs/Deployment.md §7.
+#   sudo bash setup-node.sh --from-app --bundle-dir DIR --preflight [install options]
+#   sudo bash setup-node.sh --from-app --bundle-dir DIR --launch [install options]
+#   sudo bash setup-node.sh --from-app --follow RUN [--from-byte N]
+#
 set -euo pipefail
+set -E
 
 readonly GITHUB_REPO="0xAsghar/vMessenger"
 readonly DEFAULT_GIT_URL="https://github.com/${GITHUB_REPO}.git"
@@ -31,6 +39,17 @@ readonly REALIP_SNIPPET="/etc/nginx/snippets/vmessenger-realip.conf"
 readonly NODE_ENV_FILE="/etc/vmessenger/node.env"
 readonly NGINX_SITE="/etc/nginx/sites-available/vmessenger-node.conf"
 readonly SYSTEMD_UNIT="/etc/systemd/system/vmessenger-node.service"
+
+# Machine mode. PROTOCOL_VERSION changes only when a marker, step id or issue code changes meaning;
+# the app refuses a bundle whose protocol it does not speak.
+readonly PROTOCOL_VERSION=1
+readonly INSTALLER_HOME="/var/lib/vmessenger-installer"
+readonly RUNS_DIR="$INSTALLER_HOME/runs"
+readonly BUNDLES_DIR="$INSTALLER_HOME/bundles"
+readonly LOCK_FILE="$INSTALLER_HOME/lock"
+readonly INSTALL_RECORD="/etc/vmessenger/install.json"
+readonly RUN_UNIT_PREFIX="vmessenger-install-"
+readonly RUNS_KEPT=10
 
 MODE="prod"
 DOMAIN=""
@@ -59,6 +78,25 @@ DIST_SOURCE_DIR=""
 TMP_DIRS=()
 TLS_SUMMARY=""
 
+ACTION="install"       # install | preflight | launch | run | follow | status | result | list-runs | version
+FROM_APP=false         # machine mode: ##vm markers, bundle only, no prompts
+OFFLINE=false          # never download anything but apt packages and certificates
+BUNDLE_DIR=""
+RUN_ID=""
+RUN_DIR=""
+FROM_BYTE=0
+INSTALL_ARGS=()        # the install options as given; --launch hands them to the detached run
+MARK_SEQ=0
+CURRENT_STEP=""
+FATAL_CODE=""
+WARNINGS=()
+OS_ID=""
+OS_VERSION_ID=""
+OS_CODENAME=""
+OS_PRETTY=""
+ARCH=""
+NODE_ID=""
+
 usage() {
     cat <<'EOF'
 Usage: setup-node.sh [options]
@@ -84,6 +122,18 @@ Production (requires root):
 Local development:
   --dev                 Run the TCP DHT node on :46555 (no nginx/systemd)
 
+Offline and machine mode (what the app uses; see docs/Deployment.md §7):
+  --offline             Download nothing but apt packages and certificates
+  --bundle-dir DIR      Templates and node tarball from an uploaded bundle (checked against SHA256SUMS)
+  --from-app            Machine mode: ##vm progress markers, implies --offline
+  --preflight           Report facts and problems without changing anything
+  --launch              Start the install detached under systemd and print its run id
+  --follow RUN          Stream a run's log (--from-byte N resumes); exits with the run's status
+  --status RUN          One line: running / done / failed, exit status, log size
+  --result RUN          The run's result.json
+  --list-runs           Every run on this server, newest first
+  --version             Installer protocol and bundled node version
+
 Environment:
   VMESSENGER_GIT_URL    Git clone URL when building outside a repo checkout
   VMESSENGER_REPO       Path to an existing vMessenger clone (skip clone)
@@ -98,6 +148,59 @@ EOF
 
 log() { printf '==> %s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
+
+now_ms() { date +%s%3N; }
+
+# Percent-encodes a marker value: everything but [A-Za-z0-9._~:/@+,-] becomes %XX, byte by byte,
+# so values can hold spaces, '=', newlines and UTF-8 without breaking the one-line grammar.
+pct() {
+    local LC_ALL=C s="$1" out="" c i
+    for ((i = 0; i < ${#s}; i++)); do
+        c="${s:i:1}"
+        case "$c" in
+            [A-Za-z0-9._~:/@+,-]) out+="$c" ;;
+            *) out+="$(printf '%%%02X' "'$c")" ;;
+        esac
+    done
+    printf '%s' "$out"
+}
+
+# mark EVENT [key=value ...] — one line the app parses, in machine mode only:
+#   ##vm v=1 seq=N ts=EPOCH_MS ev=EVENT key=value ...
+# seq rises by one per line within an invocation, so a client that reconnects mid-run can drop what
+# it has already seen.
+mark() {
+    [[ "$FROM_APP" == true ]] || return 0
+    local ev="$1" kv line
+    shift
+    MARK_SEQ=$((MARK_SEQ + 1))
+    line="##vm v=$PROTOCOL_VERSION seq=$MARK_SEQ ts=$(now_ms) ev=$ev"
+    for kv in "$@"; do
+        line+=" ${kv%%=*}=$(pct "${kv#*=}")"
+    done
+    printf '%s\n' "$line"
+}
+
+fact() { mark fact key="$1" value="$2"; }
+
+# step ID STATE [NOTE] — STATE is start | ok | skip | warn | fail | wait.
+step() {
+    CURRENT_STEP="$1"
+    if [[ -n "${3:-}" ]]; then
+        mark step id="$1" state="$2" note="$3"
+    else
+        mark step id="$1" state="$2"
+    fi
+}
+
+# issue CODE SEVERITY DETAIL — something the run reports and carries on past (warn, info).
+issue() {
+    local code="$1" severity="$2"
+    shift 2
+    [[ "$severity" == warn ]] && WARNINGS+=("$code")
+    mark issue code="$code" severity="$severity" step="${CURRENT_STEP:-none}" detail="$*"
+    if [[ "$severity" == warn ]]; then warn "[$code] $*"; fi
+}
 
 # Exit status by class of problem, so a caller can tell "this server cannot run a node" (20) from
 # "fix this and run again" (30) from "another install is running" (40) without parsing text:
@@ -115,6 +218,9 @@ exit_status_for() {
 die() {
     local code="$1"
     shift
+    FATAL_CODE="$code"
+    mark issue code="$code" severity=fatal step="${CURRENT_STEP:-none}" detail="$*"
+    [[ -n "$CURRENT_STEP" ]] && mark step id="$CURRENT_STEP" state=fail
     printf 'error: [%s] %s\n' "$code" "$*" >&2
     exit "$(exit_status_for "$code")"
 }
@@ -125,14 +231,35 @@ need_cmd() {
 
 # Keeps the exit status it was called with. Under `set -e` a trap that ends on a failed test would
 # replace it — every die would exit 1, and a clean run with no temp dirs would too.
-cleanup() {
+on_exit() {
     local status=$? dir
+    # Returning a non-zero status from here would, with errtrace on, fire the ERR trap as well.
+    trap - ERR
     for dir in "${TMP_DIRS[@]:-}"; do
         if [[ -n "$dir" && -d "$dir" ]]; then rm -rf "$dir"; fi
     done
+    case "$ACTION" in
+        run) finish_run "$status" ;;
+        preflight|launch|status|list-runs) mark end status="$status" ;;
+    esac
     return "$status"
 }
-trap cleanup EXIT
+
+# A command that failed under `set -e` without going through die: report where, once, and exit 1 —
+# not with the command's own status (apt's 100), which would read as one of ours. Command
+# substitutions run in a subshell whose output is being captured, so only the top level speaks.
+on_err() {
+    local status=$? line="$1" command="$2"
+    [[ -z "$FATAL_CODE" && "$BASH_SUBSHELL" -eq 0 ]] || return 0
+    FATAL_CODE="INTERNAL"
+    mark issue code=INTERNAL severity=fatal step="${CURRENT_STEP:-none}" detail="line $line: $command (exit $status)"
+    [[ -n "$CURRENT_STEP" ]] && mark step id="$CURRENT_STEP" state=fail
+    printf 'error: [INTERNAL] line %s: %s (exit %s)\n' "$line" "$command" "$status" >&2
+    exit "$(exit_status_for INTERNAL)"
+}
+
+trap on_exit EXIT
+trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
 
 make_tmp_dir() {
     local dir
@@ -141,33 +268,77 @@ make_tmp_dir() {
     printf '%s' "$dir"
 }
 
+# need_value FLAG COUNT — a flag that takes a value was given one.
+need_value() {
+    [[ "$2" -ge 2 ]] || die USAGE "$1 needs a value"
+}
+
+# Control flags choose what to do; install options say how, and are kept in INSTALL_ARGS so --launch
+# can hand exactly the same ones to the detached run.
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --domain) DOMAIN="${2:-}"; shift 2 ;;
-            --ip) PUBLIC_IP="${2:-}"; shift 2 ;;
-            --tls) TLS_MODE="${2:-}"; shift 2 ;;
-            --acme-email) ACME_EMAIL="${2:-}"; shift 2 ;;
-            --acme-no-email) ACME_NO_EMAIL=true; shift ;;
-            --behind-cdn) BEHIND_CDN="${2:-}"; shift 2 ;;
-            --firewall) FIREWALL=true; shift ;;
-            --dist-tar) DIST_TAR="${2:-}"; shift 2 ;;
-            --dist-url) DIST_URL="${2:-}"; shift 2 ;;
-            --build) BUILD_FROM_REPO=true; shift ;;
-            --install-dir) INSTALL_DIR="${2:-}"; shift 2 ;;
-            --cert-dir) CERT_DIR="${2:-}"; shift 2 ;;
-            --node-port) NODE_PORT="${2:-}"; shift 2 ;;
-            --skip-cert) SKIP_CERT=true; shift ;;
-            --force-cert) FORCE_CERT=true; shift ;;
-            --skip-build) SKIP_BUILD=true; shift ;;
-            --dev) MODE="dev"; shift ;;
+            --from-app) FROM_APP=true; OFFLINE=true; shift; continue ;;
+            --offline) OFFLINE=true; shift; continue ;;
+            --bundle-dir) need_value "$1" $#; BUNDLE_DIR="$2"; shift 2; continue ;;
+            --preflight) ACTION=preflight; shift; continue ;;
+            --launch) ACTION=launch; shift; continue ;;
+            --run|--follow|--status|--result)
+                need_value "$1" $#
+                ACTION="${1#--}"
+                RUN_ID="$2"
+                shift 2
+                continue
+                ;;
+            --from-byte) need_value "$1" $#; FROM_BYTE="$2"; shift 2; continue ;;
+            --list-runs) ACTION=list-runs; shift; continue ;;
+            --version) ACTION=version; shift; continue ;;
             -h|--help) usage; exit 0 ;;
+        esac
+        local taken=2
+        case "$1" in
+            --domain|--ip|--tls|--acme-email|--behind-cdn|--dist-tar|--dist-url|--install-dir|--cert-dir|--node-port)
+                need_value "$1" $#
+                ;;
+        esac
+        case "$1" in
+            --domain) DOMAIN="$2" ;;
+            --ip) PUBLIC_IP="$2" ;;
+            --tls) TLS_MODE="$2" ;;
+            --acme-email) ACME_EMAIL="$2" ;;
+            --behind-cdn) BEHIND_CDN="$2" ;;
+            --dist-tar) DIST_TAR="$2" ;;
+            --dist-url) DIST_URL="$2" ;;
+            --install-dir) INSTALL_DIR="$2" ;;
+            --cert-dir) CERT_DIR="$2" ;;
+            --node-port) NODE_PORT="$2" ;;
+            --acme-no-email) ACME_NO_EMAIL=true; taken=1 ;;
+            --firewall) FIREWALL=true; taken=1 ;;
+            --build) BUILD_FROM_REPO=true; taken=1 ;;
+            --skip-cert) SKIP_CERT=true; taken=1 ;;
+            --force-cert) FORCE_CERT=true; taken=1 ;;
+            --skip-build) SKIP_BUILD=true; taken=1 ;;
+            --dev) MODE="dev"; taken=1 ;;
             *) die USAGE "unknown argument: $1 (try --help)" ;;
         esac
+        INSTALL_ARGS+=("${@:1:taken}")
+        shift "$taken"
     done
+    if [[ -n "$RUN_ID" && ! "$RUN_ID" =~ ^[0-9]{8}-[0-9]{6}-[0-9a-f]{4}$ ]]; then
+        die USAGE "not a run id: $RUN_ID"
+    fi
+    [[ "$FROM_BYTE" =~ ^[0-9]+$ ]] || die USAGE "--from-byte takes a byte offset"
+    if [[ "$FROM_APP" == true ]]; then
+        case "$ACTION" in
+            install) die USAGE "--from-app needs --preflight, --launch, --follow, --status or --result" ;;
+            preflight|launch|run) [[ -n "$BUNDLE_DIR" ]] || die USAGE "--from-app --$ACTION needs --bundle-dir" ;;
+        esac
+        [[ "$MODE" == prod ]] || die USAGE "--dev is not a machine-mode install"
+    fi
 }
 
 require_root_for_prod() {
+    [[ "$ACTION" == version ]] && return 0
     if [[ "$MODE" == "prod" && "$(id -u)" -ne 0 ]]; then
         die NOT_ROOT "production setup must run as root (use sudo)"
     fi
@@ -253,12 +424,18 @@ clone_repo_if_needed() {
     REPO_ROOT="$tmp"
 }
 
-# Templates live in deploy/ inside the repo; the curl|bash path downloads them.
+# Templates come from the bundle, else deploy/ in the repo; only the curl|bash path downloads them.
 fetch_templates() {
+    if [[ -n "$BUNDLE_DIR" ]]; then
+        TEMPLATE_DIR="$BUNDLE_DIR/deploy"
+        [[ -f "$TEMPLATE_DIR/nginx/vmessenger-node.conf.template" ]] || die BUNDLE_MISSING "no deploy/ templates in $BUNDLE_DIR"
+        return
+    fi
     if [[ -n "$REPO_ROOT" && -f "$REPO_ROOT/deploy/nginx/vmessenger-node.conf.template" ]]; then
         TEMPLATE_DIR="$REPO_ROOT/deploy"
         return
     fi
+    [[ "$OFFLINE" == false ]] || die BUNDLE_MISSING "offline, and no templates: pass --bundle-dir or run from the repo"
     need_cmd curl
     TEMPLATE_DIR="$(make_tmp_dir)"
     log "downloading deploy templates from $RAW_BASE/deploy"
@@ -329,12 +506,22 @@ latest_release_dist_url() {
         | sed -E 's/.*"(https:[^"]+)"/\1/'
 }
 
-# Precedence: --dist-tar > --dist-url > --build > repo installDist (--skip-build)
-# > latest GitHub release tarball.
+# Precedence: --dist-tar > the bundle's tarball > --dist-url > --build > repo installDist
+# (--skip-build) > latest GitHub release tarball. Offline stops before anything that downloads.
 acquire_dist() {
     if [[ -n "$DIST_TAR" ]]; then
         extract_tarball "$DIST_TAR"
         return
+    fi
+    if [[ -n "$BUNDLE_DIR" ]]; then
+        extract_tarball "$(bundle_tarball)"
+        return
+    fi
+    [[ "$OFFLINE" == false || "$SKIP_BUILD" == true ]] \
+        || die BUNDLE_MISSING "offline, and no node tarball: pass --dist-tar or --bundle-dir"
+    if [[ "$SKIP_BUILD" == true && "$OFFLINE" == true ]]; then
+        [[ -n "$REPO_ROOT" && -x "$REPO_ROOT/node/build/install/vmessenger-node/bin/node" ]] \
+            || die BUNDLE_MISSING "offline, and no build at node/build/install/vmessenger-node"
     fi
     if [[ -n "$DIST_URL" ]]; then
         download_dist "$DIST_URL"
@@ -650,10 +837,295 @@ cache bypass for /healthz /dht /relay, origin read timeout as high as the plan a
 and (once Let's Encrypt is installed) strict origin certificate validation.
 EOF
     fi
+    [[ "$FROM_APP" == false ]] || return 0
     print_terminal_qr "Scan in app (تنظیمات → گره‌های شبکه → اسکن QR) — bootstrap:" "$bootstrap_link"
     print_terminal_qr "Scan in app — relay:" "$relay_link"
     print_terminal_qr "One-line install script (share to deploy another node):" "$install_one_liner"
     printf '\n%s\n' "$install_one_liner"
+}
+
+
+# ---- machine mode ----------------------------------------------------------------------------------
+
+read_os_release() {
+    [[ -z "$OS_ID" ]] || return 0
+    OS_ID="$(os_release_field ID)"
+    OS_VERSION_ID="$(os_release_field VERSION_ID)"
+    OS_CODENAME="$(os_release_field VERSION_CODENAME)"
+    OS_PRETTY="$(os_release_field PRETTY_NAME)"
+    ARCH="$(uname -m)"
+}
+
+# Read, not sourced: os-release is data, and sourcing it runs whatever it contains as root.
+os_release_field() {
+    [[ -r /etc/os-release ]] || return 0
+    sed -n "s/^$1=//p" /etc/os-release | head -n 1 | sed -e 's/^["'\'']//' -e 's/["'\'']$//'
+}
+
+resolve_bundle() {
+    [[ -d "$BUNDLE_DIR" ]] || die BUNDLE_MISSING "no bundle at $BUNDLE_DIR"
+    BUNDLE_DIR="$(cd "$BUNDLE_DIR" && pwd)"
+    [[ -f "$BUNDLE_DIR/manifest.json" ]] || die BUNDLE_MISSING "no manifest.json in $BUNDLE_DIR"
+    [[ -n "$(bundle_version)" ]] || die BUNDLE_CORRUPT "manifest.json names no nodeVersion"
+}
+
+# The version the bundle installs, from manifest.json (written by the app's build, not by hand).
+bundle_version() {
+    sed -n 's/.*"nodeVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$BUNDLE_DIR/manifest.json" | head -n 1
+}
+
+bundle_tarball() { printf '%s/vmessenger-node-%s.tar.gz' "$BUNDLE_DIR" "$(bundle_version)"; }
+
+verify_bundle() {
+    [[ -f "$BUNDLE_DIR/SHA256SUMS" ]] || die BUNDLE_CORRUPT "no SHA256SUMS in $BUNDLE_DIR"
+    if ! (cd "$BUNDLE_DIR" && sha256sum --check --quiet --strict SHA256SUMS) >/dev/null 2>&1; then
+        die BUNDLE_CORRUPT "bundle files do not match SHA256SUMS (a truncated upload?)"
+    fi
+    [[ -f "$(bundle_tarball)" ]] || die BUNDLE_MISSING "no $(basename "$(bundle_tarball)") in the bundle"
+}
+
+new_run_id() {
+    printf '%s-%s' "$(date -u +%Y%m%d-%H%M%S)" "$(od -An -N2 -tx1 /dev/urandom | tr -d ' \n')"
+}
+
+# The id of the install that is running now, if any.
+active_run() {
+    local unit
+    unit="$(systemctl list-units --type=service --state=activating,active --no-legend --plain \
+        "${RUN_UNIT_PREFIX}*" 2>/dev/null | awk 'NR == 1 { print $1 }')"
+    [[ -n "$unit" ]] || return 1
+    unit="${unit%.service}"
+    printf '%s' "${unit#"$RUN_UNIT_PREFIX"}"
+}
+
+cmd_version() {
+    local version="none"
+    if [[ -n "$BUNDLE_DIR" && -f "$BUNDLE_DIR/manifest.json" ]]; then version="$(bundle_version)"; fi
+    printf 'vmessenger-installer protocol=%s bundle=%s\n' "$PROTOCOL_VERSION" "$version"
+}
+
+# Facts about this server and the problems that would stop an install, without changing anything.
+cmd_preflight() {
+    mark hello proto="$PROTOCOL_VERSION" installer="$(bundle_version)" action=preflight
+    step preflight start
+    read_os_release
+    fact os_id "$OS_ID"
+    fact os_version "$OS_VERSION_ID"
+    fact os_codename "$OS_CODENAME"
+    fact os_pretty "$OS_PRETTY"
+    fact arch "$ARCH"
+    fact server_time_ms "$(now_ms)"
+    if [[ -f "$INSTALL_RECORD" ]]; then
+        fact installed_version "$(sed -n 's/.*"nodeVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$INSTALL_RECORD" | head -n 1)"
+    fi
+    local active
+    if active="$(active_run)"; then
+        fact active_run "$active"
+        die INSTALL_BUSY "install $active is still running"
+    fi
+    step preflight ok
+}
+
+# Starts the install as a transient systemd service and returns at once. The run outlives this SSH
+# session, a dropped connection and the app; --follow picks its log up again from any byte.
+cmd_launch() {
+    need_cmd systemd-run
+    verify_bundle
+    install -d -m 0700 "$INSTALLER_HOME" "$RUNS_DIR" "$BUNDLES_DIR"
+    local active
+    if active="$(active_run)"; then
+        fact active_run "$active"
+        die INSTALL_BUSY "install $active is still running"
+    fi
+    local version dest id
+    version="$(bundle_version)"
+    dest="$BUNDLES_DIR/$version"
+    # Root-owned copy: the run executes it after this session is gone, and it is what a later
+    # update rolls back to.
+    if [[ "$BUNDLE_DIR" != "$dest" ]]; then
+        rm -rf "$dest.new"
+        cp -R "$BUNDLE_DIR/." "$dest.new"
+        chown -R root:root "$dest.new"
+        chmod -R go-w "$dest.new"
+        rm -rf "$dest"
+        mv "$dest.new" "$dest"
+    fi
+    id="$(new_run_id)"
+    RUN_DIR="$RUNS_DIR/$id"
+    install -d -m 0700 "$RUN_DIR"
+    : > "$RUN_DIR/log"
+    printf '%q ' "${INSTALL_ARGS[@]}" > "$RUN_DIR/args"
+    if ! systemd-run --unit="${RUN_UNIT_PREFIX}${id}" --description="vMessenger node install $id" \
+        --collect --quiet --setenv=HOME=/root --setenv=LC_ALL=C \
+        --property="StandardOutput=append:$RUN_DIR/log" --property="StandardError=append:$RUN_DIR/log" \
+        /bin/bash "$dest/setup-node.sh" --from-app --run "$id" --bundle-dir "$dest" "${INSTALL_ARGS[@]}"; then
+        die RUN_START_FAILED "systemd-run could not start the install"
+    fi
+    mark launched run="$id"
+    log "install $id started; follow it with: $0 --from-app --follow $id"
+    prune_runs "$id"
+}
+
+# Entries of a directory, newest first. Run ids begin with a UTC timestamp, so name order is age.
+newest_first() {
+    local entry
+    for entry in "$1"/*; do
+        [[ -e "$entry" ]] && printf '%s\n' "${entry##*/}"
+    done | sort -r
+}
+
+# Keeps the newest RUNS_KEPT runs and the two newest bundles.
+prune_runs() {
+    local keep="$1" dir
+    newest_first "$RUNS_DIR" | tail -n +"$((RUNS_KEPT + 1))" | while read -r dir; do
+        [[ "$dir" == "$keep" ]] || rm -rf "${RUNS_DIR:?}/$dir"
+    done
+    find "$BUNDLES_DIR" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %f\n' 2>/dev/null | sort -rn | tail -n +3 \
+        | while read -r _ dir; do rm -rf "${BUNDLES_DIR:?}/$dir"; done
+}
+
+# The detached run itself (started by --launch through systemd-run).
+cmd_run() {
+    RUN_DIR="$RUNS_DIR/$RUN_ID"
+    [[ -d "$RUN_DIR" ]] || die RUN_UNKNOWN "no run $RUN_ID"
+    exec 9>"$LOCK_FILE"
+    flock -n 9 || die INSTALL_BUSY "another install holds $LOCK_FILE"
+    mark hello proto="$PROTOCOL_VERSION" installer="$(bundle_version)" run="$RUN_ID" action=run
+    setup_production
+}
+
+# Runs from the EXIT trap. The end marker is always the log's last line, and `exit` exists before
+# the process does, so --follow can report how a run ended even after a crash in the middle.
+finish_run() {
+    local status="$1"
+    [[ -n "$RUN_DIR" && -d "$RUN_DIR" ]] || return 0
+    if [[ ! -f "$RUN_DIR/result.json" ]]; then
+        write_result failed "$status" || true
+    fi
+    printf '%s\n' "$status" > "$RUN_DIR/exit"
+    mark end status="$status"
+}
+
+run_dir_or_die() {
+    RUN_DIR="$RUNS_DIR/$RUN_ID"
+    [[ -d "$RUN_DIR" ]] || die RUN_UNKNOWN "no run $RUN_ID on this server"
+}
+
+# Streams the run's log from --from-byte on, and keeps streaming until the run ends. The output is
+# the log itself, markers and all; the exit status is the run's.
+cmd_follow() {
+    run_dir_or_die
+    local pid
+    pid="$(systemctl show -p MainPID --value "${RUN_UNIT_PREFIX}${RUN_ID}.service" 2>/dev/null || true)"
+    if [[ -n "$pid" && "$pid" != 0 ]]; then
+        tail -c +"$((FROM_BYTE + 1))" --pid="$pid" -f "$RUN_DIR/log"
+    else
+        tail -c +"$((FROM_BYTE + 1))" "$RUN_DIR/log"
+    fi
+    local status
+    status="$(cat "$RUN_DIR/exit" 2>/dev/null || true)"
+    exit "${status:-1}"
+}
+
+cmd_status() {
+    run_dir_or_die
+    local state="running" status="" bytes
+    status="$(cat "$RUN_DIR/exit" 2>/dev/null || true)"
+    if [[ -n "$status" ]]; then
+        state="failed"
+        [[ "$status" == 0 ]] && state="done"
+    elif ! systemctl is-active --quiet "${RUN_UNIT_PREFIX}${RUN_ID}.service"; then
+        state="lost"
+    fi
+    bytes="$(wc -c < "$RUN_DIR/log" | tr -d ' ')"
+    mark status run="$RUN_ID" state="$state" exit="${status:--}" bytes="$bytes"
+    [[ "$FROM_APP" == true ]] || printf '%s %s exit=%s bytes=%s\n' "$RUN_ID" "$state" "${status:--}" "$bytes"
+}
+
+cmd_result() {
+    run_dir_or_die
+    [[ -f "$RUN_DIR/result.json" ]] || die RUN_UNKNOWN "run $RUN_ID has no result yet"
+    cat "$RUN_DIR/result.json"
+}
+
+cmd_list_runs() {
+    local dir status
+    while read -r dir; do
+        status="$(cat "$RUNS_DIR/$dir/exit" 2>/dev/null || printf 'running')"
+        mark run run="$dir" exit="$status"
+        [[ "$FROM_APP" == true ]] || printf '%s %s\n' "$dir" "$status"
+    done < <(newest_first "$RUNS_DIR")
+}
+
+read_node_id() {
+    NODE_ID="$(curl -fsS -m 5 "http://127.0.0.1:${NODE_PORT}/healthz?verbose=1" 2>/dev/null \
+        | sed -n 's/.*"nodeId":"\([0-9a-f]*\)".*/\1/p' || true)"
+    fact node_id "$NODE_ID"
+}
+
+# JSON string, or null when empty.
+json_str() {
+    local s="$1"
+    if [[ -z "$s" ]]; then
+        printf 'null'
+        return
+    fi
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '"%s"' "$(printf '%s' "$s" | tr -d '\000-\010\013\014\016-\037')"
+}
+
+json_array() {
+    local first=true item
+    printf '['
+    for item in "$@"; do
+        [[ -n "$item" ]] || continue
+        [[ "$first" == true ]] || printf ', '
+        first=false
+        json_str "$item"
+    done
+    printf ']'
+}
+
+# What the app reads when the run ends: schema 1. Written for failed runs too, so a client that
+# lost the log can still learn why.
+write_result() {
+    local status="$1" exit_status="$2" file="$RUN_DIR/result.json" java_version mode
+    java_version="$(java -version 2>&1 | sed -n '1s/.*version "\([^"]*\)".*/\1/p' || true)"
+    mode="ip"
+    [[ -n "$DOMAIN" ]] && mode="domain"
+    {
+        printf '{\n'
+        printf '  "schema": 1,\n'
+        printf '  "status": %s,\n' "$(json_str "$status")"
+        printf '  "exitStatus": %s,\n' "$exit_status"
+        printf '  "code": %s,\n' "$(json_str "$FATAL_CODE")"
+        printf '  "runId": %s,\n' "$(json_str "$RUN_ID")"
+        printf '  "nodeVersion": %s,\n' "$(json_str "$(bundle_version)")"
+        printf '  "nodeId": %s,\n' "$(json_str "$NODE_ID")"
+        printf '  "mode": %s,\n' "$(json_str "$mode")"
+        printf '  "tls": %s,\n' "$(json_str "$TLS_MODE")"
+        printf '  "publicHost": %s,\n' "$(json_str "$PUBLIC_NAME")"
+        printf '  "domain": %s,\n' "$(json_str "$DOMAIN")"
+        printf '  "bootstrapUrl": %s,\n' "$(json_str "${PUBLIC_NAME:+wss://$PUBLIC_NAME/dht}")"
+        printf '  "relayUrl": %s,\n' "$(json_str "${PUBLIC_NAME:+wss://$PUBLIC_NAME/relay}")"
+        printf '  "healthUrl": %s,\n' "$(json_str "${PUBLIC_NAME:+https://$PUBLIC_NAME/healthz}")"
+        printf '  "os": {"id": %s, "version": %s, "arch": %s},\n' \
+            "$(json_str "$OS_ID")" "$(json_str "$OS_VERSION_ID")" "$(json_str "$ARCH")"
+        printf '  "java": %s,\n' "$(json_str "$java_version")"
+        printf '  "warnings": %s\n' "$(json_array "${WARNINGS[@]:-}")"
+        printf '}\n'
+    } > "$file.tmp"
+    mv "$file.tmp" "$file"
+    if [[ "$status" == ok ]]; then
+        install -d -m 0755 "$(dirname "$INSTALL_RECORD")"
+        cp "$file" "$INSTALL_RECORD"
+        chmod 0644 "$INSTALL_RECORD"
+    fi
+    mark result status="$status" file="$file"
 }
 
 run_dev_node() {
@@ -669,31 +1141,63 @@ run_dev_node() {
 setup_production() {
     find_repo_root
     fetch_templates
+    read_os_release
+    step packages start
     install_os_packages
-    configure_firewall
+    step packages ok
+    if [[ "$FIREWALL" == true ]]; then
+        step firewall start
+        configure_firewall
+        step firewall ok
+    fi
+    step files start
     acquire_dist
     create_system_user
     create_dirs
     install_node_files
     remove_legacy_artifacts
+    step files ok
+    step config start
     write_node_env
     write_systemd_unit
     write_realip_snippet
+    step config ok
+    step service start
     start_node_service
+    step service ok
+    step tls start
     configure_tls_and_nginx
+    step tls ok
+    step health start
     health_check
+    read_node_id
+    step health ok
+    step finish start
+    if [[ "$ACTION" == run ]]; then write_result ok 0; fi
     print_success
+    step finish ok
 }
 
 main() {
     parse_args "$@"
     require_root_for_prod
-    validate_args
-    if [[ "$MODE" == "dev" ]]; then
-        run_dev_node
-    else
-        setup_production
-    fi
+    case "$ACTION" in
+        version) cmd_version ;;
+        follow) cmd_follow ;;
+        status) cmd_status ;;
+        result) cmd_result ;;
+        list-runs) cmd_list_runs ;;
+        *)
+            [[ -z "$BUNDLE_DIR" ]] || resolve_bundle
+            validate_args
+            case "$ACTION" in
+                preflight) cmd_preflight ;;
+                launch) cmd_launch ;;
+                run) cmd_run ;;
+                *) if [[ "$MODE" == "dev" ]]; then run_dev_node; else setup_production; fi ;;
+            esac
+            ;;
+    esac
 }
 
 # Sourcing the script (tests) defines the functions without running anything. Piped into bash

@@ -28,3 +28,6 @@ captures/
 
 # Transient git worktrees created by background agents.
 .claude/worktrees/
+
+# Throwaway keys and passwords of the Docker provisioning harness.
+scripts/provision-test/out/

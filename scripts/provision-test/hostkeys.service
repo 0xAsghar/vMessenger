@@ -1,0 +1,14 @@
+[Unit]
+Description=Generate SSH host keys on first boot (provision-test image)
+# Not Before=ssh.socket: sockets come up before basic.target, which this unit (default
+# dependencies) follows, and systemd breaks the cycle by dropping the socket. Socket-activated sshd
+# (Ubuntu 24.04) starts on the first connection, long after this has run.
+Before=ssh.service
+ConditionPathExists=!/etc/ssh/ssh_host_ed25519_key
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ssh-keygen -A
+
+[Install]
+WantedBy=multi-user.target

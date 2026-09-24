@@ -174,3 +174,81 @@ self-signed origin exposed without a CDN).
 - Second node: run the installer on another host and, on the first node, set
   `VMESSENGER_PEER_NODES=wss://<other>/dht` so `findNode` advertises it; users add it in the app via its
   `vmnode:` link.
+
+## 8. Machine mode — the protocol the app speaks
+
+The app's **New node** drives this same script over SSH. It uploads a *bundle* — `setup-node.sh`,
+`deploy/`, `vmessenger-node-<version>.tar.gz`, `manifest.json` (`{"protocol": 1, "nodeVersion": "…"}`)
+and `SHA256SUMS` — to `~/.vmessenger-installer/<version>/` and runs it with `--from-app`. Machine mode
+never downloads anything but apt packages and certificates: no GitHub, no clone, no tarball fetch.
+
+### 8.1 Invocations
+
+All but `--version` run as root (`sudo`).
+
+| Command | Does |
+|---|---|
+| `--version` | `vmessenger-installer protocol=1 bundle=<version>` |
+| `--from-app --bundle-dir B --preflight [install options]` | Facts and blocking problems; changes nothing. |
+| `--from-app --bundle-dir B --launch [install options]` | Checks `SHA256SUMS`, copies the bundle to `/var/lib/vmessenger-installer/bundles/<version>/` (root-owned), starts the install as the transient unit `vmessenger-install-<run>` and returns its run id at once. |
+| `--from-app --follow RUN [--from-byte N]` | The run's log from byte `N`, streamed until the run ends; the exit status is the run's. |
+| `--from-app --status RUN` | One `status` marker: `state=running\|done\|failed\|lost exit=<n> bytes=<log size>`. |
+| `--from-app --result RUN` | The run's `result.json`. |
+| `--list-runs` | Every run, newest first. |
+
+The install runs under systemd, not under the SSH session: a dropped connection, a phone that goes
+to sleep or an app that is killed does not stop it. The app reconnects and resumes `--follow` from the
+end of the last complete line it has; nothing is lost or repeated. Only one install runs at a time
+(`flock` on `/var/lib/vmessenger-installer/lock`); a second `--launch` stops with `INSTALL_BUSY` (exit
+40) and a `fact key=active_run` naming the one in progress.
+
+### 8.2 Markers
+
+Everything the app acts on is a line of this form; every other line is log text for a person.
+
+```
+##vm v=1 seq=<n> ts=<epoch ms> ev=<event> key=value …
+```
+
+Values are percent-encoded byte by byte: anything outside `A–Z a–z 0–9 . _ ~ : / @ + , -` becomes
+`%XX`. `seq` rises by one per line within an invocation, so a resumed stream can be de-duplicated.
+
+| Event | Keys | Meaning |
+|---|---|---|
+| `hello` | `proto`, `installer`, `action`, `run` | First line of every invocation. |
+| `fact` | `key`, `value` | Something learned about the server (`os_id`, `arch`, `node_id`, `active_run`, …). |
+| `step` | `id`, `state`, `note` | `state` is `start`, `ok`, `skip`, `warn`, `fail` or `wait`. |
+| `issue` | `code`, `severity`, `step`, `detail` | `severity` is `fatal`, `warn` or `info`. A fatal issue is followed by the step's `fail` and the end. |
+| `launched` | `run` | `--launch` started a run. |
+| `result` | `status`, `file` | `result.json` was written (`status` is `ok` or `failed`). |
+| `status` | `run`, `state`, `exit`, `bytes` | Answer to `--status`. |
+| `end` | `status` | Last line of every invocation and of every run log; `status` is the exit status. |
+
+Step ids, in order: `preflight`, `packages`, `firewall`, `files`, `config`, `service`, `tls`,
+`health`, `finish`. Exit statuses are those of §3.4. A command that fails outside a known check is
+reported as `INTERNAL` with its line, and exits 1.
+
+### 8.3 `result.json` (schema 1)
+
+Written at the end of every run, failed ones included, to the run directory; a successful run also
+copies it to `/etc/vmessenger/install.json`, which is how a later run knows what is installed.
+
+```json
+{
+  "schema": 1, "status": "ok", "exitStatus": 0, "code": null,
+  "runId": "20260924-171207-8d53", "nodeVersion": "2.0.0", "nodeId": "c7fd…",
+  "mode": "ip", "tls": "selfsigned", "publicHost": "203.0.113.10", "domain": null,
+  "bootstrapUrl": "wss://203.0.113.10/dht", "relayUrl": "wss://203.0.113.10/relay",
+  "healthUrl": "https://203.0.113.10/healthz",
+  "os": {"id": "ubuntu", "version": "24.04", "arch": "x86_64"}, "java": "21.0.4",
+  "warnings": []
+}
+```
+
+### 8.4 Files
+
+| Path | Content |
+|---|---|
+| `/var/lib/vmessenger-installer/bundles/<version>/` | The uploaded bundle, root-owned; the two newest are kept. |
+| `/var/lib/vmessenger-installer/runs/<run>/` | `args`, `log`, `result.json`, `exit`; the ten newest runs are kept. |
+| `/etc/vmessenger/install.json` | The last successful run's result. |

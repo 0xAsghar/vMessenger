@@ -105,6 +105,37 @@ Run the node locally:
 
 Production deployment is in [Deployment.md](Deployment.md).
 
+### 2.1 The installer, against throwaway servers in Docker
+
+[`scripts/provision-test/run.sh`](../scripts/provision-test/run.sh) starts privileged containers that
+run systemd and sshd — a stand-in for a fresh VPS — and drives `setup-node.sh` against them over real
+SSH, the way the app does. Nothing in it can reach a real server: targets listen on `127.0.0.1` only
+(an emulator sees that as `10.0.2.2`).
+
+```bash
+./gradlew :node:distTar                                         # the tarball the bundle carries
+scripts/provision-test/run.sh build ubuntu:24.04 debian:12      # once per base image
+scripts/provision-test/run.sh test --images ubuntu:24.04 --scenario happy-ip
+scripts/provision-test/run.sh up ubuntu:24.04                   # one target to poke at, or for the emulator
+scripts/provision-test/run.sh creds                             # its throwaway accounts
+scripts/provision-test/run.sh down --all
+```
+
+Each image has four accounts: `alice` (key, passwordless sudo), `bob` (password; sudo asks for it),
+`carol` (key, no sudo) and `root` (key). Keys, the passphrase of alice's encrypted key and bob's
+password are generated into `scripts/provision-test/out/`, which git ignores. Host keys are made on
+first boot, so a recreated target presents a new one. The images carry the installer's packages in
+apt's archive cache: the install really runs apt, without fetching ~150 MB per container.
+
+| Scenario | Checks |
+|---|---|
+| `happy-ip` | Machine mode end to end: preflight, launch, follow, `result.json`; every marker parses, `seq` has no gaps, every step ends; `https://…/healthz` answers and `/relay` upgrades (101). |
+| `happy-ip-human` | The manual path of Deployment §3.1. |
+| `resume` | `--follow` dropped mid-run and resumed with `--from-byte`: the joined stream equals the server's log. |
+| `busy` | A second `--launch` while one runs: exit 40, `INSTALL_BUSY`, the active run's id. |
+| `corrupt-bundle` | A bundle that does not match `SHA256SUMS` is refused (`BUNDLE_CORRUPT`). |
+| `not-root` | A user without sudo gets `NOT_ROOT` (exit 30). |
+
 ---
 
 ## 3. Two-emulator integration test

@@ -22,6 +22,16 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
   leftovers — its preferences file and any downloaded APKs in the cache — are deleted, and a secure
   wipe deletes them too.
 
+### Added
+
+- **Machine mode for `setup-node.sh`** (`--from-app`), the protocol the app's node setup will speak
+  over SSH: an uploaded bundle checked against `SHA256SUMS`, no downloads but apt and certificates, a
+  detached run under systemd that survives the connection, `--follow` that resumes from any byte,
+  `##vm` progress markers and a `result.json` (Deployment §8).
+- **A Docker harness for the installer** (`scripts/provision-test/`): throwaway systemd + sshd
+  containers on `127.0.0.1`, driven over real SSH, with scenarios for the happy path, resuming a
+  dropped follow, a busy server, a corrupt bundle and a user without sudo (Testing §2.1).
+
 ### Changed
 
 - **The node runs on Java 17 or newer**, so Debian 12's own `openjdk-17-jre-headless` is enough. The
