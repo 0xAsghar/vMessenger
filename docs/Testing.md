@@ -100,7 +100,7 @@ Run the node locally:
 
 ```bash
 ./gradlew :node:run --args="--tcp"     # plain TCP DHT on :46555 (dev)
-./gradlew :node:installDist            # -> node/build/install/node/bin/node
+./gradlew :node:installDist            # -> node/build/install/vmessenger-node/bin/node
 ```
 
 Production deployment is in [Deployment.md](Deployment.md).

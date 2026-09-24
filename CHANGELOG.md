@@ -33,6 +33,17 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
   (canonical `S` and key, no small-order key or `R`), so the node still refuses what the app refuses.
   With no native code left, the node tarball is 12.8 MB instead of 16.6 MB. It now carries a
   `VERSION` file and no Windows `.bat` launcher.
+- **`setup-node.sh` leaves other nginx sites alone** (it used to delete `sites-enabled/default`) and no
+  longer asks nginx for `http2`, which is deprecated in the `listen` form. Every fatal error names an
+  issue code, and the exit status gives its class (Deployment §3.4).
+
+### Fixed
+
+- `setup-node.sh` exited 1 on every error, and could exit 1 after a successful install: its cleanup
+  trap ended on a failed test, which `set -e` turned into the script's exit status.
+- `setup-node.sh --build` and `--skip-build` looked for the node in `node/build/install/node`; Gradle
+  writes it to `node/build/install/vmessenger-node`.
+- The installer's closing hint said «نودهای شبکه»; the app calls them «گره‌های شبکه».
 
 ## [2.0.0-beta.1] - 2026-09-22
 

@@ -46,6 +46,11 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # The node installer runs as root on other people's servers; shellcheck is the closest thing
+      # it has to a compiler. The runner image ships it.
+      - name: Shellcheck
+        run: shellcheck -S style scripts/*.sh
+
       - name: Detekt
         run: ./gradlew detekt
 

@@ -46,7 +46,7 @@ BEHIND_CDN="none"      # none | arvan
 DIST_TAR=""
 DIST_URL=""
 BUILD_FROM_REPO=false
-SKIP_BUILD=false       # legacy: reuse node/build/install/node from the repo
+SKIP_BUILD=false       # legacy: reuse node/build/install/vmessenger-node from the repo
 SKIP_CERT=false
 FORCE_CERT=false
 FIREWALL=false
@@ -57,7 +57,6 @@ REPO_ROOT=""
 TEMPLATE_DIR=""
 DIST_SOURCE_DIR=""
 TMP_DIRS=()
-ACTIVE_CERT_DIR=""
 TLS_SUMMARY=""
 
 usage() {
@@ -80,7 +79,7 @@ Production (requires root):
   --node-port PORT      JVM listen port behind nginx (default: 8443)
   --skip-cert           Do not issue/generate certificates (they must already exist)
   --force-cert          Regenerate the self-signed certificate even if one exists
-  --skip-build          Reuse node/build/install/node from the repo (legacy)
+  --skip-build          Reuse node/build/install/vmessenger-node from the repo (legacy)
 
 Local development:
   --dev                 Run the TCP DHT node on :46555 (no nginx/systemd)
@@ -99,17 +98,39 @@ EOF
 
 log() { printf '==> %s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
-die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
-need_cmd() {
-    command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
+# Exit status by class of problem, so a caller can tell "this server cannot run a node" (20) from
+# "fix this and run again" (30) from "another install is running" (40) without parsing text:
+#   0 done · 1 failed · 10 needs a decision · 20 unsupported · 30 precondition · 40 busy
+exit_status_for() {
+    case "$1" in
+        OS_UNSUPPORTED|ARCH_UNSUPPORTED|NO_SYSTEMD) printf '20' ;;
+        NOT_ROOT|RAM_TOO_LOW|DISK_LOW) printf '30' ;;
+        INSTALL_BUSY) printf '40' ;;
+        *) printf '1' ;;
+    esac
 }
 
+# die CODE MESSAGE — every fatal path names its issue code.
+die() {
+    local code="$1"
+    shift
+    printf 'error: [%s] %s\n' "$code" "$*" >&2
+    exit "$(exit_status_for "$code")"
+}
+
+need_cmd() {
+    command -v "$1" >/dev/null 2>&1 || die CMD_MISSING "missing required command: $1"
+}
+
+# Keeps the exit status it was called with. Under `set -e` a trap that ends on a failed test would
+# replace it — every die would exit 1, and a clean run with no temp dirs would too.
 cleanup() {
-    local dir
+    local status=$? dir
     for dir in "${TMP_DIRS[@]:-}"; do
-        [[ -n "$dir" && -d "$dir" ]] && rm -rf "$dir"
+        if [[ -n "$dir" && -d "$dir" ]]; then rm -rf "$dir"; fi
     done
+    return "$status"
 }
 trap cleanup EXIT
 
@@ -141,14 +162,14 @@ parse_args() {
             --skip-build) SKIP_BUILD=true; shift ;;
             --dev) MODE="dev"; shift ;;
             -h|--help) usage; exit 0 ;;
-            *) die "unknown argument: $1 (try --help)" ;;
+            *) die USAGE "unknown argument: $1 (try --help)" ;;
         esac
     done
 }
 
 require_root_for_prod() {
     if [[ "$MODE" == "prod" && "$(id -u)" -ne 0 ]]; then
-        die "production setup must run as root (use sudo)"
+        die NOT_ROOT "production setup must run as root (use sudo)"
     fi
 }
 
@@ -171,7 +192,7 @@ resolve_public_identity() {
         return
     fi
     if [[ -z "$PUBLIC_IP" ]]; then
-        PUBLIC_IP="$(detect_public_ip)" || die "could not detect public IP — pass --ip or --domain"
+        PUBLIC_IP="$(detect_public_ip)" || die PUBLIC_HOST_UNKNOWN "could not detect public IP — pass --ip or --domain"
         log "detected public IP: $PUBLIC_IP"
     fi
     PUBLIC_NAME="$PUBLIC_IP"
@@ -188,20 +209,20 @@ validate_args() {
     fi
     case "$TLS_MODE" in
         letsencrypt)
-            [[ -n "$DOMAIN" ]] || die "--tls letsencrypt requires --domain"
+            [[ -n "$DOMAIN" ]] || die USAGE "--tls letsencrypt requires --domain"
             if [[ "$SKIP_CERT" == false && -z "$ACME_EMAIL" && "$ACME_NO_EMAIL" == false ]]; then
-                die "--tls letsencrypt requires --acme-email EMAIL or --acme-no-email (or --skip-cert with certs already issued)"
+                die USAGE "--tls letsencrypt requires --acme-email EMAIL or --acme-no-email (or --skip-cert with certs already issued)"
             fi
             ;;
         selfsigned) ;;
-        *) die "unknown --tls mode: $TLS_MODE (letsencrypt|selfsigned)" ;;
+        *) die USAGE "unknown --tls mode: $TLS_MODE (letsencrypt|selfsigned)" ;;
     esac
     case "$BEHIND_CDN" in
         none|arvan) ;;
-        *) die "unknown --behind-cdn value: $BEHIND_CDN (none|arvan)" ;;
+        *) die USAGE "unknown --behind-cdn value: $BEHIND_CDN (none|arvan)" ;;
     esac
     if [[ -n "$DIST_TAR" && ! -f "$DIST_TAR" ]]; then
-        die "--dist-tar not found: $DIST_TAR"
+        die BUNDLE_MISSING "--dist-tar not found: $DIST_TAR"
     fi
 }
 
@@ -273,7 +294,7 @@ configure_firewall() {
 }
 
 build_node() {
-    [[ -n "$REPO_ROOT" ]] || die "no repo root for build"
+    [[ -n "$REPO_ROOT" ]] || die USAGE "no repo root for build"
     log "building node (:node:installDist) — requires JDK 21 and an Android SDK for Gradle configuration"
     cd "$REPO_ROOT"
     chmod +x ./gradlew
@@ -287,7 +308,7 @@ extract_tarball() {
     out="$(make_tmp_dir)"
     log "extracting $(basename "$tar_path")"
     tar -xzf "$tar_path" --strip-components=1 -C "$out"
-    [[ -x "$out/bin/node" ]] || die "tarball does not contain bin/node: $tar_path"
+    [[ -x "$out/bin/node" ]] || die BUNDLE_CORRUPT "tarball does not contain bin/node: $tar_path"
     DIST_SOURCE_DIR="$out"
 }
 
@@ -322,18 +343,18 @@ acquire_dist() {
     if [[ "$BUILD_FROM_REPO" == true ]]; then
         clone_repo_if_needed
         build_node
-        DIST_SOURCE_DIR="$REPO_ROOT/node/build/install/node"
+        DIST_SOURCE_DIR="$REPO_ROOT/node/build/install/vmessenger-node"
         return
     fi
-    if [[ "$SKIP_BUILD" == true && -n "$REPO_ROOT" && -x "$REPO_ROOT/node/build/install/node/bin/node" ]]; then
-        log "using existing build at $REPO_ROOT/node/build/install/node"
-        DIST_SOURCE_DIR="$REPO_ROOT/node/build/install/node"
+    if [[ "$SKIP_BUILD" == true && -n "$REPO_ROOT" && -x "$REPO_ROOT/node/build/install/vmessenger-node/bin/node" ]]; then
+        log "using existing build at $REPO_ROOT/node/build/install/vmessenger-node"
+        DIST_SOURCE_DIR="$REPO_ROOT/node/build/install/vmessenger-node"
         return
     fi
     local url
     url="$(latest_release_dist_url || true)"
     if [[ -z "$url" ]]; then
-        die "no vmessenger-node tarball in the latest GitHub release — pass --dist-tar (./gradlew :node:distTar) or --build"
+        die BUNDLE_MISSING "no vmessenger-node tarball in the latest GitHub release — pass --dist-tar (./gradlew :node:distTar) or --build"
     fi
     download_dist "$url"
 }
@@ -351,7 +372,7 @@ create_dirs() {
 }
 
 install_node_files() {
-    [[ -x "$DIST_SOURCE_DIR/bin/node" ]] || die "node distribution not found at $DIST_SOURCE_DIR"
+    [[ -x "$DIST_SOURCE_DIR/bin/node" ]] || die BUNDLE_MISSING "node distribution not found at $DIST_SOURCE_DIR"
     log "installing node to $INSTALL_DIR"
     rsync -a --delete "$DIST_SOURCE_DIR/" "$INSTALL_DIR/"
     chown -R "$NODE_USER:$NODE_USER" "$INSTALL_DIR"
@@ -388,7 +409,7 @@ EOF
 
 write_systemd_unit() {
     local template="$TEMPLATE_DIR/systemd/vmessenger-node.service.template"
-    [[ -f "$template" ]] || die "systemd template not found at $template"
+    [[ -f "$template" ]] || die BUNDLE_MISSING "systemd template not found at $template"
     log "writing $SYSTEMD_UNIT"
     sed -e "s|__INSTALL_DIR__|${INSTALL_DIR}|g" \
         -e "s|__NODE_PORT__|${NODE_PORT}|g" \
@@ -402,7 +423,7 @@ write_systemd_unit() {
 write_realip_snippet() {
     if [[ "$BEHIND_CDN" == "arvan" ]]; then
         local src="$TEMPLATE_DIR/nginx/arvan-ips.conf"
-        [[ -f "$src" ]] || die "arvan-ips.conf not found at $src"
+        [[ -f "$src" ]] || die BUNDLE_MISSING "arvan-ips.conf not found at $src"
         log "writing $REALIP_SNIPPET (Arvan real-IP restoration)"
         cp "$src" "$REALIP_SNIPPET"
         if ! grep -qE '^\s*set_real_ip_from' "$REALIP_SNIPPET"; then
@@ -416,15 +437,13 @@ write_realip_snippet() {
 write_nginx_config() {
     local cert_dir="$1"
     local template="$TEMPLATE_DIR/nginx/vmessenger-node.conf.template"
-    [[ -f "$template" ]] || die "nginx template not found at $template"
+    [[ -f "$template" ]] || die BUNDLE_MISSING "nginx template not found at $template"
     log "writing nginx site $NGINX_SITE (certs: $cert_dir)"
     sed -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
         -e "s|__NODE_PORT__|${NODE_PORT}|g" \
         -e "s|__CERT_DIR__|${cert_dir}|g" \
         "$template" > "$NGINX_SITE"
     ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/vmessenger-node.conf
-    rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-    ACTIVE_CERT_DIR="$cert_dir"
 }
 
 build_san_list() {
@@ -529,7 +548,7 @@ configure_tls_and_nginx() {
         selfsigned)
             if [[ "$SKIP_CERT" == true ]]; then
                 [[ -f "$CERT_DIR/fullchain.pem" && -f "$CERT_DIR/privkey.pem" ]] \
-                    || die "missing certificate in $CERT_DIR (need fullchain.pem and privkey.pem)"
+                    || die TLS_CERT_MISSING "missing certificate in $CERT_DIR (need fullchain.pem and privkey.pem)"
             else
                 generate_selfsigned_certificate
             fi
@@ -539,7 +558,7 @@ configure_tls_and_nginx() {
             ;;
         letsencrypt)
             if [[ "$SKIP_CERT" == true ]]; then
-                le_cert_exists || die "missing Let's Encrypt certificate in $(le_cert_dir)"
+                le_cert_exists || die TLS_CERT_MISSING "missing Let's Encrypt certificate in $(le_cert_dir)"
                 write_nginx_config "$(le_cert_dir)"
                 reload_nginx
                 TLS_SUMMARY="Let's Encrypt ($(le_cert_dir))"
@@ -584,7 +603,7 @@ health_check() {
         sleep 1
         if [[ "$i" -eq 30 ]]; then
             journalctl -u vmessenger-node -n 30 --no-pager >&2 || true
-            die "node did not become healthy on 127.0.0.1:${NODE_PORT}"
+            die HEALTH_LOCAL_FAILED "node did not become healthy on 127.0.0.1:${NODE_PORT}"
         fi
     done
     if curl -fsSk -m 5 --resolve "${DOMAIN:-localhost}:443:127.0.0.1" "https://${DOMAIN:-localhost}/healthz" 2>/dev/null | grep -q '^ok'; then
@@ -631,7 +650,7 @@ cache bypass for /healthz /dht /relay, origin read timeout as high as the plan a
 and (once Let's Encrypt is installed) strict origin certificate validation.
 EOF
     fi
-    print_terminal_qr "Scan in app (تنظیمات → نودهای شبکه → اسکن QR) — bootstrap:" "$bootstrap_link"
+    print_terminal_qr "Scan in app (تنظیمات → گره‌های شبکه → اسکن QR) — bootstrap:" "$bootstrap_link"
     print_terminal_qr "Scan in app — relay:" "$relay_link"
     print_terminal_qr "One-line install script (share to deploy another node):" "$install_one_liner"
     printf '\n%s\n' "$install_one_liner"
@@ -677,4 +696,8 @@ main() {
     fi
 }
 
-main "$@"
+# Sourcing the script (tests) defines the functions without running anything. Piped into bash
+# (curl | bash) BASH_SOURCE is empty, which counts as being run.
+if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
+    main "$@"
+fi

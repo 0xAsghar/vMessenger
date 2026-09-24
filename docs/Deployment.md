@@ -90,7 +90,21 @@ curl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/se
 | `/etc/letsencrypt/live/<domain>/` | Let's Encrypt certificate; renewed by `certbot.timer` with `systemctl reload nginx` as deploy hook. |
 
 The installer also removes the pre-1.0 artifacts (`vmessenger-relay.service`, `relay.vmessenger.ir.conf`) if it
-finds them, so two units can never fight over the same port.
+finds them, so two units can never fight over the same port. It leaves every other nginx site alone — earlier
+versions deleted `sites-enabled/default`, which is somebody else's site on a shared host.
+
+### 3.4 Exit status
+
+Every fatal error prints `error: [CODE] message`, and the exit status says what kind of problem it was:
+
+| Status | Meaning |
+|---|---|
+| `0` | Installed and healthy. |
+| `1` | Failed; the code says where. |
+| `10` | Needs a decision before it can continue. |
+| `20` | This server cannot run a node (`OS_UNSUPPORTED`, `ARCH_UNSUPPORTED`, `NO_SYSTEMD`). |
+| `30` | Fix something and run again (`NOT_ROOT`, `RAM_TOO_LOW`, `DISK_LOW`). |
+| `40` | Another install is running (`INSTALL_BUSY`). |
 
 ## 4. TLS
 
