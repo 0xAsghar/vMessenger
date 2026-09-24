@@ -91,6 +91,36 @@ class RelayListenerTest {
     }
 
     @Test
+    fun aClaimedCircuitGoesToItsClaimantAndNotToMessaging() = runBlocking {
+        val transport = AcceptingRelayTransport(FakeWebSocket())
+        val listener = RelayListener(transport, RelayHelloFactory(crypto), FakeRelayDirectory())
+        listener.configure(ByteArray(32), ByteArray(32), { ByteArray(64) }) { error("not a messaging circuit") }
+        val claimed = mutableListOf<String>()
+        listener.claimCircuits("vmcall-abc-") { claimed += it.remote.address }
+
+        assertTrue(listener.acceptCircuit("wss://relay.invalid/relay", "vmcall-abc-0"))
+        assertTrue(listener.acceptCircuit("wss://relay.invalid/relay", "vmcall-abc-1"))
+
+        assertEquals(2, claimed.size)
+        assertEquals("vmcall-abc-1", transport.lastHello?.circuitId)
+    }
+
+    @Test
+    fun anUnclaimedOrReleasedCircuitStillReachesMessaging() = runBlocking {
+        val transport = AcceptingRelayTransport(FakeWebSocket())
+        val listener = RelayListener(transport, RelayHelloFactory(crypto), FakeRelayDirectory())
+        val messaging = mutableListOf<String>()
+        listener.configure(ByteArray(32), ByteArray(32), { ByteArray(64) }) { messaging += "session" }
+        listener.claimCircuits("vmcall-abc-") { error("released") }
+        listener.releaseCircuits("vmcall-abc-")
+
+        listener.acceptCircuit("wss://relay.invalid/relay", "vmcall-abc-2")
+        listener.acceptCircuit("wss://relay.invalid/relay", "0b6f7d1c-uuid")
+
+        assertEquals(2, messaging.size)
+    }
+
+    @Test
     fun acceptWithoutHandlerIsNoOp() = runBlocking {
         val transport = ThrowingRelayTransport()
         val listener = RelayListener(transport, RelayHelloFactory(crypto), FakeRelayDirectory())

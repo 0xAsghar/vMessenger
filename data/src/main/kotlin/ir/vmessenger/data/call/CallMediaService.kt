@@ -7,88 +7,82 @@ import ir.vmessenger.core.common.network.Endpoint
 import ir.vmessenger.core.common.network.TransportIds
 import ir.vmessenger.core.crypto.CryptoEngine
 import ir.vmessenger.data.di.IoDispatcher
+import ir.vmessenger.network.messaging.RelayListener
 import ir.vmessenger.network.transport.Connection
 import ir.vmessenger.network.transport.InternetTransport
+import ir.vmessenger.network.transport.RelayTransport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * The audio path: one TCP connection per call, carrying nothing but sealed Opus frames.
+ * Where a call's audio travels: a direct socket when the two devices can reach each other, a relay
+ * circuit when they cannot, and a new one of either when the one in use dies.
  *
  * Media does not ride the messaging session on purpose. That session's ratchet is capped at 65,536
  * frames, which a call at fifty frames a second exhausts in about eleven minutes, and one slow
- * message would stall audio behind it. So a call gets its own socket, its own key, and its own port.
+ * message would stall audio behind it. So a call gets its own connections and its own key.
  *
- * **The reachability limit, stated plainly:** the accepting side listens and advertises its local
- * addresses; the dialling side connects to one of them. With no UDP hole-punching in the app yet,
- * that works when the two devices can reach each other directly — the same LAN, a VPN, or a
- * reachable host — and fails cleanly otherwise, ending the call instead of leaving it silent.
- * Carrying media over a relay is the documented follow-up; it needs the relay's inbound path to
- * distinguish a media circuit from a messaging one, which is surgery on the handshake boundary and
- * not something to attempt without two devices in hand.
+ * The callee listens on its own port and on the relay it already listens on for messages, claiming
+ * the circuits named for this call ([CallCircuits]); it advertises both. The caller dials every
+ * advertised path at once, and [CallMediaSession] settles which one carries the audio. Whenever the
+ * call has no path, the caller dials again — a fresh relay circuit each round — until the
+ * coordinator gives up on it.
  */
 @Singleton
 class CallMediaService @Inject constructor(
     private val internetTransport: InternetTransport,
+    private val relayTransport: RelayTransport,
+    private val relayListener: RelayListener,
     private val audio: CallAudio,
     private val crypto: CryptoEngine,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : CallMediaPort {
-    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher + loggingExceptionHandler(TAG))
-    private var job: Job? = null
+    @Volatile
+    private var call: MediaCall? = null
 
-    override suspend fun accept(
-        key: ByteArray,
-        outgoing: Boolean,
-        onEvent: suspend (CallEvent) -> Unit,
-    ): List<String> {
+    override suspend fun accept(key: ByteArray, onEvent: suspend (CallEvent) -> Unit): List<MediaEndpoint> {
         stop()
-        val addresses = localAddresses()
-        if (addresses.isEmpty()) {
-            AppLogger.warn(TAG, "no reachable local address; the peer cannot open the media path")
-            key.fill(0)
-            return addresses
+        val prefix = CallCircuits.prefix(crypto, key)
+        val media = start(key, MediaRole.Callee, onEvent, claimed = prefix)
+        media.scope.launch { listenDirect(media.session) }
+        relayListener.claimCircuits(prefix) { connection -> media.session.offer(connection) }
+        val relay = relayListener.connectedRelayUrl?.let { MediaEndpoint(it, relay = true) }
+        val endpoints = localAddresses(MEDIA_PORT).map { MediaEndpoint(it, relay = false) } + listOfNotNull(relay)
+        if (endpoints.isEmpty()) {
+            AppLogger.warn(TAG, "no address and no relay to advertise; the caller cannot reach this device")
+        } else {
+            AppLogger.info(TAG, "media accepting on ${endpoints.size} path(s), relay=${relay != null}")
         }
-        AppLogger.info(TAG, "media listening on $MEDIA_PORT, advertising ${addresses.size} address(es)")
-        job = scope.launch {
-            // One connection per call: the first to arrive is the peer's, and the listener closes
-            // behind it rather than staying open for whatever else finds the port.
-            internetTransport.listen(MEDIA_PORT).take(1).collect { connection ->
-                carry(connection, key, outgoing, onEvent)
-            }
-        }
-        return addresses
+        return endpoints
     }
 
     override fun connect(
-        addresses: List<String>,
+        endpoints: List<MediaEndpoint>,
+        peerIdentityHash: ByteArray,
         key: ByteArray,
-        outgoing: Boolean,
         onEvent: suspend (CallEvent) -> Unit,
     ) {
         stop()
-        job = scope.launch {
-            val connection = firstReachable(addresses)
-            if (connection == null) {
-                AppLogger.warn(TAG, "no advertised media address answered; ending the call")
-                key.fill(0)
-                onEvent(CallEvent.MediaLost)
-            } else {
-                AppLogger.info(TAG, "media connected to ${connection.remote.address}")
-                carry(connection, key, outgoing, onEvent)
-            }
-        }
+        val target = DialTarget(
+            direct = endpoints.filterNot { it.relay }.map { it.address },
+            // Held to the same rule as any relay a contact advertises for messaging: wss:// with a host.
+            relay = endpoints.firstOrNull { it.relay && relayTransport.canReach(Endpoint(RELAY, it.address)) }?.address,
+            peer = peerIdentityHash.copyOf(),
+            prefix = CallCircuits.prefix(crypto, key),
+        )
+        val media = start(key, MediaRole.Caller, onEvent, claimed = null)
+        media.scope.launch { dialWhileDown(media, target) }
     }
 
     override fun setMuted(muted: Boolean) {
@@ -100,76 +94,70 @@ class CallMediaService @Inject constructor(
     }
 
     override fun stop() {
-        job?.cancel()
-        job = null
+        val ending = call ?: return
+        call = null
+        ending.claimed?.let(relayListener::releaseCircuits)
+        ending.session.close()
         audio.capture.muted = false
-        audio.playback.close()
-        audio.session.close()
     }
 
-    /**
-     * Runs one call's audio to the end of the connection.
-     *
-     * [CallEvent.MediaLost] is reported after the loops finish but outside the `finally`, so a
-     * teardown this class was *told* to do ([stop]) does not report a loss back to the caller that
-     * asked for it — only a connection that actually ended on its own does.
-     */
-    private suspend fun carry(
-        connection: Connection,
+    private fun start(
         key: ByteArray,
-        outgoing: Boolean,
+        role: MediaRole,
         onEvent: suspend (CallEvent) -> Unit,
-    ) {
-        val codec = audio.codecs.create()
-        val direction = if (outgoing) MediaDirection.CallerToCallee else MediaDirection.CalleeToCaller
-        val channel = CallMediaChannel(crypto, codec, audio.playback, key, direction)
-        // Before a single frame moves: the echo canceller, the earpiece routing and the volume
-        // keys are all conditioned on communication mode, and focus is what stops the music.
-        audio.session.open()
-        try {
-            // A failure is still an end: thrown past this point, it skipped the report below and
-            // left the call on screen over a dead socket.
-            val failure = runCatching {
-                channel.run(connection, audio.capture.frames()) { onEvent(CallEvent.MediaUp) }
-            }.exceptionOrNull()
-            if (failure is CancellationException) throw failure
-            failure?.let { AppLogger.warn(TAG, "media path failed: ${it.message}") }
-        } finally {
-            withContext(NonCancellable) {
-                runCatching { codec.close() }
-                runCatching { connection.close() }
-                // Restored, not merely left: a process that forgets it was in communication mode
-                // leaves the whole device routing audio as though a call were still up.
-                audio.session.close()
-                // This array is ours (see [CallMediaPort]); nothing else holds it.
-                key.fill(0)
-            }
-        }
-        AppLogger.info(TAG, "media path ended")
-        onEvent(CallEvent.MediaLost)
+        claimed: String?,
+    ): MediaCall {
+        val scope = CoroutineScope(SupervisorJob() + ioDispatcher + loggingExceptionHandler(TAG))
+        val direction = if (role == MediaRole.Caller) MediaDirection.CallerToCallee else MediaDirection.CalleeToCaller
+        val sealer = MediaSealer(crypto, key, direction)
+        val session = CallMediaSession(sealer, CallAudioDevices(audio), role, onEvent, scope)
+        return MediaCall(session, scope, claimed).also { call = it }
     }
 
-    private suspend fun firstReachable(addresses: List<String>): Connection? =
-        addresses.firstNotNullOfOrNull { address ->
-            internetTransport.connect(Endpoint(TransportIds.INTERNET, address)).getOrNull()
-        }
+    /** Direct connections for the whole call, not just its first: a caller that loses its path dials again. */
+    private suspend fun listenDirect(session: CallMediaSession) {
+        runCatching { internetTransport.listen(MEDIA_PORT).collect { session.offer(it) } }
+            .onFailure { failure ->
+                if (failure is CancellationException) throw failure
+                // Not fatal: the relay can still carry the call.
+                AppLogger.warn(TAG, "direct media listener failed: ${failure.message}")
+            }
+    }
 
     /**
-     * This device's own IPv4 addresses, which is the best a phone can say about where to reach it:
-     * there is no STUN here, so a NAT's outside address is simply not knowable.
+     * Rounds of dialling, each started only while nothing carries the call and given [ROUND_MS] to
+     * bind before the next. A round's slower dials may land after it; they are still candidates.
      */
-    private fun localAddresses(): List<String> = runCatching {
-        NetworkInterface.getNetworkInterfaces().asSequence()
-            .filter { it.isUp && !it.isLoopback }
-            .flatMap { it.inetAddresses.asSequence() }
-            .filterIsInstance<Inet4Address>()
-            .mapNotNull { it.hostAddress }
-            .map { "$it:$MEDIA_PORT" }
-            .toList()
-    }.getOrElse {
-        AppLogger.warn(TAG, "could not enumerate local addresses: ${it.message}")
-        emptyList()
+    private suspend fun dialWhileDown(media: MediaCall, target: DialTarget) {
+        var attempt = 0
+        while (currentCoroutineContext().isActive) {
+            media.session.up.first { !it }
+            AppLogger.info(TAG, "opening media paths, round $attempt")
+            target.direct.forEach { address -> media.scope.launch { dialDirect(address)?.let(media.session::offer) } }
+            target.relay?.let { url ->
+                val circuit = CallCircuits.id(target.prefix, attempt)
+                media.scope.launch { dialRelay(url, target.peer, circuit)?.let(media.session::offer) }
+            }
+            attempt++
+            withTimeoutOrNull(ROUND_MS) { media.session.up.first { it } }
+        }
     }
+
+    private suspend fun dialDirect(address: String): Connection? =
+        internetTransport.connect(Endpoint(TransportIds.INTERNET, address))
+            .onFailure { AppLogger.info(TAG, "direct media dial failed: ${it.message}") }
+            .getOrNull()
+
+    private suspend fun dialRelay(url: String, peer: ByteArray, circuitId: String): Connection? =
+        relayTransport.connect(Endpoint(RELAY, url), peer, circuitId)
+            .onFailure { AppLogger.info(TAG, "relay media dial failed: ${it.message}") }
+            .getOrNull()
+
+    /** One call's media: its session, the scope everything of it runs in, and the circuits it claimed. */
+    private class MediaCall(val session: CallMediaSession, val scope: CoroutineScope, val claimed: String?)
+
+    /** Everything the caller needs to open a path, fixed for the call. */
+    private class DialTarget(val direct: List<String>, val relay: String?, val peer: ByteArray, val prefix: String)
 
     private companion object {
         const val TAG = "Call"
@@ -179,5 +167,27 @@ class CallMediaService @Inject constructor(
          * both neighbours: messaging listens on 48555 and the embedded DHT on 49555.
          */
         const val MEDIA_PORT = 48557
+
+        /** How long a round of dials gets to produce a bound path before the next round starts. */
+        const val ROUND_MS = 8_000L
+
+        val RELAY = TransportIds.RELAY
     }
+}
+
+/**
+ * This device's own IPv4 addresses, which is the best a phone can say about where to reach it: there
+ * is no STUN here, so a NAT's outside address is simply not knowable. The relay covers what these do not.
+ */
+private fun localAddresses(port: Int): List<String> = runCatching {
+    NetworkInterface.getNetworkInterfaces().asSequence()
+        .filter { it.isUp && !it.isLoopback }
+        .flatMap { it.inetAddresses.asSequence() }
+        .filterIsInstance<Inet4Address>()
+        .mapNotNull { it.hostAddress }
+        .map { "$it:$port" }
+        .toList()
+}.getOrElse {
+    AppLogger.warn("Call", "could not enumerate local addresses: ${it.message}")
+    emptyList()
 }

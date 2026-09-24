@@ -25,6 +25,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
 import okio.ByteString.Companion.toByteString
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -48,6 +49,7 @@ private enum class ControlChannelEnd(val pauseMs: Long) {
 }
 
 @Singleton
+@Suppress("TooManyFunctions") // one control channel's lifecycle, plus where each circuit it announces goes
 class RelayListener @Inject constructor(
     private val relayTransport: RelayTransport,
     private val relayHelloFactory: RelayHelloFactory,
@@ -68,6 +70,17 @@ class RelayListener @Inject constructor(
 
     @Volatile
     private var running = false
+
+    /** Circuits a local component asked for by name; see [claimCircuits]. */
+    private val claims = ConcurrentHashMap<String, InboundConnectionHandler>()
+
+    /**
+     * The relay this device can be reached on right now: the one its control channel is connected
+     * to, or null between sessions. What a peer has to dial to get a circuit to this listener.
+     */
+    @Volatile
+    var connectedRelayUrl: String? = null
+        private set
 
     /**
      * [ed25519PrivateKeyProvider] is consulted per connection attempt so the key
@@ -98,6 +111,22 @@ class RelayListener @Inject constructor(
     fun stop() {
         running = false
         scope.cancel()
+    }
+
+    /**
+     * Routes every incoming circuit whose id starts with [prefix] to [handler] instead of the
+     * messaging handshake, until [releaseCircuits].
+     *
+     * A dialer chooses its circuit id and the relay passes it through verbatim, which is what lets
+     * a call's audio arrive on this listener without being mistaken for a messaging session: both
+     * ends derive the prefix from the call's own key, so nobody else can name a circuit into it.
+     */
+    fun claimCircuits(prefix: String, handler: InboundConnectionHandler) {
+        claims[prefix] = handler
+    }
+
+    fun releaseCircuits(prefix: String) {
+        claims.remove(prefix)
     }
 
     @Suppress("TooGenericExceptionCaught") // any failure of the control channel is retried with backoff
@@ -177,10 +206,12 @@ class RelayListener @Inject constructor(
         val webSocket = openWebSocket(Request.Builder().url(url).build(), host, targetIp, session)
         try {
             session.openLatch.await()
+            connectedRelayUrl = url
             val keepAlive = scope.launch { keepAliveLoop(webSocket, session.closeLatch) }
             session.closeLatch.await()
             keepAlive.cancel()
         } finally {
+            connectedRelayUrl = null
             webSocket.cancel()
         }
         return session.end
@@ -225,7 +256,8 @@ class RelayListener @Inject constructor(
      * the circuit dropped, never the listener (or the process).
      */
     internal suspend fun acceptCircuit(url: String, circuitId: String): Boolean {
-        val inbound = handler ?: return false
+        val claimed = claims.entries.firstOrNull { circuitId.startsWith(it.key) }?.value
+        val inbound = claimed ?: handler ?: return false
         val hello = relayHelloFactory.buildAcceptHello(circuitId)
         val connection = runCatching { relayTransport.openRelayCircuit(url, hello, awaitReady = true) }
             .onFailure { AppLogger.warn(TAG, "accept circuit $circuitId failed: ${it.message}") }

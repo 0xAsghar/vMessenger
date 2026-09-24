@@ -965,8 +965,8 @@ sequenceDiagram
   B->>A: RING
   Note over B: user answers; mic opens here and only here
   B->>A: ACCEPT {media_ephemeral_pub, media_endpoints}
-  A->>B: TCP connect to one advertised address (§18)
-  Note over A,B: sealed Opus frames until HANGUP or the path drops
+  A->>B: every advertised path at once: TCP to each address, a named relay circuit (§18)
+  Note over A,B: sealed Opus frames on the path both bound, until HANGUP; a lost path is replaced
 ```
 
 Each signal rides an ordinary sealed `MessageEnvelope` on a messaging session, so the peer is whoever the v2 handshake proved (§5) — a call needs no second authentication.
@@ -976,11 +976,11 @@ Each signal rides an ordinary sealed `MessageEnvelope` on a messaging session, s
 | One call at a time; a second `INVITE` is answered `BUSY` rather than queued | `CallCoordinator.onInvite` |
 | `RING` is what turns "calling" into "ringing" for the caller; it changes no state | `onRing` |
 | The callee's `media_endpoints` travel in `ACCEPT` only, so the peer learns where to reach this device for audio **after** its user answered | `accept` |
-| The caller uses only non-relay endpoints (`filterNot { it.relay }`); with none usable the call ends rather than staying silent | `onAccept` |
+| The callee advertises its own IPv4 addresses (`relay = false`) and the relay its listener is connected to (`relay = true`); the caller dials all of them, a relay only if it passes the same `NodeAddressPolicy` as a relay a contact advertises for messaging, and with no endpoint at all the call ends rather than staying silent | `accept`, `onAccept`, `CallMediaService.connect` |
 | A signal for a `call_id` that is not the live one is ignored, and an event that does not fit the current state is dropped rather than applied — signalling races (an `ACCEPT` and a `HANGUP` crossing) are ordinary | `advance`, `CallState.next` |
 | A call that was never answered ends with `CANCEL`, an answered one with `HANGUP`, so the other end can tell "they gave up" from "they hung up" | `hangUp` |
 
-`CALL_SIGNAL_TYPE_RECONNECT` is **declared but never produced or consumed** in this release, the same way `FRAME_TYPE_ACK` is (§3): a lost media path ends the call (`onMediaEvent` sends `HANGUP`), so `CallState.Reconnecting` is unreachable and re-attaching to an agreed call is not implemented.
+`CALL_SIGNAL_TYPE_RECONNECT` is **declared but never produced or consumed**, the same way `FRAME_TYPE_ACK` is (§3). Reconnecting needs no signal: the media path replaces a lost connection on its own (§18), and the coordinator only moves the call between `Active` and `Reconnecting` (`onMediaEvent`). `Reconnecting` has the same 30-second deadline as `Connecting`; running out sends `HANGUP` and tells the user the call failed.
 
 ### 17.1 The per-call media key
 
@@ -999,22 +999,28 @@ That gives every call its own forward-secret key for one round trip, with no sec
 
 ## 18. Call media path
 
-`data/.../call/CallMediaService.kt`, `CallMediaChannel.kt`.
+`data/.../call/CallMediaService.kt`, `CallMediaSession.kt`, `CallMediaFrames.kt`, `CallCircuits.kt`.
 
-Audio does **not** ride the messaging session. That session's ratchet is capped at 65 536 frames (§6), which a call at fifty frames a second exhausts in about eleven minutes, and one slow message would stall audio behind it. So a call gets its own socket, its own port and its own key.
+Audio does **not** ride the messaging session. That session's ratchet is capped at 65 536 frames (§6), which a call at fifty frames a second exhausts in about eleven minutes, and one slow message would stall audio behind it. So a call gets its own connections and its own key.
 
 | Property | Value |
 |---|---|
-| Transport | one TCP connection per call, **port 48557** — clear of messaging (48555) and the embedded DHT (49555) |
-| Frame | `[4-byte big-endian sequence][XChaCha20-Poly1305 sealed Opus packet]` |
+| Paths | a direct TCP connection to **port 48557** — clear of messaging (48555) and the embedded DHT (49555) — or a relay circuit to the callee's relay listener (§13), whichever binds first; a call may use several over its life, one at a time |
+| Frame | `[4-byte big-endian sequence][XChaCha20-Poly1305 sealed Opus packet]`; the same on either path |
+| Greeting | a frame whose sealed payload is empty: it carries nothing but proof that the path reaches someone holding the key |
 | Nonce (24 B) | `[1 direction byte][15 zero bytes][4-byte big-endian sequence]` — `0` = caller→callee, `1` = callee→caller |
+| Sequence | **one counter per call and direction, shared by every path** (`MediaSealer`), so a new path never restarts at zero and never repeats a nonce under the call's key |
 | Key | the per-call key of §17.1; empty associated data |
-| Listener | the accepting side takes exactly one connection (`take(1)`) and closes the listener behind it |
 | Loss | no retransmission — a late voice frame is worse than a missing one, so loss is Opus's concealment problem, fed by a jitter buffer |
 
 The sequence number travels in the clear because the receiver needs it to build the nonce before it can authenticate anything; it reveals only how many frames have gone by, which the frame count already reveals. A frame that fails to authenticate is dropped and nothing else happens — and that is also all an attacker aiming bytes at the port achieves. The failure is logged once per call, not once per frame.
 
-**Two documented limits.**
+**Relay circuits by name.** A relay passes the `circuit_id` a dialer chooses through to the listener verbatim (§13; pinned by the node's tests), so the call names its circuits: `vmcall-<hex(HKDF-SHA256(media_key, salt = ∅, info = "vmessenger-call-circuit-v1", 16))>-<attempt>` (`CallCircuits`). On `ACCEPT` the callee claims that prefix on its relay listener (`RelayListener.claimCircuits`), which hands matching circuits to the call instead of the messaging handshake; every other circuit reaches messaging as before. The name comes from the call's key, so nobody but the two ends can name a circuit into the call; the relay, which sees the name, learns only that a circuit was opened. Each attempt is its own name, because a relay refuses a second dial under a name still pending.
 
-1. **Media is direct TCP only.** The accepting side listens on 48557 and advertises its own local IPv4 addresses in `ACCEPT`; the caller dials the first that answers. There is no STUN in the app, so a NAT's outside address is simply not knowable, and there is no relay path for media — carrying it over a relay would need the relay's inbound path to tell a media circuit from a messaging one. So a call works when the two devices can reach each other directly (the same LAN, a VPN, a reachable host) and fails cleanly otherwise: with no advertised address usable, the call ends rather than sitting silent.
-2. **A lost media path ends the call.** There is no failover and no re-attach: when the connection ends on its own the coordinator sends `HANGUP` and tears the call down, rather than leaving it in a state with no way back and no way out. A teardown this side asked for does not report a loss back to itself.
+**Choosing a path.** The caller opens every advertised path at once — TCP to each address, a relay circuit — and greets on each every 250 ms. The callee binds to the first connection on which anything authenticates, closes the others, and answers on it alone; the caller binds to the connection the answer came back on and closes the rest. Both ends therefore always agree, and a path carries audio only once the far end has proved it holds the key. The microphone and the speaker run only while a path is bound (`CallMediaSession`).
+
+**Losing a path.** A live call sends fifty frames a second, silence and mute included, so a bound path that delivers no authenticated frame for 5 s is dropped even if its socket never noticed (a stalled relay, a network change). Losing the bound path reports `MediaLost` (the call goes to `Reconnecting`, §17); whenever nothing is bound, the caller dials a new round every 8 s — its TCP addresses again and a fresh relay circuit — and the next path to bind reports `MediaRestored`. The callee keeps listening on its port and its claimed circuits for the whole call. A callee that is still hearing its path ignores a new one; a path the caller has really left goes quiet within a second, and then a new one is welcome.
+
+**Strangers.** Anyone can open a connection to port 48557 or dial the callee's relay listener. A connection that has not authenticated a frame within 10 s is closed, and at most 8 are held at once, so a stranger cannot fill the slots a reconnecting caller needs.
+
+**One documented limit.** There is no STUN and no hole punching: the direct path works when the devices can reach each other (the same LAN, a VPN, a reachable host), and the relay covers everything else — at the cost of the relay carrying the call's (sealed) audio and seeing its timing.

@@ -135,16 +135,12 @@ class CallCoordinator @Inject constructor(
         val contact = contactDao.getById(current.contactId) ?: return
         val keys = ephemeral ?: crypto.generateX25519KeyPair().also { ephemeral = it }
         val key = mediaKey
-        val addresses = if (key == null) {
-            emptyList()
-        } else {
-            media.accept(key.copyOf(), outgoing = false, ::onMediaEvent)
-        }
+        val endpoints = if (key == null) emptyList() else media.accept(key.copyOf(), ::onMediaEvent)
         advance(CallEvent.AcceptedHere)
         send(
             contact,
             current.callId,
-            Outgoing(CallSignalType.CALL_SIGNAL_TYPE_ACCEPT, keys.publicKey, addresses = addresses),
+            Outgoing(CallSignalType.CALL_SIGNAL_TYPE_ACCEPT, keys.publicKey, endpoints = endpoints),
         )
     }
 
@@ -171,15 +167,17 @@ class CallCoordinator @Inject constructor(
     }
 
     /**
-     * Called by the media path when its first frame lands, and when it ends.
+     * What the media path reports: audio up, the path carrying it lost, and a new one bound.
      *
-     * A media path that ends, ends the call in this release: [CallState.Reconnecting] is in the
-     * machine for the failover work and nothing reaches it yet, so a call whose socket died would
-     * otherwise sit there with no way back and no way out. Ending it also signals the peer, who may
-     * be listening for a connection that is never going to arrive.
+     * A lost path moves a live call to [CallState.Reconnecting] and nothing more — the media path is
+     * already opening another, and the state's own deadline ends the call if none binds in time. A
+     * loss before audio ever flowed changes nothing either; Connecting has the same deadline. Only a
+     * failure no new path could fix, such as the microphone, ends the call here, and ending it
+     * signals the peer, who would otherwise wait out its own deadline.
      */
     suspend fun onMediaEvent(event: CallEvent) = mutex.withLock {
-        if (event == CallEvent.MediaLost) {
+        if (event == CallEvent.MediaFailed) {
+            _session.value?.let { report(it, CallEndReason.Failed) }
             endLocked(CallSignalType.CALL_SIGNAL_TYPE_HANGUP)
         } else {
             advance(event)
@@ -244,9 +242,10 @@ class CallCoordinator @Inject constructor(
         deriveMediaKey(keys.privateKey, signal.mediaEphemeralPub.toByteArray())
         advance(CallEvent.AcceptReceived)
         val key = mediaKey
-        val addresses = signal.mediaEndpointsList.filterNot { it.relay }.map { it.address }
-        if (key != null && addresses.isNotEmpty()) {
-            media.connect(addresses, key.copyOf(), outgoing = true, ::onMediaEvent)
+        val endpoints = signal.mediaEndpointsList.map { MediaEndpoint(it.address, it.relay) }
+        val contact = contactDao.getById(ours.contactId)
+        if (key != null && contact != null && endpoints.isNotEmpty()) {
+            media.connect(endpoints, contact.identityHash, key.copyOf(), ::onMediaEvent)
         } else {
             AppLogger.warn(TAG, "accepted with no usable media address; ending call=$callId")
             endLocked(CallSignalType.CALL_SIGNAL_TYPE_HANGUP)
@@ -393,7 +392,7 @@ class CallCoordinator @Inject constructor(
         val type: CallSignalType,
         val ephemeralPublic: ByteArray = ByteArray(0),
         val reason: CallRejectReason = CallRejectReason.CALL_REJECT_REASON_UNSPECIFIED,
-        val addresses: List<String> = emptyList(),
+        val endpoints: List<MediaEndpoint> = emptyList(),
     )
 
     private suspend fun send(contact: ContactEntity, callId: String, outgoing: Outgoing): AppResult<Unit> {
@@ -405,8 +404,8 @@ class CallCoordinator @Inject constructor(
         if (outgoing.ephemeralPublic.isNotEmpty()) {
             signal.mediaEphemeralPub = ByteString.copyFrom(outgoing.ephemeralPublic)
         }
-        outgoing.addresses.forEach { address ->
-            signal.addMediaEndpoints(CallEndpoint.newBuilder().setAddress(address).setRelay(false))
+        outgoing.endpoints.forEach { endpoint ->
+            signal.addMediaEndpoints(CallEndpoint.newBuilder().setAddress(endpoint.address).setRelay(endpoint.relay))
         }
         val envelope = MessageEnvelope.newBuilder()
             .setMessageId(
@@ -437,7 +436,10 @@ class CallCoordinator @Inject constructor(
         /** Longer than [RING_TIMEOUT_MS], so the caller's cancel normally arrives first. */
         const val INCOMING_RING_TIMEOUT_MS = 75_000L
 
-        /** Answered, but no audio yet: long enough to try every advertised address in turn. */
+        /**
+         * Answered but no audio yet, or audio lost and not yet back: long enough for several rounds
+         * of dialling every advertised path, relay included.
+         */
         const val CONNECT_TIMEOUT_MS = 30_000L
 
         fun timeoutOf(state: CallState): Long? = when (state) {

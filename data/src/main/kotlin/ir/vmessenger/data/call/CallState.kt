@@ -80,6 +80,12 @@ sealed interface CallEvent {
     /** A dropped media path came back. */
     data object MediaRestored : CallEvent
 
+    /**
+     * The media path cannot go on — the microphone would not open or stopped — which no new
+     * connection would fix. The coordinator ends the call on it rather than moving the machine.
+     */
+    data object MediaFailed : CallEvent
+
     /** The user on this device declined or hung up. */
     data object EndedHere : CallEvent
 

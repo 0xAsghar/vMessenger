@@ -29,11 +29,11 @@ or honour a message timer.
   can be answered from the notification. Opus at 48 kHz in 20 ms frames, with concealment for lost
   packets, mute, and a speaker/earpiece choice.
 
-  Two limits, stated plainly because they decide whether a call connects at all. **Media is direct
-  TCP:** the phone that answers listens and tells the caller its local addresses, so a call works
-  when the two devices can reach each other directly — the same network, a VPN, or a reachable
-  host — and ends cleanly when they cannot. Carrying call audio over a relay is not in this release.
-  **There is no reconnection yet:** a call whose connection drops ends rather than recovering.
+  Audio takes a direct connection when the two phones can reach each other and a relay circuit when
+  they cannot — tried at once, so a call connects as fast as the better of the two allows. The
+  circuit is named from the call's own key, so nobody else can route one into it, and the relay
+  carries only sealed frames. A call whose connection drops — a network change, a stalled relay —
+  says so and reconnects on its own, for up to 30 seconds, without the other person redialling.
 
   The microphone is opened only by answering, and only under a foreground service, so the system
   privacy indicator and the notification shade both say so for as long as it is true.
@@ -111,6 +111,11 @@ or honour a message timer.
   the network, so a wipe that stopped the network but left the job enqueued had it brought back.
   Cancelling that work is now the wipe's first step, before the network is stopped, and the order is
   pinned by a test.
+
+- **A relay circuit closed by the other end went unnoticed.** The relay's close was never answered,
+  so the circuit sat half-open and this side kept reading a connection that was gone until a write
+  happened to fail. It is answered now, and a dial the relay closes before it is ready fails at once
+  instead of at the dial timeout.
 
 ## [1.1.2] - 2026-09-17
 

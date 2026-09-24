@@ -343,7 +343,7 @@ These are real, current gaps. None of them is hidden behind a "future work" labe
 | L11 | **Replay window is bounded, not absolute** | `ReplayCache` on the node evicts the oldest entries at 200 000 and after its TTL; a listener proof older than `proofMaxSkewMs` (default 5 min) is refused, so the exposure is bounded by that window rather than eliminated. |
 | L12 | **A group is only as private as its smallest member set** | There is no group key and no group server: a group is client-side fan-out over pairwise sessions, so message content is protected exactly as in a 1:1 chat. But every member learns every other member's identity key from the snapshot, and the creator is the sole authority on membership — a malicious creator can add a device nobody else notices, and there is no mechanism (no admin transfer, no member-side veto) to stop them. Membership changes are also not signed independently of the transport: authority rests on the session having authenticated the creator. |
 | L13 | **Group fan-out is O(n) and observable** | One session, one transfer and one queue row per recipient, including for attachments. A relay therefore sees a burst of connections from one identity to the same set of peers whenever a group message is sent, which is a strong hint that those peers form a group. The 32-member cap bounds the cost, not the signal. |
-| L17 | **Call media is direct-only, and the `ACCEPT` hands the peer this device's local addresses** | The accepting side advertises its own local IPv4 addresses so the caller can dial one (§13). There is no STUN and no relay path for audio, so two devices with no direct route cannot call at all — the call ends rather than connecting — and the peer, who is an approved contact, learns those addresses. A dropped media path ends the call; there is no failover. |
+| L17 | **The `ACCEPT` hands the peer this device's local addresses, and a relay carries calls that have no direct route** | The accepting side advertises its own local IPv4 addresses and its relay (§13), so the peer — an approved contact — learns those addresses. With no STUN, two devices with no direct route call through the relay: it cannot read the audio (sealed per frame under the per-call key) but sees the call's timing, duration and packet rate, as it does for relayed messaging. |
 | L18 | **A self-destruct deadline is only as good as the peer** | `expires_at_unix_ms` is sender-stamped and enforced locally on each device (Protocol.md §8.7). An older peer ignores the field and keeps the message; a modified client can keep the plaintext whatever the field says. Like delete-for-everyone it is a request honoured by cooperating software, not a control over another device. |
 | L19 | **Audit retention reverses local erasure for the groups that enable it** | Off by default and creator-only, disclosed to every member by an undismissable banner and a system line in the group's history, scoped to one group, never applied to a 1:1 chat, capped at 90 days and readable only on the device that captured it (§14). Within those bounds it is still what it looks like: a member of such a group is trusting that group's admins with the text of what they edited or withdrew. Leaving is the only opt-out. |
 | L14 | **Half-finished P2P paths are off, not absent** | Peer exchange, embedded DHT participation, relay-peer mode, UDP attempts and default-relay demotion all ship as reachable code behind `P2PConfig` flags that default to false (store-and-forward left this list in 1.1). Turning any of them on in the debug screen enables code that has not been through the same verification as the default path. |
@@ -383,7 +383,7 @@ Key material is zeroized with `sodium_memzero` (`CryptoEngine.memzero`) wherever
 
 ## 13. Voice calls
 
-`data/.../call/CallCoordinator.kt`, `CallMediaService.kt`, `CallMediaChannel.kt`, `CallState.kt`. Wire formats in [Protocol.md](Protocol.md) §17–18.
+`data/.../call/CallCoordinator.kt`, `CallMediaService.kt`, `CallMediaSession.kt`, `CallMediaFrames.kt`, `CallCircuits.kt`, `CallState.kt`. Wire formats in [Protocol.md](Protocol.md) §17–18.
 
 **Peer authenticity is inherited, not re-established.** Signalling is an ordinary sealed `MessageEnvelope` on a v2 messaging session, so the peer is whoever the handshake proved (§4). There is no second authentication to get wrong, no separate call-layer identity, and nothing for a user to compare: a call is exactly as authentic as the chat with the same contact, and no more.
 
@@ -398,11 +398,15 @@ Key material is zeroized with `sodium_memzero` (`CryptoEngine.memzero`) wherever
 
 **The direction byte is what keeps the two streams apart.** Both ends seal with the same per-call key, so a nonce of `[direction][15 zero bytes][sequence]` is the only thing stopping each sequence number from being used twice under one key — for a stream cipher that is the mistake that XORs two plaintexts together and hands an eavesdropper both. One byte, and it is the whole defence.
 
+**One counter per call, whatever carries it.** A call can move between connections — a relay circuit after a direct socket, a new circuit after a drop — and the sequence belongs to the call, not the connection (`MediaSealer`). A path that counted from zero again would repeat every nonce the last one used.
+
+**A path is trusted only once it proves itself.** Nothing binds a connection to the call but a frame that authenticates under the call's key: an address or a circuit name alone does not. Relay circuits are named from the call's key (Protocol.md §18), so nobody else can route one into the call, and a connection that proves nothing in 10 s is closed.
+
 What calls do **not** give you:
 
 - **No anti-replay window.** A frame that fails to authenticate is dropped, so nobody without the key can inject audio. A frame *captured and replayed* by someone on the path authenticates again; what discards it is the jitter buffer's playout rule (a duplicate, or a sequence already played), not a cryptographic replay check. There is no per-frame anti-replay state as there is for messaging frames (Protocol.md §7.3).
-- **No relay path, and local addresses go to the peer.** See L17.
-- **No call metadata hiding.** A media connection is a TCP connection to port 48557 between two addresses: an observer on the path sees a call happening, its duration and its packet rate, exactly as for messaging frames (§3).
+- **Local addresses go to the peer, and the relay sees relayed calls.** See L17.
+- **No call metadata hiding.** A direct media connection is a TCP connection to port 48557 between two addresses, and a relayed one is a circuit the relay operator can time: an observer on the path sees a call happening, its duration and its packet rate, exactly as for messaging frames (§3).
 
 ---
 

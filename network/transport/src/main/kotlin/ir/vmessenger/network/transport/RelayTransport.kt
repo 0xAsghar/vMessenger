@@ -49,12 +49,20 @@ open class RelayTransport @Inject constructor() : Transport {
     override suspend fun connect(endpoint: Endpoint): Result<Connection> =
         Result.failure(IllegalStateException("Use connect(endpoint, relayTargetId) for RELAY transport"))
 
-    suspend fun connect(endpoint: Endpoint, relayTargetId: ByteArray): Result<Connection> =
+    /**
+     * Dials [relayTargetId]'s listener through the relay at [endpoint]. [circuitId] is random unless
+     * the caller names the circuit — which the relay passes to the listener verbatim, so a listener
+     * that is expecting a particular circuit (a call's audio) can tell it from any other.
+     */
+    suspend fun connect(
+        endpoint: Endpoint,
+        relayTargetId: ByteArray,
+        circuitId: String = UUID.randomUUID().toString(),
+    ): Result<Connection> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val url = endpoint.address.ifBlank { NetworkConfig.DEFAULT_RELAY_URL }
                 require(relayTargetId.size == 32) { "relayTargetId must be 32 bytes" }
-                val circuitId = UUID.randomUUID().toString()
                 val hello = RelayHello.newBuilder()
                     .setRole(RelayRole.RELAY_ROLE_DIALER)
                     .setTargetId(com.google.protobuf.ByteString.copyFrom(relayTargetId))
@@ -164,6 +172,20 @@ open class RelayTransport @Inject constructor() : Transport {
                     connectionRef[0] = connection
                     connection.dispatchMessage(bytes)
                     if (cont.isActive) cont.resume(connection)
+                }
+            }
+
+            /**
+             * The far end — or the relay on its behalf — closed the circuit. Answering is what turns
+             * this into [onClosed]: without it OkHttp leaves the socket half-open, and this side went
+             * on reading a circuit that was gone until a write happened to fail. A close before READY
+             * is a refused dial, and fails it now rather than at the dial timeout.
+             */
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                connectionRef[0]?.markClosed()
+                webSocket.close(1000, null)
+                if (cont.isActive && connectionRef[0] == null) {
+                    cont.resumeWithException(IllegalStateException("relay closed the circuit: $code $reason"))
                 }
             }
 
