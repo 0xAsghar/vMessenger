@@ -16,7 +16,7 @@ from a downloaded release tarball, or as a one-liner on a fresh Ubuntu/Debian ho
   [`NodeConfig`](../node/src/main/kotlin/ir/vmessenger/node/NodeConfig.kt) for the full list: limits, rate
   limits, proof skew, advertised DHT URL, peer nodes, `VMESSENGER_TRUST_PROXY`).
 - Apps reach the default node at `wss://relay.vmessenger.ir/{dht,relay}` (`NetworkConfig.kt`); any other node is
-  added in the app under **تنظیمات → نودهای شبکه** with a `vmnode:bootstrap:wss://…/dht` /
+  added in the app under **تنظیمات → گره‌های شبکه** with a `vmnode:bootstrap:wss://…/dht` /
   `vmnode:relay:wss://…/relay` link or its QR (the installer prints both).
 
 ## 2. Requirements

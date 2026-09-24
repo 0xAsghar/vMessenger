@@ -17,7 +17,7 @@ class BootstrapManager @Inject constructor(
             mergeProviderNodes(provider.nodes(), merged, seen)
         }
         return if (merged.isEmpty()) {
-            AppResult.Error(ir.vmessenger.core.common.AppError.Network("هیچ نود بوت‌استرپی یافت نشد"))
+            AppResult.Error(ir.vmessenger.core.common.AppError.Network("هیچ گرهٔ بوت‌استرپی یافت نشد"))
         } else {
             AppResult.Success(merged)
         }

@@ -236,7 +236,7 @@ Local development against two emulators:
 ./scripts/emulator-connect.sh        # adb port forwards
 ```
 
-Add a node in the app under **تنظیمات → نودهای شبکه**, by pasting a link or scanning its QR:
+Add a node in the app under **تنظیمات → گره‌های شبکه**, by pasting a link or scanning its QR:
 
 ```text
 vmnode:bootstrap:wss://relay.example.com/dht
