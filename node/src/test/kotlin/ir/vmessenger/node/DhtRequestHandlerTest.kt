@@ -1,8 +1,6 @@
 package ir.vmessenger.node
 
 import com.google.protobuf.ByteString
-import com.goterl.lazysodium.LazySodiumJava
-import com.goterl.lazysodium.SodiumJava
 import ir.vmessenger.core.common.network.EndpointRecordTranscript
 import ir.vmessenger.core.proto.dht.v1.DhtRpcRequest
 import ir.vmessenger.core.proto.dht.v1.Endpoint
@@ -16,10 +14,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.security.MessageDigest
 
 class DhtRequestHandlerTest {
-    private val sodium = LazySodiumJava(SodiumJava())
     private var now = 1_700_000_000_000L
     private val nodeId = ByteArray(32) { 0x42 }
     private val counters = RecordingCounters()
@@ -33,16 +29,7 @@ class DhtRequestHandlerTest {
         override fun setRecordCount(n: Int) { lastRecordCount = n }
     }
 
-    private class Identity(val pub: ByteArray, val secret: ByteArray) {
-        val hash: ByteArray = MessageDigest.getInstance("SHA-256").digest(pub)
-    }
-
-    private fun identity(): Identity {
-        val pub = ByteArray(32)
-        val secret = ByteArray(64)
-        check(sodium.cryptoSignKeypair(pub, secret))
-        return Identity(pub, secret)
-    }
+    private fun identity(): TestIdentity = TestIdentity.generate()
 
     private fun handler(
         maxRecords: Int = 100,
@@ -63,7 +50,7 @@ class DhtRequestHandlerTest {
     /** [transcriptVersion] 2 = what 1.0 apps publish; 0 = a 0.x app's record (field unset). */
     @Suppress("LongParameterList")
     private fun signedRecord(
-        id: Identity,
+        id: TestIdentity,
         sequence: Long = 1,
         publishedAt: Long = now,
         ttlMs: Long = 60_000,
@@ -80,8 +67,7 @@ class DhtRequestHandlerTest {
             .setTranscriptVersion(transcriptVersion)
             .build()
         val transcript = checkNotNull(NodeEndpointRecordVerifier.buildTranscript(unsigned))
-        val signature = ByteArray(64)
-        check(sodium.cryptoSignDetached(signature, transcript, transcript.size.toLong(), id.secret))
+        val signature = id.sign(transcript)
         return unsigned.toBuilder().setSignature(ByteString.copyFrom(signature)).build()
     }
 

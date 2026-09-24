@@ -1,3 +1,4 @@
+import ir.vmessenger.convention.VerifyBytecodeLevelTask
 import java.util.Properties
 
 plugins {
@@ -28,8 +29,6 @@ dependencies {
     implementation(project(":core:common"))
     implementation(libs.protobuf.java)
     implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.lazysodium.java)
-    implementation(libs.jna)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
     implementation(libs.ktor.server.websockets)
@@ -47,14 +46,50 @@ tasks.named<JavaExec>("run") {
     standardInput = System.`in`
 }
 
+// The tests run on the oldest JRE a server may give the node, so what they prove — Ed25519 on the
+// JDK's own provider included — holds on Debian 12's Java 17.
+tasks.withType<Test>().configureEach {
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(JAVA_17)) })
+}
+
 // Deployable artifact: vmessenger-node-<version>.tar.gz, a gzip tarball of the
 // installDist layout nested under vmessenger-node-<version>/ — extract with
 // `tar -xzf … --strip-components=1 -C /opt/vmessenger`.
+//
+// The tarball carries a VERSION file so an installer can tell what it is about to put down without
+// running it, and no .bat launcher: the node only runs on Linux.
+val nodeVersionFile = tasks.register("nodeVersionFile") {
+    val versionText = project.version.toString()
+    val out = layout.buildDirectory.file("generated/node-version/VERSION")
+    inputs.property("version", versionText)
+    outputs.file(out)
+    doLast { out.get().asFile.writeText(versionText + "\n") }
+}
+
 distributions {
     main {
         distributionBaseName.set("vmessenger-node")
+        contents {
+            from(nodeVersionFile)
+            exclude("**/*.bat")
+        }
     }
 }
+
+// Every class the node loads — ours and every dependency's — must run on Java 17 (see
+// configureKotlinJvm). A single class built for 21 would only show up as a start failure on a
+// Debian 12 server, so the build refuses to package one.
+val verifyBytecodeLevel = tasks.register<VerifyBytecodeLevelTask>("verifyBytecodeLevel") {
+    classpath.from(tasks.jar, configurations.runtimeClasspath)
+    maxMajor.set(JAVA_17_CLASS_MAJOR)
+    report.set(layout.buildDirectory.file("reports/bytecode-level.txt"))
+}
+
+listOf("distTar", "installDist").forEach { name ->
+    tasks.named(name) { dependsOn(verifyBytecodeLevel) }
+}
+
+tasks.named("check") { dependsOn(verifyBytecodeLevel) }
 
 tasks.distTar {
     compression = Compression.GZIP
@@ -72,3 +107,6 @@ sourceSets {
         }
     }
 }
+
+val JAVA_17 = 17
+val JAVA_17_CLASS_MAJOR = 61

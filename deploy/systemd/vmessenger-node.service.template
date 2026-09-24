@@ -15,10 +15,11 @@ Environment=VMESSENGER_NODE_PORT=__NODE_PORT__
 Environment=VMESSENGER_PUBLIC_HOST=__PUBLIC_NAME__
 Environment=VMESSENGER_STATE_DIR=/var/lib/vmessenger
 Environment=VMESSENGER_TRUST_PROXY=1
-# Small heap for a 1 GB VPS; JNA/Lazysodium extract native libs into a
-# writable, exec-capable tmp dir (system /tmp may be mounted noexec).
+# Small heap for a 1 GB VPS; temp files go to the state dir (system /tmp may
+# be mounted noexec). The node loads no native code of its own: it runs on
+# any JRE 17 or newer.
 # journald stamps every line, so the SimpleLogger date is disabled.
-Environment="JAVA_OPTS=-Xms128m -Xmx512m -XX:+UseSerialGC -Djava.io.tmpdir=/var/lib/vmessenger/tmp -Djna.tmpdir=/var/lib/vmessenger/tmp -Dorg.slf4j.simpleLogger.defaultLogLevel=info -Dorg.slf4j.simpleLogger.showDateTime=false"
+Environment="JAVA_OPTS=-Xms128m -Xmx512m -XX:+UseSerialGC -Djava.io.tmpdir=/var/lib/vmessenger/tmp -Dorg.slf4j.simpleLogger.defaultLogLevel=info -Dorg.slf4j.simpleLogger.showDateTime=false"
 # Operator overrides (limits, peer nodes, log level) — optional.
 EnvironmentFile=-/etc/vmessenger/node.env
 ExecStart=__INSTALL_DIR__/bin/node

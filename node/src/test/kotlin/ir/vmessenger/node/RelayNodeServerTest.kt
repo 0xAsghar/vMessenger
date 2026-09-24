@@ -1,8 +1,6 @@
 package ir.vmessenger.node
 
 import com.google.protobuf.ByteString
-import com.goterl.lazysodium.LazySodiumJava
-import com.goterl.lazysodium.SodiumJava
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
 import io.ktor.client.plugins.websocket.webSocket
@@ -29,29 +27,18 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.security.MessageDigest
 import io.ktor.client.plugins.websocket.WebSockets as ClientWebSockets
 
 class RelayNodeServerTest {
-    private val sodium = LazySodiumJava(SodiumJava())
 
-    private class Identity(val pub: ByteArray, val secret: ByteArray) {
-        val hash: ByteArray = MessageDigest.getInstance("SHA-256").digest(pub)
-    }
-
-    private fun identity(): Identity {
-        val pub = ByteArray(32)
-        val secret = ByteArray(64)
-        check(sodium.cryptoSignKeypair(pub, secret))
-        return Identity(pub, secret)
-    }
+    private fun identity(): TestIdentity = TestIdentity.generate()
 
     /**
      * [proofVersion] 2 signs the v2 transcript (what 1.0 apps send); 0 signs the 0.x transcript and leaves
      * the field unset like a 0.x app; [labelVersion] overrides the advertised version without re-signing.
      */
     private fun listenerHello(
-        id: Identity,
+        id: TestIdentity,
         ts: Long = System.currentTimeMillis(),
         proofVersion: Int = RelayProof.PROOF_VERSION_V2,
         labelVersion: Int = proofVersion,
@@ -61,8 +48,7 @@ class RelayNodeServerTest {
         } else {
             RelayProof.buildLegacyListenerProofTranscript(id.hash, ts)
         }
-        val proof = ByteArray(64)
-        check(sodium.cryptoSignDetached(proof, transcript, transcript.size.toLong(), id.secret))
+        val proof = id.sign(transcript)
         return RelayHello.newBuilder()
             .setRole(RelayRole.RELAY_ROLE_LISTENER)
             .setListenerId(ByteString.copyFrom(id.hash))

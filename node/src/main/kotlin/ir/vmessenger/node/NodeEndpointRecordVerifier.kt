@@ -1,7 +1,5 @@
 package ir.vmessenger.node
 
-import com.goterl.lazysodium.LazySodiumJava
-import com.goterl.lazysodium.SodiumJava
 import ir.vmessenger.core.common.network.EndpointRecordTranscript
 import ir.vmessenger.core.proto.dht.v1.EndpointRecord
 import java.security.MessageDigest
@@ -12,7 +10,6 @@ import java.security.MessageDigest
  * side of the upgrade keep publishing during the transition; anything else is rejected.
  */
 class NodeEndpointRecordVerifier {
-    private val sodium = LazySodiumJava(SodiumJava())
 
     @Suppress("ReturnCount")
     fun verify(record: EndpointRecord, nowMs: Long = System.currentTimeMillis()): Boolean {
@@ -22,12 +19,7 @@ class NodeEndpointRecordVerifier {
         if (!computedHash.contentEquals(record.identityHash.toByteArray())) return false
         if (nowMs >= record.publishedAtUnixMs + record.ttlMs) return false
         val transcript = buildTranscript(record) ?: return false
-        return sodium.cryptoSignVerifyDetached(
-            record.signature.toByteArray(),
-            transcript,
-            transcript.size,
-            identityPub,
-        )
+        return Ed25519Verifier.verify(record.signature.toByteArray(), transcript, identityPub)
     }
 
     companion object {

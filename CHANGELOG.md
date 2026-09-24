@@ -22,6 +22,18 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
   leftovers — its preferences file and any downloaded APKs in the cache — are deleted, and a secure
   wipe deletes them too.
 
+### Changed
+
+- **The node runs on Java 17 or newer**, so Debian 12's own `openjdk-17-jre-headless` is enough. The
+  JVM modules still build with the 21 toolchain but emit Java 17 bytecode, and `:node:verifyBytecodeLevel`
+  refuses to package any class, ours or a dependency's, that a Java 17 JRE could not load. The node's
+  tests run on Java 17.
+- **The node verifies Ed25519 with the JDK instead of libsodium.** lazysodium-java 5.2 is built for
+  Java 21 and loads a native library through JNA. `Ed25519Verifier` adds libsodium's stricter checks
+  (canonical `S` and key, no small-order key or `R`), so the node still refuses what the app refuses.
+  With no native code left, the node tarball is 12.8 MB instead of 16.6 MB. It now carries a
+  `VERSION` file and no Windows `.bat` launcher.
+
 ## [2.0.0-beta.1] - 2026-09-22
 
 The V2 release: voice calls, English alongside Persian, and a batch of messaging, location and

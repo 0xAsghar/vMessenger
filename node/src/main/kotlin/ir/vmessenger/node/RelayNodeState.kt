@@ -1,7 +1,5 @@
 package ir.vmessenger.node
 
-import com.goterl.lazysodium.LazySodiumJava
-import com.goterl.lazysodium.SodiumJava
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.close
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
@@ -62,7 +60,6 @@ class RelayNodeState(
      * so from its first sighting it can stay valid for up to twice the skew.
      */
     val replayCache = ReplayCache(ttlMs = 2 * config.proofMaxSkewMs)
-    val sodium = LazySodiumJava(SodiumJava())
 
     private val listenersPerIp = ConcurrentHashMap<String, Int>()
 

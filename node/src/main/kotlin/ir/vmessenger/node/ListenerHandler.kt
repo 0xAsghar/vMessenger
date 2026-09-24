@@ -107,12 +107,7 @@ class ListenerHandler(private val state: RelayNodeState) {
                 RelayProof.buildLegacyListenerProofTranscript(listenerId, hello.ts)
             else -> return false
         }
-        return state.sodium.cryptoSignVerifyDetached(
-            hello.proof.toByteArray(),
-            transcript,
-            transcript.size,
-            identityPub,
-        )
+        return Ed25519Verifier.verify(hello.proof.toByteArray(), transcript, identityPub)
     }
 
     private fun replayKey(listenerId: ByteArray, ts: Long): String =

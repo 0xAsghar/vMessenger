@@ -49,11 +49,22 @@ internal fun Project.configureKotlinAndroid() {
     }
 }
 
+/**
+ * Pure-JVM modules compile with the 21 toolchain but emit Java 17 bytecode against the Java 17 API.
+ * They include `:node`, which runs on the server's own JRE — and Debian 12's newest is 17. Android
+ * modules are unaffected: they consume these jars as they would any older library.
+ */
 internal fun Project.configureKotlinJvm() {
     extensions.configure<KotlinJvmProjectExtension> {
         jvmToolchain(21)
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_21)
+            jvmTarget.set(JvmTarget.JVM_17)
+            freeCompilerArgs.add("-Xjdk-release=$JVM_LIBRARY_RELEASE")
         }
     }
+    tasks.withType<JavaCompile>().configureEach {
+        options.release.set(JVM_LIBRARY_RELEASE)
+    }
 }
+
+internal const val JVM_LIBRARY_RELEASE = 17

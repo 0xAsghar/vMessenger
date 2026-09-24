@@ -1,6 +1,6 @@
 # Deployment — running a vMessenger relay/DHT node
 
-This is the operator runbook for the reference node in [`node/`](../node) (Ktor, JVM 21).
+This is the operator runbook for the reference node in [`node/`](../node) (Ktor; runs on any JRE 17 or newer).
 It replaces the old `deploy/README.md`. Everything below is what the canonical installer
 [`scripts/setup-node.sh`](../scripts/setup-node.sh) does; you can run it from a repo checkout,
 from a downloaded release tarball, or as a one-liner on a fresh Ubuntu/Debian host.
@@ -11,7 +11,7 @@ from a downloaded release tarball, or as a one-liner on a fresh Ubuntu/Debian ho
   terminates TLS itself.
 - **nginx** owns `:80`/`:443`, terminates TLS and proxies three routes: `GET /healthz` (`ok`), `WS /dht`
   (one `DhtRpcRequest` → one `DhtRpcResponse`), `WS /relay` (listener control channels + bridged circuits).
-- State lives in `/var/lib/vmessenger` (`node.seed` — the persisted random node id; `tmp/` for JNA/libsodium).
+- State lives in `/var/lib/vmessenger` (`node.seed` — the persisted random node id; `tmp/` for the JVM's temporary files).
 - Operator overrides go in `/etc/vmessenger/node.env` (`VMESSENGER_*` variables — see
   [`NodeConfig`](../node/src/main/kotlin/ir/vmessenger/node/NodeConfig.kt) for the full list: limits, rate
   limits, proof skew, advertised DHT URL, peer nodes, `VMESSENGER_TRUST_PROXY`).
