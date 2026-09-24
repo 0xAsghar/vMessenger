@@ -20,4 +20,6 @@ dependencies {
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.sqlite.jdbc)
+    // Reads Room's exported schemas, so a test can build a database exactly as a released version did.
+    testImplementation(libs.kotlinx.serialization.json)
 }

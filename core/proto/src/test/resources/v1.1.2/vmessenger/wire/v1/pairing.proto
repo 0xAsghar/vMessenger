@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package vmessenger.wire.v1;
+
+option java_package = "ir.vmessenger.core.proto.wire.v1";
+option java_multiple_files = true;
+
+message PairingDescriptor {
+  bytes identity_pub = 1;
+  string user_hash = 2;
+  string display_label = 3;
+  uint32 version = 4;
+  bytes signature = 5;
+}

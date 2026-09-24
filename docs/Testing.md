@@ -51,6 +51,20 @@ This exists because Room does not type-check migration SQL. Before this test, a 
 
 **When you change an entity, add the migration and extend this test in the same commit.** Room will regenerate `schemas/<version>.json` on build; copy the generated `createSql` into the migration so the two cannot drift.
 
+### The V1 regression suite
+
+2.0 has to go on working with phones still running 1.1.2, and with the data 1.1.2 left on a phone that updates. These tests hold that, each against 1.1.2 itself rather than anyone's reading of it:
+
+| Test | What it holds |
+|---|---|
+| `core/proto` `V1WireCompatibilityTest` | 1.1.2's `.proto` files, copied verbatim from the `v1.1.2` tag into `src/test/resources/v1.1.2`, against the schema this build compiles: every field 1.1.2 knows keeps its number, type, cardinality and oneof, no number is removed unless reserved, no reserved number is reused, and every enum value 1.1.2 can send is still defined |
+| `core/proto` `V1WireRoundTripTest` | real bytes both ways, using 1.1.2's `messaging.proto` compiled under another package (`src/test/proto/v112`, kept identical to the released text but for its two package lines): a 1.1.2 message, file, receipt and group read intact and untimed; a timed message, an album image and a group with roles reach 1.1.2 as the message, image and group it knows; a call, a location request and a role change are nothing 1.1.2 can misread |
+| `core/database` `V1DatabaseUpgradeTest` | a database exactly as a fresh 1.1.2 install created it — from Room's own schema 20 (`schemas/…/20.json`), not rebuilt through the migration chain — with one fully filled row in every table, upgraded by 20 → 24: every row survives value for value, the result is exactly schema 24, and what 2.0 added reads as absent rather than zero |
+| `data` `V1PeerCompatibilityTest` | what 2.0 does with it: a 1.1.2 message is kept and no expiry sweep takes it; a group created on 1.1.2 arrives with plain members and audit retention off |
+| `core/common` `UserHashEncoderTest` | a `vm2-` ID, as 1.1.2 wrote them, still decodes to the same identity |
+
+Each was checked by breaking what it guards: renumbering one 1.1.2 field fails the schema test, and dropping the last migration fails the database test.
+
 ### Running a subset
 
 ```bash

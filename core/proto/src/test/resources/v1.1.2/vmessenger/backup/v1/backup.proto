@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package vmessenger.backup.v1;
+
+option java_package = "ir.vmessenger.core.proto.backup.v1";
+option java_multiple_files = true;
+
+// Plaintext payload of a `.vmb` backup bundle (encrypted by BackupBundleCodec).
+// No user-hash strings are stored: they are recomputed from identity hashes on import.
+message BackupPayload {
+  uint32 payload_version = 1;
+  int64 created_at_unix_ms = 2;
+  string app_version = 3;
+  BackupIdentity identity = 4;
+  repeated BackupContact contacts = 5;
+  repeated BackupConversation conversations = 6;
+  repeated BackupLocationAccess location_access = 7;
+  repeated BackupNode user_nodes = 8;
+}
+
+message BackupIdentity {
+  bytes ed25519_public = 1;
+  bytes ed25519_private = 2;
+  bytes x25519_static_public = 3;
+  bytes x25519_static_private = 4;
+  string display_name = 5;
+  int64 created_at_unix_ms = 6;
+}
+
+message BackupContact {
+  string id = 1;
+  bytes identity_hash = 2;
+  bytes ed25519_public = 3;
+  bytes x25519_static_public = 4;
+  string display_name = 5;
+  bool verified = 6;
+  bool blocked = 7;
+  string relationship_status = 8;
+  int64 created_at_unix_ms = 9;
+}
+
+message BackupConversation {
+  string id = 1;
+  string contact_id = 2;
+  bool muted = 3;
+  repeated BackupMessage messages = 4;
+}
+
+message BackupMessage {
+  string message_id = 1;
+  string direction = 2;
+  string content_type = 3;
+  string body = 4;
+  string status = 5;
+  int64 created_at_unix_ms = 6;
+  int64 sent_at_unix_ms = 7;
+  int64 delivered_at_unix_ms = 8;
+  int64 read_at_unix_ms = 9;
+  string reply_to_message_id = 10;
+  string attachment_name = 11;
+  string attachment_mime_type = 12;
+  int64 attachment_size_bytes = 13;
+}
+
+message BackupLocationAccess {
+  string contact_id = 1;
+  bool can_see_my_location = 2;
+}
+
+message BackupNode {
+  string address = 1;
+  string role = 2;
+}

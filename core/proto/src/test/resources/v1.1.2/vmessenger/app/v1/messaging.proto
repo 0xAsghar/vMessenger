@@ -1,0 +1,357 @@
+syntax = "proto3";
+
+package vmessenger.app.v1;
+
+option java_package = "ir.vmessenger.core.proto.app.v1";
+option java_multiple_files = true;
+
+message MessageEnvelope {
+  bytes message_id = 1;
+  bytes sender_identity_hash = 2;
+  int64 sent_at_unix_ms = 3;
+  uint64 counter = 4;
+  // 16 random bytes identifying the group this envelope belongs to; empty for a
+  // 1:1 chat. Groups are client-side fan-out: the envelope is still delivered
+  // over a pairwise secure session per member, and the receiver checks the
+  // sender against the local group snapshot before persisting anything. Who the
+  // sender is comes from the authenticated session, never from
+  // `sender_identity_hash` above, which is advisory and is not verified.
+  bytes group_id = 5;
+
+  oneof content {
+    ChatMessage chat = 10;
+    Receipt receipt = 11;
+    LocationPacket location = 12;
+    Control control = 13;
+    NetworkNodeList network_nodes = 14;
+    MailboxBlob mailbox_blob = 15;
+    RelayOpen relay_open = 16;
+    RelayReady relay_ready = 17;
+    RelayData relay_data = 18;
+    RelayClose relay_close = 19;
+    MailboxPut mailbox_put = 20;
+    MailboxListRequest mailbox_list = 21;
+    MailboxListResponse mailbox_list_response = 22;
+    MailboxFetchRequest mailbox_fetch = 23;
+    MailboxFetchResponse mailbox_fetch_response = 24;
+    MailboxDelete mailbox_delete = 25;
+    MailboxDeleteAck mailbox_delete_ack = 26;
+    ContactRequest contact_request = 27;
+    ContactResponse contact_response = 28;
+    AttachmentInfo attachment_info = 29;
+    AttachmentChunk attachment_chunk = 30;
+    GroupControl group_control = 31;
+    MessageEdit message_edit = 32;
+    MessageDelete message_delete = 33;
+    ProfileUpdate profile_update = 34;
+  }
+}
+
+/** One member of a group, carried in snapshots so fan-out can reach a non-contact. */
+message GroupMember {
+  bytes identity_hash = 1;
+  bytes identity_pub = 2;
+  string display_name = 3;
+  bytes x25519_static_pub = 4;
+}
+
+/**
+ * A membership change. Authority is the creator: every device accepts
+ * CREATE/SNAPSHOT only from `creator_identity_hash`, and an incremental change
+ * only when `version` is exactly its local version + 1 — a gap means a control
+ * was missed, so the receiver asks for a SNAPSHOT instead of guessing. LEAVE is
+ * the one control a member sends about itself.
+ */
+message GroupControl {
+  bytes group_id = 1;
+  GroupControlType type = 2;
+  string name = 3;
+  repeated GroupMember members = 4;
+  uint64 version = 5;
+  bytes creator_identity_hash = 6;
+  int64 at_unix_ms = 7;
+  // The member an ADD/REMOVE is about; unset for the other types.
+  bytes target_identity_hash = 8;
+}
+
+enum GroupControlType {
+  GROUP_CONTROL_TYPE_UNSPECIFIED = 0;
+  GROUP_CONTROL_TYPE_CREATE = 1;
+  GROUP_CONTROL_TYPE_UPDATE_NAME = 2;
+  GROUP_CONTROL_TYPE_ADD = 3;
+  GROUP_CONTROL_TYPE_REMOVE = 4;
+  GROUP_CONTROL_TYPE_LEAVE = 5;
+  GROUP_CONTROL_TYPE_SNAPSHOT = 6;
+  GROUP_CONTROL_TYPE_SNAPSHOT_REQUEST = 7;
+  GROUP_CONTROL_TYPE_CLOSE = 8;
+}
+
+/**
+ * Media/file transfer header. The payload follows as AttachmentChunk envelopes
+ * on the same secure session; the receiver materializes the message once all
+ * chunks arrived. Chunks stay well below the 1 MiB transport frame cap.
+ */
+message AttachmentInfo {
+  bytes transfer_id = 1;
+  string file_name = 2;
+  string mime_type = 3;
+  int64 total_size = 4;
+  int32 chunk_count = 5;
+  AttachmentKind kind = 6;
+  string caption = 7;
+  // SHA-256 of the plaintext file; the receiver verifies it once every chunk
+  // arrived and discards the transfer on mismatch. Required (32 bytes) in v2.
+  bytes sha256 = 8;
+  // Voice/video length, so the bubble shows a duration before the file lands.
+  int64 duration_ms = 9;
+  // 64 amplitude buckets (one byte each, 0..255) drawn as the voice waveform.
+  bytes waveform = 10;
+}
+
+message AttachmentChunk {
+  bytes transfer_id = 1;
+  int32 index = 2;
+  bytes data = 3;
+}
+
+enum AttachmentKind {
+  ATTACHMENT_KIND_UNSPECIFIED = 0;
+  ATTACHMENT_KIND_IMAGE = 1;
+  ATTACHMENT_KIND_VIDEO = 2;
+  ATTACHMENT_KIND_FILE = 3;
+  ATTACHMENT_KIND_AUDIO = 4;
+}
+
+/** Phase 4: network infrastructure hints exchanged after a secure handshake. */
+message NetworkNodeList {
+  repeated string bootstrap_addresses = 1;
+  repeated string relay_addresses = 2;
+  repeated SignedNodeRecord signed_records = 3;
+}
+
+/** Signed node capability record (Phase 4 / rc28). */
+message SignedNodeRecord {
+  string address = 1;
+  NodeRole role = 2;
+  bytes public_key = 3;
+  repeated string capabilities = 4;
+  int64 expires_at_unix_ms = 5;
+  bytes signature = 6;
+  // 2 = domain-separated, length-prefixed transcript ("vmessenger-node-record-v2"); anything else is rejected.
+  uint32 transcript_version = 7;
+}
+
+enum NodeRole {
+  NODE_ROLE_UNSPECIFIED = 0;
+  NODE_ROLE_BOOTSTRAP = 1;
+  NODE_ROLE_RELAY = 2;
+}
+
+/** Phase 6: open a relay circuit through a relay-capable peer. */
+message RelayOpen {
+  string circuit_id = 1;
+  bytes target_identity_hash = 2;
+}
+
+message RelayReady {
+  string circuit_id = 1;
+}
+
+message RelayData {
+  string circuit_id = 1;
+  bytes encrypted_frame = 2;
+}
+
+message RelayClose {
+  string circuit_id = 1;
+  string reason = 2;
+}
+
+/**
+ * Phase 8: encrypted offline delivery blob (plaintext never stored on mailbox peers).
+ * `sealed_payload` is `crypto_box_seal(MailboxInner, recipient x25519 static key)`;
+ * `blob_id` is content-addressed (`hex(SHA256(sealed_payload))[0..32)`) and any
+ * sender-chosen id is ignored by the storing peer. `seal_version` is 2 for this
+ * layout. Limitation: no forward secrecy for mailbox-delivered messages.
+ */
+message MailboxBlob {
+  bytes blob_id = 1;
+  bytes recipient_identity_hash = 2;
+  bytes sealed_payload = 3;
+  int64 expires_at_unix_ms = 4;
+  uint32 seal_version = 5;
+}
+
+/**
+ * Plaintext of a sealed mailbox blob. `signature` is Ed25519 by the sender's
+ * identity key over `"vmessenger-mailbox-v2" || lp(recipient_identity_hash) || SHA256(envelope)`,
+ * binding the inner envelope to its intended recipient.
+ */
+message MailboxInner {
+  bytes sender_identity_pub = 1;
+  bytes envelope = 2;
+  bytes signature = 3;
+}
+
+message MailboxPut {
+  MailboxBlob blob = 1;
+}
+
+message MailboxListRequest {
+  bytes recipient_identity_hash = 1;
+}
+
+message MailboxListResponse {
+  repeated bytes blob_ids = 1;
+}
+
+message MailboxFetchRequest {
+  bytes blob_id = 1;
+}
+
+message MailboxFetchResponse {
+  MailboxBlob blob = 1;
+}
+
+message MailboxDelete {
+  bytes blob_id = 1;
+}
+
+message MailboxDeleteAck {
+  bytes blob_id = 1;
+  bool accepted = 2;
+}
+
+message ChatMessage {
+  string text = 1;
+  bytes reply_to_message_id = 2;
+}
+
+/**
+ * A new body for a message the sender already sent.
+ *
+ * Deliberately its own arm rather than extra fields on ChatMessage: a 1.0.x peer
+ * parses an unknown oneof arm as nothing at all, but would parse an extended
+ * ChatMessage as an ordinary new message and insert a second bubble carrying the
+ * edited text. Being ignored is the correct fallback; being duplicated is not.
+ *
+ * `target_message_id` is UTF-8 of the local message id, the same convention as
+ * `message_id` and `reply_to_message_id`, and is bounded at 64 characters by the
+ * receiver. An edit whose `edited_at_unix_ms` is not strictly newer than the one
+ * already applied is ignored, which makes replay harmless.
+ */
+message MessageEdit {
+  bytes target_message_id = 1;
+  string new_text = 2;
+  int64 edited_at_unix_ms = 3;
+}
+
+/**
+ * A request to remove a message from the recipient's history too.
+ *
+ * A request, not a command: nothing in an end-to-end encrypted peer-to-peer
+ * network can make another device comply, and the Persian copy says so. The
+ * receiver renders a tombstone rather than erasing the row, which keeps reply
+ * quotes resolvable and avoids stranding the conversation's unread count, which
+ * is only ever incremented.
+ */
+message MessageDelete {
+  bytes target_message_id = 1;
+  int64 deleted_at_unix_ms = 2;
+}
+
+/**
+ * The sender's own profile, pushed to approved contacts when it changes.
+ *
+ * Until this existed a display name reached a peer exactly once, inside the
+ * pairing handshake, so renaming yourself was invisible to every existing
+ * contact forever. `revision` is monotonic per sender and lets a receiver drop a
+ * stale update that arrives out of order; `avatar` is empty when the user has no
+ * photo, and clearing one is an update with `avatar` empty and a higher revision.
+ *
+ * The avatar rides inline rather than through the chunked attachment transfer
+ * because it is downscaled to fit well inside the 64 KiB relay frame limit.
+ */
+message ProfileUpdate {
+  string display_name = 1;
+  int64 updated_at_unix_ms = 2;
+  uint64 revision = 3;
+  bytes avatar = 4;
+  string avatar_mime = 5;
+  bytes avatar_sha256 = 6;
+}
+
+message Receipt {
+  bytes ref_message_id = 1;
+  ReceiptType type = 2;
+  int64 at_unix_ms = 3;
+  // Additional message ids acknowledged by this receipt (batched READ). Each is
+  // validated like ref_message_id: it must be an outgoing message to the sender.
+  repeated bytes ref_message_ids = 4;
+}
+
+enum ReceiptType {
+  RECEIPT_TYPE_UNSPECIFIED = 0;
+  RECEIPT_TYPE_DELIVERED = 1;
+  RECEIPT_TYPE_READ = 2;
+}
+
+message Control {
+  ControlType type = 1;
+  bytes ref_message_id = 2;
+}
+
+enum ControlType {
+  CONTROL_TYPE_UNSPECIFIED = 0;
+  CONTROL_TYPE_TYPING = 1;
+  CONTROL_TYPE_LOCATION_SHARE_START = 2;
+  CONTROL_TYPE_LOCATION_SHARE_STOP = 3;
+}
+
+message Ack {
+  bytes ref_message_id = 1;
+  AckStatus status = 2;
+}
+
+enum AckStatus {
+  ACK_STATUS_UNSPECIFIED = 0;
+  ACK_STATUS_ACCEPTED = 1;
+  ACK_STATUS_REJECTED = 2;
+}
+
+message LocationPacket {
+  bytes share_id = 1;
+  double latitude = 2;
+  double longitude = 3;
+  float accuracy_m = 4;
+  float speed_mps = 5;
+  float heading_deg = 6;
+  int32 battery_pct = 7;
+  int64 sampled_at_unix_ms = 8;
+  bool is_final = 9;
+}
+
+message ContactRequest {
+  bytes requester_identity_pub = 1;
+  string requester_user_hash = 2;
+  string requester_display_name = 3;
+  bytes request_id = 4;
+}
+
+message ContactResponse {
+  bytes request_id = 1;
+  ContactResponseType type = 2;
+  // Responder identity so the requester can learn the accepter's profile
+  // (hash-based pairing only carries a partial hash and no display name).
+  bytes responder_identity_pub = 3;
+  string responder_user_hash = 4;
+  string responder_display_name = 5;
+}
+
+enum ContactResponseType {
+  CONTACT_RESPONSE_UNSPECIFIED = 0;
+  CONTACT_RESPONSE_ACCEPT = 1;
+  CONTACT_RESPONSE_REJECT = 2;
+  // The peer deleted us; the receiver marks the contact REJECTED.
+  CONTACT_RESPONSE_REVOKE = 3;
+}
