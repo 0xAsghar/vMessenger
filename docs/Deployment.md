@@ -190,8 +190,11 @@ self-signed origin exposed without a CDN).
 ## 8. Machine mode — the protocol the app speaks
 
 The app's **New node** drives this same script over SSH. It uploads a *bundle* — `setup-node.sh`,
-`deploy/`, `vmessenger-node-<version>.tar.gz`, `manifest.json` (`{"protocol": 1, "nodeVersion": "…"}`)
-and `SHA256SUMS` — to `~/.vmessenger-installer/<version>/` and runs it with `--from-app`. Machine mode
+`deploy/`, `vmessenger-node-<version>.tgz`, `manifest.json` (`{"protocol": 1, "nodeVersion": "…"}`)
+and `SHA256SUMS` — to `~/.vmessenger-installer/<version>/` and runs it with `--from-app`. The bundle
+is built by `:app:bundleNodeInstaller` and carried in the APK as assets under `node-installer/`
+(about 12.8 MB, stored uncompressed: the tarball is already gzip). It is `.tgz` because Android's
+asset packager gunzips anything ending in `.gz`; the installer accepts either name. Machine mode
 never downloads anything but apt packages and certificates: no GitHub, no clone, no tarball fetch.
 
 ### 8.1 Invocations

@@ -1909,7 +1909,12 @@ bundle_version() {
     sed -n 's/.*"nodeVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$BUNDLE_DIR/manifest.json" | head -n 1
 }
 
-bundle_tarball() { printf '%s/vmessenger-node-%s.tar.gz' "$BUNDLE_DIR" "$(bundle_version)"; }
+# The app's bundle names it .tgz (Android's asset packager unpacks anything ending in .gz).
+bundle_tarball() {
+    local base
+    base="$BUNDLE_DIR/vmessenger-node-$(bundle_version)"
+    if [[ -f "$base.tgz" ]]; then printf '%s.tgz' "$base"; else printf '%s.tar.gz' "$base"; fi
+}
 
 verify_bundle() {
     [[ -f "$BUNDLE_DIR/SHA256SUMS" ]] || die BUNDLE_CORRUPT "no SHA256SUMS in $BUNDLE_DIR"

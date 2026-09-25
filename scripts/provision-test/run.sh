@@ -177,16 +177,14 @@ node_tarball() {
 
 node_version() { sed -n 's/^versionName=//p' "$REPO/gradle/version.properties"; }
 
-# The bundle the app uploads: installer, templates, node tarball, manifest.json and SHA256SUMS.
+# The bundle the app uploads — the very one the APK carries: `:app:bundleNodeInstaller` builds it
+# (installer, templates, node tarball as .tgz, manifest.json, SHA256SUMS).
 make_bundle() {
-    local dir="$OUT/bundle" tar
-    tar="$(node_tarball)"
+    local dir="$OUT/bundle" java_home="$REPO/.jdk/jdk-17/Contents/Home"
+    (cd "$REPO" && JAVA_HOME="${JAVA_HOME:-$java_home}" ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$REPO/.android-sdk}" \
+        ./gradlew -q :app:bundleNodeInstaller >&2) || fail "could not build the installer bundle"
     rm -rf "$dir"
-    mkdir -p "$dir"
-    cp "$REPO/scripts/setup-node.sh" "$tar" "$dir/"
-    cp -R "$REPO/deploy" "$dir/deploy"
-    printf '{"protocol": 1, "nodeVersion": "%s"}\n' "$(node_version)" > "$dir/manifest.json"
-    (cd "$dir" && find . -type f | sed 's|^\./||' | sort | xargs shasum -a 256 > "$OUT/SHA256SUMS" && mv "$OUT/SHA256SUMS" .)
+    cp -R "$REPO/app/build/generated/assets/bundleNodeInstaller/node-installer" "$dir"
     printf '%s' "$dir"
 }
 

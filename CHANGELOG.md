@@ -48,6 +48,9 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
 - **Securing the server** (`--secure`, Deployment §8.7): fail2ban for SSH, automatic security updates, time
   sync; and `--key-only-ssh`, armed with a rollback timer and kept only when a fresh key-only login confirms
   it, so a mistake cannot lock the owner out. `--uninstall [--purge]` removes what the installer added.
+- **The APK carries the node installer** (`assets/node-installer/`, built by `:app:bundleNodeInstaller`):
+  the script, templates, the node tarball, a manifest and checksums, so setting up a node fetches nothing
+  from GitHub. This adds about 12 MB to each APK.
 - **Ubuntu 26.04 and Debian 13** are supported, after installing end to end in the harness.
 - **A Docker harness for the installer** (`scripts/provision-test/`): throwaway systemd + sshd
   containers on `127.0.0.1`, driven over real SSH, with scenarios for the happy path, resuming a

@@ -1,3 +1,6 @@
+import ir.vmessenger.convention.BundleNodeInstallerTask
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.vmessenger.android.application)
     alias(libs.plugins.vmessenger.android.compose)
@@ -26,8 +29,13 @@ android {
     }
 
     buildFeatures {
-        // BuildConfig.DEBUG / VERSION_NAME drive debug-screen gating and the updater.
+        // BuildConfig.DEBUG / VERSION_NAME drive debug-screen gating and the node-address policy.
         buildConfig = true
+    }
+
+    // The node tarball is already gzip; compressing it again only costs time on every read.
+    androidResources {
+        noCompress += "tgz"
     }
 
     signingConfigs {
@@ -67,7 +75,32 @@ android {
     }
 }
 
+// The node installer the app uploads to a server over SSH ("New node"): script, templates, node
+// tarball, manifest and checksums, as assets under node-installer/.
+val nodeDistTar by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+val bundleNodeInstaller = tasks.register<BundleNodeInstallerTask>("bundleNodeInstaller") {
+    installer.set(rootProject.layout.projectDirectory.file("scripts/setup-node.sh"))
+    deployDir.set(rootProject.layout.projectDirectory.dir("deploy"))
+    nodeTarball.from(nodeDistTar)
+    nodeVersion.set(
+        Properties().also { props -> rootProject.file("gradle/version.properties").inputStream().use(props::load) }
+            .getProperty("versionName"),
+    )
+    outputDir.set(layout.buildDirectory.dir("generated/node-installer"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(bundleNodeInstaller, BundleNodeInstallerTask::outputDir)
+    }
+}
+
 dependencies {
+    nodeDistTar(project(":node", "nodeDistTar"))
     implementation(project(":domain"))
     implementation(project(":data"))
     implementation(project(":core:database"))

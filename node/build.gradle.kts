@@ -100,6 +100,16 @@ tasks.distZip {
     enabled = false
 }
 
+// What the app bundles (app/build.gradle.kts, BundleNodeInstallerTask): the distribution tarball.
+val nodeDistTar by configurations.creating {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+}
+
+artifacts {
+    add(nodeDistTar.name, tasks.distTar)
+}
+
 sourceSets {
     main {
         proto {

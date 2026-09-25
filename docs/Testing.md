@@ -113,7 +113,8 @@ SSH, the way the app does. Nothing in it can reach a real server: targets listen
 (an emulator sees that as `10.0.2.2`).
 
 ```bash
-./gradlew :node:distTar                                         # the tarball the bundle carries
+./gradlew :node:distTar                                         # the node tarball; run.sh builds the
+                                                                # app's bundle (:app:bundleNodeInstaller) itself
 scripts/provision-test/run.sh build ubuntu:24.04 debian:12      # once per base image
 scripts/provision-test/run.sh test --images ubuntu:24.04 --scenario happy-ip
 scripts/provision-test/run.sh up ubuntu:24.04                   # one target to poke at, or for the emulator
