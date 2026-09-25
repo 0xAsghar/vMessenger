@@ -141,6 +141,9 @@ apt's archive cache: the install really runs apt, without fetching ~150 MB per c
 | `mirror-unreachable` | The server's mirror points nowhere: the fastest current mirror is used (`APT_MIRROR_SWITCHED`), the server's sources untouched. |
 | `clock-skew` | A 15-minute offset at preflight: exit 10, `CLOCK_SKEW` consent. The allowed path is not run: setting the clock in a privileged container sets the Docker VM's. |
 | `untested-os` | `os-release` claiming Ubuntu 28.04: exit 10, `OS_UNTESTED`; installs once allowed. |
+| `update-same` | Installing again keeps the pin, and keeps the previous node in `/opt/vmessenger.prev`. |
+| `hardening` | `--secure --key-only-ssh`, confirmed by a fresh key-only login: fail2ban on, password logins off (`sshd -T`); then `--uninstall` leaves no node and a valid nginx. |
+| `hardening-rollback` | Key-only SSH that nobody confirms: rolled back, password logins on again. |
 | `unsupported-os` | Ubuntu 18.04 and Debian 10 (`--unsupported`): exit 20, `OS_UNSUPPORTED`, nothing installed. |
 
 `test` with no `--images` runs the supported matrix: Ubuntu 20.04, 22.04, 24.04 and 26.04, Debian 11, 12 and 13.

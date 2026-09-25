@@ -51,6 +51,10 @@ readonly LOCK_FILE="$INSTALLER_HOME/lock"
 readonly INSTALL_RECORD="/etc/vmessenger/install.json"
 readonly RUN_UNIT_PREFIX="vmessenger-install-"
 readonly RUNS_KEPT=10
+readonly SSH_HARDENING_FILE="/etc/ssh/sshd_config.d/00-vmessenger-hardening.conf"
+readonly SSH_ROLLBACK_UNIT="vmessenger-ssh-rollback"
+readonly F2B_JAIL="/etc/fail2ban/jail.d/vmessenger-sshd.local"
+readonly UNATTENDED_CONF="/etc/apt/apt.conf.d/52vmessenger-unattended"
 readonly APT_DIR="$INSTALLER_HOME/apt"
 
 # Resources. Below MIN_RAM_MB the JVM and nginx do not fit; below SWAP_BELOW_RAM_MB a swapfile of
@@ -138,6 +142,15 @@ CERT_PEM_FILE=""       # the certificate the node serves
 NODE_MODE=""           # ip-pinned | domain-ca | domain-pinned
 URL_HOST=""            # the host every URL names
 PREVIOUS_URLS=""       # the last install's relay/bootstrap URLs, when they change
+SECURE=false           # --secure: fail2ban, automatic security updates, time sync
+KEY_ONLY_SSH=false     # --key-only-ssh: password logins off, confirmed by a fresh key login
+SSH_USER=""            # the account the app logs in as (key-only checks its keys)
+SSH_CONFIRM_SECONDS=170
+PURGE=false
+HARDENING_F2B="off"
+HARDENING_UPDATES="off"
+HARDENING_TIME="off"
+HARDENING_SSH="off"
 
 usage() {
     cat <<'EOF'
@@ -149,6 +162,10 @@ Production (requires root):
   --public-host HOST    What clients dial when there is no domain: an IP, or a name (same as --ip)
   --public-port PORT    TLS port nginx serves and every URL names (default 443)
   --no-http             Serve nothing on port 80 (no Let's Encrypt HTTP-01, no redirect)
+  --secure              Harden the server: fail2ban for SSH, automatic security updates, time sync
+  --key-only-ssh        Turn password logins off (machine mode; rolled back unless a key login confirms)
+  --ssh-user USER       The account that logs in (its authorized_keys must not be empty)
+  --uninstall           Remove the node, its unit and its nginx site (--purge: its identity and state too)
   --tls MODE            letsencrypt | selfsigned (default: letsencrypt with --domain, else selfsigned)
   --acme-email EMAIL    Contact e-mail for Let's Encrypt expiry notices
   --acme-no-email       Register with Let's Encrypt without a contact e-mail
@@ -180,6 +197,7 @@ Offline and machine mode (what the app uses; see docs/Deployment.md §7):
   --status RUN          One line: running / done / failed, exit status, log size
   --result RUN          The run's result.json
   --list-runs           Every run on this server, newest first
+  --confirm-ssh RUN     A fresh key-only login works: keep the run's key-only SSH setting
   --version             Installer protocol and bundled node version
 
 Environment:
@@ -320,7 +338,7 @@ on_exit() {
     done
     case "$ACTION" in
         run) finish_run "$status" ;;
-        preflight|launch|status|list-runs) mark end status="$status" ;;
+        preflight|launch|status|list-runs|confirm-ssh|uninstall) mark end status="$status" ;;
     esac
     return "$status"
 }
@@ -363,7 +381,7 @@ parse_args() {
             --bundle-dir) need_value "$1" $#; BUNDLE_DIR="$2"; shift 2; continue ;;
             --preflight) ACTION=preflight; shift; continue ;;
             --launch) ACTION=launch; shift; continue ;;
-            --run|--follow|--status|--result)
+            --run|--follow|--status|--result|--confirm-ssh)
                 need_value "$1" $#
                 ACTION="${1#--}"
                 RUN_ID="$2"
@@ -372,12 +390,14 @@ parse_args() {
                 ;;
             --from-byte) need_value "$1" $#; FROM_BYTE="$2"; shift 2; continue ;;
             --list-runs) ACTION="list-runs"; shift; continue ;;
+            --uninstall) ACTION=uninstall; shift; continue ;;
+            --purge) PURGE=true; shift; continue ;;
             --version) ACTION=version; shift; continue ;;
             -h|--help) usage; exit 0 ;;
         esac
         local taken=2
         case "$1" in
-            --domain|--ip|--public-host|--public-port|--tls|--acme-email|--behind-cdn|--dist-tar|--dist-url|--install-dir|--cert-dir|--node-port|--allow|--clock-offset-ms|--apt-mirror)
+            --domain|--ip|--public-host|--public-port|--tls|--acme-email|--behind-cdn|--dist-tar|--dist-url|--install-dir|--cert-dir|--node-port|--allow|--clock-offset-ms|--apt-mirror|--ssh-user|--ssh-confirm-seconds)
                 need_value "$1" $#
                 ;;
         esac
@@ -399,6 +419,10 @@ parse_args() {
             --acme-no-email) ACME_NO_EMAIL=true; taken=1 ;;
             --firewall) FIREWALL=true; taken=1 ;;
             --no-http) NO_HTTP=true; taken=1 ;;
+            --secure) SECURE=true; taken=1 ;;
+            --key-only-ssh) KEY_ONLY_SSH=true; taken=1 ;;
+            --ssh-user) SSH_USER="$2" ;;
+            --ssh-confirm-seconds) SSH_CONFIRM_SECONDS="$2" ;;
             --build) BUILD_FROM_REPO=true; taken=1 ;;
             --skip-cert) SKIP_CERT=true; taken=1 ;;
             --force-cert) FORCE_CERT=true; taken=1 ;;
@@ -418,6 +442,11 @@ parse_args() {
     # Hosts and domains end up in nginx config, unit files and URLs: letters, digits, '.', '-', ':'.
     [[ -z "$PUBLIC_IP" || "$PUBLIC_IP" =~ ^[A-Za-z0-9.:-]+$ ]] || die USAGE "--public-host is not a host name or address"
     [[ -z "$DOMAIN" || "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || die USAGE "--domain is not a domain name"
+    [[ -z "$SSH_USER" || "$SSH_USER" =~ ^[a-z_][a-z0-9_.-]*$ ]] || die USAGE "--ssh-user is not a user name"
+    [[ "$SSH_CONFIRM_SECONDS" =~ ^[0-9]+$ ]] || die USAGE "--ssh-confirm-seconds takes seconds"
+    if [[ "$KEY_ONLY_SSH" == true && ( "$FROM_APP" == false || -z "$SSH_USER" ) ]]; then
+        die USAGE "--key-only-ssh needs --from-app and --ssh-user: it waits for a confirmed key login"
+    fi
     [[ -z "$APT_MIRROR" || "$APT_MIRROR" =~ ^https?://[A-Za-z0-9.:/_~-]+$ ]] || die USAGE "--apt-mirror takes an http(s) URL"
     if [[ "$FROM_APP" == true ]]; then
         case "$ACTION" in
@@ -1564,7 +1593,7 @@ open_firewall_ports() {
     ufw status 2>/dev/null | grep -q '^Status: active' || return 0
     ufw allow "$PUBLIC_PORT/tcp" >/dev/null
     [[ "$NO_HTTP" == true ]] || ufw allow 80/tcp >/dev/null
-    issue UFW_OPENED info "ufw is on: allowed $PUBLIC_PORT/tcp${NO_HTTP:+}$([[ "$NO_HTTP" == true ]] || printf ' and 80/tcp')"
+    issue UFW_OPENED info "ufw is on: allowed $PUBLIC_PORT/tcp$([[ "$NO_HTTP" == true ]] || printf ' and 80/tcp')"
 }
 
 # What the node advertises about itself, rewritten on every run (the operator's node.env wins).
@@ -1678,6 +1707,178 @@ EOF
     printf '\n%s\n' "$install_one_liner"
 }
 
+
+# ---- hardening --------------------------------------------------------------------------------------
+
+ssh_ports() { sshd -T 2>/dev/null | awk '/^port / { print $2 }' | sort -u | paste -sd, -; }
+
+# fail2ban on the SSH port(s), read from journald (no auth.log on a minimal Debian).
+harden_fail2ban() {
+    step fail2ban start
+    local pkgs=(fail2ban)
+    apt_has_candidate python3-systemd && pkgs+=(python3-systemd)
+    apt_install "${pkgs[@]}" >/dev/null
+    install -d -m 0755 "$(dirname "$F2B_JAIL")"
+    cat > "$F2B_JAIL" <<EOF
+# Written by setup-node.sh --secure.
+[sshd]
+enabled = true
+backend = systemd
+port = $(ssh_ports)
+maxretry = 5
+findtime = 10m
+bantime = 1h
+EOF
+    systemctl enable fail2ban >/dev/null 2>&1 || true
+    if systemctl restart fail2ban && sleep 2 && fail2ban-client status sshd >/dev/null 2>&1; then
+        HARDENING_F2B="on"
+        step fail2ban ok
+    else
+        issue HARDEN_F2B_FAILED warn "fail2ban did not start: $(journalctl -u fail2ban -n 3 --no-pager 2>/dev/null | tail -n 1)"
+        step fail2ban warn
+    fi
+}
+
+# Security updates installed daily by unattended-upgrades (its stock origins are the distribution's
+# security suites); our file only switches the periodic runs on.
+harden_updates() {
+    step updates start
+    apt_install unattended-upgrades >/dev/null
+    cat > "$UNATTENDED_CONF" <<'EOF'
+// Written by setup-node.sh --secure.
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
+    systemctl enable --now apt-daily.timer apt-daily-upgrade.timer >/dev/null 2>&1 || true
+    HARDENING_UPDATES="on"
+    step updates ok
+}
+
+# Time sync, unless chrony or ntpd already keeps time. TLS, apt and relay proofs all need a clock.
+harden_time() {
+    step timesync start
+    if systemctl is-active --quiet chrony || systemctl is-active --quiet chronyd || systemctl is-active --quiet ntp; then
+        HARDENING_TIME="existing"
+        step timesync skip "chrony or ntp already keeps time"
+        return
+    fi
+    if [[ -z "$(systemctl list-unit-files systemd-timesyncd.service --no-legend 2>/dev/null)" ]]; then
+        apt_install systemd-timesyncd >/dev/null
+    fi
+    timedatectl set-ntp true >/dev/null 2>&1 || systemctl enable --now systemd-timesyncd >/dev/null 2>&1 || true
+    HARDENING_TIME="on"
+    step timesync ok
+}
+
+reload_sshd() { systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true; }
+
+ssh_rollback() {
+    rm -f "$SSH_HARDENING_FILE"
+    reload_sshd
+    systemctl stop "$SSH_ROLLBACK_UNIT.timer" >/dev/null 2>&1 || true
+}
+
+# Password logins off, in a drop-in that sshd reads first. Armed with a rollback timer before it
+# takes effect, and kept only when the app proves a fresh key-only login works (--confirm-ssh);
+# otherwise undone, so a mistake cannot lock the owner out.
+harden_ssh() {
+    step ssh start
+    local home keys
+    home="$(getent passwd "$SSH_USER" | cut -d: -f6)"
+    keys="$home/.ssh/authorized_keys"
+    if [[ -z "$home" || ! -s "$keys" ]]; then
+        issue HARDEN_SSH_NO_KEYS warn "$SSH_USER has no authorized_keys; password logins stay on"
+        HARDENING_SSH="skipped"
+        step ssh skip
+        return
+    fi
+    if ! grep -Eqi '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf' /etc/ssh/sshd_config; then
+        issue HARDEN_SSH_NO_INCLUDE warn "sshd_config does not read sshd_config.d; password logins stay on"
+        HARDENING_SSH="skipped"
+        step ssh skip
+        return
+    fi
+    {
+        printf '# Written by setup-node.sh --key-only-ssh. Delete it and reload ssh to allow passwords again.\n'
+        printf 'PasswordAuthentication no\n'
+        printf 'KbdInteractiveAuthentication no\n'
+        # Only tightened, never loosened: "prohibit-password" where root could log in with one.
+        if sshd -T 2>/dev/null | grep -qi '^permitrootlogin yes'; then printf 'PermitRootLogin prohibit-password\n'; fi
+    } > "$SSH_HARDENING_FILE"
+    if ! sshd -t 2>/dev/null; then
+        rm -f "$SSH_HARDENING_FILE"
+        issue HARDEN_SSH_INVALID warn "sshd rejected the hardening drop-in; nothing changed"
+        HARDENING_SSH="skipped"
+        step ssh skip
+        return
+    fi
+    if ! sshd -T -C "user=$SSH_USER,host=localhost,addr=127.0.0.1" 2>/dev/null | grep -qi '^passwordauthentication no'; then
+        rm -f "$SSH_HARDENING_FILE"
+        issue HARDEN_SSH_OVERRIDDEN warn "another sshd setting (a Match block?) keeps password logins on for $SSH_USER; nothing changed"
+        HARDENING_SSH="skipped"
+        step ssh skip
+        return
+    fi
+    systemctl stop "$SSH_ROLLBACK_UNIT.timer" >/dev/null 2>&1 || true
+    systemd-run --unit="$SSH_ROLLBACK_UNIT" --on-active=$((SSH_CONFIRM_SECONDS + 10)) --quiet \
+        /bin/sh -c "rm -f '$SSH_HARDENING_FILE'; systemctl reload ssh || systemctl reload sshd || true" \
+        || die HARDEN_SSH_TIMER "could not arm the rollback timer; password logins stay on"
+    reload_sshd
+    rm -f "$RUN_DIR/ssh-confirmed"
+    step ssh wait "confirm with a fresh key-only login"
+    fact ssh_confirm "$RUN_ID"
+    local waited=0
+    while [[ ! -f "$RUN_DIR/ssh-confirmed" && "$waited" -lt "$SSH_CONFIRM_SECONDS" ]]; do
+        sleep 2
+        waited=$((waited + 2))
+    done
+    if [[ -f "$RUN_DIR/ssh-confirmed" ]]; then
+        systemctl stop "$SSH_ROLLBACK_UNIT.timer" >/dev/null 2>&1 || true
+        HARDENING_SSH="applied"
+        step ssh ok
+    else
+        ssh_rollback
+        HARDENING_SSH="rolled-back"
+        issue HARDEN_SSH_ROLLED_BACK warn "no key-only login confirmed within ${SSH_CONFIRM_SECONDS}s; password logins are on again"
+        step ssh warn
+    fi
+}
+
+harden_server() {
+    if [[ "$SECURE" == true ]]; then
+        harden_fail2ban
+        harden_updates
+        harden_time
+    fi
+    [[ "$KEY_ONLY_SSH" == false ]] || harden_ssh
+}
+
+cmd_confirm_ssh() {
+    run_dir_or_die
+    : > "$RUN_DIR/ssh-confirmed"
+    mark confirmed run="$RUN_ID"
+    [[ "$FROM_APP" == true ]] || printf 'confirmed %s\n' "$RUN_ID"
+}
+
+# Takes out what the installer put in: the service, its unit, its nginx site, the node's files and
+# the files the installer writes. Other nginx sites, and the hardening (the server's now), stay.
+# --purge also removes the node's identity (node.seed) and state, its user and the installer's runs.
+cmd_uninstall() {
+    mark hello proto="$PROTOCOL_VERSION" action=uninstall
+    step uninstall start
+    systemctl disable --now vmessenger-node >/dev/null 2>&1 || true
+    rm -f "$SYSTEMD_UNIT"
+    systemctl daemon-reload
+    rm -f /etc/nginx/sites-enabled/vmessenger-node.conf "$NGINX_SITE" "$NGINX_SITE.vmessenger-backup" "$REALIP_SNIPPET"
+    if command -v nginx >/dev/null 2>&1 && nginx -t >/dev/null 2>&1; then systemctl reload nginx 2>/dev/null || true; fi
+    rm -rf "$INSTALL_DIR" "${INSTALL_DIR}.prev" "${INSTALL_DIR}.new" "$MANAGED_ENV_FILE" "$INSTALL_RECORD"
+    if [[ "$PURGE" == true ]]; then
+        rm -rf "$STATE_DIR" /etc/vmessenger "$INSTALLER_HOME"
+        userdel "$NODE_USER" >/dev/null 2>&1 || true
+    fi
+    step uninstall ok
+    if [[ "$PURGE" == true ]]; then log "vMessenger node removed, with its identity and state"; else log "vMessenger node removed"; fi
+}
 
 # ---- machine mode ----------------------------------------------------------------------------------
 
@@ -1953,6 +2154,9 @@ write_result() {
             "$(json_str "$OS_ID")" "$(json_str "$OS_VERSION_ID")" "$(json_str "$ARCH")"
         printf '  "java": %s,\n' "$(json_str "$java_version")"
         printf '  "aptSources": %s,\n' "$(json_str "$APT_SOURCES_NOTE")"
+        printf '  "hardening": {"fail2ban": %s, "autoUpdates": %s, "timeSync": %s, "keyOnlySsh": %s},\n' \
+            "$(json_str "$HARDENING_F2B")" "$(json_str "$HARDENING_UPDATES")" "$(json_str "$HARDENING_TIME")" \
+            "$(json_str "$HARDENING_SSH")"
         printf '  "warnings": %s\n' "$(json_array "${WARNINGS[@]:-}")"
         printf '}\n'
     } > "$file.tmp"
@@ -2023,6 +2227,7 @@ setup_production() {
     health_check
     read_node_id
     step health ok
+    harden_server
     step finish start
     if [[ "$ACTION" == run ]]; then write_result ok 0; fi
     print_success
@@ -2038,6 +2243,8 @@ main() {
         follow) cmd_follow ;;
         status) cmd_status ;;
         result) cmd_result ;;
+        confirm-ssh) cmd_confirm_ssh ;;
+        uninstall) cmd_uninstall ;;
         list-runs) cmd_list_runs ;;
         *)
             [[ -z "$BUNDLE_DIR" ]] || resolve_bundle

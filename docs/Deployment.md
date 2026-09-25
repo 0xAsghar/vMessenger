@@ -207,6 +207,8 @@ All but `--version` run as root (`sudo`).
 | `--from-app --status RUN` | One `status` marker: `state=running\|done\|failed\|lost exit=<n> bytes=<log size>`. |
 | `--from-app --result RUN` | The run's `result.json`. |
 | `--list-runs` | Every run, newest first. |
+| `--from-app --confirm-ssh RUN` | Run over a **fresh key-only** login while the run waits (`step ssh wait`, `fact ssh_confirm`): keeps key-only SSH. |
+| `--uninstall [--purge]` | Removes the service, unit, nginx site and node files; `--purge` also the identity (`node.seed`), state, user and runs. Other sites and the hardening stay. |
 
 The install runs under systemd, not under the SSH session: a dropped connection, a phone that goes
 to sleep or an app that is killed does not stop it. The app reconnects and resumes `--follow` from the
@@ -237,7 +239,7 @@ Values are percent-encoded byte by byte: anything outside `A–Z a–z 0–9 . _
 | `end` | `status` | Last line of every invocation and of every run log; `status` is the exit status. |
 
 Step ids, in order: `preflight`, `apt`, `swap`, `java`, `packages`, `ports`, `firewall`, `files`,
-`tls`, `config`, `service`, `health`, `finish`. `wait` means the step is waiting on something outside the
+`tls`, `config`, `service`, `health`, `fail2ban`, `updates`, `timesync`, `ssh`, `finish`. `wait` means the step is waiting on something outside the
 installer — cloud-init, or another package manager holding the dpkg lock — for up to 15 minutes. Exit statuses are those of §3.4. A command that fails outside a known check is
 reported as `INTERNAL` with its line, and exits 1.
 
@@ -343,3 +345,20 @@ was written, which is why the check exists):
   Installing an older version over a newer one needs `--allow DOWNGRADE`. `node.seed` is never touched.
 - **Health** is checked locally, then through nginx with the pin (`curl --pinnedpubkey`) or the CA, then
   `/relay` must upgrade (101), and the node must advertise the URL it will be reached at.
+
+### 8.7 Securing the server
+
+`--secure` (the app's **Secure this server**, on by default):
+
+- **fail2ban** for SSH on the port(s) `sshd -T` reports, reading journald (`/etc/fail2ban/jail.d/vmessenger-sshd.local`: 5 tries in 10 minutes, 1 hour ban).
+- **Automatic security updates**: unattended-upgrades with its stock origins (the distribution's security suites), switched on by `/etc/apt/apt.conf.d/52vmessenger-unattended`.
+- **Time sync**: systemd-timesyncd, unless chrony or ntp already keeps time.
+
+`--key-only-ssh --ssh-user USER` (offered by the app only when the user connected with a key):
+
+1. `USER` must have a non-empty `authorized_keys`, and `sshd_config` must `Include` `sshd_config.d`; otherwise nothing changes (`HARDEN_SSH_NO_KEYS`, `HARDEN_SSH_NO_INCLUDE`).
+2. `/etc/ssh/sshd_config.d/00-vmessenger-hardening.conf` turns off password and keyboard-interactive logins, and turns `PermitRootLogin yes` into `prohibit-password` (never loosens it). It must pass `sshd -t`, and `sshd -T -C user=USER` must show passwords off (a `Match` block could keep them on: `HARDEN_SSH_OVERRIDDEN`).
+3. A rollback timer (`vmessenger-ssh-rollback`) is armed **before** sshd reloads.
+4. The run waits (`step ssh wait`) for the app to log in again **with the key only** and run `--confirm-ssh`. Confirmed: the timer is stopped. Not confirmed within 170 s: the drop-in is removed and passwords work again (`HARDEN_SSH_ROLLED_BACK`).
+
+`result.json` reports `"hardening": {"fail2ban", "autoUpdates", "timeSync", "keyOnlySsh"}` (`on`, `off`, `existing`, `applied`, `rolled-back`, `skipped`). There is no firewall option: an active ufw only gets the node's ports opened (§8.6).

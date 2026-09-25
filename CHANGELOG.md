@@ -45,6 +45,9 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
   not possible, `--public-host`, `--public-port`, `--no-http`, port-owner checks (apache2 stopped only when
   allowed), transactional nginx changes, an atomic install with rollback, and health checked through nginx
   with the pin. `result.json` carries the pin, the certificate and the URLs a client should use.
+- **Securing the server** (`--secure`, Deployment §8.7): fail2ban for SSH, automatic security updates, time
+  sync; and `--key-only-ssh`, armed with a rollback timer and kept only when a fresh key-only login confirms
+  it, so a mistake cannot lock the owner out. `--uninstall [--purge]` removes what the installer added.
 - **Ubuntu 26.04 and Debian 13** are supported, after installing end to end in the harness.
 - **A Docker harness for the installer** (`scripts/provision-test/`): throwaway systemd + sshd
   containers on `127.0.0.1`, driven over real SSH, with scenarios for the happy path, resuming a

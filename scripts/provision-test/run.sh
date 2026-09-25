@@ -299,6 +299,57 @@ scenario_update_same() {
     as_root "$slot" 'test -x /opt/vmessenger.prev/bin/node' || { printf 'no previous node kept\n' >&2; return 1; }
 }
 
+# launch_run SLOT LOG ARGS… — start an install with ARGS; prints the run id.
+launch_run() {
+    local slot="$1" log="$2" b
+    shift 2
+    b="$(stage_bundle "$slot" alice)" || return 1
+    on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --launch $(ip_args "$slot") $*" > "$log.launch" 2>&1 \
+        || { cat "$log.launch" >&2; return 1; }
+    sed -n 's/^##vm .* ev=launched run=\([0-9a-f-]*\).*/\1/p' "$log.launch"
+}
+
+installer_path() { printf '/home/alice/.vmessenger-installer/%s/setup-node.sh' "$(node_version)"; }
+
+# "Secure this server" with key-only SSH, confirmed the way the app does it: a fresh key-only login
+# while the run waits. Password logins end up off; then --uninstall leaves no node behind.
+scenario_hardening() {
+    local slot="$2" log="$OUT/$3" run
+    run="$(launch_run "$slot" "$log" --secure --key-only-ssh --ssh-user alice --ssh-confirm-seconds 120)" || return 1
+    on "$slot" alice "sudo bash $(installer_path) --from-app --follow $run" > "$log.follow" 2>&1 &
+    local follower=$!
+    for _ in $(seq 1 180); do
+        grep -q 'ev=fact key=ssh_confirm' "$log.follow" 2>/dev/null && break
+        sleep 5
+    done
+    grep -q 'ev=fact key=ssh_confirm' "$log.follow" || { tail -20 "$log.follow" >&2; return 1; }
+    local opts=()
+    while IFS= read -r line; do opts+=("$line"); done < <(ssh_opts)
+    ssh "${opts[@]}" -o PreferredAuthentications=publickey -i "$OUT/alice_ed25519" -p "$(ssh_port "$slot")" alice@127.0.0.1 \
+        "sudo bash $(installer_path) --from-app --confirm-ssh $run" >/dev/null || return 1
+    wait "$follower" || { tail -20 "$log.follow" >&2; return 1; }
+    on "$slot" alice "sudo bash $(installer_path) --from-app --result $run" > "$log.result.json"
+    if ! grep -q '"keyOnlySsh": "applied"' "$log.result.json" || ! grep -q '"fail2ban": "on"' "$log.result.json"; then
+        cat "$log.result.json" >&2
+        return 1
+    fi
+    as_root "$slot" "sshd -T -C user=bob,host=x,addr=127.0.0.1 | grep -qi '^passwordauthentication no'" \
+        || { printf 'password logins are still on\n' >&2; return 1; }
+    on "$slot" alice "sudo bash $(installer_path) --from-app --uninstall" > "$log.uninstall" 2>&1 || { cat "$log.uninstall" >&2; return 1; }
+    as_root "$slot" '! systemctl is-active --quiet vmessenger-node && ! test -e /opt/vmessenger && nginx -t 2>/dev/null' \
+        || { printf 'uninstall left the node behind\n' >&2; return 1; }
+}
+
+# Key-only SSH that nobody confirms is taken back: password logins work again.
+scenario_hardening_rollback() {
+    local slot="$2" log="$OUT/$3" run
+    run="$(launch_run "$slot" "$log" --key-only-ssh --ssh-user alice --ssh-confirm-seconds 20)" || return 1
+    on "$slot" alice "sudo bash $(installer_path) --from-app --follow $run" > "$log.follow" 2>&1 || true
+    grep -q 'ev=issue code=HARDEN_SSH_ROLLED_BACK' "$log.follow" || { tail -20 "$log.follow" >&2; return 1; }
+    as_root "$slot" "sshd -T -C user=bob,host=x,addr=127.0.0.1 | grep -qi '^passwordauthentication yes'" \
+        || { printf 'password logins stayed off\n' >&2; return 1; }
+}
+
 # A dropped connection mid-run: the install carries on, and --follow --from-byte picks the log up
 # again with nothing lost or repeated.
 scenario_resume() {
