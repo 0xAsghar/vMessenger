@@ -49,7 +49,7 @@ jobs:
       # The node installer runs as root on other people's servers; shellcheck is the closest thing
       # it has to a compiler. The runner image ships it.
       - name: Shellcheck
-        run: shellcheck -S style scripts/*.sh
+        run: shellcheck -S style scripts/*.sh scripts/provision-test/*.sh
 
       - name: Detekt
         run: ./gradlew detekt

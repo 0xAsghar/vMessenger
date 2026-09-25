@@ -37,6 +37,9 @@ Detekt is applied to every subproject from the root build with a shared config (
 | `:data` | inbound policy and collector, receipts, attachments, contact requests, mailbox seal/protocol, outbox error codes, relay selection vs. published endpoint, signature domain separation, backup, wipe plan, group control authority, per-recipient delivery and its aggregate |
 | `:domain` | use cases |
 | `:feature:identity` | ViewModel |
+| `:feature:provision` | `ServerInputTest`: Persian digits, bidi marks and `user@host` normalised; shell-unsafe input refused; every `IssueCode` has words |
+| `:core:ssh` | sshj against an embedded Apache MINA SSHD: key formats, host-key capture and mismatch, streaming, exit codes, SFTP and its fallback, timeouts |
+| `:core:nodesetup` | `ContractTest` (the script's codes, steps and protocol match the Kotlin), `ProtocolTest`, `InstallResultTest`, `NodeSetupEngineTest` (a whole setup, resume after a dropped follow, host key changed or not trusted, decisions); `ProvisionE2eTest` runs only through the harness (§2.1) |
 | `:node` | see §2 |
 
 There are **no** `androidTest` (instrumented) sources in the repository; everything runs on the JVM.
@@ -59,7 +62,7 @@ This exists because Room does not type-check migration SQL. Before this test, a 
 |---|---|
 | `core/proto` `V1WireCompatibilityTest` | 1.1.2's `.proto` files, copied verbatim from the `v1.1.2` tag into `src/test/resources/v1.1.2`, against the schema this build compiles: every field 1.1.2 knows keeps its number, type, cardinality and oneof, no number is removed unless reserved, no reserved number is reused, and every enum value 1.1.2 can send is still defined |
 | `core/proto` `V1WireRoundTripTest` | real bytes both ways, using 1.1.2's `messaging.proto` compiled under another package (`src/test/proto/v112`, kept identical to the released text but for its two package lines): a 1.1.2 message, file, receipt and group read intact and untimed; a timed message, an album image and a group with roles reach 1.1.2 as the message, image and group it knows; a call, a location request and a role change are nothing 1.1.2 can misread |
-| `core/database` `V1DatabaseUpgradeTest` | a database exactly as a fresh 1.1.2 install created it — from Room's own schema 20 (`schemas/…/20.json`), not rebuilt through the migration chain — with one fully filled row in every table, upgraded by 20 → 24: every row survives value for value, the result is exactly schema 24, and what 2.0 added reads as absent rather than zero |
+| `core/database` `V1DatabaseUpgradeTest` | a database exactly as a fresh 1.1.2 install created it — from Room's own schema 20 (`schemas/…/20.json`), not rebuilt through the migration chain — with one fully filled row in every table, upgraded by 20 → 25: every row survives value for value, the result is exactly schema 25, and what 2.0 added reads as absent rather than zero |
 | `data` `V1PeerCompatibilityTest` | what 2.0 does with it: a 1.1.2 message is kept and no expiry sweep takes it; a group created on 1.1.2 arrives with plain members and audit retention off |
 | `core/common` `UserHashEncoderTest` | a `vm2-` ID, as 1.1.2 wrote them, still decodes to the same identity |
 
@@ -152,6 +155,26 @@ apt's archive cache: the install really runs apt, without fetching ~150 MB per c
 The unsupported images run sshd without systemd: systemd 237 and older cannot boot on a cgroup v2 host. The
 Debian 11 image is built from a snapshot of its security suite, while its sources keep the live one — the state a
 real Debian 11 server is in (Deployment §8.5, `APT_SECURITY_GONE`).
+
+### 2.2 New node on an emulator, against a harness server
+
+The wizard end to end, with a person at the keyboard (the harness credentials are typed by them, not by
+a script):
+
+```bash
+scripts/provision-test/run.sh up debian:12 --slot 1   # prints the SSH and HTTPS ports
+scripts/provision-test/run.sh creds                   # alice's key files, bob's password
+```
+
+On the emulator the server is `10.0.2.2`, SSH port `22000 + 10·slot + 2`. Its HTTPS port
+(`22000 + 10·slot + 3`) is mapped to the same number inside the container, so enter it in the Address step's
+*Public port* field, which debug builds show. Settings → Nodes → *Set up a new server*: log in as `alice`
+with a key file pushed to the device (`adb push scripts/provision-test/out/alice_ed25519 /sdcard/Download/`),
+or as `bob` with his password (sudo asks for it again). Check: the fingerprint dialog appears before anything
+is sent; the steps advance; leaving mid-install and setting up again joins the running install; *Add* puts
+the node's `wss://…#pin-sha256=` addresses in the lists and under *Your servers*; a second emulator reaches
+the first through that relay. Rebuilding the container (a new host key) and choosing *Update* must stop at
+`SSH_HOST_KEY_MISMATCH`. `scripts/provision-test/run.sh down <name>` removes it.
 
 ---
 

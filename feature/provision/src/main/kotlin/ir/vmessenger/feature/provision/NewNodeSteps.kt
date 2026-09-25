@@ -1,5 +1,6 @@
 package ir.vmessenger.feature.provision
 
+import android.content.pm.ApplicationInfo
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -137,6 +138,21 @@ internal fun AddressStep(form: NewNodeForm, onEvent: (NewNodeEvent) -> Unit) {
             kind = VmNoticeKind.Warning,
         )
         AddressKind.Domain -> DomainFields(form, onEdit)
+    }
+    if (LocalContext.current.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+        Ltr {
+            VmTextField(
+                value = form.publicPort,
+                onValueChange = { onEdit(form.copy(publicPort = it)) },
+                modifier = Modifier.fillMaxWidth(),
+                config = VmTextFieldConfig(
+                    label = stringResource(R.string.provision_public_port_debug),
+                    placeholder = "443",
+                    isError = form.error == FormError.PublicPort,
+                    keyboardType = KeyboardType.Number,
+                ),
+            )
+        }
     }
     NavButtons(onNext = { onEvent(NewNodeEvent.Next) }, onBack = { onEvent(NewNodeEvent.Back) })
 }

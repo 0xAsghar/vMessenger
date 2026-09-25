@@ -80,6 +80,11 @@ version** (currently 25, [docs/Database.md](docs/Database.md)).
   first-run node question ("Create a node"), which records the node as the person's own.
 - **"Your servers"** on the Nodes screen: the servers this device set up, with "Update" when the app carries a
   newer node (the SSH login is asked again) and "Forget".
+- **`AGENTS.md`**: how to work in the repository — environment, the gate, emulators, module map, the
+  architecture, UI, detekt, database and security rules, and what must never be done without the
+  maintainer (touching production servers, tags, signing).
+- **Debug builds show a *Public port* field in New node**, for test servers whose port 443 is mapped
+  elsewhere (the Docker harness; Testing §2.2).
 - **Ubuntu 26.04 and Debian 13** are supported, after installing end to end in the harness.
 - **A Docker harness for the installer** (`scripts/provision-test/`): throwaway systemd + sshd
   containers on `127.0.0.1`, driven over real SSH, with scenarios for the happy path, resuming a
@@ -112,6 +117,11 @@ version** (currently 25, [docs/Database.md](docs/Database.md)).
 - **The Nodes screen's guide no longer shows the GitHub one-liner**: it points at "Set up a new server",
   and the app downloads nothing from GitHub. The first-run "Create a node" step opens New node instead of
   asking for the address of a node started elsewhere.
+- **Docs**: README (New node, pinned addresses, limitations, schema 25, the in-house design system),
+  Deployment §0 (setting a node up from the app; a domain is optional), Security §18 (setting up a node over
+  SSH) and L21–L22, Architecture §10.6 (the provisioning data flow), UI §5.9 and the Persian-and-English
+  rules, FolderStructure (`feature:provision`), Testing §2.2 (New node against a harness server). CI runs
+  shellcheck on the harness too.
 - **`setup-node.sh` leaves other nginx sites alone** (it used to delete `sites-enabled/default`) and no
   longer asks nginx for `http2`, which is deprecated in the `listen` form. Every fatal error names an
   issue code, and the exit status gives its class (Deployment §3.4).

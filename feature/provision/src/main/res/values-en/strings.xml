@@ -129,4 +129,5 @@
     <string name="provision_issue_health">The node didn\'t start correctly; the previous version was kept.</string>
     <string name="provision_issue_harden">Part of securing the server didn\'t work; the node itself is fine.</string>
     <string name="provision_issue_upload">The installer couldn\'t be sent to the server intact.</string>
+    <string name="provision_public_port_debug">Public port (debug builds only)</string>
 </resources>

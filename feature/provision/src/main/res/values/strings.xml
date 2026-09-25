@@ -129,4 +129,5 @@
     <string name="provision_issue_health">گره درست راه‌اندازی نشد؛ نسخهٔ قبلی حفظ شد.</string>
     <string name="provision_issue_harden">بخشی از امن‌سازی سرور انجام نشد؛ خود گره سالم است.</string>
     <string name="provision_issue_upload">نصب‌کننده سالم به سرور نرسید.</string>
+    <string name="provision_public_port_debug">درگاه عمومی (فقط نسخهٔ اشکال‌زدایی)</string>
 </resources>

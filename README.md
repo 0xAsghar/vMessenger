@@ -82,6 +82,8 @@ Implemented and verified on two emulators (see [docs/Testing.md](docs/Testing.md
 - **Multi-node network** — database-backed bootstrap and relay lists with health ranking and a trust tier (built-in / user / official / community); add, enable, share and import nodes with `vmnode:bootstrap:…` / `vmnode:relay:…` links or QR.
 - **Security** — MITM-resistant v2 handshake, per-contact X25519 key pinning, inbound authorization on every envelope kind, SQLCipher database, Keystore-wrapped keys (StrongBox where available), `FLAG_SECURE`, private lock-screen notifications, boot-restart of the network service, and a complete secure wipe. See [docs/Security.md](docs/Security.md).
 - **Backup** — passphrase-protected identity/contacts backup bundle (Argon2id13 + XChaCha20-Poly1305).
+- **New node** — give the app a server's SSH login (password or key) and it turns an Ubuntu/Debian server into a node and adds it: with or without a domain, always over TLS (a pinned certificate when no CA vouches for it), with an option to secure the server, and with common server problems found and fixed on the way. Everything it installs ships inside the app; nothing is downloaded from GitHub ([docs/Deployment.md](docs/Deployment.md) §0).
+- **Pinned node addresses** — `wss://203.0.113.10/relay#pin-sha256=…` carries the node's certificate key, so a node needs no domain and no CA ([docs/Network.md](docs/Network.md)).
 - **Reference node** — a JVM bootstrap/DHT + relay node anyone can run ([docs/Deployment.md](docs/Deployment.md)).
 
 Not implemented: voice or video calls, Bluetooth / Wi-Fi Direct / mesh transports, geofencing, location analytics, SOS mode, a plugin system.
@@ -113,12 +115,14 @@ One more, outside that table:
 - **User-operated relay mode is off by default.** The circuit protocol, circuit table, TTL and a policy gate (off / contacts-only / Wi-Fi-only / charging-only) exist, but the path has not been through the same verification as the default relay.
 - **Peer exchange of signed node records is off by default.** Records verify correctly and community records are stored disabled, but the flow is unverified end to end.
 - **The default relay remains a single operational dependency in practice.** Demotion (`reduceDefaultRelay`) exists but is off, because the replacement paths above are not proven.
+- **Contacts on app versions before pinned addresses cannot reach you through a pinned node.** A node set up without a domain (or whose Let's Encrypt certificate could not be issued) is reached by its certificate pin, which older apps do not understand (Security L20).
+- **New node sets up Ubuntu 20.04+ and Debian 11+ servers only**, on x86-64 or ARM64 with systemd. Other systems need the manual runbook.
 - **Only one built-in node ships** (`relay.vmessenger.ir`, serving both `/dht` and `/relay`), so "decentralized" today means "self-hostable and multi-node capable", not "no default operator".
 
 ### Platform
 
 - **After a secure wipe the app does not come back to the foreground.** Android's background-activity-start restriction blocks the `AlarmManager` relaunch; the data is destroyed and the service restarts, but the user must tap the launcher icon.
-- **Room schemas 3, 4, 5 and 11 were never committed versions**, so the exported schema history has gaps. The migration chain itself is continuous and is replayed 1 → 18 on a real SQLite engine in a JVM test.
+- **Room schemas 3, 4, 5 and 11 were never committed versions**, so the exported schema history has gaps. The migration chain itself is continuous and is replayed 1 → 25 on a real SQLite engine in a JVM test.
 - **Feature flags gate unproven code paths, not absent ones** (L14). Turning on peer exchange, embedded DHT, relay-peer mode, UDP attempts, store-and-forward or relay demotion in the debug screen enables code that the default build does not exercise.
 - **Map pin rendering has never been visually verified**, because `screencap` returns a black image on the software-GPU emulator MapLibre renders on. See [docs/UI.md](docs/UI.md) §8.
 - **There are no Compose UI tests and no accessibility audit.** The presentation layer is covered by ViewModel unit tests only.
@@ -127,12 +131,12 @@ One more, outside that table:
 
 ## Technology
 
-- Kotlin, Clean Architecture + MVVM, Jetpack Compose + Material 3 (Persian / RTL)
+- Kotlin, Clean Architecture + MVVM, Jetpack Compose with an in-house design system on Compose Foundation (Persian / RTL and English)
 - Hilt, Coroutines + Flow
-- Room over SQLCipher (schema 18), DataStore for preferences
+- Room over SQLCipher (schema 25), DataStore for preferences
 - Protocol Buffers (proto3) for every wire format
 - libsodium (Lazysodium): Ed25519, X25519, ChaCha20-Poly1305-IETF, XChaCha20-Poly1305 secretstream, `crypto_box_seal`, Argon2id13, HKDF-SHA256; Android Keystore (AES-256-GCM, StrongBox where available) for key wrapping
-- MapLibre for the map; Ktor for the reference node
+- MapLibre for the map; Ktor for the reference node; sshj (with BouncyCastle) for setting a node up over SSH
 
 ---
 
@@ -146,12 +150,13 @@ One more, outside that table:
 | [docs/Security.md](docs/Security.md) | threat model, handshake guarantees, key pinning, inbound authorization, encryption at rest, secure wipe, known limitations |
 | [docs/Discovery.md](docs/Discovery.md) | the Discovery layer, QR and User Hash pairing, DHT resolution |
 | [docs/DHT.md](docs/DHT.md) | the minimal DHT design, joining it, signed routing records, TTL and refresh |
-| [docs/Database.md](docs/Database.md) | schema 18: entities, enums, indices, DAOs, the 1→18 migration chain |
+| [docs/Database.md](docs/Database.md) | schema 25: entities, enums, indices, DAOs, the 1→25 migration chain |
 | [docs/Testing.md](docs/Testing.md) | unit tests, node tests, the two-emulator procedure, the M3 scenario matrix, release verification |
-| [docs/Deployment.md](docs/Deployment.md) | operator runbook for running a relay/DHT node |
+| [docs/Deployment.md](docs/Deployment.md) | setting a node up from the app, and the operator runbook for running a relay/DHT node |
 | [docs/UI.md](docs/UI.md) | the design system, component catalogue, navigation, screens and the RTL/Persian rules |
 | [docs/FolderStructure.md](docs/FolderStructure.md) | the Gradle multi-module layout |
 | [CHANGELOG.md](CHANGELOG.md) | what each release changed |
+| [AGENTS.md](AGENTS.md) | how to work in this repository: commands, rules, checklists (for people and coding agents) |
 
 ---
 
@@ -161,14 +166,15 @@ One more, outside that table:
 vMessenger/
   app/                 <- Android application (Hilt, navigation, lifecycle service)
   build-logic/         <- Gradle convention plugins
-  core/                <- common, crypto, proto, database, datastore, location, map, notifications, designsystem
+  core/                <- common, crypto, proto, database, datastore, location, map, notifications, designsystem,
+                          ssh (SSH client), nodesetup (the New node engine)
   data/                <- repository implementations, network coordinators, attachment + wipe + backup
   domain/              <- pure Kotlin domain layer
-  feature/             <- identity, pairing, contacts, chat, map, settings, debug, about
+  feature/             <- identity, pairing, contacts, chat, map, settings, debug, about, provision (New node)
   network/             <- discovery, dht, bootstrap, transport, messaging
   node/                <- standalone JVM bootstrap/DHT + relay node
   deploy/              <- nginx and systemd templates for a production node host
-  scripts/             <- setup-node.sh, emulator-connect.sh, p2p-terminal-check.sh, sign-node-record
+  scripts/             <- setup-node.sh, provision-test/ (Docker harness), emulator-connect.sh, p2p-terminal-check.sh, sign-node-record
   docs/                <- this documentation set
   vMessenger-icon/     <- launcher icons and brand logos
 ```
@@ -211,9 +217,11 @@ Signing secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROI
 
 Anyone can run a bootstrap (DHT) and/or relay node. Nodes never see plaintext — they hold signed, expiring endpoint records and forward opaque encrypted frames.
 
+**The easy way: from the app.** Settings → Nodes → *Set up a new server* (or *Create a node* on first run). Enter the server's address and SSH login — a password, or a key file — and the app connects, confirms the server's fingerprint with you, installs and starts the node, checks it, and adds it to your nodes. No domain is needed; with one, the node gets a Let's Encrypt certificate. The app keeps no SSH password or key: to update the node later, you enter it again. See [docs/Deployment.md](docs/Deployment.md) §0.
+
 **Full operator runbook: [docs/Deployment.md](docs/Deployment.md)** — install and update, TLS, running behind a CDN, verification and day-to-day operation.
 
-Quick start on a fresh Ubuntu/Debian host:
+Quick start by hand on a fresh Ubuntu/Debian host, from a checkout of this repository:
 
 ```bash
 sudo ./scripts/setup-node.sh --domain relay.example.com

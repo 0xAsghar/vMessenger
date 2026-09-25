@@ -283,7 +283,7 @@ install that still opens rather than one that opens with neither key.
 |---|---|
 | No cleartext traffic in release | `app/src/main/res/xml/network_security_config.xml` — `cleartextTrafficPermitted="false"`; the debug build type overlays it for the emulator/LAN bootstrap |
 | Address policy enforced in code as well | `core/common/.../network/NodeAddressPolicy.kt` — release builds accept only `wss://`; `ws://` and bare `host:port` require a debug build **and** a local host (`10.0.2.2`, loopback, `localhost`, RFC 1918). Applied by the node repository on every add/import **and** by the transports before dialing, so a stored row from an older build cannot bypass it |
-| Screenshot / recents protection | `FLAG_SECURE` set in `MainActivity.onCreate` before anything renders, then driven by `PrivacyPreferences.screenSecurityEnabled` (default **on**) |
+| Screenshot / recents protection | `FLAG_SECURE` set in `MainActivity.onCreate` before anything renders, then driven by `PrivacyPreferences.screenSecurityEnabled` (default **on**). A screen holding a secret forces it on whatever that switch says (`RequireSecureWindow`, reference-counted in `SecureWindowRequests`); New node does |
 | Lock-screen privacy | Message channel and every notification are `VISIBILITY_PRIVATE`; the public version carries no sender and no preview. With "hide notification content" on it is `VISIBILITY_SECRET`, so nothing reaches the lock screen (`core/notifications/.../MessageNotificationManager.kt`) |
 | No cloud backup of app data | `android:allowBackup="false"` |
 | Foreground service type | `remoteMessaging|dataSync` — `remoteMessaging` (API 34+) is exempt from Android 15's 6 h `dataSync` cap and from the Android 14 `BOOT_COMPLETED` start restriction |
@@ -348,6 +348,8 @@ These are real, current gaps. None of them is hidden behind a "future work" labe
 | L18 | **A self-destruct deadline is only as good as the peer** | `expires_at_unix_ms` is sender-stamped and enforced locally on each device (Protocol.md §8.7). An older peer ignores the field and keeps the message; a modified client can keep the plaintext whatever the field says. Like delete-for-everyone it is a request honoured by cooperating software, not a control over another device. |
 | L19 | **Audit retention reverses local erasure for the groups that enable it** | Off by default and creator-only, disclosed to every member by an undismissable banner and a system line in the group's history, scoped to one group, never applied to a 1:1 chat, capped at 90 days and readable only on the device that captured it (§14). Within those bounds it is still what it looks like: a member of such a group is trusting that group's admins with the text of what they edited or withdrew. Leaving is the only opt-out. |
 | L20 | **A pinned node is invisible to apps older than pins** | An address with `#pin-sha256=` reads, to an older app, as an ordinary `wss://` URL whose certificate fails the CA check. It fails closed — it never trusts the unknown key — but a contact on an older version cannot reach you through a node set up on a bare IP. Nodes with a domain and a CA certificate carry no pin. |
+| L21 | **SSH secrets can't be fully erased from memory** | The New node wizard copies the password, key and passphrase into arrays it wipes when the setup ends (§18), but a Compose text field's own buffers and the JVM's copies inside sshj and BouncyCastle are not ours to zero; they are released to the garbage collector. The secrets never reach disk, a log or saved state. |
+| L22 | **The first contact with a server trusts its host key** | New node shows the server's SSH fingerprint and sends nothing until the person trusts it, but few people compare it with the provider's console. An interposer on that first connection could learn the password (not a key: key logins don't disclose the key). Updates are protected: the stored fingerprint must match, or the setup stops before logging in. |
 | L14 | **Half-finished P2P paths are off, not absent** | Peer exchange, embedded DHT participation, relay-peer mode, UDP attempts and default-relay demotion all ship as reachable code behind `P2PConfig` flags that default to false (store-and-forward left this list in 1.1). Turning any of them on in the debug screen enables code that has not been through the same verification as the default path. |
 
 ---
@@ -491,3 +493,34 @@ a certificate with that key.
   keeps a node's key across re-runs, so its pin does not change when its certificate is renewed or its
   address changes (Deployment §8.6).
 - **Fails closed for old versions** (L20).
+
+## 18. Setting up a node over SSH
+
+`feature/provision`, `data/.../nodesetup/NodeSetupController.kt`, `core/nodesetup`, `core/ssh`. What the
+person sees is in [Deployment.md](Deployment.md) §0; what the server does is §8 there.
+
+- **Nothing is sent before the host key is trusted.** The engine learns the server's host key on a
+  connection that offers no credentials (`SshConnector.probeHostKey`), shows its SHA-256 fingerprint, and
+  logs in only after the person confirms it, pinned to exactly that key. For a server set up before, the
+  stored fingerprint must match or the setup stops (`SSH_HOST_KEY_MISMATCH`) with nothing sent (L22).
+- **The app keeps no SSH secret.** The password, key file and passphrase live in the wizard's ViewModel
+  (never in `SavedStateHandle`, `rememberSaveable`, DataStore, the database or a backup) and are copied into
+  arrays without passing through a `String` when the setup starts; the fields are cleared at once, and the
+  engine wipes the arrays in a `finally` when the setup ends however it ends. The sudo password goes to the
+  server on stdin, never in a command line. Logs record state names and issue codes only. See L21.
+- **The window is secure and out of autofill** for the whole wizard, whatever the screen-security switch
+  says, and the screen stays on during the install.
+- **A question the setup waits on expires.** A host-key, sudo-password or consent question unanswered for
+  10 minutes ends the setup, so credentials are not held by a setup nobody is watching.
+- **What is done to the server** is listed in Deployment §8: packages from the server's own sources (a
+  broken or stale mirror is worked around with a temporary source list, never by editing the server's),
+  nginx sites added beside existing ones, a node user and unit, and — with *Secure this server* — fail2ban,
+  unattended security upgrades and time sync. No firewall is enabled.
+- **Key-only SSH can't lock the person out.** It is offered only to someone logging in with a key; the
+  installer checks that the user has authorized keys and that `sshd -t` accepts the drop-in, and arms a
+  180-second rollback that only a fresh key-only login from the phone disarms (Deployment §8.7).
+- **The node is checked before it is added.** The installer's result must name the bundled version and a
+  pin that matches its certificate; the phone then reaches `/healthz` over TLS with that pin. A node
+  answering with any other certificate is not added (`REACH_TLS_MISMATCH`).
+- **The installer ships in the APK**, signed with it and checked against `SHA256SUMS` on the server; nothing
+  is fetched from GitHub.

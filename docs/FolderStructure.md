@@ -30,6 +30,7 @@ flowchart TD
     fSettings["feature:settings"]
     fDebug["feature:debug"]
     fAbout["feature:about"]
+    fProvision["feature:provision"]
   end
 
   domain["domain"]
@@ -144,8 +145,8 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 - This is the only feature module that depends on `data`; the reason is recorded in [Architecture.md](Architecture.md) Section 6.
 
 ### feature:settings
-- Settings UI (appearance, privacy, network nodes, identity, backup export), the blocked-contacts screen, the node QR scanner, and the entry points to Debug and About.
-- Depends on: `domain`, `core:designsystem`, `core:datastore`, `core:common`.
+- Settings UI (appearance, privacy, network nodes and "Your servers", identity, backup export), the blocked-contacts screen, the node QR scanner, and the entry points to Debug, About and New node.
+- Depends on: `domain`, `data` (the app-lock coordinator, and the bundled installer's node version for "Update"), `feature:pairing`, `core:designsystem`, `core:datastore`, `core:common`.
 
 ### feature:debug
 - Diagnostics UI (join status, routing table, connections, crypto self-test).
@@ -154,6 +155,10 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 ### feature:about
 - About screen (versions, docs links, license, disclosure).
 - Depends on: `core:designsystem`.
+
+### feature:provision
+- **New node**: the wizard that sets a server up as a node over SSH (`NewNodeRoute`, `NewNodeViewModel`), its input normalisation (`ServerInput`), and the words for every step and issue code (`ProvisionText`). Holds the SSH secrets in memory only (Security §18).
+- Depends on: `domain`, `core:nodesetup` (contract types and `NodeSetupSession`), `core:designsystem`, `core:common`. The session itself is bound in `data`.
 
 ### network:discovery
 - `DiscoveryProvider` contract, `DiscoveryManager`, `DhtDiscoveryProvider` (adapts `network:dht`), future LAN/BLE providers.
@@ -296,14 +301,14 @@ vMessenger/
       network/                   <- coordinators, ContactRequest*, LocationSharingCoordinator
       di/
   feature/
-    identity/  pairing/  contacts/  chat/  map/  settings/  debug/  about/
+    identity/  pairing/  contacts/  chat/  map/  settings/  debug/  about/  provision/
   network/
     discovery/  dht/  bootstrap/  transport/  messaging/
   core/
     common/  crypto/  proto/  database/  datastore/  location/  map/  notifications/  designsystem/  ssh/  nodesetup/
   node/                        <- standalone JVM bootstrap/DHT + relay node (`:node` Gradle module)
   deploy/                      <- nginx + systemd templates for a node host
-  scripts/                     <- setup-node.sh, emulator-connect.sh, p2p-terminal-check.sh, sign-node-record
+  scripts/                     <- setup-node.sh, provision-test/ (Docker harness), emulator-connect.sh, p2p-terminal-check.sh, sign-node-record
   docs/                        <- this documentation set
   vMessenger-icon/             <- launcher icons and brand logos
   README.md
@@ -315,7 +320,7 @@ The tree above is implemented. New capabilities are added as vertical slices beh
 
 ## 8. How the structure protects the architecture
 
-- The compiler enforces the Dependency Rule: `domain` cannot import Android, `network:*` cannot import UI, and a `feature:*` module can reach only what its `build.gradle.kts` declares. `feature:map` is the one module that declares `data`, for `LocationSharingCoordinator`; every other feature module goes through `domain` use cases.
+- The compiler enforces the Dependency Rule: `domain` cannot import Android, `network:*` cannot import UI, and a `feature:*` module can reach only what its `build.gradle.kts` declares. `feature:map` declares `data` for `LocationSharingCoordinator` and `feature:settings` for the app-lock coordinator and the bundled installer; every other feature module goes through `domain` use cases (`feature:provision` reaches its session through an interface in `core:nodesetup`).
 - New transports/discovery providers are new modules wired via Hilt multibinding - no edits to existing layers (see [Network.md](Network.md) Section 9).
 - Cryptography is quarantined in `core:crypto`, simplifying audit (see [Security.md](Security.md)).
 - Feature isolation keeps build times low and makes new features additive. Groups, voice messages and the map rebuild all landed without touching the networking or crypto contracts.

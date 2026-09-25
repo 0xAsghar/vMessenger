@@ -5,6 +5,38 @@ It replaces the old `deploy/README.md`. Everything below is what the canonical i
 [`scripts/setup-node.sh`](../scripts/setup-node.sh) does; you can run it from a repo checkout,
 from a downloaded release tarball, or as a one-liner on a fresh Ubuntu/Debian host.
 
+## 0. Set up from the app (New node)
+
+Most people never need the rest of this runbook. In the app, **Settings → Nodes → Set up a new server**
+(or **Create a node** in the first-run node question) opens *New node* (`:feature:provision`):
+
+1. **Server** — the address (IP or name), SSH port and user, and a password or a private key file (OpenSSH or
+   PEM, with its passphrase). `user@host` typed into the address field is split; Persian digits are accepted.
+2. **Address** — by IP (the node gets a self-signed certificate the app pins) or by a domain whose A/AAAA
+   record already points at the server (Let's Encrypt; if the certificate can't be issued, the node falls back
+   to its pinned certificate, and to IP addresses if the domain points elsewhere). Pinned addresses are not
+   reachable from app versions that predate them; the screen says so.
+3. **Security** — *Secure this server* (on by default: fail2ban for SSH, automatic security updates, time
+   sync; §8.7), *Key-only SSH login* (only when logging in with a key; undone by itself unless a fresh key
+   login succeeds), and *Use as my relay*.
+4. **Review**, then **install**. The app shows the server's host-key fingerprint and sends nothing until it is
+   trusted; asks for the sudo password if the user needs one; asks before anything that needs consent
+   (an untested OS release, stopping Apache, another public port, a clock fix, a downgrade — §8.5); uploads
+   the installer bundled in the APK (only files the server lacks, checked with `sha256sum`); runs it detached
+   (§8), following its log and reconnecting where it left off if the connection drops; and finally checks the
+   node from the phone over TLS with the pin. A node that answers with another certificate is not added.
+5. **Done** — the node's bootstrap and relay addresses join the app's nodes, the relay listener moves to it
+   when *Use as my relay* is on, and the server appears under **Your servers**.
+
+The app keeps no SSH secret. The password, key and passphrase live in memory for the one setup and are wiped
+when it ends however it ends (Security §17). **Your servers** keeps the host, SSH port and user, the host-key
+fingerprint, the addresses, the TLS mode and the node version; *Update* appears when the app carries a newer
+node and asks for the login again, and a changed host key stops it before anything is sent.
+
+Supported servers are those in §2. Nothing is downloaded from GitHub: the script, the templates and the node
+tarball ship in the APK (`assets/node-installer/`); the server only fetches its own OS packages and, with a
+domain, a Let's Encrypt certificate.
+
 ## 1. What a node is
 
 - The JVM process listens on **`127.0.0.1:<node-port>`** (default `8443`) over plain HTTP/WebSocket. It never
@@ -29,8 +61,9 @@ from a downloaded release tarball, or as a one-liner on a fresh Ubuntu/Debian ho
   The JVM heap is a quarter of the memory, between 128 and 768 MB.
 - A JRE 17 or newer. The installer reuses one that is installed, or installs the first of OpenJDK 21, 25 and 17
   that apt offers (Debian 11 and 12 have 17 only) and points the unit's `JAVA_HOME` at it.
-- Root SSH access.
-- A DNS name pointing at the host **or** at a CDN whose origin is the host (see §5 for Arvan).
+- SSH access as root, or as a user that can use sudo (with or without a password).
+- Optionally, a DNS name pointing at the host **or** at a CDN whose origin is the host (see §5 for Arvan).
+  Without one the node is reached by IP with a pinned certificate (§8.6).
 - Inbound TCP 22, 80, 443 (`--firewall` configures ufw for exactly that).
 
 ## 3. Install / update

@@ -164,7 +164,7 @@ The project is a Gradle multi-module build. Full details and package layout are 
 
 ```mermaid
 flowchart TD
-  app["app"] --> features["feature:identity, pairing, contacts,<br/>chat, map, settings, debug, about"]
+  app["app"] --> features["feature:identity, pairing, contacts,<br/>chat, map, settings, debug, about, provision"]
   app --> network["network:discovery, dht, bootstrap,<br/>transport, messaging"]
   app --> coredata["data"]
   features --> domain["domain"]
@@ -187,6 +187,10 @@ flowchart TD
   domain --> common
   node["node (JVM)"] --> proto
   node --> common
+  featprov["feature:provision"] --> nodesetup["core:nodesetup (JVM)"]
+  coredata --> nodesetup
+  nodesetup --> ssh["core:ssh (JVM, sshj)"]
+  nodesetup --> common
 ```
 
 `feature:map` is the one feature module that depends on `data`, because live-location sharing is driven by `LocationSharingCoordinator` rather than by a use case. Map rendering itself is factored out into `core:map` (MapLibre wrapper, camera, marker layer, location puck), which `feature:map` and the chat location preview both consume.
@@ -199,6 +203,7 @@ Key rules:
 - `feature:*` modules depend on `domain` and `core:designsystem`, and never on `network` internals directly; `feature:map` is the documented exception for its `data` dependency.
 - `data` is the only module that wires repositories to `network`, `database`, and `datastore`.
 - `network:*` modules depend on `core:crypto`, `core:proto`, and `core:common`, and never on `feature` or `presentation` code.
+- `feature:provision` depends on `core:nodesetup` for the setup's contract types (state, issues, steps) and on the `NodeSetupSession` interface there; `data` binds that interface to `NodeSetupController`, which owns the engine and the credentials. `core:nodesetup` and `core:ssh` are plain JVM modules, so the whole engine runs in unit tests and against Docker servers from Gradle.
 - `node` is a JVM module that shares `core:proto` and `core:common` with the app so transcripts and framing cannot drift between the two.
 
 This guarantees the Dependency Rule and keeps build times and blast radius small.
@@ -321,6 +326,35 @@ If endpoint resolution or connection fails, the message remains in the offline/r
 6. Stopping share sends `CONTROL_TYPE_LOCATION_SHARE_STOP` plus a final `LocationPacket` with `is_final = true`, stops the FGS, and clears active shares.
 
 ---
+
+### 10.6 Set up a node (New node)
+
+1. `NewNodeViewModel` collects the server, address and security choices; the password or key stays in its
+   `TextFieldState`s and a byte array. *Start* builds a `NodeSetupRequest` (secrets copied into arrays, the
+   fields cleared) and hands it to `NodeSetupSession.start`.
+2. `NodeSetupController` (a `@Singleton` in `data`, so a rotation or a trip to another screen doesn't stop
+   the setup) installs the full BouncyCastle provider on first use and runs `NodeSetupEngine` on its own
+   scope. The engine's `SetupHost` callbacks become the session's `state` and `question` flows; a question
+   waits up to 10 minutes for the screen's answer.
+3. The engine probes the host key without credentials and waits for the person to trust it; logs in pinned
+   to that key; finds out whether it is root, has password-less sudo, or needs the sudo password; uploads
+   the installer bundle from the APK's assets (`AssetInstallerBundle`) — only what the server lacks — and
+   checks it with `sha256sum`.
+4. It runs the installer's `--preflight` until nothing needs deciding, `--launch`es the detached run, and
+   follows its log with `--follow RUN --from-byte N`, turning `##vm` markers into `Installing(steps, issues,
+   log)`. A dropped connection logs in again and resumes after the last whole line; the run on the server
+   never notices. For key-only SSH it makes a fresh key-only login to confirm the change before the
+   server's rollback timer fires.
+5. It reads `result.json`, checks the version and the pin against the certificate, and `PinnedNodeVerifier`
+   fetches `/healthz` over TLS with that pin. The credentials are wiped in a `finally`.
+6. On *Add*, `CompleteNodeProvisioningUseCase` stores the bootstrap and relay addresses (the relay enabled
+   when *Use as my relay*), records the server in `managed_node`, writes the activity entry, and calls
+   `RelayControl.reselectRelay()`, so the listener — and the published endpoint record, which follows it —
+   moves to the new node.
+
+There is no foreground service for this: the installer runs detached on the server, so a process death
+only loses the phone's view of it. Setting up again joins the running install (`INSTALL_BUSY`) or picks up
+from what the finished one left.
 
 ## 11. Error handling
 

@@ -11,7 +11,7 @@ object ShellQuote {
 data class InstallOptions(
     /** What clients dial: the address or name the phone reached the server at. */
     val publicHost: String,
-    val publicPort: Int = 443,
+    val publicPort: Int = DEFAULT_PUBLIC_PORT,
     val domain: String? = null,
     val acmeEmail: String? = null,
     val secure: Boolean = true,
@@ -43,11 +43,12 @@ data class InstallOptions(
         if (clockOffsetMs != null) addAll(listOf("--clock-offset-ms", clockOffsetMs.toString()))
     }
 
-    private companion object {
-        const val MAX_PORT = 65_535
-        val HOST = Regex("^[A-Za-z0-9.:-]{1,253}$")
-        val DOMAIN = Regex("^(?=.{1,253}$)([A-Za-z0-9-]{1,63}\\.)+[A-Za-z]{2,63}$")
-        val EMAIL = Regex("^[^\\s@'\"]+@[^\\s@'\"]+\\.[^\\s@'\"]+$")
-        val USER = Regex("^[a-z_][a-z0-9_.-]{0,31}$")
+    companion object {
+        const val DEFAULT_PUBLIC_PORT = 443
+        private const val MAX_PORT = 65_535
+        private val HOST = Regex("^[A-Za-z0-9.:-]{1,253}$")
+        private val DOMAIN = Regex("^(?=.{1,253}$)([A-Za-z0-9-]{1,63}\\.)+[A-Za-z]{2,63}$")
+        private val EMAIL = Regex("^[^\\s@'\"]+@[^\\s@'\"]+\\.[^\\s@'\"]+$")
+        private val USER = Regex("^[a-z_][a-z0-9_.-]{0,31}$")
     }
 }

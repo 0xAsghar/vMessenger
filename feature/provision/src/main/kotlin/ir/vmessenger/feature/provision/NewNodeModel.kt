@@ -14,7 +14,7 @@ enum class AuthKind { Password, Key }
 
 enum class AddressKind { Ip, Domain }
 
-enum class FormError { Host, Port, User, Secret, Key, Domain, Email }
+enum class FormError { Host, Port, User, Secret, Key, Domain, Email, PublicPort }
 
 /** Everything the wizard asks that is not a secret. Secrets live in the ViewModel's fields only. */
 data class NewNodeForm(
@@ -27,6 +27,8 @@ data class NewNodeForm(
     val address: AddressKind = AddressKind.Ip,
     val domain: String = "",
     val email: String = "",
+    /** Debug builds only: the port clients dial, for a test server whose 443 is mapped elsewhere. */
+    val publicPort: String = "",
     val secure: Boolean = true,
     val keyOnly: Boolean = false,
     val useAsRelay: Boolean = true,

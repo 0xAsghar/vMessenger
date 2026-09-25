@@ -231,6 +231,10 @@ caller for a label it could own.
 | `VmSearchBar` | `VmSearchBar` | The inline field that replaces the top bar while a list is in search mode. |
 | `VmSnackbarHost` | `VmSnackbarHost`, `rememberVmSnackbar` | The app's one snackbar style and its state factory. |
 | `UiMessage` | `Text(resId, args)`, `Failure(error)`, `UiMessage.asText()` | A one-shot snackbar message carried as a resource id, so a ViewModel never touches a `Context`. |
+| `VmStepList` | `VmStepList`, `VmStep`, `VmStepState` | A process as steps — pending, running, done, warning, failed, skipped — announced as a live region when a step changes. |
+| `VmSecretField` | `VmSecretField` | A password field over a `TextFieldState` (`BasicSecureTextField`); never saveable, so a secret can't reach saved state. |
+| `VmNotice` | `VmNotice`, `VmNoticeKind` | An inline info / warning / critical card with an optional title and action. |
+| `VmCodeBlock` | `VmCodeBlock` | Monospaced, always left to right, with an optional copy button: addresses, fingerprints, logs. |
 | `ComponentModels` | `AvatarVariant`, `DeliveryTicksState`, `BubbleDirection`, `MessageBubbleColors`, `MessageBubbleDefaults`, `ReplyPreview`, `ComposerState`, `EmptyStateAction` | Shared value types; no rendering. |
 
 `SkeletonList` not shimmering and `EmptyState` being distinct from it are the same decision: a
@@ -271,7 +275,7 @@ flowchart TD
   Outer --> Chat["chatGraph: Conversation, NewChat,<br/>NewGroup, GroupInfo, ImageViewer"]
   Outer --> Cont["contactsGraph: ContactDetail,<br/>BlockedContacts"]
   Outer --> Pair["pairingGraph: PairingMyQr,<br/>PairingScan, PairingHash"]
-  Outer --> Set["settingsGraph: Identity, About,<br/>Nodes, NodesScan"]
+  Outer --> Set["settingsGraph: Identity, About,<br/>Nodes, NodesScan, NewNode"]
   Outer --> Dev["developerToolsGraph: Debug, Logs<br/>(behind DeveloperToolsGate)"]
   Home --> Inner["HomeTabNavHost<br/>(inner graph, four tabs only)"]
   Inner --> T1["ChatsTab → ChatRoute"]
@@ -292,7 +296,7 @@ placeholder that redirects. It registers `Onboarding` inline and delegates every
 | [`ChatGraph.kt`](../app/src/main/kotlin/ir/vmessenger/navigation/ChatGraph.kt) | `Conversation`, `NewChat`, `NewGroup`, `GroupInfo`, `ImageViewer` |
 | [`ContactsGraph.kt`](../app/src/main/kotlin/ir/vmessenger/navigation/ContactsGraph.kt) | `ContactDetail`, `BlockedContacts` |
 | [`PairingGraph.kt`](../app/src/main/kotlin/ir/vmessenger/navigation/PairingGraph.kt) | `PairingMyQr`, `PairingScan`, `PairingHash` |
-| [`SettingsGraph.kt`](../app/src/main/kotlin/ir/vmessenger/navigation/SettingsGraph.kt) | `settingsGraph`: `Identity`, `About`, `Nodes`, `NodesScan`; `developerToolsGraph`: `Debug`, `Logs` |
+| [`SettingsGraph.kt`](../app/src/main/kotlin/ir/vmessenger/navigation/SettingsGraph.kt) | `settingsGraph`: `Identity`, `About`, `Nodes`, `NodesScan`, `NewNode(managedNodeId?)`; `developerToolsGraph`: `Debug`, `Logs` |
 
 `HomeGraph` is the bridge between the two hosts. It converts the outer `NavController` into a
 `HomeNavigation` bundle of fourteen callbacks
@@ -421,7 +425,9 @@ is sectioned rows over identity, privacy switches, network nodes, blocked contac
 [`NodesRoute`](../feature/settings/src/main/kotlin/ir/vmessenger/feature/settings/NodesRoute.kt)
 manages the bootstrap and relay node lists and
 [`NodeQrScannerRoute`](../feature/settings/src/main/kotlin/ir/vmessenger/feature/settings/NodeQrScannerRoute.kt)
-imports one from a `vmnode:` QR.
+imports one from a `vmnode:` QR. The Nodes screen leads with *Set up a new server* (§5.9) and, once this
+device has set one up, a *Your servers* section: each server's address and node version, *Update* when the
+app carries a newer node (*Set up again* otherwise), and *Forget*.
 [`BlockedContactsRoute`](../feature/settings/src/main/kotlin/ir/vmessenger/feature/settings/BlockedContactsRoute.kt)
 exists because blocking had no way back: blocked contacts are filtered out of the contacts list, so
 without this screen they were invisible and permanently unblockable.
@@ -441,6 +447,21 @@ log viewer. Both are gated as described in §4.1.
 app name, the real version and the licence, and its version row is the seven-tap developer-mode
 unlock.
 
+### 5.9 `feature:provision` (New node)
+
+[`NewNodeRoute`](../feature/provision/src/main/kotlin/ir/vmessenger/feature/provision/NewNodeRoute.kt) is
+one destination with its own steps — Intro, Server, Address, Security, Review, Install — driven by
+[`NewNodeViewModel`](../feature/provision/src/main/kotlin/ir/vmessenger/feature/provision/NewNodeViewModel.kt)
+through a single `onEvent`. Back steps back through the form, asks before stopping a running install, and
+closes from the first step or a finished install. The install step shows a `VmStepList` (connect, upload,
+the server's own steps as the installer reports them, the phone's check), the issues as `VmNotice`s, and the
+log in a collapsible `VmCodeBlock`; the host-key, sudo-password and consent questions are dialogs that can't
+be dismissed by tapping outside. The window is forced secure and kept out of autofill for the whole wizard
+(`RequireSecureWindow`, `ExcludeFromAutofill`) and the screen stays on while installing (`KeepScreenOn`).
+Secrets are `VmSecretField`s over `TextFieldState`s the ViewModel owns; nothing secret is saveable. Entered
+from Settings → Nodes, and from the first-run node question's *Create a node*, which records the node as the
+person's own when the wizard finishes (the `node_provisioned` result on the back stack entry).
+
 ### 5.8 Screens owned by `:app`
 
 Three composables do not belong to a feature module because they are app-wide:
@@ -456,12 +477,11 @@ when a wrong device clock is making TLS validation fail).
 
 ### 6.1 The three rules
 
-**All user-facing text lives in `strings.xml`.** Each module owns its own, so a component's labels
-travel with the component rather than being passed in by every caller. Every feature module has one,
-as do `app`, `core:designsystem`, `core:location` and `core:notifications`. `feature:chat` splits
-its resources across three files — `strings.xml`, `strings_group.xml` and `strings_voice.xml` — one
-per sub-feature. No module ships a translated variant; all copy is Persian in the default `values/`
-folder.
+**All user-facing text lives in `strings.xml`, in Persian and English together.** Each module owns its
+own, so a component's labels travel with the component rather than being passed in by every caller.
+Persian is the default `values/` folder and English is `values-en/`; a string added to one is added to the
+other in the same change. `feature:chat` splits its resources across three files — `strings.xml`,
+`strings_group.xml` and `strings_voice.xml` — one per sub-feature.
 
 `UiMessage` is the mechanism that keeps this honest across the ViewModel boundary: a one-shot message
 is carried as a `@StringRes` id plus arguments, resolved to text only at the composable that shows
@@ -471,9 +491,10 @@ it, so no ViewModel needs a `Context` to say something to the user.
 `VmDateFormat`, which uses ICU with a Persian locale, passes the result through
 `VmTextFormat.persianDigits` rather than trusting the locale's digit shaping.
 
-**Layout direction is forced once, at the root.** `RtlLayout` provides
-`LocalLayoutDirection = LayoutDirection.Rtl` in `VMessengerApp`, and that is the only place layout
-direction is set. A repository-wide search for `LocalLayoutDirection` finds exactly three files:
+**Layout direction is set once, at the root, from the app language.** `RtlLayout` provides right to left
+for Persian and left to right for English in `VMessengerApp`. Below the root, only technical text changes
+direction: IP addresses, ports, host names, URLs, fingerprints and logs are laid out left to right in both
+languages (`VmCodeBlock`, and the `Ltr` wrapper in `feature:provision`) and keep ASCII digits. A repository-wide search for `LocalLayoutDirection` finds exactly three files:
 `Theme.kt` where it is declared, `VMessengerApp.kt` where it is applied, and
 [`ComposerMicButton.kt`](../feature/chat/src/main/kotlin/ir/vmessenger/feature/chat/voice/ComposerMicButton.kt),
 which reads it to mirror the slide-to-cancel gesture — a gesture direction is not something the

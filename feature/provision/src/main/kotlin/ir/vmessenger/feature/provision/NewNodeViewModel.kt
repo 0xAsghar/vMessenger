@@ -165,6 +165,7 @@ class NewNodeViewModel @Inject constructor(
     }
 
     private fun addressError(f: NewNodeForm): FormError? = when {
+        f.publicPort.isNotBlank() && ServerInput.port(f.publicPort) == null -> FormError.PublicPort
         f.address == AddressKind.Domain && !ServerInput.domainOk(ServerInput.clean(f.domain)) -> FormError.Domain
         f.address == AddressKind.Domain && !ServerInput.emailOk(ServerInput.clean(f.email)) -> FormError.Email
         else -> null
@@ -182,6 +183,7 @@ class NewNodeViewModel @Inject constructor(
         val email = ServerInput.clean(f.email).takeIf { domain != null && it.isNotEmpty() }
         val options = InstallOptions(
             publicHost = host,
+            publicPort = ServerInput.port(f.publicPort) ?: InstallOptions.DEFAULT_PUBLIC_PORT,
             domain = domain,
             acmeEmail = email,
             secure = f.secure,
