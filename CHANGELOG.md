@@ -51,6 +51,8 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
 - **The APK carries the node installer** (`assets/node-installer/`, built by `:app:bundleNodeInstaller`):
   the script, templates, the node tarball, a manifest and checksums, so setting up a node fetches nothing
   from GitHub. This adds about 12 MB to each APK.
+- **`:core:ssh`**, the SSH client "New node" uses (sshj): the host key is learned before any login, a login goes
+  only to the confirmed key, and passwords and keys are wipeable arrays that never print.
 - **Ubuntu 26.04 and Debian 13** are supported, after installing end to end in the harness.
 - **A Docker harness for the installer** (`scripts/provision-test/`): throwaway systemd + sshd
   containers on `127.0.0.1`, driven over real SSH, with scenarios for the happy path, resuming a

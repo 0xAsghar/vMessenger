@@ -41,6 +41,7 @@ include(":core:map")
 include(":core:notifications")
 include(":core:designsystem")
 include(":core:audio")
+include(":core:ssh")
 
 include(":network:discovery")
 include(":network:dht")

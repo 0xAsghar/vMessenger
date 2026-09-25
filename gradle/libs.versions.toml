@@ -40,6 +40,9 @@ okhttp = "4.12.0"
 concentus = "1.0.2"
 ktor = "3.0.3"
 slf4j = "2.0.16"
+sshj = "0.39.0"
+bouncycastle = "1.78.1"
+mina-sshd = "2.13.2"
 javaxInject = "1"
 
 compileSdk = "35"
@@ -129,6 +132,11 @@ ktor-server-websockets = { group = "io.ktor", name = "ktor-server-websockets-jvm
 ktor-server-test-host = { group = "io.ktor", name = "ktor-server-test-host", version.ref = "ktor" }
 ktor-client-websockets = { group = "io.ktor", name = "ktor-client-websockets", version.ref = "ktor" }
 slf4j-simple = { group = "org.slf4j", name = "slf4j-simple", version.ref = "slf4j" }
+sshj = { group = "com.hierynomus", name = "sshj", version.ref = "sshj" }
+bouncycastle-prov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
+bouncycastle-pkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "bouncycastle" }
+mina-sshd-core = { group = "org.apache.sshd", name = "sshd-core", version.ref = "mina-sshd" }
+mina-sshd-sftp = { group = "org.apache.sshd", name = "sshd-sftp", version.ref = "mina-sshd" }
 javax-inject = { group = "javax.inject", name = "javax.inject", version.ref = "javaxInject" }
 androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycle" }

@@ -207,6 +207,10 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 - Notification channels and builders (message notifications, location foreground notification), privacy-aware content.
 - Depends on: `core:common`, `core:designsystem` (for styling tokens if needed).
 
+### core:ssh
+- SSH for **New node**: `SshConnector` (`probeHostKey` learns a server's host key without logging in; `connect` logs in only to the confirmed key) and `SshSession` (`run`, `stream`, `upload` over SFTP with a `cat >` fallback), over sshj. `SshAuth` holds a password or a key as char/byte arrays with `wipe()` and a redacted `toString()`; `HostKey` is OpenSSH's `SHA256:` fingerprint; `SshException` names what went wrong (unreachable, timeout, host-key mismatch, auth rejected, key unreadable, disconnected).
+- Depends on: sshj and BouncyCastle (Apache-2.0, MIT), coroutines. Pure JVM, so the setup engine runs it off-device; tests use an embedded Apache MINA SSHD and keys made by the real `ssh-keygen`.
+
 ### core:designsystem
 - Material 3 theme (color/typography/shape tokens), RTL setup, reusable Compose components (message bubble, identicon, QR card, security banner). See [UI.md](UI.md).
 - Depends on: `core:common`.
@@ -292,7 +296,7 @@ vMessenger/
   network/
     discovery/  dht/  bootstrap/  transport/  messaging/
   core/
-    common/  crypto/  proto/  database/  datastore/  location/  map/  notifications/  designsystem/
+    common/  crypto/  proto/  database/  datastore/  location/  map/  notifications/  designsystem/  ssh/
   node/                        <- standalone JVM bootstrap/DHT + relay node (`:node` Gradle module)
   deploy/                      <- nginx + systemd templates for a node host
   scripts/                     <- setup-node.sh, emulator-connect.sh, p2p-terminal-check.sh, sign-node-record
