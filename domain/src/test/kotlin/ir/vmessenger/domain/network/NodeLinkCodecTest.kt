@@ -39,4 +39,12 @@ class NodeLinkCodecTest {
         assertNull(NodeLinkCodec.decode("vmnode:bogus:addr"))
         assertNull(NodeLinkCodec.decode(""))
     }
+
+    @Test
+    fun keepsAPinnedAddressWhole() {
+        val address = "wss://203.0.113.10/relay#pin-sha256=601FQOh6ckV1-Qbw-9F3cGprfojLs5_j4Hkn7DPKFfc"
+        val link = NodeLinkCodec.encode(NetworkNodeRole.RELAY, address)
+        assertEquals("vmnode:relay:$address", link)
+        assertEquals(address, NodeLinkCodec.decode(link)?.address)
+    }
 }

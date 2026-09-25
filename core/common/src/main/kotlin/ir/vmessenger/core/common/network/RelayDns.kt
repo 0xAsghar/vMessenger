@@ -2,29 +2,29 @@ package ir.vmessenger.core.common.network
 
 import okhttp3.Dns
 import java.net.InetAddress
-import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Keeps relay WebSocket connections on a stable backend IP when the relay
  * hostname resolves to multiple addresses (common behind round-robin DNS).
  *
- * Listeners pin to the first IP that accepts a control channel; dialers try every
- * known IP until the peer is found or all candidates fail.
+ * Listeners stick to the first IP that accepts a control channel; dialers try every
+ * known IP until the peer is found or all candidates fail. "Sticky", not "pinned":
+ * a pin, in this codebase, is a certificate key ([SpkiPin]).
  */
 object RelayDns {
-    private val pinnedIpByHost = ConcurrentHashMap<String, String>()
+    private val stickyIpByHost = ConcurrentHashMap<String, String>()
 
     val defaultDns: Dns = object : Dns {
-        override fun lookup(hostname: String): List<InetAddress> = lookupPinnedOrSystem(hostname)
+        override fun lookup(hostname: String): List<InetAddress> = lookupStickyOrSystem(hostname)
     }
 
-    fun hostFromUrl(url: String): String? =
-        runCatching { URI(url).host }.getOrNull()
+    /** The host of a node URL — lowercase, an IPv6 address without brackets — or null. */
+    fun hostFromUrl(url: String): String? = NodeUrl.parse(url)?.host
 
-    fun lookupPinnedOrSystem(hostname: String): List<InetAddress> {
-        pinnedIpByHost[hostname]?.let { pinned ->
-            return listOf(InetAddress.getByName(pinned))
+    fun lookupStickyOrSystem(hostname: String): List<InetAddress> {
+        stickyIpByHost[hostname]?.let { sticky ->
+            return listOf(InetAddress.getByName(sticky))
         }
         return Dns.SYSTEM.lookup(hostname)
     }
@@ -35,23 +35,23 @@ object RelayDns {
                 .mapNotNull { it.hostAddress }
                 .distinct()
         }.getOrDefault(emptyList())
-        val pinned = pinnedIpByHost[hostname]
-        return if (pinned != null) {
-            listOf(pinned) + resolved.filter { it != pinned }
+        val sticky = stickyIpByHost[hostname]
+        return if (sticky != null) {
+            listOf(sticky) + resolved.filter { it != sticky }
         } else {
             resolved
         }
     }
 
-    fun pin(hostname: String, ip: String) {
-        pinnedIpByHost[hostname] = ip
+    fun stick(hostname: String, ip: String) {
+        stickyIpByHost[hostname] = ip
     }
 
-    fun pinnedIp(hostname: String): String? = pinnedIpByHost[hostname]
+    fun stickyIp(hostname: String): String? = stickyIpByHost[hostname]
 
-    /** Forgets every pinned backend IP (secure wipe, and tests). */
-    fun clearPins() {
-        pinnedIpByHost.clear()
+    /** Forgets every sticky backend IP (secure wipe, and tests). */
+    fun clearStickyIps() {
+        stickyIpByHost.clear()
     }
 
     fun dnsTargeting(hostname: String, ip: String): Dns = object : Dns {

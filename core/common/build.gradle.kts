@@ -7,4 +7,7 @@ dependencies {
     implementation(libs.okhttp)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.junit)
+    // Pinned TLS is tested against a real TLS server with generated certificates.
+    testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.okhttp.tls)
 }

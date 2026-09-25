@@ -308,7 +308,7 @@ install that still opens rather than one that opens with neither key.
 | 6 | `database-files` | delete `vmessenger.db` and its `-wal` / `-shm` / `-journal` siblings |
 | 7 | `files` | delete `files/attachments`, `files/logs`, everything in `cacheDir`, and the files the removed in-app updater left behind (`LegacyUpdaterCleanup`) |
 | 8 | `preferences` | clear every DataStore: draft, security, privacy, p2p, discovery, theme, node-setup, contact-retry, and the app lock's own store |
-| 9 | `memory` | zeroize cached identity, DB passphrase and attachment key; clear log buffer, network path tracker, pinned relay IPs; reset `P2PConfig` |
+| 9 | `memory` | zeroize cached identity, DB passphrase and attachment key; clear log buffer, network path tracker, sticky relay IPs; reset `P2PConfig` |
 | 10 | `keystore` | delete **both** aliases — `vmessenger_master` and strict mode's `vmessenger_app_lock` — **last**, because every earlier step may still need to decrypt |
 
 Properties:
@@ -347,6 +347,7 @@ These are real, current gaps. None of them is hidden behind a "future work" labe
 | L17 | **The `ACCEPT` hands the peer this device's local addresses, and a relay carries calls that have no direct route** | The accepting side advertises its own local IPv4 addresses and its relay (§13), so the peer — an approved contact — learns those addresses. With no STUN, two devices with no direct route call through the relay: it cannot read the audio (sealed per frame under the per-call key) but sees the call's timing, duration and packet rate, as it does for relayed messaging. |
 | L18 | **A self-destruct deadline is only as good as the peer** | `expires_at_unix_ms` is sender-stamped and enforced locally on each device (Protocol.md §8.7). An older peer ignores the field and keeps the message; a modified client can keep the plaintext whatever the field says. Like delete-for-everyone it is a request honoured by cooperating software, not a control over another device. |
 | L19 | **Audit retention reverses local erasure for the groups that enable it** | Off by default and creator-only, disclosed to every member by an undismissable banner and a system line in the group's history, scoped to one group, never applied to a 1:1 chat, capped at 90 days and readable only on the device that captured it (§14). Within those bounds it is still what it looks like: a member of such a group is trusting that group's admins with the text of what they edited or withdrew. Leaving is the only opt-out. |
+| L20 | **A pinned node is invisible to apps older than pins** | An address with `#pin-sha256=` reads, to an older app, as an ordinary `wss://` URL whose certificate fails the CA check. It fails closed — it never trusts the unknown key — but a contact on an older version cannot reach you through a node set up on a bare IP. Nodes with a domain and a CA certificate carry no pin. |
 | L14 | **Half-finished P2P paths are off, not absent** | Peer exchange, embedded DHT participation, relay-peer mode, UDP attempts and default-relay demotion all ship as reachable code behind `P2PConfig` flags that default to false (store-and-forward left this list in 1.1). Turning any of them on in the debug screen enables code that has not been through the same verification as the default path. |
 
 ---
@@ -460,3 +461,29 @@ That line is what makes the log safe to export. A log that named peers would tur
 - **Verified contacts only, enforced on both devices.** The sender builds a request only for a contact that is verified *and* already permitted to receive our location; the receiver refuses to accept one from an unverified contact (§6). The receiver's check is the one that counts — a peer whose own UI skipped it is refused on arrival — and this is the only inbound kind held to a confirmed safety number.
 - **A request the receiver may ignore.** The handler raises a notification against the existing conversation and returns. Nothing else happens: no location service is started, no access is granted, no share state is touched. With no conversation for that contact yet there is nowhere to send the user, and the request is dropped.
 - **Never a remote enable.** The person holding the phone answers, and sharing still goes through the ordinary per-contact grant and the visible location foreground service. There is no path by which this arm turns on a sensor.
+
+---
+
+## 17. Pinned node certificates
+
+`core/common/.../network/NodeUrl.kt`, `SpkiPin.kt`, `PinnedTls.kt`. Grammar in [Protocol.md](Protocol.md) §19.
+
+A node set up on a bare IP address cannot get a CA certificate, and a self-signed one validated the
+ordinary way would have to be trusted blindly. Instead the node's address carries the SHA-256 of its
+public key, and a connection to that address is accepted when — and only when — the server presents
+a certificate with that key.
+
+- **What the pin protects.** Someone on the path between the phone and the node (a network operator,
+  a hostile Wi-Fi) cannot stand in for the node: they do not hold its private key. Relay traffic is
+  end-to-end encrypted in any case (§5); the pin protects the listener's registration, circuit
+  metadata and DHT answers from an interposer.
+- **What the pin trusts.** Whoever gave you the address chose the key. A `vmnode:` link from a friend,
+  a signed endpoint record from a contact, the installer's result over an SSH connection whose host
+  key you confirmed — the pin is exactly as trustworthy as that channel, the same as the address itself
+  always was.
+- **Name and dates are not checked on a pinned connection.** The pin is the identity; a certificate
+  name for an IP address, or its expiry, adds nothing a matching key does not already prove. An
+  unpinned address is validated against the platform's CAs exactly as before — the two never mix.
+- **Constant-time comparison** (`MessageDigest.isEqual`), leaf certificate only.
+- **Rotation.** Up to four pins per address; a certificate matching any is accepted.
+- **Fails closed for old versions** (L20).

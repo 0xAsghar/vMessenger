@@ -124,6 +124,10 @@ class MinimalDhtTest {
         assertEquals(NetworkConfig.DEFAULT_DHT_URL, normalizeDhtRpcAddress("${NetworkConfig.RELAY_HOST}:8443"))
         assertEquals(NetworkConfig.DEV_BOOTSTRAP_ADDRESS, normalizeDhtRpcAddress(NetworkConfig.DEV_BOOTSTRAP_ADDRESS))
         assertNull(normalizeDhtRpcAddress("10.1.2.3:46555"))
+        // A pinned node keeps its pin, and a malformed pin is not a target.
+        val pinned = "wss://203.0.113.10/dht#pin-sha256=601FQOh6ckV1-Qbw-9F3cGprfojLs5_j4Hkn7DPKFfc"
+        assertEquals(pinned, normalizeDhtRpcAddress(pinned, policy = NodeAddressPolicy.RELEASE))
+        assertNull(normalizeDhtRpcAddress("wss://203.0.113.10/dht#pin-sha256=x", policy = NodeAddressPolicy.RELEASE))
         assertEquals("10.1.2.3:46555", normalizeDhtRpcAddress("10.1.2.3:46555", trusted = setOf("10.1.2.3:46555")))
     }
 }

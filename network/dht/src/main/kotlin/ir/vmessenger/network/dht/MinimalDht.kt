@@ -34,7 +34,7 @@ class DhtRpcClient @Inject constructor() : DhtRpcSender {
         try {
             // Policy gate: release builds only ever dial wss://; ws:// and host:port need a debug build + local host.
             require(NodeAddressPolicy.current.isBootstrapAllowed(address)) { "address rejected by NodeAddressPolicy" }
-            val response = if (address.startsWith("ws://") || address.startsWith("wss://")) {
+            val response = if (isWebSocketUrl(address)) {
                 val responseBytes = WebSocketFrameClient.sendBinary(address, request.toByteArray())
                 DhtRpcResponse.parseFrom(responseBytes)
             } else {
@@ -250,9 +250,13 @@ internal fun normalizeDhtRpcAddress(
     policy: NodeAddressPolicy = NodeAddressPolicy.current,
 ): String? = when {
     address in trusted -> address
-    address.startsWith("ws://") || address.startsWith("wss://") ->
+    isWebSocketUrl(address) ->
         address.takeIf { policy.isBootstrapAllowed(it) }
     address == "${NetworkConfig.RELAY_HOST}:8443" -> NetworkConfig.DEFAULT_DHT_URL
     address == NetworkConfig.DEV_BOOTSTRAP_ADDRESS -> address
     else -> null
 }
+
+/** `ws://` or `wss://`, in any case — the node address policy reads schemes case-insensitively too. */
+internal fun isWebSocketUrl(address: String): Boolean =
+    address.startsWith("ws://", ignoreCase = true) || address.startsWith("wss://", ignoreCase = true)

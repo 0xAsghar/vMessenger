@@ -909,6 +909,16 @@ The unknown-arm behaviour is the point: an old peer **ignores** an arm it does n
 
 ---
 
+### 15.2 Node URLs with pinned keys
+
+Node addresses may carry certificate key pins (§19). Nothing on the wire changes: the pin is part of
+an address *string* wherever one already travels. An app older than pins parses such an address as
+an ordinary `wss://` URL, dials it, and fails the certificate check against the system CAs — it
+cannot reach that node, and says so as a connection failure rather than trusting a key it cannot
+check. Nodes on a domain with a CA certificate are unpinned and reach every version.
+
+---
+
 ## 16. Extensibility
 
 - New content types are new `oneof` arms in `MessageEnvelope`; old clients see them as unknown and `InboundKind.of` returns null, which routes them to infrastructure handling and drops them.
@@ -1026,3 +1036,39 @@ The sequence number travels in the clear because the receiver needs it to build 
 **Strangers.** Anyone can open a connection to port 48557 or dial the callee's relay listener. A connection that has not authenticated a frame within 10 s is closed, and at most 8 are held at once, so a stranger cannot fill the slots a reconnecting caller needs.
 
 **One documented limit.** There is no STUN and no hole punching: the direct path works when the devices can reach each other (the same LAN, a VPN, a reachable host), and the relay covers everything else — at the cost of the relay carrying the call's (sealed) audio and seeing its timing.
+
+---
+
+## 19. Node URLs
+
+```
+node-url  = ( "wss" / "ws" ) "://" host [ ":" port ] [ path ] [ "?" query ] [ "#" pin-spec ]
+pin-spec  = "pin-sha256=" pin *3( "," pin )        ; wss only; at most four pins
+pin       = 43base64url                             ; SHA-256 of the DER SubjectPublicKeyInfo, no padding
+host      = reg-name / IPv4address / "[" IPv6address "]"
+```
+
+`ws://` exists only for local hosts in debug builds (`NodeAddressPolicy`). A fragment that is not a
+valid `pin-spec` makes the address invalid (`MALFORMED_PIN`) rather than being ignored.
+
+| Form | Rule |
+|---|---|
+| Dialled | Without the fragment (`NodeUrl.dialUrl`). The pin is never sent. |
+| Canonical | Lowercase scheme and host, the default port dropped, pins sorted and de-duplicated (`NodeUrl.canonical`). |
+| Location | `scheme://host:port/path`, port always spelled, no pins (`NodeUrl.locationKey`). Two addresses with one location and different pins are one node whose key changed. |
+
+Where an address travels, the pin travels with it, inside whatever already protects the address:
+
+| Carrier | Field | Protected by |
+|---|---|---|
+| `vmnode:<role>:<address>` link or QR | the address | whoever handed it over |
+| DHT endpoint record (§14) | `Endpoint.address` | the publisher's Ed25519 signature over the transcript, which covers the address string |
+| Peer-exchanged node record (§12) | `SignedNodeRecord.address` | the node key's signature, which covers the address string |
+| Call `ACCEPT` relay (§17) | `CallEndpoint.address` with `relay = true` | the authenticated session |
+
+A pin is computed from a certificate with:
+
+```bash
+openssl x509 -in cert.pem -pubkey -noout | openssl pkey -pubin -outform der \
+  | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '='
+```

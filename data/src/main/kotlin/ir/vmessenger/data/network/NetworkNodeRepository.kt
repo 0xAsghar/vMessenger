@@ -254,11 +254,18 @@ class NetworkNodeRepository(
     override fun exportLink(node: NetworkNode): String =
         NodeLinkCodec.encode(node.role, node.address)
 
+    // A row stored under an older policy may not pass today's (a URL fragment that is not a pin
+    // spec): it can never be dialled, so it is never chosen, and the next row — or the default —
+    // is used instead of retrying it forever.
     private suspend fun rankedEnabledBootstrap(): List<BootstrapNodeEntity> =
-        NodeRanking.rank(bootstrapNodeDao.getEnabled()) { it.rankKey() }
+        NodeRanking.rank(bootstrapNodeDao.getEnabled().filter { addressPolicy().isBootstrapAllowed(it.address) }) {
+            it.rankKey()
+        }
 
     private suspend fun rankedEnabledRelays(): List<RelayNodeEntity> =
-        NodeRanking.rank(relayNodeDao.getEnabled()) { it.rankKey() }
+        NodeRanking.rank(relayNodeDao.getEnabled().filter { addressPolicy().isRelayAllowed(it.address) }) {
+            it.rankKey()
+        }
 
     private fun BootstrapNodeEntity.rankKey() = NodeRankKey(priority, failCount, lastOkUnixMs)
 

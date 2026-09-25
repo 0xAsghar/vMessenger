@@ -12,13 +12,20 @@ enum class NodeAddressRejection {
 
     /** `ws://` or plain `host:port` for a host that is not local, or in a release build. */
     INSECURE_NOT_LOCAL,
+
+    /**
+     * A fragment that is not a valid key pin spec (`#pin-sha256=<pin>[,…]`, at most
+     * [NodeUrl.MAX_PINS], `wss://` only). See [NodeUrl].
+     */
+    MALFORMED_PIN,
 }
 
 /**
  * Decides which node addresses the app may store or dial.
  *
  * Release builds accept only `wss://host[:port][/path]` for relays and bootstrap
- * nodes. When [allowInsecureLocal] is set (debug builds, from `BuildConfig.DEBUG`)
+ * nodes, optionally pinned to a certificate key (`#pin-sha256=…`, [NodeUrl]).
+ * When [allowInsecureLocal] is set (debug builds, from `BuildConfig.DEBUG`)
  * a relay may also be `ws://` and a bootstrap node may be `ws://` or `host:port`,
  * but only for local hosts: `10.0.2.2`, `127.0.0.1`, `localhost` and RFC 1918
  * ranges. Applied by the node repository (add + every import) and by the
@@ -49,8 +56,10 @@ class NodeAddressPolicy(val allowInsecureLocal: Boolean) {
         return when {
             trimmed.isEmpty() -> NodeAddressRejection.BLANK
             uri == null || host == null || uri.userInfo != null -> NodeAddressRejection.MALFORMED
+            !uri.scheme.equals(SCHEME_WSS, ignoreCase = true) && !uri.scheme.equals(SCHEME_WS, ignoreCase = true) ->
+                NodeAddressRejection.MALFORMED
+            NodeUrl.pinsOf(uri.rawFragment, uri.scheme) == null -> NodeAddressRejection.MALFORMED_PIN
             uri.scheme.equals(SCHEME_WSS, ignoreCase = true) -> null
-            !uri.scheme.equals(SCHEME_WS, ignoreCase = true) -> NodeAddressRejection.MALFORMED
             allowInsecureLocal && isLocalHost(host) -> null
             else -> NodeAddressRejection.INSECURE_NOT_LOCAL
         }

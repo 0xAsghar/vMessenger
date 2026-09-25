@@ -68,4 +68,15 @@ class NodeAddressPolicyTest {
     fun processWideDefaultIsRelease() {
         assertFalse(NodeAddressPolicy.RELEASE.allowInsecureLocal)
     }
+
+    @Test
+    fun pinnedAddressesAreAcceptedAndBadPinsNamed() {
+        val pin = SpkiPinTest.FIXED_PIN
+        assertTrue(release.isRelayAllowed("wss://203.0.113.10/relay#pin-sha256=$pin"))
+        assertTrue(release.isBootstrapAllowed("wss://203.0.113.10:8443/dht#pin-sha256=$pin"))
+        assertEquals(NodeAddressRejection.MALFORMED_PIN, release.checkRelay("wss://203.0.113.10/relay#pin-sha256=nope"))
+        assertEquals(NodeAddressRejection.MALFORMED_PIN, release.checkRelay("wss://203.0.113.10/relay#note"))
+        assertEquals(NodeAddressRejection.MALFORMED_PIN, debug.checkRelay("ws://10.0.2.2/relay#pin-sha256=$pin"))
+        assertEquals(NodeAddressRejection.MALFORMED, release.checkRelay("https://h/relay#pin-sha256=$pin"))
+    }
 }

@@ -24,6 +24,12 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
 
 ### Added
 
+- **Pinned node certificates.** A node address may end in `#pin-sha256=<key>[,…]` (up to four keys): the
+  app then trusts exactly that certificate key — no CA, no name or date check — which is how a node on a bare
+  IP address gets a certificate a phone can verify. The pin travels inside the address, so `vmnode:` links,
+  signed endpoint records and the relay a call falls back to all carry it, and signatures over the address
+  cover it; it is never sent on the wire. `NodeUrl`, `SpkiPin` and `PinnedTls` in `core:common`; the grammar is
+  Protocol §19, the threat model Security §17. Apps older than this fail closed on such an address (L20).
 - **Machine mode for `setup-node.sh`** (`--from-app`), the protocol the app's node setup will speak
   over SSH: an uploaded bundle checked against `SHA256SUMS`, no downloads but apt and certificates, a
   detached run under systemd that survives the connection, `--follow` that resumes from any byte,
@@ -50,6 +56,13 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
   (canonical `S` and key, no small-order key or `R`), so the node still refuses what the app refuses.
   With no native code left, the node tarball is 12.8 MB instead of 16.6 MB. It now carries a
   `VERSION` file and no Windows `.bat` launcher.
+- **Every WebSocket to a node opens through one function** (`WebSocketFrameClient.openWebSocket`), which
+  picks pinned or CA trust and the relay backend; the copies in the relay transport and the listener are gone.
+  Variants share one base client, the shared dispatcher is uncapped (an open WebSocket holds its call for its
+  whole life), and the variant cache is a bounded LRU because DHT peers supply addresses.
+- **A malformed pin is an error** (`MALFORMED_PIN`, «کلید سنجاق‌شده … معتبر نیست»), not ignored, and a stored
+  node that no longer passes the address policy is skipped when choosing a relay or bootstrap node.
+- **"Pinned" relay IPs are now "sticky"** (`RelayDns.stick`, `clearStickyIps`): "pin" means a certificate key.
 - **The node's unit sets `JAVA_HOME`** to the JRE the installer chose, and sizes the heap to the server (a
   quarter of its memory, 128–768 MB, instead of a fixed 512 MB).
 - **`setup-node.sh` leaves other nginx sites alone** (it used to delete `sites-enabled/default`) and no
@@ -58,6 +71,11 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
 
 ### Fixed
 
+- **Sticky relay IPs never took effect.** They were recorded from an OkHttp `EventListener`, which OkHttp does
+  not give WebSocket calls, so every relay socket fell back to resolver order. The backend is now recorded
+  when a socket dialled to it opens.
+- The DHT client read `WSS://` (any upper case) as a raw TCP address; schemes are case-insensitive now, as the
+  address policy already treated them.
 - `setup-node.sh` exited 1 on every error, and could exit 1 after a successful install: its cleanup
   trap ended on a failed test, which `set -e` turned into the script's exit status.
 - `setup-node.sh --build` and `--skip-build` looked for the node in `node/build/install/node`; Gradle

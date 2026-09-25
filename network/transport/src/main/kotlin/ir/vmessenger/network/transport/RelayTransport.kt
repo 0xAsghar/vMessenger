@@ -21,7 +21,6 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -81,12 +80,12 @@ open class RelayTransport @Inject constructor() : Transport {
         val host = RelayDns.hostFromUrl(url)
         val ips = host?.let { RelayDns.candidateIps(it) }.orEmpty()
         if (host == null || ips.isEmpty()) {
-            return dialWithTimeout(url, hello, awaitReady, host, targetIp = null)
+            return dialWithTimeout(url, hello, awaitReady, targetIp = null)
         }
         var lastError: Exception? = null
         for (ip in ips) {
             try {
-                return dialWithTimeout(url, hello, awaitReady, host, ip)
+                return dialWithTimeout(url, hello, awaitReady, ip)
             } catch (e: Exception) {
                 lastError = e
                 if (!shouldRetryRelayDial(e)) throw e
@@ -107,23 +106,20 @@ open class RelayTransport @Inject constructor() : Transport {
         url: String,
         hello: RelayHello,
         awaitReady: Boolean,
-        host: String?,
         targetIp: String?,
     ): RelayConnection =
         withTimeoutOrNull(DIAL_TIMEOUT_MS) {
-            openRelayCircuitOnce(url, hello, awaitReady, host, targetIp)
+            openRelayCircuitOnce(url, hello, awaitReady, targetIp)
         } ?: throw java.net.SocketTimeoutException("Relay dial timed out after ${DIAL_TIMEOUT_MS}ms")
 
     private suspend fun openRelayCircuitOnce(
         url: String,
         hello: RelayHello,
         awaitReady: Boolean,
-        host: String?,
         targetIp: String?,
     ): RelayConnection = suspendCancellableCoroutine { cont ->
         val remote = Endpoint(TransportIds.RELAY, url)
         val connectionRef = arrayOf<RelayConnection?>(null)
-        val request = Request.Builder().url(url).build()
         val socketHolder = arrayOfNulls<WebSocket>(1)
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -200,14 +196,7 @@ open class RelayTransport @Inject constructor() : Transport {
                 }
             }
         }
-        socketHolder[0] = when {
-            host != null && targetIp != null ->
-                WebSocketFrameClient.httpClientWithPinning(host, targetIp).newWebSocket(request, listener)
-            host != null ->
-                WebSocketFrameClient.httpClientWithPinning(host).newWebSocket(request, listener)
-            else ->
-                WebSocketFrameClient.httpClient().newWebSocket(request, listener)
-        }
+        socketHolder[0] = WebSocketFrameClient.openWebSocket(url, targetIp, listener)
         cont.invokeOnCancellation {
             socketHolder[0]?.close(1000, "cancelled")
         }

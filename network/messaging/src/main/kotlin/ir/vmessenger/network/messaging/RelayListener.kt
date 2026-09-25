@@ -19,7 +19,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -177,12 +176,12 @@ class RelayListener @Inject constructor(
         val host = RelayDns.hostFromUrl(url)
         val ips = host?.let { RelayDns.candidateIps(it) }.orEmpty()
         if (host == null || ips.isEmpty()) {
-            return connectControlChannelOnce(url, host, targetIp = null, credentials)
+            return connectControlChannelOnce(url, targetIp = null, credentials)
         }
         var lastError: Exception? = null
         for (ip in ips) {
             try {
-                return connectControlChannelOnce(url, host, ip, credentials)
+                return connectControlChannelOnce(url, ip, credentials)
             } catch (e: Exception) {
                 lastError = e
                 AppLogger.warn(TAG, "control channel failed via $ip: ${e.message}")
@@ -193,7 +192,6 @@ class RelayListener @Inject constructor(
 
     private suspend fun connectControlChannelOnce(
         url: String,
-        host: String?,
         targetIp: String?,
         credentials: Credentials,
     ): ControlChannelEnd {
@@ -203,7 +201,7 @@ class RelayListener @Inject constructor(
             credentials.ed25519PrivateKey,
         )
         val session = ControlChannelSession(url, hello)
-        val webSocket = openWebSocket(Request.Builder().url(url).build(), host, targetIp, session)
+        val webSocket = WebSocketFrameClient.openWebSocket(url, targetIp, session)
         try {
             session.openLatch.await()
             connectedRelayUrl = url
@@ -215,20 +213,6 @@ class RelayListener @Inject constructor(
             webSocket.cancel()
         }
         return session.end
-    }
-
-    private fun openWebSocket(
-        request: Request,
-        host: String?,
-        targetIp: String?,
-        listener: WebSocketListener,
-    ): WebSocket = when {
-        host != null && targetIp != null ->
-            WebSocketFrameClient.httpClientWithPinning(host, targetIp).newWebSocket(request, listener)
-        host != null ->
-            WebSocketFrameClient.httpClientWithPinning(host).newWebSocket(request, listener)
-        else ->
-            WebSocketFrameClient.httpClient().newWebSocket(request, listener)
     }
 
     /**

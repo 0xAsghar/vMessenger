@@ -161,7 +161,7 @@ class SecureWipeCoordinator @Inject constructor(
         NetworkPathTracker.clear()
         GroupSyncTracker.clear()
         P2PConfig.resetToDefaults()
-        RelayDns.clearPins()
+        RelayDns.clearStickyIps()
         AppLogger.clear()
     }
 

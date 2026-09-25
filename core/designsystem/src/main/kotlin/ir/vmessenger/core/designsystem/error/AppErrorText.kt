@@ -56,6 +56,7 @@ private fun nodeRejectionText(rejection: NodeAddressRejection, relay: Boolean): 
     NodeAddressRejection.MALFORMED ->
         if (relay) R.string.vm_error_node_relay_malformed else R.string.vm_error_node_bootstrap_malformed
     NodeAddressRejection.INSECURE_NOT_LOCAL -> R.string.vm_error_node_insecure
+    NodeAddressRejection.MALFORMED_PIN -> R.string.vm_error_node_bad_pin
 }
 
 private fun digits(value: Int): String = VmTextFormat.digits(value.toString())

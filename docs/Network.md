@@ -147,6 +147,32 @@ data class Endpoint(
 
 Endpoints are produced by Discovery (for MVP, from signed DHT records) and consumed by Transport. Because endpoints are transport-tagged, the same identity can be reachable simultaneously over several transports.
 
+### 4.1 Node addresses and pinned certificates
+
+A relay or DHT node is addressed by a URL — `wss://host[:port][/path]` — optionally followed by the
+keys its certificate may carry: `#pin-sha256=<pin>[,<pin>…]`, at most four, each the base64url
+(no padding) SHA-256 of a DER `SubjectPublicKeyInfo`. `NodeUrl` (`core/common/.../network/NodeUrl.kt`)
+is the one parser; the grammar is in [Protocol.md](Protocol.md) §19.
+
+- **A pinned URL trusts its pins and nothing else.** A node set up on a bare IP has a self-signed
+  certificate that no CA vouches for; its key is its identity. `PinnedTls` accepts the server when
+  the leaf certificate's key matches a pin, and ignores its name and dates. An unpinned URL keeps the
+  platform's CA validation, unchanged.
+- **The pin never goes on the wire.** `NodeUrl.dialUrl` drops the fragment; the address string, pin
+  and all, is what is stored, shared and signed.
+- **One way to open a socket.** Every WebSocket to a node — a relay dial, the listener's control
+  channel, a DHT request — goes through `WebSocketFrameClient.openWebSocket(url, targetIp, listener)`,
+  which picks the client: pins, and, for relay sockets, the backend IP. Variants derive from one base
+  `OkHttpClient` and share its connection pool.
+- **Sticky IPs.** A relay name that resolves to several backends keeps a listener and its dialers on
+  the same one: a relay socket dialled to one backend makes it, once it opens, the host's *sticky IP*
+  (`RelayDns`), which later relay sockets try first. (This used to be called "pinning"; the word now
+  means certificate keys. It was recorded from an OkHttp `EventListener`, which OkHttp does not give
+  WebSocket calls, so until 2.0 it never actually took effect.)
+- **Bounded.** Unpinned, untargeted sockets (most DHT requests) use the base client; pinned or
+  targeted variants are kept in a 32-entry LRU, since their addresses can come from DHT peers. The
+  shared dispatcher is uncapped: an open WebSocket holds its call for its whole life.
+
 ---
 
 ## 5. Transport abstraction and automatic selection
