@@ -140,7 +140,7 @@ private fun supportingColor(config: VmTextFieldConfig): Color {
 }
 
 @Composable
-private fun FieldFrame(
+internal fun FieldFrame(
     edge: Color,
     edgeWidth: Dp,
     leadingIcon: @Composable (() -> Unit)?,

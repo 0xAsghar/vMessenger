@@ -110,4 +110,11 @@
     <string name="vm_picker_minutes_earlier">پنج دقیقه قبل</string>
     <string name="vm_picker_in_past">این زمان گذشته است؛ زمانی در آینده انتخاب کنید.</string>
     <string name="vm_picker_too_late">این زمان دورتر از حد مجاز است.</string>
+    <string name="vm_copy">رونوشت</string>
+    <string name="vm_step_pending">در انتظار</string>
+    <string name="vm_step_running">در حال انجام</string>
+    <string name="vm_step_done">انجام شد</string>
+    <string name="vm_step_warning">انجام شد، با هشدار</string>
+    <string name="vm_step_failed">ناموفق</string>
+    <string name="vm_step_skipped">رد شد</string>
 </resources>

@@ -110,4 +110,11 @@
     <string name="vm_picker_minutes_earlier">Five minutes earlier</string>
     <string name="vm_picker_in_past">That time has passed; pick one in the future.</string>
     <string name="vm_picker_too_late">That is further ahead than is allowed.</string>
+    <string name="vm_copy">Copy</string>
+    <string name="vm_step_pending">Waiting</string>
+    <string name="vm_step_running">In progress</string>
+    <string name="vm_step_done">Done</string>
+    <string name="vm_step_warning">Done, with a warning</string>
+    <string name="vm_step_failed">Failed</string>
+    <string name="vm_step_skipped">Skipped</string>
 </resources>

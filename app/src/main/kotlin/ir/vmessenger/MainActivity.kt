@@ -17,6 +17,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import ir.vmessenger.app.locale.AppLocaleController
+import ir.vmessenger.core.designsystem.foundation.SecureWindowRequests
 import ir.vmessenger.core.notifications.MessageNotificationManager
 import ir.vmessenger.data.lock.LockState
 import ir.vmessenger.feature.lock.AppLockScreen
@@ -140,8 +141,14 @@ class MainActivity : AppCompatActivity() {
                 // The lock forces the flag on regardless of the preference. A user who turned
                 // screen security off would otherwise leak a recents thumbnail of whatever was on
                 // screen when the app locked — which is exactly what the lock is for.
-                combine(viewModel.screenSecurityEnabled, viewModel.lockState) { enabled, lock ->
-                    enabled || lock != LockState.Unlocked
+                // And a screen that requires it (RequireSecureWindow: typing a server password)
+                // gets it whatever the preference says.
+                combine(
+                    viewModel.screenSecurityEnabled,
+                    viewModel.lockState,
+                    SecureWindowRequests.active,
+                ) { enabled, lock, required ->
+                    enabled || lock != LockState.Unlocked || required
                 }.collect { secure ->
                     if (secure) {
                         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)

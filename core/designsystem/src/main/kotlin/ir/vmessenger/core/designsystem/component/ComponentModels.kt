@@ -100,3 +100,6 @@ class AlbumTile(
     /** Its send failed: the tile says so, and the bubble offers the retry. */
     val failed: Boolean,
 )
+
+/** What a [VmNotice] is: something to know, to be careful about, or that went wrong. */
+enum class VmNoticeKind { Info, Warning, Critical }

@@ -61,6 +61,10 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
   preflight decisions, the detached install followed through dropped connections, key-only SSH confirmed by a
   fresh key login, `result.json` checked (the pin must be the certificate's key). A contract test keeps its
   issue codes and step ids in step with the installer.
+- **Design-system pieces for setting up a node**: `VmStepList` (a process as steps, announced as they
+  change), `VmSecretField` (`BasicSecureTextField`, never saved with the screen), `VmNotice`, `VmCodeBlock`
+  (monospace, left to right, copyable), and `RequireSecureWindow` / `KeepScreenOn` / `ExcludeFromAutofill`
+  — a screen that asks for a server password forces `FLAG_SECURE` whatever the screen-security switch says.
 - **Ubuntu 26.04 and Debian 13** are supported, after installing end to end in the harness.
 - **A Docker harness for the installer** (`scripts/provision-test/`): throwaway systemd + sshd
   containers on `127.0.0.1`, driven over real SSH, with scenarios for the happy path, resuming a
