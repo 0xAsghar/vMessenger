@@ -38,6 +38,19 @@ android {
         noCompress += "tgz"
     }
 
+    // BouncyCastle's jars (sshj, for "New node") each carry the same OSGi and JPMS metadata, which
+    // Android has no use for.
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+                "META-INF/versions/*/module-info.class",
+                "META-INF/BCKEY.DSA",
+                "META-INF/BCKEY.SF",
+            )
+        }
+    }
+
     signingConfigs {
         create("release") {
             val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")

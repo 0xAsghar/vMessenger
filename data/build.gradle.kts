@@ -8,6 +8,10 @@ android {
 }
 
 dependencies {
+    // "New node": SSH to the server (sshj + BouncyCastle); sshj's slf4j logging goes nowhere.
+    api(project(":core:ssh"))
+    implementation(libs.bouncycastle.prov)
+    runtimeOnly(libs.slf4j.nop)
     implementation(project(":domain"))
     implementation(project(":network:discovery"))
     implementation(project(":network:dht"))

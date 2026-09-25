@@ -53,6 +53,10 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
   from GitHub. This adds about 12 MB to each APK.
 - **`:core:ssh`**, the SSH client "New node" uses (sshj): the host key is learned before any login, a login goes
   only to the confirmed key, and passwords and keys are wipeable arrays that never print.
+- **The app can run sshj on Android**: the platform's cut-down "BC" provider is replaced by the full
+  BouncyCastle, at the same position, the first time a node is set up (`SshCryptoProvider`); R8 keep rules
+  ship inside `:core:ssh`; sshj's logging goes to slf4j's no-op. Release APKs grow by about 3 MB for this
+  (arm64: 41.0 MB with the bundled node installer).
 - **Ubuntu 26.04 and Debian 13** are supported, after installing end to end in the harness.
 - **A Docker harness for the installer** (`scripts/provision-test/`): throwaway systemd + sshd
   containers on `127.0.0.1`, driven over real SSH, with scenarios for the happy path, resuming a
