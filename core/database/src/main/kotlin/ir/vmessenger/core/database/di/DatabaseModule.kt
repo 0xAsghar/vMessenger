@@ -24,6 +24,7 @@ import ir.vmessenger.core.database.dao.LocationAccessDao
 import ir.vmessenger.core.database.dao.LocationSampleDao
 import ir.vmessenger.core.database.dao.LocationShareDao
 import ir.vmessenger.core.database.dao.MailboxDao
+import ir.vmessenger.core.database.dao.ManagedNodeDao
 import ir.vmessenger.core.database.dao.MessageDao
 import ir.vmessenger.core.database.dao.MessageEditHistoryDao
 import ir.vmessenger.core.database.dao.MessageRecipientDao
@@ -45,6 +46,7 @@ import ir.vmessenger.core.database.migration.MIGRATION_20_21
 import ir.vmessenger.core.database.migration.MIGRATION_21_22
 import ir.vmessenger.core.database.migration.MIGRATION_22_23
 import ir.vmessenger.core.database.migration.MIGRATION_23_24
+import ir.vmessenger.core.database.migration.MIGRATION_24_25
 import ir.vmessenger.core.database.migration.MIGRATION_2_3
 import ir.vmessenger.core.database.migration.MIGRATION_3_4
 import ir.vmessenger.core.database.migration.MIGRATION_4_5
@@ -105,6 +107,7 @@ object DatabaseModule {
                 MIGRATION_21_22,
                 MIGRATION_22_23,
                 MIGRATION_23_24,
+                MIGRATION_24_25,
             )
             .build()
     }
@@ -173,4 +176,7 @@ object DatabaseModule {
 
     @Provides
     fun provideDhtRecordDao(database: VMessengerDatabase): DhtRecordDao = database.dhtRecordDao()
+
+    @Provides
+    fun provideManagedNodeDao(database: VMessengerDatabase): ManagedNodeDao = database.managedNodeDao()
 }

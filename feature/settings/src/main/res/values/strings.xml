@@ -129,6 +129,8 @@
     <string name="feature_settings_activity_unlocked">برنامه باز شد</string>
     <string name="feature_settings_activity_locked">برنامه قفل شد</string>
     <string name="feature_settings_activity_node_added">گره افزوده شد</string>
+    <string name="feature_settings_activity_node_provisioned">گره روی سرور راه‌اندازی شد</string>
+    <string name="feature_settings_activity_node_updated">گرهٔ سرور به‌روز شد</string>
     <string name="feature_settings_activity_node_removed">گره حذف شد</string>
     <string name="feature_settings_activity_network_connected">اتصال به شبکه برقرار شد</string>
     <string name="feature_settings_activity_network_disconnected">اتصال به شبکه قطع شد</string>

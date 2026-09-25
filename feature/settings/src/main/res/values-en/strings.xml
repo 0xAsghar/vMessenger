@@ -129,6 +129,8 @@
     <string name="feature_settings_activity_unlocked">App unlocked</string>
     <string name="feature_settings_activity_locked">App locked</string>
     <string name="feature_settings_activity_node_added">Node added</string>
+    <string name="feature_settings_activity_node_provisioned">Node set up on a server</string>
+    <string name="feature_settings_activity_node_updated">Server\'s node updated</string>
     <string name="feature_settings_activity_node_removed">Node removed</string>
     <string name="feature_settings_activity_network_connected">Connected to the network</string>
     <string name="feature_settings_activity_network_disconnected">Disconnected from the network</string>

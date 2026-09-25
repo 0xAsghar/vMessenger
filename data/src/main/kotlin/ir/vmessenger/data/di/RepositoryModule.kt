@@ -13,6 +13,7 @@ import ir.vmessenger.data.network.NetworkNodeRepository
 import ir.vmessenger.data.network.OutboxDispatcher
 import ir.vmessenger.data.network.OutboxWaker
 import ir.vmessenger.data.network.P2PSessionHooks
+import ir.vmessenger.data.nodesetup.ManagedNodeRepositoryImpl
 import ir.vmessenger.data.repository.ContactRepositoryImpl
 import ir.vmessenger.data.repository.ContactRequestRepositoryImpl
 import ir.vmessenger.data.repository.ConversationDraftStore
@@ -35,6 +36,7 @@ import ir.vmessenger.domain.repository.IdentityBackupRepository
 import ir.vmessenger.domain.repository.IdentityRepository
 import ir.vmessenger.domain.repository.LocationAccessRepository
 import ir.vmessenger.domain.repository.LocationRepository
+import ir.vmessenger.domain.repository.ManagedNodeRepository
 import ir.vmessenger.domain.repository.NodeManagementRepository
 import ir.vmessenger.domain.repository.PairingRepository
 import ir.vmessenger.domain.repository.RelayControl
@@ -117,6 +119,10 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun bindRelayControl(impl: NetworkCoordinator): RelayControl
+
+    @Binds
+    @Singleton
+    abstract fun bindManagedNodeRepository(impl: ManagedNodeRepositoryImpl): ManagedNodeRepository
 
     @Binds
     @Singleton

@@ -9,7 +9,7 @@ GitHub Releases; they were never tracked here and are not reconstructed.
 
 Two version numbers move independently of this file and are stated where they matter: the **wire
 protocol major** (currently 2, [docs/Protocol.md](docs/Protocol.md)) and the **database schema
-version** (currently 24, [docs/Database.md](docs/Database.md)).
+version** (currently 25, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
 
@@ -65,6 +65,11 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
   change), `VmSecretField` (`BasicSecureTextField`, never saved with the screen), `VmNotice`, `VmCodeBlock`
   (monospace, left to right, copyable), and `RequireSecureWindow` / `KeepScreenOn` / `ExcludeFromAutofill`
   — a screen that asks for a server password forces `FLAG_SECURE` whatever the screen-security switch says.
+- **Database schema 24 → 25: `managed_node`**, the servers this device set up ("Your servers"): host, SSH
+  port and user, the confirmed host key, the node's addresses, version and state — never a password or key.
+  One row per server; no foreign key; in the encrypted database, not in backups, erased by a wipe. With it,
+  `ManagedNode`, `ManagedNodeRepository` and the use cases that complete a setup (the node's addresses join
+  the app's nodes through the usual checks) or forget a server, and `SemVer` back in `core:common`.
 - **Ubuntu 26.04 and Debian 13** are supported, after installing end to end in the harness.
 - **A Docker harness for the installer** (`scripts/provision-test/`): throwaway systemd + sshd
   containers on `127.0.0.1`, driven over real SSH, with scenarios for the happy path, resuming a

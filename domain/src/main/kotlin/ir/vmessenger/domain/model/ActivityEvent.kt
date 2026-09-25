@@ -22,6 +22,8 @@ enum class ActivityEventKind {
     AppLocked,
     NodeAdded,
     NodeRemoved,
+    NodeProvisioned,
+    NodeUpdated,
     NetworkConnected,
     NetworkDisconnected,
     PermissionGranted,

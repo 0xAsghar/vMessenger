@@ -17,6 +17,8 @@ internal fun ActivityEventKind.labelRes(): Int = when (this) {
     ActivityEventKind.AppLocked -> R.string.feature_settings_activity_locked
     ActivityEventKind.NodeAdded -> R.string.feature_settings_activity_node_added
     ActivityEventKind.NodeRemoved -> R.string.feature_settings_activity_node_removed
+    ActivityEventKind.NodeProvisioned -> R.string.feature_settings_activity_node_provisioned
+    ActivityEventKind.NodeUpdated -> R.string.feature_settings_activity_node_updated
     ActivityEventKind.NetworkConnected -> R.string.feature_settings_activity_network_connected
     ActivityEventKind.NetworkDisconnected -> R.string.feature_settings_activity_network_disconnected
     ActivityEventKind.PermissionGranted -> R.string.feature_settings_activity_permission_granted

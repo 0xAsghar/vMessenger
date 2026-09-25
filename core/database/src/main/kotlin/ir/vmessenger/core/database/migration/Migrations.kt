@@ -670,3 +670,44 @@ val MIGRATION_23_24_STATEMENTS: List<String> = listOf(
     """.trimIndent(),
     "CREATE INDEX IF NOT EXISTS `index_activity_log_atUnixMs` ON `activity_log` (`atUnixMs`)",
 )
+
+val MIGRATION_24_25 = object : Migration(24, 25) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_24_25_STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/**
+ * The servers this device set up as nodes ("Your servers"). No foreign key: a server is not the
+ * relay row it offered, and forgetting one must not take the other with it. No secrets, ever.
+ */
+val MIGRATION_24_25_STATEMENTS: List<String> = listOf(
+    """
+    CREATE TABLE IF NOT EXISTS `managed_node` (
+        `id` TEXT NOT NULL,
+        `host` TEXT NOT NULL,
+        `sshPort` INTEGER NOT NULL,
+        `sshUser` TEXT NOT NULL,
+        `hostKeyAlgorithm` TEXT NOT NULL,
+        `hostKeyFingerprint` TEXT NOT NULL,
+        `publicHost` TEXT NOT NULL,
+        `publicPort` INTEGER NOT NULL,
+        `tlsMode` TEXT NOT NULL,
+        `domain` TEXT,
+        `relayUrl` TEXT NOT NULL,
+        `bootstrapUrl` TEXT NOT NULL,
+        `nodeVersion` TEXT NOT NULL,
+        `nodeId` TEXT,
+        `secured` INTEGER NOT NULL,
+        `keyOnlyLogin` INTEGER NOT NULL,
+        `status` TEXT NOT NULL,
+        `lastRunId` TEXT,
+        `createdAtUnixMs` INTEGER NOT NULL,
+        `updatedAtUnixMs` INTEGER NOT NULL,
+        `lastCheckedUnixMs` INTEGER,
+        `lastCheckOk` INTEGER,
+        PRIMARY KEY(`id`)
+    )
+    """.trimIndent(),
+    "CREATE UNIQUE INDEX IF NOT EXISTS `index_managed_node_host_sshPort` ON `managed_node` (`host`, `sshPort`)",
+)

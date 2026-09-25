@@ -45,6 +45,10 @@ enum class ActivityKind {
     AppLocked,
     NodeAdded,
     NodeRemoved,
+
+    /** A server this device set up as a node, or updated; the detail is the node's address. */
+    NodeProvisioned,
+    NodeUpdated,
     NetworkConnected,
     NetworkDisconnected,
     PermissionGranted,

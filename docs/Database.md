@@ -1,6 +1,6 @@
 # vMessenger - Local Database
 
-The on-device store: Room over SQLCipher, **schema version 24**.
+The on-device store: Room over SQLCipher, **schema version 25**.
 
 Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/database/` and the exported schema `core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/24.json`.
 
@@ -417,6 +417,28 @@ A contact's name appears only for an action the user took deliberately on someon
 contacts — adding or blocking them. `ActivityLogger.record` is fire-and-forget and never throws: an
 audit trail that can take the app down with it is worse than one with a gap.
 
+### 4.21 `managed_node`
+
+The servers this device set up as nodes ("Your servers", New node). **No secrets**: no SSH password,
+key or passphrase is ever stored — updating a node asks for them again. One row per server (unique
+`host` + `sshPort`), no foreign key (forgetting a server does not remove the relay it offered, and the
+reverse), excluded from backups, erased by a wipe.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | TEXT | PK (UUID) |
+| `host`, `sshPort`, `sshUser` | TEXT, INTEGER, TEXT | where to log in again; unique `index_managed_node_host_sshPort` |
+| `hostKeyAlgorithm`, `hostKeyFingerprint` | TEXT | the host key the person confirmed (`SHA256:…`); a different one on update is a hard stop |
+| `publicHost`, `publicPort` | TEXT, INTEGER | what the node's URLs name |
+| `tlsMode` | TEXT | `IP_PINNED`, `DOMAIN_CA` or `DOMAIN_PINNED` |
+| `domain` | TEXT? | when set up with one |
+| `relayUrl`, `bootstrapUrl` | TEXT | the node's addresses, pin included when pinned |
+| `nodeVersion`, `nodeId` | TEXT, TEXT? | what the server runs; compared with the node the app carries |
+| `secured`, `keyOnlyLogin` | INTEGER | the hardening applied |
+| `status` | TEXT | `INSTALLING`, `READY` or `INTERRUPTED` |
+| `lastRunId` | TEXT? | the installer run, to resume one that was interrupted |
+| `createdAtUnixMs`, `updatedAtUnixMs`, `lastCheckedUnixMs`, `lastCheckOk` | INTEGER | timestamps and the last reachability check |
+
 ---
 
 ## 5. Enums and type converters
@@ -432,7 +454,7 @@ audit trail that can take the app down with it is worse than one with a gap.
 | `ContactRequestStatus` | `PENDING`, `ACCEPTED`, `REJECTED` | `contact_request.status` |
 | `GroupMemberRole` | `CREATOR`, `ADMIN`, `MEMBER` | `chat_group_member.role` |
 | `MessageRevisionKind` | `EDIT`, `DELETE` | `message_edit_history.revision` |
-| `ActivityKind` | `IdentityCreated`, `AppUnlocked`, `AppLocked`, `NodeAdded`, `NodeRemoved`, `NetworkConnected`, `NetworkDisconnected`, `PermissionGranted`, `PermissionDenied`, `LocationSharingStarted`, `LocationSharingStopped`, `CallPlaced`, `CallReceived`, `CallEnded`, `ContactAdded`, `ContactBlocked`, `AccountWiped`, `Failure` | `activity_log.kind` |
+| `ActivityKind` | `IdentityCreated`, `AppUnlocked`, `AppLocked`, `NodeAdded`, `NodeRemoved`, `NodeProvisioned`, `NodeUpdated`, `NetworkConnected`, `NetworkDisconnected`, `PermissionGranted`, `PermissionDenied`, `LocationSharingStarted`, `LocationSharingStopped`, `CallPlaced`, `CallReceived`, `CallEnded`, `ContactAdded`, `ContactBlocked`, `AccountWiped`, `Failure` | `activity_log.kind` |
 | `NodeTrust` (not a converter) | `BUILT_IN`, `USER`, `OFFICIAL`, `COMMUNITY` | `relay_node.trust`, `bootstrap_node.trust` |
 
 Several queries hard-code the stored names (`WHERE status = 'PENDING'`, `direction = 'INCOMING'`, `status != 'READ'`), so renaming an enum constant requires a migration.
@@ -507,6 +529,7 @@ Three projection types keep the UI off N+1 queries:
 | 21 → 22 | `message.albumId` / `albumIndex` |
 | 22 → 23 | `chat_group.auditRetention`; new `message_edit_history` table (+ its two indices); the `ADMIN` role |
 | 23 → 24 | new `activity_log` table (+ index on `atUnixMs`) |
+| 24 → 25 | new `managed_node` table (+ unique index on `host`, `sshPort`) |
 
 ### 20 → 21 in detail
 
@@ -536,6 +559,13 @@ existing column.
 Exported as `MIGRATION_23_24_STATEMENTS`. One `CREATE TABLE` and one index for `activity_log` (§4.20),
 with no foreign key (§3). Nothing existing changes meaning, so there is no back-fill: a device that
 upgrades simply starts logging from then on.
+
+### 24 → 25 in detail
+
+Exported as `MIGRATION_24_25_STATEMENTS`. One `CREATE TABLE` and one unique index for `managed_node`
+(§4.21). Nothing existing changes; a device that upgrades has no servers until it sets one up.
+`MigrationTest` checks the table, its key, that no column is named for a secret, and that a second row for
+the same host and port is refused; `V1DatabaseUpgradeTest` carries a 1.1.2 database through to 25.
 
 ### 18 → 19 in detail
 

@@ -29,6 +29,7 @@ internal val UP_TO_22 = UP_TO_21 + MIGRATION_21_22
 internal val UP_TO_23 = UP_TO_22 + MIGRATION_22_23
 
 internal val UP_TO_24 = UP_TO_23 + MIGRATION_23_24
+internal val UP_TO_25 = UP_TO_24 + MIGRATION_24_25
 
 /**
  * Replays every migration on a real SQLite engine (JDBC, in memory), because a
@@ -423,5 +424,26 @@ class MigrationTest {
          */
         const val CONTACT_HASH_HEX = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
         const val CONTACT_ROUTING_KEY = "0102030405060708090a0b0c0d0e0f10"
+    }
+
+    @Test
+    fun `the 25 migration creates managed_node with one row per server and no secrets`() {
+        UP_TO_24.forEach { it.migrate(database.db) }
+
+        MIGRATION_24_25.migrate(database.db)
+
+        assertContains(database.tables(), "managed_node")
+        assertEquals(listOf("id"), database.primaryKeyOf("managed_node"))
+        val columns = database.columns("managed_node")
+        listOf("host", "sshPort", "sshUser", "hostKeyFingerprint", "relayUrl", "status").forEach {
+            assertContains(columns, it)
+        }
+        val secretWords = listOf("password", "passphrase", "privateKey", "secret")
+        columns.forEach { column -> assertTrue(secretWords.none { column.contains(it, ignoreCase = true) }, column) }
+        val row = "'203.0.113.10',22,'root','ssh-ed25519','SHA256:x','203.0.113.10',443," +
+            "'IP_PINNED',NULL,'wss://r','wss://d','2.0.0',NULL,1,0,'READY',NULL,1,1,NULL,NULL)"
+        database.exec("INSERT INTO `managed_node` VALUES ('a',$row")
+        val duplicate = runCatching { database.exec("INSERT INTO `managed_node` VALUES ('b',$row") }
+        assertTrue(duplicate.isFailure, "one row per host and SSH port")
     }
 }

@@ -71,7 +71,7 @@ class V1DatabaseUpgradeTest {
         return released.tables.mapValues { (table, columns) -> snapshot(table, columns) }
     }
 
-    private fun upgrade() = listOf(MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24)
+    private fun upgrade() = listOf(MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25)
         .forEach { it.migrate(database.db) }
 
     private fun snapshot(table: String, columns: List<RoomColumn>): List<List<String?>> =
@@ -89,7 +89,7 @@ class V1DatabaseUpgradeTest {
     private companion object {
         /** The schema 1.1.2 shipped. */
         const val RELEASED_1_1_2 = 20
-        const val CURRENT = 24
+        const val CURRENT = 25
 
         /** Tables SQLite and Room keep for themselves. */
         val BOOKKEEPING = setOf("room_master_table", "sqlite_sequence", "android_metadata")
