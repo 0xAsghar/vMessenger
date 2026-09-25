@@ -135,6 +135,18 @@ apt's archive cache: the install really runs apt, without fetching ~150 MB per c
 | `busy` | A second `--launch` while one runs: exit 40, `INSTALL_BUSY`, the active run's id. |
 | `corrupt-bundle` | A bundle that does not match `SHA256SUMS` is refused (`BUNDLE_CORRUPT`). |
 | `not-root` | A user without sudo gets `NOT_ROOT` (exit 30). |
+| `broken-repo` | A dead third-party repository: left out (`APT_REPO_EXCLUDED`), the owner's file untouched. |
+| `dpkg-interrupted` | A package unpacked but never configured: finished (`DPKG_INTERRUPTED`). |
+| `apt-lock` | Another process holds the dpkg lock for 25 s: the install waits (step `apt` `wait`). |
+| `mirror-unreachable` | The server's mirror points nowhere: the fastest current mirror is used (`APT_MIRROR_SWITCHED`), the server's sources untouched. |
+| `clock-skew` | A 15-minute offset at preflight: exit 10, `CLOCK_SKEW` consent. The allowed path is not run: setting the clock in a privileged container sets the Docker VM's. |
+| `untested-os` | `os-release` claiming Ubuntu 28.04: exit 10, `OS_UNTESTED`; installs once allowed. |
+| `unsupported-os` | Ubuntu 18.04 and Debian 10 (`--unsupported`): exit 20, `OS_UNSUPPORTED`, nothing installed. |
+
+`test` with no `--images` runs the supported matrix: Ubuntu 20.04, 22.04, 24.04 and 26.04, Debian 11, 12 and 13.
+The unsupported images run sshd without systemd: systemd 237 and older cannot boot on a cgroup v2 host. The
+Debian 11 image is built from a snapshot of its security suite, while its sources keep the live one — the state a
+real Debian 11 server is in (Deployment §8.5, `APT_SECURITY_GONE`).
 
 ---
 

@@ -177,7 +177,7 @@ vMessenger/
 
 ## Building
 
-Requirements: JDK 21 (Gradle toolchain; CI uses Temurin 21), Android SDK 35 with Build Tools 35, and a `local.properties` with `sdk.dir`.
+Requirements: JDK 17 to run Gradle, which provisions the JDK 21 toolchain it compiles with (CI installs Temurin 17 and 21; the node's tests run on 17), Android SDK 35 with Build Tools 35, and a `local.properties` with `sdk.dir`.
 
 ```bash
 ./gradlew assembleDebug

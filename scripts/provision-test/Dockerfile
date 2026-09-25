@@ -14,7 +14,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 ARG PREFETCH="openjdk-21-jre-headless openjdk-17-jre-headless nginx openssl rsync qrencode certbot fail2ban unattended-upgrades systemd-timesyncd"
 
 # EOL releases (Ubuntu 18.04, Debian 10) moved to the archive; the unsupported-OS scenarios still
-# need an image, so point them there before the first update.
+# need an image, so point them there before the first update. Debian 11's security suite lists
+# packages its pool no longer serves (end of LTS, 2026): the image is built from a snapshot of it,
+# and its sources keep the live one, as a real Debian 11 server's do — which is what the installer
+# has to cope with.
 RUN . /etc/os-release; \
     if [ "$ID" = debian ] && [ "${VERSION_ID:-0}" -le 10 ]; then \
         sed -i -e 's|deb.debian.org|archive.debian.org|g' -e 's|security.debian.org|archive.debian.org|g' \
@@ -22,15 +25,24 @@ RUN . /etc/os-release; \
     fi; \
     rm -f /etc/apt/apt.conf.d/docker-clean; \
     echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80retries; \
-    apt-get update -qq \
-    && apt-get install -y -qq --no-install-recommends \
+    o=""; \
+    if [ "$ID" = debian ] && [ "${VERSION_ID:-0}" = 11 ]; then \
+        grep -v security /etc/apt/sources.list > /etc/apt/image-build.list; \
+        echo 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260815T000000Z bullseye-security main' \
+            >> /etc/apt/image-build.list; \
+        o="-o Dir::Etc::SourceList=/etc/apt/image-build.list -o Acquire::http::Timeout=120"; \
+    fi; \
+    apt-get $o update -qq \
+    && apt-get $o install -y -qq --no-install-recommends \
         systemd systemd-sysv dbus openssh-server sudo ca-certificates iproute2 procps curl \
-    && for p in $PREFETCH; do apt-get install -y -qq --download-only "$p" >/dev/null 2>&1 || true; done \
-    && rm -rf /var/lib/apt/lists/*
+    && for p in $PREFETCH; do apt-get $o install -y -qq --download-only "$p" >/dev/null 2>&1 || true; done \
+    && rm -rf /var/lib/apt/lists/* /etc/apt/image-build.list
 
 # Units a container has no use for, or that would hang boot waiting for hardware and consoles.
+# getty.target: systemd 245 (Ubuntu 20.04) adds a serial getty for hvc0 and holds boot at "starting"
+# waiting for a console device a container never gets.
 RUN systemctl mask systemd-networkd-wait-online.service getty@tty1.service console-getty.service \
-        systemd-logind.service 2>/dev/null || true; \
+        getty.target serial-getty@hvc0.service systemd-logind.service 2>/dev/null || true; \
     rm -f /etc/ssh/ssh_host_*; \
     mkdir -p /run/sshd
 

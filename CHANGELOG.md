@@ -28,6 +28,13 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
   over SSH: an uploaded bundle checked against `SHA256SUMS`, no downloads but apt and certificates, a
   detached run under systemd that survives the connection, `--follow` that resumes from any byte,
   `##vm` progress markers and a `result.json` (Deployment §8).
+- **The installer checks the server first and fixes what commonly goes wrong** (Deployment §8.5): the OS
+  release and architecture, memory, disk and clock; it waits out cloud-init and automatic updates, finishes an
+  interrupted dpkg, leaves broken third-party repositories out, moves to a mirror that answers (and is not
+  stale) when the server's does not, falls back to the archives for end-of-life releases, retries on a lossy
+  link, adds swap on small servers, and chooses a JRE 17+ that apt offers. It never edits the server's apt
+  sources. Decisions — an untested release, setting the clock — are asked (`--allow`), not taken.
+- **Ubuntu 26.04 and Debian 13** are supported, after installing end to end in the harness.
 - **A Docker harness for the installer** (`scripts/provision-test/`): throwaway systemd + sshd
   containers on `127.0.0.1`, driven over real SSH, with scenarios for the happy path, resuming a
   dropped follow, a busy server, a corrupt bundle and a user without sudo (Testing §2.1).
@@ -43,6 +50,8 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
   (canonical `S` and key, no small-order key or `R`), so the node still refuses what the app refuses.
   With no native code left, the node tarball is 12.8 MB instead of 16.6 MB. It now carries a
   `VERSION` file and no Windows `.bat` launcher.
+- **The node's unit sets `JAVA_HOME`** to the JRE the installer chose, and sizes the heap to the server (a
+  quarter of its memory, 128–768 MB, instead of a fixed 512 MB).
 - **`setup-node.sh` leaves other nginx sites alone** (it used to delete `sites-enabled/default`) and no
   longer asks nginx for `http2`, which is deprecated in the `listen` form. Every fatal error names an
   issue code, and the exit status gives its class (Deployment §3.4).

@@ -21,7 +21,14 @@ from a downloaded release tarball, or as a one-liner on a fresh Ubuntu/Debian ho
 
 ## 2. Requirements
 
-- Ubuntu 24.04 / Debian 12 host with a public IP; 1 vCPU / 1 GB RAM is enough (the unit caps the JVM at 512 MB).
+- **Ubuntu 22.04, 24.04 or 26.04, or Debian 12 or 13**, 64-bit x86 or ARM, with systemd. Ubuntu 20.04 and
+  Debian 11 install with a warning: they no longer get regular security updates. A newer release installs after
+  `--allow OS_UNTESTED`; anything else is refused (`OS_UNSUPPORTED`, exit 20). Every supported release was
+  installed end to end in the Docker harness (Testing §2.1).
+- At least 450 MB of memory (under 1 GB, the installer adds a 1 GB swapfile) and about 1.5 GB free on `/var`.
+  The JVM heap is a quarter of the memory, between 128 and 768 MB.
+- A JRE 17 or newer. The installer reuses one that is installed, or installs the first of OpenJDK 21, 25 and 17
+  that apt offers (Debian 11 and 12 have 17 only) and points the unit's `JAVA_HOME` at it.
 - Root SSH access.
 - A DNS name pointing at the host **or** at a CDN whose origin is the host (see §5 for Arvan).
 - Inbound TCP 22, 80, 443 (`--firewall` configures ufw for exactly that).
@@ -72,10 +79,15 @@ curl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/se
 | `--behind-cdn arvan\|none` | Installs the real-IP snippet (`deploy/nginx/arvan-ips.conf`) so nginx and the node see client IPs. |
 | `--firewall` | ufw: allow OpenSSH, 80/tcp, 443/tcp; deny other inbound. |
 | `--dist-tar PATH` / `--dist-url URL` | Install this tarball instead of the latest GitHub release. |
-| `--build` | Build from a repo checkout (JDK 21 + Android SDK required — prefer a tarball on servers). |
+| `--build` | Build from a repo checkout (JDK 17 + the Gradle toolchain's 21 + Android SDK — prefer a tarball on servers). |
 | `--skip-cert` / `--force-cert` | Reuse existing certificates / regenerate the self-signed one. |
 | `--install-dir`, `--cert-dir`, `--node-port` | Paths and port (defaults `/opt/vmessenger`, `/etc/vmessenger/tls`, `8443`). |
 | `--dev` | Run the raw-TCP DHT dev node on `:46555` for emulator testing (no nginx/systemd). |
+| `--allow CODE[,CODE]` | Go ahead where the installer would stop to ask: `OS_UNTESTED`, `CLOCK_SKEW` (§8.5). |
+| `--clock-offset-ms N` | How far the server's clock is behind a trusted one, in ms (the app measures it). |
+| `--apt-mirror URL` | Fetch packages from this mirror for this install; the server's sources stay as they are. |
+| `--offline` | Download nothing but apt packages and certificates (needs `--dist-tar` or `--bundle-dir`). |
+| `--bundle-dir DIR` | Templates and tarball from an app-style bundle, checked against its `SHA256SUMS` (§8). |
 
 ### 3.3 What gets written
 
@@ -218,14 +230,15 @@ Values are percent-encoded byte by byte: anything outside `A–Z a–z 0–9 . _
 | `hello` | `proto`, `installer`, `action`, `run` | First line of every invocation. |
 | `fact` | `key`, `value` | Something learned about the server (`os_id`, `arch`, `node_id`, `active_run`, …). |
 | `step` | `id`, `state`, `note` | `state` is `start`, `ok`, `skip`, `warn`, `fail` or `wait`. |
-| `issue` | `code`, `severity`, `step`, `detail` | `severity` is `fatal`, `warn` or `info`. A fatal issue is followed by the step's `fail` and the end. |
+| `issue` | `code`, `severity`, `step`, `detail` | `severity` is `fatal`, `consent`, `warn` or `info`. A fatal issue is followed by the step's `fail` and the end. `consent` is a decision (§8.5). |
 | `launched` | `run` | `--launch` started a run. |
 | `result` | `status`, `file` | `result.json` was written (`status` is `ok` or `failed`). |
 | `status` | `run`, `state`, `exit`, `bytes` | Answer to `--status`. |
 | `end` | `status` | Last line of every invocation and of every run log; `status` is the exit status. |
 
-Step ids, in order: `preflight`, `packages`, `firewall`, `files`, `config`, `service`, `tls`,
-`health`, `finish`. Exit statuses are those of §3.4. A command that fails outside a known check is
+Step ids, in order: `preflight`, `apt`, `swap`, `java`, `packages`, `firewall`, `files`, `config`,
+`service`, `tls`, `health`, `finish`. `wait` means the step is waiting on something outside the
+installer — cloud-init, or another package manager holding the dpkg lock — for up to 15 minutes. Exit statuses are those of §3.4. A command that fails outside a known check is
 reported as `INTERNAL` with its line, and exits 1.
 
 ### 8.3 `result.json` (schema 1)
@@ -252,3 +265,50 @@ copies it to `/etc/vmessenger/install.json`, which is how a later run knows what
 | `/var/lib/vmessenger-installer/bundles/<version>/` | The uploaded bundle, root-owned; the two newest are kept. |
 | `/var/lib/vmessenger-installer/runs/<run>/` | `args`, `log`, `result.json`, `exit`; the ten newest runs are kept. |
 | `/etc/vmessenger/install.json` | The last successful run's result. |
+
+### 8.5 What the installer fixes by itself, and what it asks first
+
+Found before anything changes (preflight, which every run repeats):
+
+| Code | Severity | What happens |
+|---|---|---|
+| `OS_UNSUPPORTED`, `ARCH_UNSUPPORTED`, `NO_SYSTEMD` | fatal (20) | Nothing is installed. |
+| `RAM_TOO_LOW`, `DISK_LOW` | fatal (30) | Under 450 MB of memory; under ~1.5 GB free on `/var` (2.5 GB when a swapfile is needed), counting what `apt-get clean` would free. |
+| `OS_EOL` | warn | Ubuntu 20.04, Debian 11. |
+| `OS_UNTESTED` | consent | A release newer than the tested ones. |
+| `CLOCK_SKEW` | consent | The app measured the server's clock more than 5 minutes off (`--clock-offset-ms`); allowed, the installer turns on time sync and, if that does not fix it, sets the clock. |
+| `INSTALL_BUSY` | fatal (40) | Another install is running. |
+
+Fixed on the way, reported as `info` (or `warn` where the result is worse than a clean install):
+
+| Code | The problem | The fix |
+|---|---|---|
+| step `apt` `wait` | cloud-init is still running, or another package manager holds the lock | Wait, up to 15 minutes (`APT_LOCKED` after that). |
+| `DPKG_INTERRUPTED` | An install was interrupted (a reboot mid-upgrade) | `dpkg --configure -a`, then `apt-get -f install` once the lists are fresh. |
+| `APT_REPO_EXCLUDED` | A third-party repository no longer refreshes | Left out of this install's apt calls. |
+| `APT_MIRROR_SWITCHED` | The release's mirror does not answer, or is stale | The fastest current mirror that answers from the server (below). |
+| `APT_EOL_RELEASE` | The release has left the regular mirrors | `old-releases.ubuntu.com` or `archive.debian.org`. |
+| `APT_SECURITY_GONE` (warn) | An end-of-life Debian's security suite lists packages no host serves (Debian 11 since September 2026) | Its security updates from snapshot.debian.org, as of the last date the suite was whole. |
+| `APT_INDEX_STALE` | A mirror mid-sync is missing packages its index lists | Refresh and retry. |
+| `APT_NETWORK_RETRY` | DNS or a download failed on a lossy link, or apt stalled | Retry, up to four times. An apt call that makes no progress — no bytes into apt's partial directories, no line in dpkg's log — for 2 minutes (`update`) or 5 (`install`) is stopped: on a stalled link apt's own timeouts do not always fire. A slow link that is getting there is left alone. HTTP pipelining is off (`Pipeline-Depth=0`). |
+| `APT_FIXED_BROKEN` | Broken dependencies from an earlier half-done install | `apt-get -f install`, then retry. |
+| `SWAP_ADDED` | Under 1 GB of memory and no swap | A 1 GB `/swapfile.vmessenger` (not in a container). |
+| `DISK_CLEANED` | Tight disk | `apt-get clean`. |
+| `JAVA_REUSED` | A JRE 17+ is already installed | Used as is. |
+
+**The server's apt sources are never edited.** When a source has to be left out or replaced, the installer
+writes its own list under `/var/lib/vmessenger-installer/apt/` and points only its own apt calls at it
+(`-o Dir::Etc::SourceList`, `-o Dir::Etc::SourceParts`). Packages are verified against the distribution's keys
+whichever mirror they come from.
+
+Mirror candidates, probed from the server in parallel (each must serve this release and architecture, and its
+`-updates` suite must be inside its `Valid-Until`; two of the Iranian mirrors below were weeks stale when this
+was written, which is why the check exists):
+
+- Ubuntu (amd64): archive.ubuntu.com, mirror.arvancloud.ir, mirror.iranserver.com, mirror.mobinhost.com,
+  repo.iut.ac.ir, ir.archive.ubuntu.com. Ubuntu on ARM: ports.ubuntu.com only; none of the Iranian mirrors carry
+  `ubuntu-ports`.
+- Debian: deb.debian.org, mirror.arvancloud.ir, mirror.iranserver.com, mirror.mobinhost.com, repo.iut.ac.ir
+  (amd64 only; its security suite comes from security.debian.org).
+
+`--apt-mirror URL` names one outright.

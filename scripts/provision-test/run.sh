@@ -7,6 +7,7 @@
 #
 #   scripts/provision-test/run.sh build [IMAGE...]      build the target images
 #   scripts/provision-test/run.sh up IMAGE [--slot N]   start one target and print how to reach it
+#   scripts/provision-test/run.sh install IMAGE [--slot N]  the same, with a node installed; prints its pin
 #   scripts/provision-test/run.sh down [NAME...|--all]  remove targets
 #   scripts/provision-test/run.sh test [options]        run scenarios against fresh targets
 #   scripts/provision-test/run.sh creds                 print the throwaway credentials
@@ -29,7 +30,7 @@ REPO="$(cd "$HERE/../.." && pwd)"
 OUT="$HERE/out"
 NET="vm-provision-net"
 LABEL="ir.vmessenger.provision-test=1"
-SUPPORTED_IMAGES="ubuntu:20.04 ubuntu:22.04 ubuntu:24.04 debian:11 debian:12"
+SUPPORTED_IMAGES="ubuntu:20.04 ubuntu:22.04 ubuntu:24.04 ubuntu:26.04 debian:11 debian:12 debian:13"
 UNSUPPORTED_IMAGES="ubuntu:18.04 debian:10"
 PORT_BASE=22000
 PLATFORM=""
@@ -90,12 +91,20 @@ up() {
         -p "127.0.0.1:$(ssh_port "$slot"):22" -p "127.0.0.1:$(http_port "$slot"):80"
         -p "127.0.0.1:$(https_port "$slot"):443")
     [[ -n "$PLATFORM" ]] && args+=(--platform "$PLATFORM")
-    docker run "${args[@]}" "$tag" >/dev/null
-    wait_for_systemd "$name"
-    install_creds "$name"
-    wait_for_ssh "$slot"
+    if is_unsupported "$base"; then
+        # systemd 237 and older cannot boot on a cgroup v2 host (Docker Desktop). The installer
+        # refuses these releases before it needs systemd, so sshd on its own is enough.
+        docker run "${args[@]}" "$tag" bash -c 'ssh-keygen -A >/dev/null; mkdir -p /run/sshd; exec /usr/sbin/sshd -D' >/dev/null || return 1
+    else
+        docker run "${args[@]}" "$tag" >/dev/null || return 1
+        wait_for_systemd "$name" || return 1
+    fi
+    install_creds "$name" || return 1
+    wait_for_ssh "$slot" || return 1
     printf '%s' "$name"
 }
+
+is_unsupported() { [[ " $UNSUPPORTED_IMAGES " == *" $1 "* ]]; }
 
 wait_for_systemd() {
     local name="$1" state
@@ -182,10 +191,10 @@ make_bundle() {
 # prints the remote path.
 stage_bundle() {
     local slot="$1" user="$2" bundle remote
-    bundle="$(make_bundle)"
+    bundle="$(make_bundle)" || return 1
     remote=".vmessenger-installer/$(node_version)"
-    on "$slot" "$user" "rm -rf $remote && mkdir -p .vmessenger-installer"
-    copy_to "$slot" "$user" "$remote" "$bundle"
+    on "$slot" "$user" "rm -rf $remote && mkdir -p .vmessenger-installer" || return 1
+    copy_to "$slot" "$user" "$remote" "$bundle" || return 1
     printf '/home/%s/%s' "$user" "$remote"
 }
 
@@ -193,9 +202,9 @@ stage_bundle() {
 # following the manual would.
 stage() {
     local slot="$1" tar
-    tar="$(node_tarball)"
-    on "$slot" alice 'rm -rf ~/vm && mkdir -p ~/vm/scripts'
-    copy_to "$slot" alice 'vm/scripts/' "$REPO/scripts/setup-node.sh"
+    tar="$(node_tarball)" || return 1
+    on "$slot" alice 'rm -rf ~/vm && mkdir -p ~/vm/scripts' || return 1
+    copy_to "$slot" alice 'vm/scripts/' "$REPO/scripts/setup-node.sh" || return 1
     copy_to "$slot" alice 'vm/' "$REPO/deploy" "$tar"
 }
 
@@ -206,12 +215,13 @@ stage() {
 # The app's path: preflight, launch detached, follow to the end, read the result.
 scenario_happy_ip() {
     local slot="$2" log="$OUT/$3" b run status=0
-    b="$(stage_bundle "$slot" alice)"
+    b="$(stage_bundle "$slot" alice)" || return 1
     local installer="sudo bash $b/setup-node.sh --from-app --bundle-dir $b"
-    on "$slot" alice "$installer --preflight --ip 127.0.0.1" > "$log.preflight" 2>&1 \
+    local extra="${ALLOW_ARGS:-}"
+    on "$slot" alice "$installer --preflight --ip 127.0.0.1 $extra" > "$log.preflight" 2>&1 \
         || { cat "$log.preflight" >&2; return 1; }
     grep -q '^##vm .* ev=end status=0$' "$log.preflight" || { cat "$log.preflight" >&2; return 1; }
-    on "$slot" alice "$installer --launch --ip 127.0.0.1" > "$log.launch" 2>&1 || { cat "$log.launch" >&2; return 1; }
+    on "$slot" alice "$installer --launch --ip 127.0.0.1 $extra" > "$log.launch" 2>&1 || { cat "$log.launch" >&2; return 1; }
     run="$(sed -n 's/^##vm .* ev=launched run=\([0-9a-f-]*\).*/\1/p' "$log.launch")"
     [[ -n "$run" ]] || { cat "$log.launch" >&2; return 1; }
     on "$slot" alice "sudo bash $b/setup-node.sh --from-app --follow $run" > "$log.follow" 2>&1 || status=$?
@@ -246,7 +256,7 @@ check_markers() {
 scenario_happy_ip_human() {
     local slot="$2" tar
     tar="$(basename "$(node_tarball)")"
-    stage "$slot"
+    stage "$slot" || return 1
     on "$slot" alice "sudo VMESSENGER_REPO=\$HOME/vm bash \$HOME/vm/scripts/setup-node.sh --ip 127.0.0.1 --dist-tar \$HOME/vm/$tar" \
         > "$OUT/$3.install.log" 2>&1 || { tail -30 "$OUT/$3.install.log" >&2; return 1; }
     check_health "$slot"
@@ -254,7 +264,7 @@ scenario_happy_ip_human() {
 
 scenario_not_root() {
     local slot="$2" status=0
-    stage "$slot"
+    stage "$slot" || return 1
     on "$slot" carol 'true' || return 1
     # carol has no sudo; running the installer as her must stop with NOT_ROOT (exit 30).
     copy_to "$slot" carol '' "$REPO/scripts/setup-node.sh"
@@ -267,7 +277,7 @@ scenario_not_root() {
 # again with nothing lost or repeated.
 scenario_resume() {
     local slot="$2" log="$OUT/$3" b run size
-    b="$(stage_bundle "$slot" alice)"
+    b="$(stage_bundle "$slot" alice)" || return 1
     local installer="sudo bash $b/setup-node.sh --from-app --bundle-dir $b"
     on "$slot" alice "$installer --launch --ip 127.0.0.1" > "$log.launch" 2>&1 || { cat "$log.launch" >&2; return 1; }
     run="$(sed -n 's/^##vm .* ev=launched run=\([0-9a-f-]*\).*/\1/p' "$log.launch")"
@@ -293,7 +303,7 @@ scenario_resume() {
 # A second launch while one is running answers INSTALL_BUSY (exit 40) with the active run's id.
 scenario_busy() {
     local slot="$2" log="$OUT/$3" b first status=0
-    b="$(stage_bundle "$slot" alice)"
+    b="$(stage_bundle "$slot" alice)" || return 1
     local installer="sudo bash $b/setup-node.sh --from-app --bundle-dir $b"
     on "$slot" alice "$installer --launch --ip 127.0.0.1" > "$log.first" 2>&1 || return 1
     first="$(sed -n 's/^##vm .* ev=launched run=\([0-9a-f-]*\).*/\1/p' "$log.first")"
@@ -304,10 +314,105 @@ scenario_busy() {
     on "$slot" alice "sudo bash $b/setup-node.sh --from-app --follow $first" > "$log.follow" 2>&1
 }
 
+# ---- things that go wrong on real servers, set up by hand as root before the app arrives ----------
+
+# as_root SLOT CMD — change the target the way its owner (or its history) would have.
+as_root() { on "$1" root "$2"; }
+
+# install_and_expect SLOT LABEL ISSUE... — the machine-mode install succeeds and reported each ISSUE.
+install_and_expect() {
+    local slot="$1" label="$2"
+    shift 2
+    scenario_happy_ip "" "$slot" "$label" || return 1
+    local code
+    for code in "$@"; do
+        grep -q "ev=issue code=$code " "$OUT/$label.follow" \
+            || { printf 'expected issue %s in the run\n' "$code" >&2; return 1; }
+    done
+}
+
+# A third-party repository that no longer answers makes `apt-get update` fail on most servers
+# someone has used for a while. The install leaves it out and goes on.
+scenario_broken_repo() {
+    as_root "$2" "echo 'deb [trusted=yes] http://127.0.0.1:9/gone stable main' > /etc/apt/sources.list.d/gone.list" || return 1
+    install_and_expect "$2" "$3" APT_REPO_EXCLUDED || return 1
+    as_root "$2" 'test -f /etc/apt/sources.list.d/gone.list'   # the owner's file is untouched
+}
+
+# A package left unpacked but not configured (a reboot mid-upgrade) blocks every apt install until
+# `dpkg --configure -a` runs.
+scenario_dpkg_interrupted() {
+    # shellcheck disable=SC2016 # expanded on the target, not here
+    as_root "$2" 'deb=$(ls /var/cache/apt/archives/rsync_*.deb 2>/dev/null | head -n 1); [ -n "$deb" ] || { apt-get update -qq && apt-get download -qq rsync && deb=$(ls rsync_*.deb); }; dpkg --unpack "$deb" >/dev/null && test -n "$(dpkg --audit)"' \
+        || return 1
+    install_and_expect "$2" "$3" DPKG_INTERRUPTED
+}
+
+# Another package manager holds the lock when the install starts (unattended-upgrades on a fresh
+# VPS): the install waits for it instead of failing.
+scenario_apt_lock() {
+    as_root "$2" 'systemd-run --unit=vm-test-holds-dpkg-lock --collect flock /var/lib/dpkg/lock-frontend sleep 25' || return 1
+    install_and_expect "$2" "$3" || return 1
+    grep -q 'ev=step id=apt state=wait' "$OUT/$3.follow" || { printf 'the install never waited for the lock\n' >&2; return 1; }
+}
+
+# The mirror in the server's sources does not answer (blocked, or gone): the install finds one that
+# does, uses it for its own apt calls, and leaves the server's sources as they were.
+scenario_mirror_unreachable() {
+    as_root "$2" "sed -i -E 's#https?://(archive|ports|security)\\.ubuntu\\.com#http://127.0.0.1:9#g; s#https?://(deb|security)\\.debian\\.org#http://127.0.0.1:9#g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null; grep -rq '127.0.0.1:9' /etc/apt/" \
+        || return 1
+    install_and_expect "$2" "$3" APT_MIRROR_SWITCHED || return 1
+    as_root "$2" "grep -rq '127.0.0.1:9' /etc/apt/"   # the server's sources were not edited
+}
+
+# A server clock minutes off (as the app measures it) needs the owner's go-ahead before it is
+# changed: preflight stops with exit 10 and a CLOCK_SKEW decision. The go-ahead path is not run
+# here: setting the clock inside a privileged container sets the Docker VM's.
+scenario_clock_skew() {
+    local slot="$2" log="$OUT/$3" b status=0
+    b="$(stage_bundle "$slot" alice)" || return 1
+    on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --preflight --ip 127.0.0.1 --clock-offset-ms 900000" \
+        > "$log" 2>&1 || status=$?
+    if [[ "$status" -ne 10 ]] || ! grep -q 'ev=issue code=CLOCK_SKEW severity=consent' "$log"; then
+        cat "$log" >&2
+        return 1
+    fi
+}
+
+# A release newer than the tested ones asks first (exit 10, OS_UNTESTED) and installs once allowed.
+# There is no such release to pull, so the target's os-release claims one (run on ubuntu:24.04).
+scenario_untested_os() {
+    local slot="$2" log="$OUT/$3" b status=0
+    as_root "$slot" "sed -i -e 's/^VERSION_ID=.*/VERSION_ID=\"28.04\"/' -e 's/^PRETTY_NAME=.*/PRETTY_NAME=\"Ubuntu 28.04 LTS\"/' /etc/os-release" || return 1
+    b="$(stage_bundle "$slot" alice)" || return 1
+    on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --preflight --ip 127.0.0.1" > "$log.preflight" 2>&1 \
+        || status=$?
+    if [[ "$status" -ne 10 ]] || ! grep -q 'ev=issue code=OS_UNTESTED severity=consent' "$log.preflight"; then
+        cat "$log.preflight" >&2
+        return 1
+    fi
+    ALLOW_ARGS="--allow OS_UNTESTED" scenario_happy_ip "" "$slot" "$3.allowed"
+}
+
+# An OS the installer does not support is refused at preflight: exit 20, OS_UNSUPPORTED, nothing
+# installed. Run with --unsupported.
+scenario_unsupported_os() {
+    local slot="$2" log="$OUT/$3" b status=0
+    b="$(stage_bundle "$slot" alice)" || return 1
+    on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --preflight --ip 127.0.0.1" > "$log" 2>&1 \
+        || status=$?
+    if [[ "$status" -ne 20 ]] || ! grep -q 'ev=issue code=OS_UNSUPPORTED severity=fatal' "$log"; then
+        cat "$log" >&2
+        printf 'expected exit 20 with OS_UNSUPPORTED, got %s\n' "$status" >&2
+        return 1
+    fi
+    ! on "$slot" alice 'command -v nginx' >/dev/null 2>&1
+}
+
 # A bundle that does not match its SHA256SUMS is refused before anything is installed.
 scenario_corrupt_bundle() {
     local slot="$2" log="$OUT/$3" b status=0
-    b="$(stage_bundle "$slot" alice)"
+    b="$(stage_bundle "$slot" alice)" || return 1
     on "$slot" alice "printf 'x' >> $b/deploy/nginx/vmessenger-node.conf.template"
     on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --launch --ip 127.0.0.1" > "$log" 2>&1 || status=$?
     if [[ "$status" -ne 1 ]] || ! grep -q 'ev=issue code=BUNDLE_CORRUPT' "$log"; then
@@ -332,8 +437,13 @@ run_one() {
     local base="$1" slot="$2" scenario="$3" name fn status=0
     fn="scenario_$(printf '%s' "$scenario" | tr '-' '_')"
     declare -F "$fn" >/dev/null || fail "unknown scenario: $scenario"
-    name="$(up "$base" "$slot")"
     local label="$scenario@$base"
+    # Scenarios run under `|| status=…`, where bash switches `set -e` off: every step that can fail
+    # is checked by hand, starting here.
+    if ! name="$(up "$base" "$slot")"; then
+        printf 'FAIL %s (target did not come up)\n' "$label" | tee -a "$OUT/results.txt"
+        return 1
+    fi
     log "$label: running on $name (ssh 127.0.0.1:$(ssh_port "$slot"))"
     "$fn" "$base" "$slot" "$(printf '%s' "$label" | tr ':@/' '---')" || status=$?
     if [[ "$status" -eq 0 ]]; then
@@ -409,6 +519,41 @@ $name is up ($base).
 EOF
 }
 
+# install IMAGE [--slot N] — a target with a node on it, installed the app's way; prints how to reach
+# the node and its key pin (the certificate is self-signed on an IP, so the pin is the identity).
+cmd_install() {
+    local base="${1:-}" slot=0 name b run
+    [[ -n "$base" ]] || fail "usage: run.sh install IMAGE [--slot N]"
+    shift
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --slot) slot="$2"; shift 2 ;;
+            --platform) PLATFORM="$2"; shift 2 ;;
+            *) fail "unknown install option: $1" ;;
+        esac
+    done
+    name="$(up "$base" "$slot")" || fail "$base did not come up"
+    b="$(stage_bundle "$slot" alice)" || fail "could not upload the bundle"
+    run="$(on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --launch --ip 127.0.0.1" \
+        | sed -n 's/^##vm .* ev=launched run=\([0-9a-f-]*\).*/\1/p')"
+    [[ -n "$run" ]] || fail "the install did not start"
+    on "$slot" alice "sudo bash $b/setup-node.sh --from-app --follow $run" > "$OUT/$name.install.log" 2>&1 \
+        || { tail -20 "$OUT/$name.install.log" >&2; fail "the install failed (log: $OUT/$name.install.log)"; }
+    local pin port
+    port="$(https_port "$slot")"
+    pin="$(openssl s_client -connect "127.0.0.1:$port" </dev/null 2>/dev/null | openssl x509 -pubkey -noout \
+        | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
+    cat <<EOF2
+
+A node is running on $name ($base).
+  Key pin:            $pin
+  From an emulator:   wss://10.0.2.2:$port/relay#pin-sha256=$pin
+                      wss://10.0.2.2:$port/dht#pin-sha256=$pin
+  From this Mac:      https://127.0.0.1:$port/healthz (curl -k)
+  Node log:           run.sh shell $name, then journalctl -u vmessenger-node -f
+EOF2
+}
+
 cmd_down() {
     if [[ "${1:-}" == "--all" || $# -eq 0 ]]; then
         docker ps -aq --filter "label=$LABEL" --filter "name=vm-target-" | xargs -r docker rm -f >/dev/null
@@ -441,6 +586,7 @@ main() {
             for base in "$@"; do build_image "$base" >/dev/null; done
             ;;
         up) cmd_up "$@" ;;
+        install) cmd_install "$@" ;;
         down) cmd_down "$@" ;;
         test) cmd_test "$@" ;;
         creds) cmd_creds ;;

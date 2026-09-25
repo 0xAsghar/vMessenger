@@ -50,6 +50,29 @@ readonly LOCK_FILE="$INSTALLER_HOME/lock"
 readonly INSTALL_RECORD="/etc/vmessenger/install.json"
 readonly RUN_UNIT_PREFIX="vmessenger-install-"
 readonly RUNS_KEPT=10
+readonly APT_DIR="$INSTALLER_HOME/apt"
+
+# Resources. Below MIN_RAM_MB the JVM and nginx do not fit; below SWAP_BELOW_RAM_MB a swapfile of
+# SWAP_MB keeps apt and the JVM from being OOM-killed.
+readonly MIN_RAM_MB=450
+readonly SWAP_BELOW_RAM_MB=1000
+readonly SWAP_MB=1024
+readonly SWAP_FILE="/swapfile.vmessenger"
+readonly MIN_DISK_MB=1500
+readonly CLOCK_SKEW_MS=300000
+
+# Debian releases whose security archive was wound down after end of life, and the last
+# snapshot.debian.org timestamp at which it was whole. bullseye's LTS ended 2026-08-31; by late
+# September its security index listed packages no host served, the latest snapshots included.
+readonly EOL_SECURITY_SNAPSHOTS="bullseye|20260815T000000Z"
+
+# Where apt can fetch from when the configured mirror cannot be reached. Each was checked to serve
+# dists/<codename>/Release (Sept 2026); the installer probes them again from the server and uses
+# the fastest that answers, for its own apt calls only. The server's sources are never edited.
+readonly UBUNTU_MIRRORS="http://archive.ubuntu.com/ubuntu http://mirror.arvancloud.ir/ubuntu http://mirror.iranserver.com/ubuntu http://mirror.mobinhost.com/ubuntu http://repo.iut.ac.ir/repo/Ubuntu http://ir.archive.ubuntu.com/ubuntu"
+readonly UBUNTU_PORTS_MIRRORS="http://ports.ubuntu.com/ubuntu-ports"
+# debian mirror|security mirror
+readonly DEBIAN_MIRRORS="http://deb.debian.org/debian|http://security.debian.org/debian-security http://mirror.arvancloud.ir/debian|http://mirror.arvancloud.ir/debian-security http://mirror.iranserver.com/debian|http://mirror.iranserver.com/debian-security http://mirror.mobinhost.com/debian|http://mirror.mobinhost.com/debian-security http://repo.iut.ac.ir/repo/debian|http://security.debian.org/debian-security"
 
 MODE="prod"
 DOMAIN=""
@@ -87,6 +110,7 @@ RUN_DIR=""
 FROM_BYTE=0
 INSTALL_ARGS=()        # the install options as given; --launch hands them to the detached run
 MARK_SEQ=0
+SEQ_FILE=""            # the marker counter, when markers may come from subshells (runs)
 CURRENT_STEP=""
 FATAL_CODE=""
 WARNINGS=()
@@ -96,6 +120,16 @@ OS_CODENAME=""
 OS_PRETTY=""
 ARCH=""
 NODE_ID=""
+ALLOW=","              # consents given with --allow, as ,CODE,CODE,
+PENDING_CONSENTS=()
+CLOCK_OFFSET_MS=""     # phone clock minus server clock, measured by the app
+APT_MIRROR=""          # --apt-mirror: use this mirror for the install's apt calls
+APT_OPTS=(-o DPkg::Lock::Timeout=600 -o Acquire::Retries=3 -o Acquire::http::Timeout=30
+    -o Acquire::http::Pipeline-Depth=0 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
+APT_SOURCES_NOTE=""    # what the install's apt calls use, when not the server's own sources
+JAVA_BIN=""
+JAVA_HOME_DIR=""
+RAM_MB=0
 
 usage() {
     cat <<'EOF'
@@ -118,6 +152,9 @@ Production (requires root):
   --skip-cert           Do not issue/generate certificates (they must already exist)
   --force-cert          Regenerate the self-signed certificate even if one exists
   --skip-build          Reuse node/build/install/vmessenger-node from the repo (legacy)
+  --allow CODE[,CODE]   Go ahead where the installer would stop to ask (OS_UNTESTED, CLOCK_SKEW)
+  --clock-offset-ms N   How far this server's clock is behind a trusted one (the app's), in ms
+  --apt-mirror URL      Fetch packages from this Ubuntu/Debian mirror for this install
 
 Local development:
   --dev                 Run the TCP DHT node on :46555 (no nginx/systemd)
@@ -168,17 +205,25 @@ pct() {
 # mark EVENT [key=value ...] — one line the app parses, in machine mode only:
 #   ##vm v=1 seq=N ts=EPOCH_MS ev=EVENT key=value ...
 # seq rises by one per line within an invocation, so a client that reconnects mid-run can drop what
-# it has already seen.
+# it has already seen. Written to fd 3, the script's own stdout (opened in main): a function whose
+# output is captured with $(…) still reports to the app, instead of into its caller's variable.
 mark() {
     [[ "$FROM_APP" == true ]] || return 0
     local ev="$1" kv line
     shift
-    MARK_SEQ=$((MARK_SEQ + 1))
+    # A subshell's increments do not come back to the parent, so the counter lives in a file when
+    # there is one to keep it in; seq stays gap-free and unique either way.
+    if [[ -n "$SEQ_FILE" ]]; then
+        MARK_SEQ=$(( $(cat "$SEQ_FILE" 2>/dev/null || printf 0) + 1 ))
+        printf '%s' "$MARK_SEQ" > "$SEQ_FILE"
+    else
+        MARK_SEQ=$((MARK_SEQ + 1))
+    fi
     line="##vm v=$PROTOCOL_VERSION seq=$MARK_SEQ ts=$(now_ms) ev=$ev"
     for kv in "$@"; do
         line+=" ${kv%%=*}=$(pct "${kv#*=}")"
     done
-    printf '%s\n' "$line"
+    printf '%s\n' "$line" >&3
 }
 
 fact() { mark fact key="$1" value="$2"; }
@@ -210,8 +255,32 @@ exit_status_for() {
         OS_UNSUPPORTED|ARCH_UNSUPPORTED|NO_SYSTEMD) printf '20' ;;
         NOT_ROOT|RAM_TOO_LOW|DISK_LOW) printf '30' ;;
         INSTALL_BUSY) printf '40' ;;
+        OS_UNTESTED|CLOCK_SKEW) printf '10' ;;
         *) printf '1' ;;
     esac
+}
+
+allowed() { [[ "$ALLOW" == *",$1,"* ]]; }
+
+# consent CODE DETAIL — a change the installer will only make when told to (--allow CODE). Given,
+# it returns 0 and the caller goes ahead. Not given: a preflight records it and carries on (and
+# exits 10 at the end); anything else stops here with exit 10.
+consent() {
+    local code="$1"
+    shift
+    if allowed "$code"; then
+        issue "$code" info "going ahead as allowed: $*"
+        return 0
+    fi
+    PENDING_CONSENTS+=("$code")
+    mark issue code="$code" severity=consent step="${CURRENT_STEP:-none}" detail="$*"
+    printf 'decision needed: [%s] %s — run again with --allow %s to go ahead\n' "$code" "$*" "$code" >&2
+    if [[ "$ACTION" != preflight ]]; then
+        FATAL_CODE="$code"
+        [[ -n "$CURRENT_STEP" ]] && mark step id="$CURRENT_STEP" state=fail
+        exit "$(exit_status_for "$code")"
+    fi
+    return 1
 }
 
 # die CODE MESSAGE — every fatal path names its issue code.
@@ -291,13 +360,13 @@ parse_args() {
                 continue
                 ;;
             --from-byte) need_value "$1" $#; FROM_BYTE="$2"; shift 2; continue ;;
-            --list-runs) ACTION=list-runs; shift; continue ;;
+            --list-runs) ACTION="list-runs"; shift; continue ;;
             --version) ACTION=version; shift; continue ;;
             -h|--help) usage; exit 0 ;;
         esac
         local taken=2
         case "$1" in
-            --domain|--ip|--tls|--acme-email|--behind-cdn|--dist-tar|--dist-url|--install-dir|--cert-dir|--node-port)
+            --domain|--ip|--tls|--acme-email|--behind-cdn|--dist-tar|--dist-url|--install-dir|--cert-dir|--node-port|--allow|--clock-offset-ms|--apt-mirror)
                 need_value "$1" $#
                 ;;
         esac
@@ -312,6 +381,9 @@ parse_args() {
             --install-dir) INSTALL_DIR="$2" ;;
             --cert-dir) CERT_DIR="$2" ;;
             --node-port) NODE_PORT="$2" ;;
+            --allow) ALLOW+="${2//[[:space:]]/},";;
+            --clock-offset-ms) CLOCK_OFFSET_MS="$2" ;;
+            --apt-mirror) APT_MIRROR="$2" ;;
             --acme-no-email) ACME_NO_EMAIL=true; taken=1 ;;
             --firewall) FIREWALL=true; taken=1 ;;
             --build) BUILD_FROM_REPO=true; taken=1 ;;
@@ -328,6 +400,8 @@ parse_args() {
         die USAGE "not a run id: $RUN_ID"
     fi
     [[ "$FROM_BYTE" =~ ^[0-9]+$ ]] || die USAGE "--from-byte takes a byte offset"
+    [[ -z "$CLOCK_OFFSET_MS" || "$CLOCK_OFFSET_MS" =~ ^-?[0-9]+$ ]] || die USAGE "--clock-offset-ms takes milliseconds"
+    [[ -z "$APT_MIRROR" || "$APT_MIRROR" =~ ^https?://[A-Za-z0-9.:/_~-]+$ ]] || die USAGE "--apt-mirror takes an http(s) URL"
     if [[ "$FROM_APP" == true ]]; then
         case "$ACTION" in
             install) die USAGE "--from-app needs --preflight, --launch, --follow, --status or --result" ;;
@@ -445,17 +519,540 @@ fetch_templates() {
     curl -fsSL "$RAW_BASE/deploy/systemd/vmessenger-node.service.template" -o "$TEMPLATE_DIR/systemd/vmessenger-node.service.template"
 }
 
-install_os_packages() {
+# ---- packages -------------------------------------------------------------------------------------
+
+export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a NEEDRESTART_SUSPEND=1 UCF_FORCE_CONFFOLD=1
+
+apt_get() { apt-get "${APT_OPTS[@]}" "$@"; }
+
+# apt_get_guarded STALL CAP ARGS… — apt-get, stopped (exit 124) when it has made no progress for
+# STALL seconds, or after CAP seconds in all. On a stalled link apt's own timeouts do not always
+# fire: a download that stops mid-file leaves gpgv waiting on it for good. A fixed limit cannot tell
+# that from a slow link that is getting there, so progress is measured instead — bytes landing in
+# apt's partial directories, lines landing in dpkg's log. Pipelining is off (Pipeline-Depth=0):
+# middleboxes that mangle pipelined requests are a known cause of these stalls.
+apt_get_guarded() {
+    local stall="$1" cap="$2" pid mark last="" idle=0 elapsed=0
+    shift 2
+    apt-get "${APT_OPTS[@]}" "$@" &
+    pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        sleep 5
+        elapsed=$((elapsed + 5))
+        mark="$(apt_progress_mark)"
+        if [[ "$mark" != "$last" ]]; then
+            last="$mark"
+            idle=0
+        else
+            idle=$((idle + 5))
+        fi
+        if [[ "$idle" -ge "$stall" || "$elapsed" -ge "$cap" ]]; then
+            kill -TERM "$pid" 2>/dev/null || true
+            sleep 10
+            kill -KILL "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            printf 'E: apt-get made no progress for %s s (%s s in all); stopped\n' "$idle" "$elapsed"
+            return 124
+        fi
+    done
+    wait "$pid"
+}
+
+# Changes whenever apt downloads or dpkg records a step.
+apt_progress_mark() {
+    du -sb /var/lib/apt/lists/partial /var/cache/apt/archives/partial 2>/dev/null | awk '{ s += $1 } END { printf "%d", s }'
+    printf ':%s' "$(stat -c %s /var/log/dpkg.log 2>/dev/null || printf 0)"
+}
+
+# Another package manager holds the dpkg or lists lock (unattended-upgrades on a fresh server, a
+# person in another shell): wait for it rather than fail, for up to 15 minutes.
+wait_for_package_manager() {
+    local waited=0
+    if command -v cloud-init >/dev/null 2>&1 && cloud-init status 2>/dev/null | grep -q running; then
+        step apt wait "cloud-init is still setting the server up"
+        timeout 900 cloud-init status --wait >/dev/null 2>&1 || true
+    fi
+    while lslocks -n -o PATH 2>/dev/null | grep -Eq '^/var/lib/(dpkg/lock(-frontend)?|apt/lists/lock)$'; do
+        if [[ "$waited" -eq 0 ]]; then
+            step apt wait "another package manager is running (automatic updates?)"
+            log "waiting for another package manager to finish"
+        fi
+        [[ "$waited" -lt 900 ]] || die APT_LOCKED "another package manager has held the dpkg lock for 15 minutes"
+        sleep 5
+        waited=$((waited + 5))
+    done
+    [[ "$waited" -eq 0 ]] || step apt start
+}
+
+# A dpkg run that was interrupted (a reboot mid-upgrade) blocks every later install until it is
+# finished; finishing it is what apt itself tells you to do.
+# When dpkg alone cannot finish (the package's dependencies never arrived), apt can, once the lists
+# are fresh: see prepare_apt.
+DPKG_NEEDS_APT=false
+repair_dpkg() {
+    [[ -n "$(dpkg --audit 2>/dev/null)" ]] || return 0
+    issue DPKG_INTERRUPTED info "finishing an interrupted package installation"
+    dpkg --configure -a >/dev/null 2>&1 || DPKG_NEEDS_APT=true
+}
+
+# The distribution's own suites, whatever mirror serves them: a PPA or a vendor repo is not base.
+is_base_uri() {
+    local uri="$1"
+    [[ "$uri" != *launchpad* && "$uri" =~ /(ubuntu|Ubuntu|ubuntu-ports|debian|debian-security)/?$ ]]
+}
+
+# Every source file that mentions URI.
+source_files_for() {
+    grep -rlF -- "${1%/}" /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null || true
+}
+
+apt_proxy() { apt-config dump 2>/dev/null | sed -n 's/^Acquire::http::Proxy "\(.*\)";$/\1/p' | head -n 1; }
+
+# Seconds to fetch a mirror's index for this release and architecture — or nothing when it does
+# not answer, lacks the architecture, or is stale: a mirror whose -updates suite is past its
+# Valid-Until answers fine and then fails apt with "Release file … is expired".
+probe_mirror() {
+    local uri="$1" arch proxy t="" valid_until
+    arch="$(dpkg --print-architecture)"
+    proxy="$(apt_proxy)"
+    # Two tries: on a lossy link a live mirror can miss one.
+    for _ in 1 2; do
+        t="$(curl -fsS -L -o /dev/null -m 20 ${proxy:+-x "$proxy"} -w '%{time_total}' \
+            "$uri/dists/$OS_CODENAME/main/binary-$arch/Release" 2>/dev/null)" && break
+        t=""
+    done
+    [[ -n "$t" ]] || return 0
+    valid_until="$(curl -fsS -L -m 20 ${proxy:+-x "$proxy"} "$uri/dists/$OS_CODENAME-updates/InRelease" 2>/dev/null \
+        | sed -n 's/^Valid-Until: //p' | head -n 1)" || true
+    if [[ -n "$valid_until" ]] && [[ "$(date -d "$valid_until" +%s 2>/dev/null || printf 0)" -lt "$(date +%s)" ]]; then
+        printf 'stale'
+        return 0
+    fi
+    printf '%s' "$t"
+}
+
+# Every mirror that answers from here and is current, fastest first, one "mirror|security" a line.
+# Probed in parallel; a probe can take 40 s on a bad link.
+rank_mirrors() {
+    local candidates entry uri t n=0 dir
+    if [[ "$OS_ID" == ubuntu ]]; then
+        candidates="$UBUNTU_MIRRORS"
+        [[ "$(dpkg --print-architecture)" == amd64 ]] || candidates="$UBUNTU_PORTS_MIRRORS"
+    else
+        candidates="$DEBIAN_MIRRORS"
+    fi
+    dir="$(make_tmp_dir)"
+    for entry in $candidates; do
+        n=$((n + 1))
+        probe_mirror "${entry%%|*}" > "$dir/$n" &
+    done
+    wait
+    n=0
+    for entry in $candidates; do
+        n=$((n + 1))
+        uri="${entry%%|*}"
+        t="$(cat "$dir/$n")"
+        fact mirror_probe "$uri ${t:-unreachable}"
+        if [[ -n "$t" && "$t" != stale ]]; then printf '%s %s\n' "$t" "$entry"; fi
+    done | sort -n | awk '{ print $2 }'
+}
+
+# use_sources MIRROR [SECURITY] — the install's apt calls read only a list written here, naming
+# MIRROR for this release; the server's own sources stay as they are.
+use_sources() {
+    local mirror="${1%/}" security="${2:-}" list="$APT_DIR/sources.list" components="main"
+    install -d -m 0755 "$APT_DIR" "$APT_DIR/empty.d"
+    if [[ "$OS_ID" == ubuntu ]]; then
+        components="main universe"
+        {
+            printf 'deb %s %s %s\n' "$mirror" "$OS_CODENAME" "$components"
+            printf 'deb %s %s-updates %s\n' "$mirror" "$OS_CODENAME" "$components"
+            printf 'deb %s %s-security %s\n' "$mirror" "$OS_CODENAME" "$components"
+        } > "$list"
+    else
+        {
+            printf 'deb %s %s main\n' "$mirror" "$OS_CODENAME"
+            printf 'deb %s %s-updates main\n' "$mirror" "$OS_CODENAME"
+            case "$security" in
+                "") ;;
+                # snapshot.debian.org's copy is past its Valid-Until by design.
+                *snapshot.debian.org*) printf 'deb [check-valid-until=no] %s %s-security main\n' "${security%/}" "$OS_CODENAME" ;;
+                *) printf 'deb %s %s-security main\n' "${security%/}" "$OS_CODENAME" ;;
+            esac
+        } > "$list"
+    fi
+    APT_OPTS+=(-o "Dir::Etc::SourceList=$list" -o "Dir::Etc::SourceParts=$APT_DIR/empty.d")
+    APT_SOURCES_NOTE="$mirror"
+    fact apt_sources "$mirror"
+}
+
+# exclude_sources FILE... — the install's apt calls read every source file but these.
+exclude_sources() {
+    local parts="$APT_DIR/parts.d" f skip x
+    install -d -m 0755 "$APT_DIR"
+    rm -rf "$parts"
+    install -d -m 0755 "$parts"
+    for f in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+        [[ -f "$f" ]] || continue
+        skip=false
+        for x in "$@"; do [[ "$f" == "$x" ]] && skip=true; done
+        [[ "$skip" == true ]] || cp "$f" "$parts/"
+    done
+    local list=/etc/apt/sources.list
+    for x in "$@"; do
+        if [[ "$x" == /etc/apt/sources.list ]]; then list="$APT_DIR/empty.list"; : > "$list"; fi
+    done
+    APT_OPTS+=(-o "Dir::Etc::SourceParts=$parts" -o "Dir::Etc::SourceList=$list")
+}
+
+# snapshot.debian.org's copy of this release's security suite, from when it was whole.
+eol_security_snapshot() {
+    local entry stamp=""
+    for entry in $EOL_SECURITY_SNAPSHOTS; do
+        [[ "${entry%%|*}" == "$OS_CODENAME" ]] && stamp="${entry#*|}"
+    done
+    printf 'http://snapshot.debian.org/archive/debian-security/%s' "${stamp:-$(date -u +%Y%m%dT%H%M%SZ)}"
+}
+
+# Where the release lives once it is end-of-life and its mirrors have dropped it.
+archive_mirror() {
+    if [[ "$OS_ID" == ubuntu ]]; then
+        printf 'http://old-releases.ubuntu.com/ubuntu'
+    else
+        printf 'http://archive.debian.org/debian|http://archive.debian.org/debian-security'
+    fi
+}
+
+# apt-get update, until every source refreshes. What goes wrong is fixed for this install only:
+#   a third-party source fails  -> left out of the install's apt calls
+#   the release's mirror fails  -> the fastest mirror that answers, or the archive once it is EOL
+#   "not valid yet"             -> the server's clock (needs consent)
+apt_update() {
+    local out="$APT_DIR/update.log" attempt failing base_fail="" third=() uri excluded=false switched=false
+    local mirrors=() ranked=false entry f
+    install -d -m 0755 "$APT_DIR"
+    if [[ -n "$APT_MIRROR" ]]; then
+        use_sources "$APT_MIRROR"
+        switched=true
+    fi
+    for attempt in 1 2 3 4 5 6 7 8; do
+        wait_for_package_manager
+        apt_get_guarded 120 1800 update > "$out" 2>&1 || true
+        failing="$(sed -n -E \
+            -e 's/^Err:[0-9]+ ([^ ]+) .*/\1/p' \
+            -e "s/^E: The repository '([^ ]+) .*/\1/p" \
+            -e 's/^W: GPG error: ([^ ]+) .*/\1/p' \
+            -e 's/^[WE]: Failed to fetch ([^ ]+)\/dists\/.*/\1/p' \
+            -e 's/^E: Release file for ([^ ]+)\/dists\/.* is expired.*/\1/p' "$out" | sort -u)"
+        if [[ -z "$failing" ]] && ! grep -Eq '^(E:|W: (Some index files|Failed to fetch))' "$out"; then
+            return 0
+        fi
+        if grep -q 'not valid yet' "$out"; then
+            fix_clock "apt says the package lists are not valid yet"
+            continue
+        fi
+        base_fail=""
+        third=()
+        for uri in $failing; do
+            if is_base_uri "$uri"; then
+                base_fail="$uri"
+            else
+                while read -r f; do [[ -n "$f" ]] && third+=("$f"); done < <(source_files_for "$uri")
+            fi
+        done
+        if [[ "${#third[@]}" -gt 0 && "$excluded" == false && "$switched" == false ]]; then
+            issue APT_REPO_EXCLUDED info "left out of this install, because apt could not refresh them: ${third[*]}"
+            exclude_sources "${third[@]}"
+            excluded=true
+            continue
+        fi
+        if [[ -n "$base_fail" && "$switched" == false ]]; then
+            if grep -Eq "404 +Not Found|does not have a Release file" "$out"; then
+                local archive
+                archive="$(archive_mirror)"
+                issue APT_EOL_RELEASE info "$OS_PRETTY has left the regular mirrors; using ${archive%%|*} for this install"
+                use_sources "${archive%%|*}" "${archive#*|}"
+                switched=true
+                continue
+            fi
+        fi
+        # The release's mirror — or the one this install switched to — still fails: the next
+        # current mirror that answers, fastest first.
+        if [[ -n "$base_fail" && ( "$attempt" -ge 2 || "$switched" == true ) ]]; then
+            if [[ "$ranked" == false ]]; then
+                while read -r entry; do [[ -n "$entry" ]] && mirrors+=("$entry"); done < <(rank_mirrors)
+                ranked=true
+            fi
+            [[ "${#mirrors[@]}" -gt 0 ]] \
+                || die APT_MIRROR_UNREACHABLE "no current package mirror answers from this server: $(grep -E '^(E|W):' "$out" | head -n 2 | tr '\n' ' ')"
+            local mirror="${mirrors[0]}"
+            mirrors=("${mirrors[@]:1}")
+            issue APT_MIRROR_SWITCHED info "$base_fail does not work from here; using ${mirror%%|*} for this install"
+            use_sources "${mirror%%|*}" "${mirror#*|}"
+            switched=true
+            continue
+        fi
+        issue APT_NETWORK_RETRY info "apt-get update failed (try $attempt): $(grep -E '^(E|W):' "$out" | head -n 1)"
+        sleep $((attempt * 5))
+    done
+    die APT_UPDATE_FAILED "apt-get update keeps failing: $(grep -E '^(E|W):' "$out" | head -n 3 | tr '\n' ' ')"
+}
+
+# fix_clock REASON — with consent, turn on time sync and, if the clock is still off, set it from
+# the offset the app measured.
+fix_clock() {
+    consent CLOCK_SKEW "the server's clock is wrong ($1): turn on time sync and correct it" || return 0
+    timedatectl set-ntp true >/dev/null 2>&1 || true
+    local i
+    for i in $(seq 1 20); do
+        [[ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" == yes ]] && break
+        sleep 1
+    done
+    if [[ -n "$CLOCK_OFFSET_MS" && "${CLOCK_OFFSET_MS#-}" -gt "$CLOCK_SKEW_MS" ]]; then
+        date -u -s "@$(( $(date +%s) + CLOCK_OFFSET_MS / 1000 ))" >/dev/null
+        CLOCK_OFFSET_MS=0
+        issue CLOCK_FIXED info "clock set to $(date -u +%FT%TZ)"
+    fi
+}
+
+apt_install() {
+    local out="$APT_DIR/install.log" try status
+    for try in 1 2 3 4; do
+        wait_for_package_manager
+        status=0
+        apt_get_guarded 300 5400 install -y -q --no-install-recommends "$@" > "$out" 2>&1 || status=$?
+        cat "$out"
+        [[ "$status" -ne 0 ]] || return 0
+        # A lossy link (DNS that times out, a dropped download) fails an install that works a
+        # minute later; apt resumes what it already fetched.
+        grep -Eq 'Temporary failure resolving|Could not connect|Connection timed out|Connection failed|Hash Sum mismatch|Undetermined Error|made no progress' "$out" \
+            || break
+        issue APT_NETWORK_RETRY info "download failed (try $try of 4); retrying"
+        sleep $((try * 10))
+    done
+    # Broken dependencies left by an earlier half-done install: let apt repair them, then retry.
+    if grep -Eq 'Unmet dependencies|held broken packages|apt --fix-broken install' "$out"; then
+        issue APT_FIXED_BROKEN info "repairing broken dependencies (apt-get -f install)"
+        apt_get install -y -f -q >/dev/null 2>&1 || true
+        apt_get install -y -q --no-install-recommends "$@" && return 0
+    fi
+    # The index lists packages the pool no longer has. A mirror mid-sync: refresh and retry. A
+    # security suite being wound down after end of life (Debian 11 in 2026): its index outlives its
+    # packages everywhere, and a server with its updates installed cannot do without them (a newer
+    # ca-certificates breaks the release's ca-certificates-java). snapshot.debian.org, Debian's
+    # archive of everything it ever published, still has them.
+    if grep -Eq '^E: Failed to fetch .* 404 +Not Found' "$out"; then
+        if grep -Eq '^E: Failed to fetch [^ ]*(-security|debian-security)/pool/' "$out" && [[ "$OS_ID" == debian ]]; then
+            local mirror snapshot
+            mirror="$(rank_mirrors)"
+            mirror="${mirror%%$'\n'*}"
+            [[ -n "$mirror" ]] || die APT_INSTALL_FAILED "the security archive's packages are gone and no mirror answers"
+            snapshot="$(eol_security_snapshot)"
+            issue APT_SECURITY_GONE warn "$OS_PRETTY's security archive no longer serves its packages; installing its security updates from snapshot.debian.org"
+            use_sources "${mirror%%|*}" "$snapshot"
+        else
+            issue APT_INDEX_STALE info "the mirror is missing packages its index lists; refreshing"
+        fi
+        apt_update
+        apt_get install -y -q --no-install-recommends "$@" && return 0
+    fi
+    die APT_INSTALL_FAILED "could not install $*: $(grep -E '^E:' "$out" | head -n 2 | tr '\n' ' ')"
+}
+
+prepare_apt() {
     need_cmd apt-get
-    local pkgs=(openjdk-21-jre-headless nginx ca-certificates rsync qrencode curl)
-    [[ "$TLS_MODE" == "selfsigned" || "$TLS_MODE" == "letsencrypt" ]] && pkgs+=(openssl)
+    wait_for_package_manager
+    repair_dpkg
+    apt_update
+    if [[ "$DPKG_NEEDS_APT" == true ]]; then
+        wait_for_package_manager
+        apt_get install -y -f -q >/dev/null 2>&1 || true
+        [[ -z "$(dpkg --audit 2>/dev/null)" ]] \
+            || die APT_INSTALL_FAILED "an interrupted package installation cannot be finished: $(dpkg --audit | head -n 2 | tr '\n' ' ')"
+    fi
+}
+
+java_major() {
+    "$1" -version 2>&1 | sed -n '1s/.*version "\([0-9][0-9]*\).*/\1/p'
+}
+
+apt_has_candidate() {
+    local candidate
+    candidate="$(apt-cache "${APT_OPTS[@]}" policy "$1" 2>/dev/null | awk '/Candidate:/ { print $2 }')"
+    [[ -n "$candidate" && "$candidate" != "(none)" ]]
+}
+
+# A JRE 17 or newer: one already installed if there is one, else the first of 21, 25, 17 that apt
+# offers here (Debian 12 has 17 only; Ubuntu 20.04 through 24.04 have 21).
+install_java() {
+    local j major best="" best_major=0
+    for j in /usr/lib/jvm/*/bin/java; do
+        [[ -x "$j" ]] || continue
+        major="$(java_major "$j")"
+        [[ -n "$major" && "$major" -ge 17 && "$major" -gt "$best_major" ]] || continue
+        best="$j"
+        best_major="$major"
+    done
+    if [[ -z "$best" ]]; then
+        local pkg chosen=""
+        for pkg in openjdk-21-jre-headless openjdk-25-jre-headless openjdk-17-jre-headless; do
+            if apt_has_candidate "$pkg"; then chosen="$pkg"; break; fi
+        done
+        [[ -n "$chosen" ]] || die JAVA_UNAVAILABLE "apt offers no OpenJDK 17, 21 or 25 on $OS_PRETTY"
+        log "installing $chosen"
+        apt_install "$chosen"
+        for j in /usr/lib/jvm/*/bin/java; do
+            [[ -x "$j" ]] || continue
+            major="$(java_major "$j")"
+            if [[ -n "$major" && "$major" -ge 17 && "$major" -gt "$best_major" ]]; then best="$j"; best_major="$major"; fi
+        done
+        [[ -n "$best" ]] || die JAVA_UNAVAILABLE "$chosen installed, but no java 17+ under /usr/lib/jvm"
+    else
+        issue JAVA_REUSED info "using the Java $best_major already installed"
+    fi
+    JAVA_BIN="$(readlink -f "$best")"
+    JAVA_HOME_DIR="$(dirname "$(dirname "$JAVA_BIN")")"
+    fact java "$best_major $JAVA_HOME_DIR"
+}
+
+install_os_packages() {
+    local pkgs=(nginx ca-certificates rsync curl openssl)
     [[ "$TLS_MODE" == "letsencrypt" ]] && pkgs+=(certbot)
     [[ "$FIREWALL" == true ]] && pkgs+=(ufw)
+    [[ "$FROM_APP" == true ]] || pkgs+=(qrencode)
     [[ "$BUILD_FROM_REPO" == true ]] && pkgs+=(openjdk-21-jdk-headless git)
     log "installing OS packages: ${pkgs[*]}"
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq
-    apt-get install -y -qq "${pkgs[@]}"
+    apt_install "${pkgs[@]}"
+}
+
+# Under SWAP_BELOW_RAM_MB of memory and no swap to speak of, a swapfile: apt and the JVM starting
+# together are what an OOM kill on a small VPS looks like. Not in a container, which cannot swapon.
+ensure_swap() {
+    local swap_mb
+    swap_mb="$(awk '/^SwapTotal:/ { print int($2 / 1024) }' /proc/meminfo)"
+    if [[ "$RAM_MB" -ge "$SWAP_BELOW_RAM_MB" || "$swap_mb" -ge 512 ]]; then
+        step swap skip
+        return 0
+    fi
+    if systemd-detect-virt -cq 2>/dev/null; then
+        issue SWAP_SKIPPED info "a container cannot add swap"
+        step swap skip
+        return 0
+    fi
+    if [[ ! -f "$SWAP_FILE" ]]; then
+        fallocate -l "${SWAP_MB}M" "$SWAP_FILE" 2>/dev/null || dd if=/dev/zero of="$SWAP_FILE" bs=1M count="$SWAP_MB" status=none
+        chmod 0600 "$SWAP_FILE"
+        mkswap "$SWAP_FILE" >/dev/null
+    fi
+    swapon "$SWAP_FILE" 2>/dev/null || true
+    grep -q "^$SWAP_FILE " /etc/fstab || printf '%s none swap sw 0 0\n' "$SWAP_FILE" >> /etc/fstab
+    issue SWAP_ADDED info "added a ${SWAP_MB} MB swapfile ($RAM_MB MB of memory)"
+    step swap ok
+}
+
+# The JVM heap for this much memory: a quarter of it, between 128 and 768 MB.
+heap_mb() {
+    local heap=$((RAM_MB / 4))
+    [[ "$heap" -ge 128 ]] || heap=128
+    [[ "$heap" -le 768 ]] || heap=768
+    printf '%s' "$heap"
+}
+
+# ---- preflight ------------------------------------------------------------------------------------
+
+# supported | eol | untested | unsupported, for this OS release.
+os_support() {
+    local v="$OS_VERSION_ID"
+    case "$OS_ID" in
+        ubuntu)
+            case "$v" in
+                22.04|24.04|26.04) printf 'supported' ;;
+                20.04) printf 'eol' ;;
+                *)
+                    if [[ "$v" =~ ^[0-9]+\.[0-9]+$ ]] && [[ "${v%%.*}" -gt 20 || ( "${v%%.*}" -eq 20 && "${v#*.}" -gt 4 ) ]]; then
+                        printf 'untested'
+                    else
+                        printf 'unsupported'
+                    fi
+                    ;;
+            esac
+            ;;
+        debian)
+            case "$v" in
+                12|13) printf 'supported' ;;
+                11) printf 'eol' ;;
+                "") printf 'untested' ;;   # testing and unstable carry no VERSION_ID
+                *) if [[ "$v" =~ ^[0-9]+$ && "$v" -gt 13 ]]; then printf 'untested'; else printf 'unsupported'; fi ;;
+            esac
+            ;;
+        *) printf 'unsupported' ;;
+    esac
+}
+
+free_mb() { df -Pm "$1" 2>/dev/null | awk 'NR == 2 { print $4 }'; }
+
+# What stops an install, found before anything changes. Fatal problems stop here; decisions are
+# asked (consent); warnings are reported and the install goes on.
+preflight_checks() {
+    read_os_release
+    fact os_id "$OS_ID"
+    fact os_version "$OS_VERSION_ID"
+    fact os_codename "$OS_CODENAME"
+    fact os_pretty "$OS_PRETTY"
+    fact arch "$ARCH"
+    fact server_time_ms "$(now_ms)"
+    local support
+    support="$(os_support)"
+    fact os_support "$support"
+    case "$support" in
+        supported) ;;
+        eol) issue OS_EOL warn "$OS_PRETTY no longer gets regular security updates; the node will run, but plan a move to a newer release" ;;
+        untested) consent OS_UNTESTED "$OS_PRETTY is newer than the releases this installer was tested on (Ubuntu 20.04–26.04, Debian 11–13)" || true ;;
+        *) die OS_UNSUPPORTED "${OS_PRETTY:-this system} is not supported: use Ubuntu 20.04–26.04 or Debian 11–13" ;;
+    esac
+    case "$ARCH" in
+        x86_64|aarch64) ;;
+        *) die ARCH_UNSUPPORTED "$ARCH is not supported: a node needs a 64-bit x86 or ARM server" ;;
+    esac
+    [[ -d /run/systemd/system ]] || die NO_SYSTEMD "systemd is not running as PID 1 (a container or an init-less VPS?)"
+    RAM_MB="$(awk '/^MemTotal:/ { print int($2 / 1024) }' /proc/meminfo)"
+    fact ram_mb "$RAM_MB"
+    [[ "$RAM_MB" -ge "$MIN_RAM_MB" ]] || die RAM_TOO_LOW "$RAM_MB MB of memory; a node needs at least $MIN_RAM_MB MB"
+    fact container "$(systemd-detect-virt -c 2>/dev/null || printf 'none')"
+    local need="$MIN_DISK_MB" free cache
+    [[ "$RAM_MB" -ge "$SWAP_BELOW_RAM_MB" ]] || need=$((need + SWAP_MB))
+    free="$(free_mb /var)"
+    cache="$(du -sm /var/cache/apt/archives 2>/dev/null | awk '{ print $1 }')"
+    fact disk_free_mb "$free"
+    if [[ "$((free + ${cache:-0}))" -lt "$need" ]]; then
+        die DISK_LOW "${free} MB free on /var; the install needs about $need MB"
+    fi
+    if [[ -n "$CLOCK_OFFSET_MS" && "${CLOCK_OFFSET_MS#-}" -gt "$CLOCK_SKEW_MS" ]]; then
+        fact clock_offset_ms "$CLOCK_OFFSET_MS"
+        consent CLOCK_SKEW "the server's clock is $((${CLOCK_OFFSET_MS#-} / 60000)) minutes off, which breaks TLS and apt: turn on time sync and correct it" || true
+    fi
+    local j
+    for j in /usr/lib/jvm/*/bin/java; do
+        [[ -x "$j" ]] && fact java_installed "$(java_major "$j") $j"
+    done
+    if [[ -f "$INSTALL_RECORD" ]]; then
+        fact installed_version "$(sed -n 's/.*"nodeVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$INSTALL_RECORD" | head -n 1)"
+    fi
+    local active
+    if active="$(active_run)" && [[ "$active" != "$RUN_ID" ]]; then
+        fact active_run "$active"
+        die INSTALL_BUSY "install $active is still running"
+    fi
+}
+
+# Frees what apt can give back when the disk is tight.
+make_disk_room() {
+    local free
+    free="$(free_mb /var)"
+    if [[ "$free" -lt "$MIN_DISK_MB" ]]; then
+        apt-get clean
+        issue DISK_CLEANED info "cleared apt's package cache (${free} MB was free)"
+    fi
 }
 
 configure_firewall() {
@@ -601,6 +1198,8 @@ write_systemd_unit() {
     sed -e "s|__INSTALL_DIR__|${INSTALL_DIR}|g" \
         -e "s|__NODE_PORT__|${NODE_PORT}|g" \
         -e "s|__PUBLIC_NAME__|${PUBLIC_NAME}|g" \
+        -e "s|__JAVA_HOME__|${JAVA_HOME_DIR}|g" \
+        -e "s|__HEAP_MB__|$(heap_mb)|g" \
         "$template" > "$SYSTEMD_UNIT"
     if [[ "$NODE_USER" != "$DEFAULT_NODE_USER" ]]; then
         sed -i -e "s|^User=.*|User=${NODE_USER}|" -e "s|^Group=.*|Group=${NODE_USER}|" "$SYSTEMD_UNIT"
@@ -905,23 +1504,15 @@ cmd_version() {
 }
 
 # Facts about this server and the problems that would stop an install, without changing anything.
+# Exit 0: go ahead. 10: decisions to make (the consent issues say which). 20/30/40: see §3.4.
 cmd_preflight() {
     mark hello proto="$PROTOCOL_VERSION" installer="$(bundle_version)" action=preflight
     step preflight start
-    read_os_release
-    fact os_id "$OS_ID"
-    fact os_version "$OS_VERSION_ID"
-    fact os_codename "$OS_CODENAME"
-    fact os_pretty "$OS_PRETTY"
-    fact arch "$ARCH"
-    fact server_time_ms "$(now_ms)"
-    if [[ -f "$INSTALL_RECORD" ]]; then
-        fact installed_version "$(sed -n 's/.*"nodeVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$INSTALL_RECORD" | head -n 1)"
-    fi
-    local active
-    if active="$(active_run)"; then
-        fact active_run "$active"
-        die INSTALL_BUSY "install $active is still running"
+    preflight_checks
+    if [[ "${#PENDING_CONSENTS[@]}" -gt 0 ]]; then
+        step preflight wait "decisions needed: ${PENDING_CONSENTS[*]}"
+        FATAL_CODE="${PENDING_CONSENTS[0]}"
+        exit 10
     fi
     step preflight ok
 }
@@ -988,6 +1579,8 @@ prune_runs() {
 cmd_run() {
     RUN_DIR="$RUNS_DIR/$RUN_ID"
     [[ -d "$RUN_DIR" ]] || die RUN_UNKNOWN "no run $RUN_ID"
+    SEQ_FILE="$RUN_DIR/seq"
+    : > "$SEQ_FILE"
     exec 9>"$LOCK_FILE"
     flock -n 9 || die INSTALL_BUSY "another install holds $LOCK_FILE"
     mark hello proto="$PROTOCOL_VERSION" installer="$(bundle_version)" run="$RUN_ID" action=run
@@ -1094,7 +1687,7 @@ json_array() {
 # lost the log can still learn why.
 write_result() {
     local status="$1" exit_status="$2" file="$RUN_DIR/result.json" java_version mode
-    java_version="$(java -version 2>&1 | sed -n '1s/.*version "\([^"]*\)".*/\1/p' || true)"
+    java_version="$("${JAVA_BIN:-java}" -version 2>&1 | sed -n '1s/.*version "\([^"]*\)".*/\1/p' || true)"
     mode="ip"
     [[ -n "$DOMAIN" ]] && mode="domain"
     {
@@ -1116,6 +1709,7 @@ write_result() {
         printf '  "os": {"id": %s, "version": %s, "arch": %s},\n' \
             "$(json_str "$OS_ID")" "$(json_str "$OS_VERSION_ID")" "$(json_str "$ARCH")"
         printf '  "java": %s,\n' "$(json_str "$java_version")"
+        printf '  "aptSources": %s,\n' "$(json_str "$APT_SOURCES_NOTE")"
         printf '  "warnings": %s\n' "$(json_array "${WARNINGS[@]:-}")"
         printf '}\n'
     } > "$file.tmp"
@@ -1141,7 +1735,17 @@ run_dev_node() {
 setup_production() {
     find_repo_root
     fetch_templates
-    read_os_release
+    step preflight start
+    preflight_checks
+    step preflight ok
+    step apt start
+    make_disk_room
+    prepare_apt
+    step apt ok
+    ensure_swap
+    step java start
+    install_java
+    step java ok
     step packages start
     install_os_packages
     step packages ok
@@ -1179,6 +1783,7 @@ setup_production() {
 }
 
 main() {
+    exec 3>&1
     parse_args "$@"
     require_root_for_prod
     case "$ACTION" in
@@ -1200,8 +1805,9 @@ main() {
     esac
 }
 
-# Sourcing the script (tests) defines the functions without running anything. Piped into bash
-# (curl | bash) BASH_SOURCE is empty, which counts as being run.
+# Sourcing the script (tests) defines the functions without running anything; open fd 3 first
+# (exec 3>&1), which mark writes to. Piped into bash (curl | bash) BASH_SOURCE is empty, which
+# counts as being run.
 if [[ "${BASH_SOURCE[0]:-$0}" == "$0" ]]; then
     main "$@"
 fi
