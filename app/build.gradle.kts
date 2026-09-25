@@ -138,6 +138,7 @@ dependencies {
     implementation(project(":feature:settings"))
     implementation(project(":feature:debug"))
     implementation(project(":feature:about"))
+    implementation(project(":feature:provision"))
 
     implementation(libs.maplibre.android)
     implementation(libs.compose.material.icons.extended)

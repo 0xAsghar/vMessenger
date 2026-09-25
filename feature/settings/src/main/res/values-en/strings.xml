@@ -48,8 +48,6 @@
     <string name="nodes_run_section">Running a node</string>
     <string name="nodes_run_guide_action">Node setup guide</string>
     <string name="nodes_run_intro">Anyone can run a bootstrap (DHT) node or a relay. A node does not read messages; it only relays short-lived signed metadata.</string>
-    <string name="nodes_run_install_label">One-line install (VPS, no domain)</string>
-    <string name="nodes_run_install_one_liner">curl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/setup-node.sh | sudo bash -s --</string>
     <string name="nodes_run_build_label">Manual build</string>
     <string name="nodes_run_build_manual">./gradlew :node:installDist</string>
     <string name="nodes_run_production_label">Install from the repository (openssl certificate in /etc/vmessenger/tls/)</string>
@@ -145,4 +143,13 @@
     <string name="feature_settings_activity_contact_blocked">Contact blocked</string>
     <string name="feature_settings_activity_account_wiped">Account wiped</string>
     <string name="feature_settings_activity_failure">Error</string>
+    <string name="nodes_new_server">Set up a new server</string>
+    <string name="nodes_servers_section">Your servers</string>
+    <string name="nodes_server_version">Node %1$s</string>
+    <string name="nodes_server_update">Update</string>
+    <string name="nodes_server_rerun">Set up again</string>
+    <string name="nodes_server_forget">Forget server</string>
+    <string name="nodes_server_forget_title">Forget this server?</string>
+    <string name="nodes_server_forget_body">It leaves \"Your servers\". Its node stays among your nodes, and nothing changes on the server.</string>
+    <string name="nodes_run_in_app">The easiest way: tap \"Set up a new server\" and give the app your server\'s SSH login. The app installs everything itself; nothing is downloaded from GitHub.</string>
 </resources>

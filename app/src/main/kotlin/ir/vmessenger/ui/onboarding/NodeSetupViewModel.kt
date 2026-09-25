@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /** Which part of the node question is on screen. */
-enum class NodeSetupStep { Choose, AddNode, CreateNode }
+enum class NodeSetupStep { Choose, AddNode }
 
 /**
  * The node question, asked once before an identity exists.
@@ -45,6 +45,9 @@ class NodeSetupViewModel @Inject constructor(
     }
 
     fun onUseTestNodes(onDone: () -> Unit) = record(NodeSetupChoice.TestNodes, onDone)
+
+    /** The New node wizard set a node up and added it. */
+    fun onProvisioned(onDone: () -> Unit) = record(NodeSetupChoice.Custom, onDone)
 
     /** Continuing with none. The warning is the screen's job; this only records the answer. */
     fun onSkip(onDone: () -> Unit) = record(NodeSetupChoice.Skipped, onDone)

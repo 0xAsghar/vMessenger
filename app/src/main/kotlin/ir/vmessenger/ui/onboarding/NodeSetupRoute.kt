@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -38,9 +39,13 @@ import ir.vmessenger.core.designsystem.theme.VmTheme
 @Composable
 fun NodeSetupRoute(
     onDone: () -> Unit,
+    onCreateNode: () -> Unit,
+    provisioned: Boolean,
     modifier: Modifier = Modifier,
     viewModel: NodeSetupViewModel = hiltViewModel(),
 ) {
+    // The New node wizard set a node up and added it: that is the person's own node.
+    LaunchedEffect(provisioned) { if (provisioned) viewModel.onProvisioned(onDone) }
     val step by viewModel.step.collectAsStateWithLifecycle()
     val busy by viewModel.busy.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
@@ -65,11 +70,11 @@ fun NodeSetupRoute(
                 NodeSetupStep.Choose -> ChooseStep(
                     busy = busy,
                     onStep = viewModel::onStep,
+                    onCreateNode = onCreateNode,
                     onUseTestNodes = { viewModel.onUseTestNodes(onDone) },
                     onSkip = { confirmSkip = true },
                 )
-                NodeSetupStep.AddNode, NodeSetupStep.CreateNode -> AddressStep(
-                    creating = step == NodeSetupStep.CreateNode,
+                NodeSetupStep.AddNode -> AddressStep(
                     busy = busy,
                     error = error?.toUiText(),
                     onSubmit = { input -> viewModel.onSubmitAddress(input, onDone) },
@@ -108,6 +113,7 @@ private fun Explainer(text: String, emphasis: Boolean = false) {
 private fun ChooseStep(
     busy: Boolean,
     onStep: (NodeSetupStep) -> Unit,
+    onCreateNode: () -> Unit,
     onUseTestNodes: () -> Unit,
     onSkip: () -> Unit,
 ) {
@@ -128,7 +134,7 @@ private fun ChooseStep(
     )
     VmOutlinedButton(
         text = stringResource(R.string.node_setup_create),
-        onClick = { onStep(NodeSetupStep.CreateNode) },
+        onClick = onCreateNode,
         modifier = Modifier.fillMaxWidth(),
         enabled = !busy,
     )
@@ -142,17 +148,12 @@ private fun ChooseStep(
 
 @Composable
 private fun AddressStep(
-    creating: Boolean,
     busy: Boolean,
     error: String?,
     onSubmit: (String) -> Unit,
 ) {
     var input by rememberSaveable { mutableStateOf("") }
-    // The app cannot bring a node into being: `:node` is a server you run. So "create" explains what
-    // that takes and then asks for the address of the one you started, which is the same field.
-    Explainer(
-        stringResource(if (creating) R.string.node_setup_create_body else R.string.node_setup_add_body),
-    )
+    Explainer(stringResource(R.string.node_setup_add_body))
     VmTextField(
         value = input,
         onValueChange = { input = it },

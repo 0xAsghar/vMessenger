@@ -35,7 +35,6 @@
     <string name="node_setup_add">افزودن گره</string>
     <string name="node_setup_add_body">نشانی گره‌ای را که در اختیار دارید وارد کنید. پیوند vmnode: نیز پذیرفته می‌شود.</string>
     <string name="node_setup_create">ساخت گرهٔ تازه</string>
-    <string name="node_setup_create_body">گره یک سرویس مستقل است و روی همین دستگاه ساخته نمی‌شود: آن را روی سروری با دسترسی عمومی و با راهنمای راه‌اندازی پروژه اجرا کنید، سپس نشانی‌اش را در اینجا وارد کنید.</string>
     <string name="node_setup_address_label">نشانی گره</string>
     <string name="node_setup_address_save">ذخیره و ادامه</string>
     <string name="node_setup_skip">فعلاً رد می‌کنم</string>

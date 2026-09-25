@@ -59,5 +59,6 @@ include(":feature:map")
 include(":feature:settings")
 include(":feature:debug")
 include(":feature:about")
+include(":feature:provision")
 
 include(":node")

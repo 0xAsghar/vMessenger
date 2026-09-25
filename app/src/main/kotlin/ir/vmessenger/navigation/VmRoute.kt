@@ -75,6 +75,13 @@ sealed interface VmRoute {
     @Serializable
     data object NodesScan : VmRoute
 
+    /**
+     * New node: set a server up over SSH. [managedNodeId] names a server set up before (update or
+     * set up again); from onboarding, finishing records the node choice.
+     */
+    @Serializable
+    data class NewNode(val managedNodeId: String? = null) : VmRoute
+
     @Serializable
     data object Debug : VmRoute
 

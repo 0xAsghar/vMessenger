@@ -48,8 +48,6 @@
     <string name="nodes_run_section">راه‌اندازی گره</string>
     <string name="nodes_run_guide_action">راهنمای راه‌اندازی گره</string>
     <string name="nodes_run_intro">هر کسی می‌تواند گرهٔ بوت‌استرپ (DHT) یا رله اجرا کند. گره پیام‌ها را نمی‌خواند؛ فقط متادیتای امضا‌شدهٔ موقت را رله می‌کند.</string>
-    <string name="nodes_run_install_label">نصب یک‌خطی (VPS، بدون دامنه)</string>
-    <string name="nodes_run_install_one_liner">curl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/setup-node.sh | sudo bash -s --</string>
     <string name="nodes_run_build_label">ساخت دستی</string>
     <string name="nodes_run_build_manual">./gradlew :node:installDist</string>
     <string name="nodes_run_production_label">نصب از مخزن (گواهی openssl در /etc/vmessenger/tls/)</string>
@@ -145,4 +143,13 @@
     <string name="feature_settings_activity_contact_blocked">مخاطب مسدود شد</string>
     <string name="feature_settings_activity_account_wiped">حساب پاک شد</string>
     <string name="feature_settings_activity_failure">خطا</string>
+    <string name="nodes_new_server">راه‌اندازی سرور جدید</string>
+    <string name="nodes_servers_section">سرورهای شما</string>
+    <string name="nodes_server_version">گره %1$s</string>
+    <string name="nodes_server_update">به‌روزرسانی</string>
+    <string name="nodes_server_rerun">راه‌اندازی دوباره</string>
+    <string name="nodes_server_forget">فراموش کردن سرور</string>
+    <string name="nodes_server_forget_title">این سرور فراموش شود؟</string>
+    <string name="nodes_server_forget_body">از «سرورهای شما» حذف می‌شود. گره‌اش در میان گره‌هایتان می‌ماند و روی سرور چیزی تغییر نمی‌کند.</string>
+    <string name="nodes_run_in_app">ساده‌ترین راه: «راه‌اندازی سرور جدید» را بزنید و اطلاعات ورود SSH سرورتان را بدهید. برنامه همه‌چیز را خودش نصب می‌کند؛ چیزی از GitHub دانلود نمی‌شود.</string>
 </resources>

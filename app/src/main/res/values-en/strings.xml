@@ -35,7 +35,6 @@
     <string name="node_setup_add">Add node</string>
     <string name="node_setup_add_body">Enter the address of a node you have access to. A vmnode: link is also accepted.</string>
     <string name="node_setup_create">Create a new node</string>
-    <string name="node_setup_create_body">A node is a standalone service and is not created on this device: run it on a publicly reachable server, following the project\'s setup guide, then enter its address here.</string>
     <string name="node_setup_address_label">Node address</string>
     <string name="node_setup_address_save">Save and continue</string>
     <string name="node_setup_skip">Skip for now</string>

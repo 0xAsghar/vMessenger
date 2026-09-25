@@ -12,8 +12,12 @@ import ir.vmessenger.feature.about.AboutRoute
 import ir.vmessenger.feature.debug.DebugRoute
 import ir.vmessenger.feature.debug.LogsRoute
 import ir.vmessenger.feature.identity.IdentityRoute
+import ir.vmessenger.feature.provision.NewNodeRoute
 import ir.vmessenger.feature.settings.NodeQrScannerRoute
 import ir.vmessenger.feature.settings.NodesRoute
+/** Set on the entry below the New node wizard when a node was set up and added. */
+internal const val NODE_PROVISIONED = "node_provisioned"
+
 /** Everything reachable from the settings tab, as full screens outside the tab shell. */
 internal fun NavGraphBuilder.settingsGraph(navController: NavHostController) {
     composable<VmRoute.Identity> { entry ->
@@ -26,6 +30,17 @@ internal fun NavGraphBuilder.settingsGraph(navController: NavHostController) {
         NodesRoute(
             onNavigateBack = { navController.popIfCurrent(entry) },
             onNavigateToScan = { navController.navigate(VmRoute.NodesScan) },
+            onNewNode = { id -> navController.navigate(VmRoute.NewNode(managedNodeId = id)) },
+        )
+    }
+    composable<VmRoute.NewNode> { entry ->
+        NewNodeRoute(
+            onNavigateBack = { navController.popIfCurrent(entry) },
+            onFinished = {
+                // Onboarding's node question reads this to record that a node of the person's own was set up.
+                navController.previousBackStackEntry?.savedStateHandle?.set(NODE_PROVISIONED, true)
+                navController.popIfCurrent(entry)
+            },
         )
     }
     composable<VmRoute.NodesScan> { entry ->

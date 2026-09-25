@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -51,13 +52,17 @@ fun VMessengerNavHost(
         popEnterTransition = { sharedAxisPopEnter() },
         popExitTransition = { sharedAxisPopExit() },
     ) {
-        composable<VmRoute.NodeSetup> {
+        composable<VmRoute.NodeSetup> { entry ->
+            val provisioned by entry.savedStateHandle.getStateFlow(NODE_PROVISIONED, false)
+                .collectAsStateWithLifecycle()
             NodeSetupRoute(
                 onDone = {
                     navController.navigate(VmRoute.Onboarding) {
                         popUpTo<VmRoute.NodeSetup> { inclusive = true }
                     }
                 },
+                onCreateNode = { navController.navigate(VmRoute.NewNode()) },
+                provisioned = provisioned,
             )
         }
         composable<VmRoute.Onboarding> {

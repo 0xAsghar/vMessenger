@@ -13,25 +13,31 @@ import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ir.vmessenger.core.designsystem.component.ConfirmDialog
 import ir.vmessenger.core.designsystem.component.SettingsDivider
 import ir.vmessenger.core.designsystem.component.SettingsSection
 import ir.vmessenger.core.designsystem.component.StyledQrCode
 import ir.vmessenger.core.designsystem.component.VMessengerScaffold
+import ir.vmessenger.core.designsystem.component.VmButton
 import ir.vmessenger.core.designsystem.component.VmChip
 import ir.vmessenger.core.designsystem.component.VmFab
 import ir.vmessenger.core.designsystem.component.VmIconButton
@@ -46,6 +52,7 @@ import ir.vmessenger.core.designsystem.foundation.rememberCopyToClipboard
 import ir.vmessenger.core.designsystem.theme.VmSizes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.VmTheme
+import ir.vmessenger.domain.model.ManagedNode
 import ir.vmessenger.domain.model.NetworkNode
 import ir.vmessenger.domain.model.NetworkNodeRole
 
@@ -53,6 +60,7 @@ import ir.vmessenger.domain.model.NetworkNodeRole
 fun NodesRoute(
     onNavigateBack: () -> Unit = {},
     onNavigateToScan: () -> Unit = {},
+    onNewNode: (managedNodeId: String?) -> Unit = {},
     viewModel: NodesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -60,6 +68,7 @@ fun NodesRoute(
     var showAddDialog by remember { mutableStateOf(false) }
     var showRunGuide by remember { mutableStateOf(false) }
     var shareNode by remember { mutableStateOf<NetworkNode?>(null) }
+    var forgetServer by remember { mutableStateOf<ManagedNode?>(null) }
     val scroll = rememberScrollState()
 
     VMessengerScaffold(
@@ -94,6 +103,21 @@ fun NodesRoute(
                 .padding(bottom = FAB_CLEARANCE),
             verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
         ) {
+            VmButton(
+                text = stringResource(R.string.nodes_new_server),
+                onClick = { onNewNode(null) },
+                leadingIcon = Icons.Outlined.Dns,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = VmSpacing.lg, vertical = VmSpacing.sm),
+            )
+            if (state.servers.isNotEmpty()) {
+                ServerSection(
+                    servers = state.servers,
+                    onUpdate = { onNewNode(it.id) },
+                    onForget = { forgetServer = it },
+                )
+            }
             NodeSection(
                 title = stringResource(R.string.nodes_bootstrap_section),
                 nodes = state.bootstrapNodes,
@@ -131,6 +155,20 @@ fun NodesRoute(
         )
     }
 
+    forgetServer?.let { server ->
+        ConfirmDialog(
+            title = stringResource(R.string.nodes_server_forget_title),
+            body = stringResource(R.string.nodes_server_forget_body),
+            confirmLabel = stringResource(R.string.nodes_server_forget),
+            destructive = true,
+            onConfirm = {
+                viewModel.forget(server, alsoRemoveNodes = false)
+                forgetServer = null
+            },
+            onDismiss = { forgetServer = null },
+        )
+    }
+
     shareNode?.let { node ->
         ShareNodeDialog(
             link = viewModel.exportLink(node),
@@ -155,10 +193,7 @@ private fun RunNodeGuideDialog(onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
         ) {
             VmText(text = stringResource(R.string.nodes_run_intro))
-            CopyableCodeBlock(
-                label = stringResource(R.string.nodes_run_install_label),
-                code = stringResource(R.string.nodes_run_install_one_liner),
-            )
+            VmText(text = stringResource(R.string.nodes_run_in_app))
             CopyableCodeBlock(
                 label = stringResource(R.string.nodes_run_build_label),
                 code = stringResource(R.string.nodes_run_build_manual),
@@ -214,6 +249,55 @@ private fun CopyableCodeBlock(
                 onClick = { copy(code) },
                 tint = VmTheme.colors.iconSecondary,
             )
+        }
+    }
+}
+
+@Composable
+private fun ServerSection(
+    servers: List<ManagedServer>,
+    onUpdate: (ManagedNode) -> Unit,
+    onForget: (ManagedNode) -> Unit,
+) {
+    SettingsSection(title = stringResource(R.string.nodes_servers_section)) {
+        servers.forEachIndexed { index, server ->
+            if (index > 0) SettingsDivider()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = VmSizes.touchTarget)
+                    .padding(start = VmSpacing.lg, end = VmSpacing.xs, top = VmSpacing.sm, bottom = VmSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        VmText(
+                            text = server.node.domain ?: server.node.host,
+                            style = VmTheme.typography.bodyLg,
+                            color = VmTheme.colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    VmText(
+                        text = stringResource(R.string.nodes_server_version, server.node.nodeVersion),
+                        style = VmTheme.typography.bodySm,
+                        color = VmTheme.colors.textSecondary,
+                    )
+                }
+                VmTextButton(
+                    text = stringResource(
+                        if (server.canUpdate) R.string.nodes_server_update else R.string.nodes_server_rerun,
+                    ),
+                    onClick = { onUpdate(server.node) },
+                )
+                VmIconButton(
+                    icon = Icons.Outlined.Delete,
+                    contentDescription = stringResource(R.string.nodes_server_forget),
+                    onClick = { onForget(server.node) },
+                    tint = VmTheme.colors.iconSecondary,
+                )
+            }
         }
     }
 }

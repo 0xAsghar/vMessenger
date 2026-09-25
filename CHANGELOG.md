@@ -70,6 +70,16 @@ version** (currently 25, [docs/Database.md](docs/Database.md)).
   One row per server; no foreign key; in the encrypted database, not in backups, erased by a wipe. With it,
   `ManagedNode`, `ManagedNodeRepository` and the use cases that complete a setup (the node's addresses join
   the app's nodes through the usual checks) or forget a server, and `SemVer` back in `core:common`.
+- **New node** (`:feature:provision`): the person gives a server's SSH login (password, or a key file with
+  its passphrase) and the app turns it into a node and adds it — with or without a domain, always over TLS,
+  with "Secure this server" on by default and key-only SSH offered when logging in with a key. The server's
+  fingerprint is shown and confirmed before anything is sent; a sudo password or a consent the installer needs
+  is asked as the run reaches it; the steps, issues and log are shown live; a dropped connection is picked up
+  where it left off. The phone checks the node with its pin before it is added, and a node answering with a
+  different certificate is not added. Reached from Settings → Nodes ("Set up a new server") and from the
+  first-run node question ("Create a node"), which records the node as the person's own.
+- **"Your servers"** on the Nodes screen: the servers this device set up, with "Update" when the app carries a
+  newer node (the SSH login is asked again) and "Forget".
 - **Ubuntu 26.04 and Debian 13** are supported, after installing end to end in the harness.
 - **A Docker harness for the installer** (`scripts/provision-test/`): throwaway systemd + sshd
   containers on `127.0.0.1`, driven over real SSH, with scenarios for the happy path, resuming a
@@ -99,6 +109,9 @@ version** (currently 25, [docs/Database.md](docs/Database.md)).
 - **"Pinned" relay IPs are now "sticky"** (`RelayDns.stick`, `clearStickyIps`): "pin" means a certificate key.
 - **The node's unit sets `JAVA_HOME`** to the JRE the installer chose, and sizes the heap to the server (a
   quarter of its memory, 128–768 MB, instead of a fixed 512 MB).
+- **The Nodes screen's guide no longer shows the GitHub one-liner**: it points at "Set up a new server",
+  and the app downloads nothing from GitHub. The first-run "Create a node" step opens New node instead of
+  asking for the address of a node started elsewhere.
 - **`setup-node.sh` leaves other nginx sites alone** (it used to delete `sites-enabled/default`) and no
   longer asks nginx for `http2`, which is deprecated in the `listen` form. Every fatal error names an
   issue code, and the exit status gives its class (Deployment §3.4).
