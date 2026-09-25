@@ -348,6 +348,17 @@ scenario_hardening_rollback() {
         || { printf 'password logins stayed off\n' >&2; return 1; }
 }
 
+# The app's engine, not a shell: `:core:nodesetup:provisionE2e` sets the node up over sshj, with
+# key-only SSH confirmed, and checks it with a pinned HTTPS request.
+scenario_engine() {
+    local slot="$2" bundle java_home="$REPO/.jdk/jdk-17/Contents/Home"
+    bundle="$(make_bundle)" || return 1
+    (cd "$REPO" && JAVA_HOME="${JAVA_HOME:-$java_home}" ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$REPO/.android-sdk}" \
+        ./gradlew -q :core:nodesetup:provisionE2e -PvmE2eTarget="127.0.0.1:$(ssh_port "$slot")" \
+        -PvmE2eBundle="$bundle" -PvmE2eKey="$OUT/alice_ed25519" -PvmE2eHttpsPort="$(https_port "$slot")") \
+        > "$OUT/$3.log" 2>&1 || { tail -40 "$OUT/$3.log" >&2; return 1; }
+}
+
 # A dropped connection mid-run: the install carries on, and --follow --from-byte picks the log up
 # again with nothing lost or repeated.
 scenario_resume() {

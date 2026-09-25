@@ -42,6 +42,7 @@ include(":core:notifications")
 include(":core:designsystem")
 include(":core:audio")
 include(":core:ssh")
+include(":core:nodesetup")
 
 include(":network:discovery")
 include(":network:dht")

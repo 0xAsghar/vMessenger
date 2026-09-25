@@ -57,6 +57,10 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
   BouncyCastle, at the same position, the first time a node is set up (`SshCryptoProvider`); R8 keep rules
   ship inside `:core:ssh`; sshj's logging goes to slf4j's no-op. Release APKs grow by about 3 MB for this
   (arm64: 41.0 MB with the bundled node installer).
+- **`:core:nodesetup`, the New node engine**: host key before login, privilege, only-what-changed upload,
+  preflight decisions, the detached install followed through dropped connections, key-only SSH confirmed by a
+  fresh key login, `result.json` checked (the pin must be the certificate's key). A contract test keeps its
+  issue codes and step ids in step with the installer.
 - **Ubuntu 26.04 and Debian 13** are supported, after installing end to end in the harness.
 - **A Docker harness for the installer** (`scripts/provision-test/`): throwaway systemd + sshd
   containers on `127.0.0.1`, driven over real SSH, with scenarios for the happy path, resuming a

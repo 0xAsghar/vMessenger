@@ -211,6 +211,10 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 - SSH for **New node**: `SshConnector` (`probeHostKey` learns a server's host key without logging in; `connect` logs in only to the confirmed key) and `SshSession` (`run`, `stream`, `upload` over SFTP with a `cat >` fallback), over sshj. `SshAuth` holds a password or a key as char/byte arrays with `wipe()` and a redacted `toString()`; `HostKey` is OpenSSH's `SHA256:` fingerprint; `SshException` names what went wrong (unreachable, timeout, host-key mismatch, auth rejected, key unreadable, disconnected).
 - Depends on: sshj and BouncyCastle (Apache-2.0, MIT), coroutines. Pure JVM, so the setup engine runs it off-device; tests use an embedded Apache MINA SSHD and keys made by the real `ssh-keygen`.
 
+### core:nodesetup
+- The **New node** engine. `NodeSetupEngine` drives `scripts/setup-node.sh` over `:core:ssh`: host key (confirmed before any login), privilege (root, passwordless sudo, or `sudo -S` with the password on stdin), the bundle (only missing or changed files, then `sha256sum -c`), preflight and its decisions, the detached run followed to its end — logging in again and resuming after the last whole line when the connection drops — key-only SSH confirmed by a fresh key login, and `result.json` checked (version, node URLs, the pin is the certificate's key). The contract with the installer lives here: `IssueCode`, `StepId`, `MarkerParser`, `LogLineAssembler`, `InstallOptions` (validated and shell-quoted), `InstallResult`. The request's credentials are wiped when the engine returns.
+- Depends on: `core:ssh`, `core:common`, kotlinx-serialization. `ContractTest` checks that every issue code and step id in `setup-node.sh`, and its protocol version, match the Kotlin; `provisionE2e` runs the real engine against a Docker target (`scripts/provision-test/run.sh --scenario engine`).
+
 ### core:designsystem
 - Material 3 theme (color/typography/shape tokens), RTL setup, reusable Compose components (message bubble, identicon, QR card, security banner). See [UI.md](UI.md).
 - Depends on: `core:common`.
@@ -296,7 +300,7 @@ vMessenger/
   network/
     discovery/  dht/  bootstrap/  transport/  messaging/
   core/
-    common/  crypto/  proto/  database/  datastore/  location/  map/  notifications/  designsystem/  ssh/
+    common/  crypto/  proto/  database/  datastore/  location/  map/  notifications/  designsystem/  ssh/  nodesetup/
   node/                        <- standalone JVM bootstrap/DHT + relay node (`:node` Gradle module)
   deploy/                      <- nginx + systemd templates for a node host
   scripts/                     <- setup-node.sh, emulator-connect.sh, p2p-terminal-check.sh, sign-node-record

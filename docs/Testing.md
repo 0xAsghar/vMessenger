@@ -145,6 +145,7 @@ apt's archive cache: the install really runs apt, without fetching ~150 MB per c
 | `update-same` | Installing again keeps the pin, and keeps the previous node in `/opt/vmessenger.prev`. |
 | `hardening` | `--secure --key-only-ssh`, confirmed by a fresh key-only login: fail2ban on, password logins off (`sshd -T`); then `--uninstall` leaves no node and a valid nginx. |
 | `hardening-rollback` | Key-only SSH that nobody confirms: rolled back, password logins on again. |
+| `engine` | The app's engine instead of a shell (`./gradlew :core:nodesetup:provisionE2e`): real sshj, key-only SSH confirmed by a fresh key login, `result.json` checked, the node reached over pinned HTTPS. |
 | `unsupported-os` | Ubuntu 18.04 and Debian 10 (`--unsupported`): exit 20, `OS_UNSUPPORTED`, nothing installed. |
 
 `test` with no `--images` runs the supported matrix: Ubuntu 20.04, 22.04, 24.04 and 26.04, Debian 11, 12 and 13.
