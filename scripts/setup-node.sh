@@ -37,6 +37,7 @@ readonly ACME_WEBROOT="/var/www/acme"
 readonly LE_LIVE_DIR="/etc/letsencrypt/live"
 readonly REALIP_SNIPPET="/etc/nginx/snippets/vmessenger-realip.conf"
 readonly NODE_ENV_FILE="/etc/vmessenger/node.env"
+readonly MANAGED_ENV_FILE="/etc/vmessenger/node.managed.env"
 readonly NGINX_SITE="/etc/nginx/sites-available/vmessenger-node.conf"
 readonly SYSTEMD_UNIT="/etc/systemd/system/vmessenger-node.service"
 
@@ -130,6 +131,13 @@ APT_SOURCES_NOTE=""    # what the install's apt calls use, when not the server's
 JAVA_BIN=""
 JAVA_HOME_DIR=""
 RAM_MB=0
+PUBLIC_PORT=443        # where nginx serves TLS, and the port in every URL
+NO_HTTP=false          # no port-80 server (taken, or asked not to)
+PIN=""                 # base64url SHA-256 of the served certificate's key, when the URLs are pinned
+CERT_PEM_FILE=""       # the certificate the node serves
+NODE_MODE=""           # ip-pinned | domain-ca | domain-pinned
+URL_HOST=""            # the host every URL names
+PREVIOUS_URLS=""       # the last install's relay/bootstrap URLs, when they change
 
 usage() {
     cat <<'EOF'
@@ -138,6 +146,9 @@ Usage: setup-node.sh [options]
 Production (requires root):
   --domain HOST         Public hostname (TLS SAN + advertised URLs). Enables Let's Encrypt by default.
   --ip ADDRESS          Public IP when no domain (default: auto-detect outbound IP)
+  --public-host HOST    What clients dial when there is no domain: an IP, or a name (same as --ip)
+  --public-port PORT    TLS port nginx serves and every URL names (default 443)
+  --no-http             Serve nothing on port 80 (no Let's Encrypt HTTP-01, no redirect)
   --tls MODE            letsencrypt | selfsigned (default: letsencrypt with --domain, else selfsigned)
   --acme-email EMAIL    Contact e-mail for Let's Encrypt expiry notices
   --acme-no-email       Register with Let's Encrypt without a contact e-mail
@@ -255,7 +266,7 @@ exit_status_for() {
         OS_UNSUPPORTED|ARCH_UNSUPPORTED|NO_SYSTEMD) printf '20' ;;
         NOT_ROOT|RAM_TOO_LOW|DISK_LOW) printf '30' ;;
         INSTALL_BUSY) printf '40' ;;
-        OS_UNTESTED|CLOCK_SKEW) printf '10' ;;
+        OS_UNTESTED|CLOCK_SKEW|PORT_APACHE|PUBLIC_PORT_TAKEN|DOWNGRADE) printf '10' ;;
         *) printf '1' ;;
     esac
 }
@@ -366,13 +377,14 @@ parse_args() {
         esac
         local taken=2
         case "$1" in
-            --domain|--ip|--tls|--acme-email|--behind-cdn|--dist-tar|--dist-url|--install-dir|--cert-dir|--node-port|--allow|--clock-offset-ms|--apt-mirror)
+            --domain|--ip|--public-host|--public-port|--tls|--acme-email|--behind-cdn|--dist-tar|--dist-url|--install-dir|--cert-dir|--node-port|--allow|--clock-offset-ms|--apt-mirror)
                 need_value "$1" $#
                 ;;
         esac
         case "$1" in
             --domain) DOMAIN="$2" ;;
-            --ip) PUBLIC_IP="$2" ;;
+            --ip|--public-host) PUBLIC_IP="$2" ;;
+            --public-port) PUBLIC_PORT="$2" ;;
             --tls) TLS_MODE="$2" ;;
             --acme-email) ACME_EMAIL="$2" ;;
             --behind-cdn) BEHIND_CDN="$2" ;;
@@ -386,6 +398,7 @@ parse_args() {
             --apt-mirror) APT_MIRROR="$2" ;;
             --acme-no-email) ACME_NO_EMAIL=true; taken=1 ;;
             --firewall) FIREWALL=true; taken=1 ;;
+            --no-http) NO_HTTP=true; taken=1 ;;
             --build) BUILD_FROM_REPO=true; taken=1 ;;
             --skip-cert) SKIP_CERT=true; taken=1 ;;
             --force-cert) FORCE_CERT=true; taken=1 ;;
@@ -401,6 +414,10 @@ parse_args() {
     fi
     [[ "$FROM_BYTE" =~ ^[0-9]+$ ]] || die USAGE "--from-byte takes a byte offset"
     [[ -z "$CLOCK_OFFSET_MS" || "$CLOCK_OFFSET_MS" =~ ^-?[0-9]+$ ]] || die USAGE "--clock-offset-ms takes milliseconds"
+    [[ "$PUBLIC_PORT" =~ ^[0-9]+$ && "$PUBLIC_PORT" -ge 1 && "$PUBLIC_PORT" -le 65535 ]] || die USAGE "--public-port takes a port"
+    # Hosts and domains end up in nginx config, unit files and URLs: letters, digits, '.', '-', ':'.
+    [[ -z "$PUBLIC_IP" || "$PUBLIC_IP" =~ ^[A-Za-z0-9.:-]+$ ]] || die USAGE "--public-host is not a host name or address"
+    [[ -z "$DOMAIN" || "$DOMAIN" =~ ^[A-Za-z0-9.-]+$ ]] || die USAGE "--domain is not a domain name"
     [[ -z "$APT_MIRROR" || "$APT_MIRROR" =~ ^https?://[A-Za-z0-9.:/_~-]+$ ]] || die USAGE "--apt-mirror takes an http(s) URL"
     if [[ "$FROM_APP" == true ]]; then
         case "$ACTION" in
@@ -442,6 +459,22 @@ resolve_public_identity() {
     fi
     PUBLIC_NAME="$PUBLIC_IP"
     SERVER_NAME="_"
+}
+
+# host[:port] as a URL spells it: IPv6 bracketed, the default port left out.
+url_authority() {
+    local host="$1"
+    [[ "$host" == *:* ]] && host="[$host]"
+    if [[ "$PUBLIC_PORT" == 443 ]]; then printf '%s' "$host"; else printf '%s:%s' "$host" "$PUBLIC_PORT"; fi
+}
+
+# node_url PATH — the URL clients use for PATH, with the key pin when the node's certificate is not
+# one a CA vouches for (docs/Protocol.md §19).
+node_url() {
+    local url
+    url="wss://$(url_authority "$URL_HOST")$1"
+    if [[ -n "$PIN" ]]; then url+="#pin-sha256=$PIN"; fi
+    printf '%s' "$url"
 }
 
 validate_args() {
@@ -1043,6 +1076,12 @@ preflight_checks() {
         fact active_run "$active"
         die INSTALL_BUSY "install $active is still running"
     fi
+    if [[ "$ACTION" == preflight ]]; then
+        check_ports
+    fi
+    if [[ -f "$INSTALL_RECORD" ]]; then
+        PREVIOUS_URLS="$(sed -n 's/.*"\(relayUrl\|bootstrapUrl\)"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\2/p' "$INSTALL_RECORD" | tr '\n' ' ')"
+    fi
 }
 
 # Frees what apt can give back when the disk is tight.
@@ -1155,11 +1194,50 @@ create_dirs() {
     install -d -m 0755 "$ACME_WEBROOT" /etc/vmessenger /etc/nginx/snippets
 }
 
+# The node lands in INSTALL_DIR.new and is swapped in whole; the previous one stays as
+# INSTALL_DIR.prev, which a failed health check rolls back to. node.seed (the node's identity)
+# lives in STATE_DIR and is never touched.
 install_node_files() {
     [[ -x "$DIST_SOURCE_DIR/bin/node" ]] || die BUNDLE_MISSING "node distribution not found at $DIST_SOURCE_DIR"
+    check_downgrade
     log "installing node to $INSTALL_DIR"
-    rsync -a --delete "$DIST_SOURCE_DIR/" "$INSTALL_DIR/"
-    chown -R "$NODE_USER:$NODE_USER" "$INSTALL_DIR"
+    rm -rf "${INSTALL_DIR}.new"
+    rsync -a --delete "$DIST_SOURCE_DIR/" "${INSTALL_DIR}.new/"
+    chown -R "$NODE_USER:$NODE_USER" "${INSTALL_DIR}.new"
+    if [[ -d "$INSTALL_DIR" && -x "$INSTALL_DIR/bin/node" ]]; then
+        rm -rf "${INSTALL_DIR}.prev"
+        mv "$INSTALL_DIR" "${INSTALL_DIR}.prev"
+    else
+        rm -rf "$INSTALL_DIR"
+    fi
+    mv "${INSTALL_DIR}.new" "$INSTALL_DIR"
+}
+
+installed_version() {
+    if [[ -f "$INSTALL_DIR/VERSION" ]]; then
+        tr -d '[:space:]' < "$INSTALL_DIR/VERSION"
+    elif [[ -f "$INSTALL_RECORD" ]]; then
+        sed -n 's/.*"nodeVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$INSTALL_RECORD" | head -n 1
+    fi
+}
+
+# Replacing a newer node with an older one needs a go-ahead.
+check_downgrade() {
+    local installed new
+    installed="$(installed_version)"
+    new="$(tr -d '[:space:]' < "$DIST_SOURCE_DIR/VERSION" 2>/dev/null || true)"
+    [[ -n "$installed" && -n "$new" && "$installed" != "$new" ]] || return 0
+    if [[ "$(printf '%s\n%s\n' "$installed" "$new" | sort -V | tail -n 1)" == "$installed" ]]; then
+        consent DOWNGRADE "this server runs node $installed; installing $new would downgrade it" || true
+    fi
+}
+
+rollback_node() {
+    [[ -d "${INSTALL_DIR}.prev" ]] || return 1
+    log "rolling back to the previous node"
+    rm -rf "$INSTALL_DIR"
+    mv "${INSTALL_DIR}.prev" "$INSTALL_DIR"
+    systemctl restart vmessenger-node || true
 }
 
 # Earlier deploy docs installed a differently named unit and site; both would
@@ -1220,62 +1298,85 @@ write_realip_snippet() {
     fi
 }
 
+# nginx changes are transactional: the existing configuration must pass `nginx -t` before
+# anything is touched (a broken one is not ours to fix), our site is backed up, and restored if the
+# new one fails. Other sites are never touched.
 write_nginx_config() {
     local cert_dir="$1"
     local template="$TEMPLATE_DIR/nginx/vmessenger-node.conf.template"
     [[ -f "$template" ]] || die BUNDLE_MISSING "nginx template not found at $template"
-    log "writing nginx site $NGINX_SITE (certs: $cert_dir)"
-    sed -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
+    log "writing nginx site $NGINX_SITE (certs: $cert_dir, port $PUBLIC_PORT)"
+    local default_server=""
+    [[ "$SERVER_NAME" == "_" ]] && default_server=" default_server"
+    local filter=()
+    [[ "$NO_HTTP" == true ]] && filter+=(-e '/@HTTP@/d')
+    [[ -f /proc/net/if_inet6 ]] || filter+=(-e '/@IPV6@/d')
+    [[ -f "$NGINX_SITE" ]] && cp "$NGINX_SITE" "$NGINX_SITE.vmessenger-backup"
+    sed ${filter[@]+"${filter[@]}"} \
+        -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
         -e "s|__NODE_PORT__|${NODE_PORT}|g" \
         -e "s|__CERT_DIR__|${cert_dir}|g" \
+        -e "s|__PUBLIC_PORT__|${PUBLIC_PORT}|g" \
+        -e "s|__DEFAULT_SERVER__|${default_server}|g" \
         "$template" > "$NGINX_SITE"
     ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/vmessenger-node.conf
 }
 
+# Fails before any change when nginx's configuration is already broken.
+check_nginx_before() {
+    command -v nginx >/dev/null 2>&1 || return 0
+    if ! nginx -t >/dev/null 2>&1; then
+        die NGINX_CONFIG_BROKEN "nginx's configuration is already invalid ($(nginx -t 2>&1 | grep -m1 emerg || true)); fix it first"
+    fi
+}
+
+# EC P-256, and the key is kept across re-runs, so the node's pin survives a renewed certificate or
+# a changed address. A new certificate is made when it is missing, names another host, or expires
+# within 30 days.
+generate_selfsigned_certificate() {
+    local cert="$CERT_DIR/fullchain.pem" key="$CERT_DIR/privkey.pem" san cn
+    need_cmd openssl
+    install -d -m 0750 "$CERT_DIR"
+    san="$(build_san_list)"
+    cn="${DOMAIN:-$PUBLIC_NAME}"
+    if [[ "$FORCE_CERT" == false && -f "$cert" && -f "$key" ]] \
+        && openssl x509 -in "$cert" -noout -checkend 2592000 >/dev/null 2>&1 \
+        && openssl x509 -in "$cert" -noout -ext subjectAltName 2>/dev/null | grep -qF "$(printf '%s' "${san%%,*}" | sed 's/^IP:/IP Address:/')"; then
+        log "self-signed certificate in $CERT_DIR is current"
+        return
+    fi
+    local key_args=(-newkey ec -pkeyopt ec_paramgen_curve:P-256 -keyout "$key")
+    if [[ -f "$key" ]]; then
+        key_args=(-key "$key")
+        log "renewing the self-signed certificate on the same key (the pin stays)"
+    else
+        log "generating a self-signed certificate (EC P-256, ${CERT_VALID_DAYS} days) in $CERT_DIR"
+    fi
+    openssl req -x509 -nodes "${key_args[@]}" -days "$CERT_VALID_DAYS" -out "$cert" \
+        -subj "/CN=$cn" -addext "subjectAltName=$san" -addext "basicConstraints=critical,CA:FALSE" 2>/dev/null \
+        || die TLS_CERT_FAILED "openssl could not make a certificate"
+    chmod 0640 "$key" "$cert"
+    chown root:root "$key" "$cert"
+}
+
 build_san_list() {
-    local sans=()
+    local sans=() host="$PUBLIC_NAME"
     [[ -n "$DOMAIN" ]] && sans+=("DNS:$DOMAIN")
-    if [[ -n "$PUBLIC_IP" ]]; then
-        sans+=("IP:$PUBLIC_IP")
-    elif [[ "$PUBLIC_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        sans+=("IP:$PUBLIC_NAME")
+    if [[ -n "$PUBLIC_IP" ]]; then host="$PUBLIC_IP"; fi
+    if [[ "$host" =~ ^[0-9.]+$ || "$host" == *:* ]]; then
+        sans+=("IP:$host")
+    elif [[ "$host" != "$DOMAIN" ]]; then
+        sans+=("DNS:$host")
     fi
     sans+=("DNS:localhost")
     local IFS=","
     printf '%s' "${sans[*]}"
 }
 
-generate_selfsigned_certificate() {
-    local cert="$CERT_DIR/fullchain.pem"
-    local key="$CERT_DIR/privkey.pem"
-    if [[ "$FORCE_CERT" == false && -f "$cert" && -f "$key" ]]; then
-        log "self-signed certificate already exists in $CERT_DIR"
-        return
-    fi
-    need_cmd openssl
-    log "generating self-signed TLS certificate (valid ${CERT_VALID_DAYS} days) in $CERT_DIR"
-    install -d -m 0750 "$CERT_DIR"
-    local san_list cn
-    san_list="$(build_san_list)"
-    cn="${DOMAIN:-$PUBLIC_NAME}"
-    openssl req -x509 -nodes -newkey rsa:2048 -days "$CERT_VALID_DAYS" \
-        -keyout "$key" -out "$cert" \
-        -config <(cat <<EOF
-[req]
-distinguished_name = req_dn
-x509_extensions = req_ext
-prompt = no
-
-[req_dn]
-CN = $cn
-
-[req_ext]
-subjectAltName = $san_list
-basicConstraints = CA:FALSE
-EOF
-) -extensions req_ext
-    chmod 0640 "$key" "$cert"
-    chown root:root "$key" "$cert"
+# The key pin of a certificate file: base64url SHA-256 of its SubjectPublicKeyInfo.
+pin_of() {
+    openssl x509 -in "$1" -pubkey -noout | openssl pkey -pubin -outform der \
+        | openssl dgst -sha256 -binary | base64 -w0 | tr '+/' '-_' | tr -d '='
 }
 
 le_cert_dir() { printf '%s/%s' "$LE_LIVE_DIR" "$DOMAIN"; }
@@ -1284,93 +1385,197 @@ le_cert_exists() {
     [[ -f "$(le_cert_dir)/fullchain.pem" && -f "$(le_cert_dir)/privkey.pem" ]]
 }
 
-reload_nginx() {
-    nginx -t
-    systemctl enable nginx >/dev/null 2>&1 || true
-    systemctl restart nginx
+# Does http://DOMAIN/.well-known/acme-challenge/ reach this server? Tried before certbot, which
+# would otherwise spend Let's Encrypt's rate limit on a domain pointing elsewhere.
+acme_probe() {
+    local token probe
+    token="vmessenger-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
+    probe="$ACME_WEBROOT/.well-known/acme-challenge/$token"
+    install -d "$(dirname "$probe")"
+    printf '%s' "$token" > "$probe"
+    local answer
+    answer="$(curl -fsS -m 15 "http://${DOMAIN}/.well-known/acme-challenge/$token" 2>/dev/null || true)"
+    rm -f "$probe"
+    [[ "$answer" == "$token" ]]
 }
 
-# HTTP-01 through the webroot. Works behind a CDN as long as the CDN forwards
-# /.well-known/acme-challenge/ to this origin (probe first). On failure the
-# node keeps running on the self-signed bootstrap cert.
+# Does DOMAIN resolve to the address clients reach this server at?
+domain_points_here() {
+    local want got
+    [[ -n "$PUBLIC_IP" ]] || return 0
+    want="$(getent ahosts "$PUBLIC_IP" 2>/dev/null | awk '{ print $1 }' | sort -u)"
+    got="$(getent ahosts "$DOMAIN" 2>/dev/null | awk '{ print $1 }' | sort -u)"
+    fact domain_resolves_to "$(printf '%s' "$got" | tr '\n' ' ')"
+    [[ -n "$got" ]] && grep -qxF -f <(printf '%s\n' "$want") <(printf '%s\n' "$got")
+}
+
+# HTTP-01 through the webroot. Every failure is survivable: the node keeps serving the self-signed
+# certificate, and its URLs carry the pin.
 obtain_letsencrypt() {
     need_cmd certbot
-    local probe="$ACME_WEBROOT/.well-known/acme-challenge/vmessenger-probe"
-    install -d "$(dirname "$probe")"
-    echo probe > "$probe"
-    if curl -fsS -m 15 "http://${DOMAIN}/.well-known/acme-challenge/vmessenger-probe" 2>/dev/null | grep -q probe; then
-        log "ACME path reachable through http://${DOMAIN}"
-    else
-        warn "http://${DOMAIN}/.well-known/acme-challenge/ did not reach this origin (DNS/CDN not switched yet?). Trying certbot anyway."
+    if [[ "$NO_HTTP" == true ]]; then
+        issue LE_SKIPPED warn "port 80 is not served here, which Let's Encrypt's HTTP-01 check needs"
+        return 1
     fi
-    rm -f "$probe"
-
-    local contact_args=()
-    if [[ -n "$ACME_EMAIL" ]]; then
-        contact_args=(-m "$ACME_EMAIL")
-    else
-        contact_args=(--register-unsafely-without-email)
+    if ! acme_probe; then
+        issue ACME_UNREACHABLE warn "http://${DOMAIN}/.well-known/acme-challenge/ does not reach this server (DNS not pointed here yet, or port 80 blocked)"
+        return 1
     fi
-    if certbot certonly --webroot -w "$ACME_WEBROOT" -d "$DOMAIN" \
-        --agree-tos "${contact_args[@]}" -n --keep-until-expiring \
-        --deploy-hook 'systemctl reload nginx'; then
+    local contact_args=(--register-unsafely-without-email) out
+    [[ -n "$ACME_EMAIL" ]] && contact_args=(-m "$ACME_EMAIL")
+    out="$(certbot certonly --webroot -w "$ACME_WEBROOT" -d "$DOMAIN" --agree-tos "${contact_args[@]}" \
+        -n --keep-until-expiring --deploy-hook 'systemctl reload nginx' 2>&1)" && {
         log "Let's Encrypt certificate issued for $DOMAIN"
         return 0
+    }
+    printf '%s\n' "$out" >&2
+    if grep -qi 'too many' <<<"$out"; then
+        issue LE_RATE_LIMITED warn "Let's Encrypt's rate limit for $DOMAIN is reached; using a pinned certificate for now"
+    else
+        issue LE_FAILED warn "Let's Encrypt refused: $(grep -m1 -i 'detail\|error' <<<"$out" || true)"
     fi
-    local contact_flag="--acme-no-email"
-    [[ -n "$ACME_EMAIL" ]] && contact_flag="--acme-email $ACME_EMAIL"
-    warn "certbot failed; staying on the self-signed certificate in $CERT_DIR."
-    cat >&2 <<EOF
-    Fallbacks:
-      * Point DNS/CDN at this host, then re-run:  sudo $0 --domain $DOMAIN $contact_flag $( [[ -n "$DIST_TAR" ]] && printf -- '--dist-tar %q' "$DIST_TAR" )
-      * DNS-01 (manual TXT record):  certbot certonly --manual --preferred-challenges dns -d $DOMAIN
-        then: sudo $0 --domain $DOMAIN --tls letsencrypt --skip-cert ...
-EOF
     return 1
 }
 
+reload_nginx() {
+    if ! nginx -t >/dev/null 2>&1; then
+        local why
+        why="$(nginx -t 2>&1 | grep -m1 emerg || true)"
+        if [[ -f "$NGINX_SITE.vmessenger-backup" ]]; then
+            mv "$NGINX_SITE.vmessenger-backup" "$NGINX_SITE"
+        else
+            rm -f "$NGINX_SITE" /etc/nginx/sites-enabled/vmessenger-node.conf
+        fi
+        die NGINX_NEW_CONFIG_FAILED "nginx refused the node's site, which was taken back out: $why"
+    fi
+    rm -f "$NGINX_SITE.vmessenger-backup"
+    systemctl enable nginx >/dev/null 2>&1 || true
+    systemctl reload nginx 2>/dev/null || systemctl restart nginx
+}
+
+# The node's certificate and URLs. With a domain: Let's Encrypt, and the URLs name the domain with
+# no pin. Anything short of that falls back to the self-signed certificate and pinned URLs — on the
+# domain when it points here, else on the address the server was reached at.
 configure_tls_and_nginx() {
-    case "$TLS_MODE" in
-        selfsigned)
-            if [[ "$SKIP_CERT" == true ]]; then
-                [[ -f "$CERT_DIR/fullchain.pem" && -f "$CERT_DIR/privkey.pem" ]] \
-                    || die TLS_CERT_MISSING "missing certificate in $CERT_DIR (need fullchain.pem and privkey.pem)"
-            else
-                generate_selfsigned_certificate
-            fi
+    check_nginx_before
+    write_realip_snippet
+    generate_selfsigned_certificate
+    URL_HOST="$PUBLIC_NAME"
+    write_nginx_config "$CERT_DIR"
+    reload_nginx
+    CERT_PEM_FILE="$CERT_DIR/fullchain.pem"
+    if [[ -n "$DOMAIN" && "$TLS_MODE" == letsencrypt ]]; then
+        if le_cert_exists || obtain_letsencrypt; then
+            write_nginx_config "$(le_cert_dir)"
+            reload_nginx
+            CERT_PEM_FILE="$(le_cert_dir)/fullchain.pem"
+            NODE_MODE="domain-ca"
+            URL_HOST="$DOMAIN"
+            PIN=""
+            TLS_SUMMARY="Let's Encrypt ($(le_cert_dir)); renewed by certbot.timer"
+            return
+        fi
+        if domain_points_here; then
+            NODE_MODE="domain-pinned"
+            URL_HOST="$DOMAIN"
+        elif [[ -n "$PUBLIC_IP" ]]; then
+            issue DOMAIN_NOT_HERE warn "$DOMAIN does not point at this server; the node's addresses use $PUBLIC_IP"
+            NODE_MODE="ip-pinned"
+            URL_HOST="$PUBLIC_IP"
+            SERVER_NAME="_"
             write_nginx_config "$CERT_DIR"
             reload_nginx
-            TLS_SUMMARY="self-signed (${CERT_DIR}); CDN must accept an untrusted origin cert, or clients must trust it"
+        else
+            NODE_MODE="domain-pinned"
+            URL_HOST="$DOMAIN"
+        fi
+    else
+        NODE_MODE="${DOMAIN:+domain-pinned}"
+        NODE_MODE="${NODE_MODE:-ip-pinned}"
+    fi
+    PIN="$(pin_of "$CERT_DIR/fullchain.pem")"
+    fact pin "$PIN"
+    TLS_SUMMARY="self-signed ($CERT_DIR), pinned: pin-sha256=$PIN"
+}
+
+# ---- ports ------------------------------------------------------------------------------------------
+
+# The processes listening on TCP PORT, one name per line.
+port_owners() {
+    ss -Hltnp "sport = :$1" 2>/dev/null | { grep -o 'users:(("[^"]*"' || true; } | sed -e 's/users:(("//' -e 's/"$//' | sort -u
+}
+
+free_port_near() {
+    local port="$1"
+    while [[ -n "$(port_owners "$port")" ]]; do port=$((port + 1)); done
+    printf '%s' "$port"
+}
+
+# Another nginx site holds this port as its default_server: fine for a domain (SNI picks the site),
+# fatal for a bare IP, which has no name to pick by.
+nginx_default_elsewhere() {
+    { grep -rlE "listen[^;]*\b$1\b[^;]*default_server" /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null || true; } \
+        | { grep -v 'vmessenger-node.conf' || true; } | head -n 1
+}
+
+# Who has the ports the node needs, and what to do about it — before anything is installed.
+check_ports() {
+    local owners
+    owners="$(port_owners "$PUBLIC_PORT")"
+    fact port_owner "$PUBLIC_PORT ${owners:-free}"
+    case "$owners" in
+        "" | nginx) ;;
+        apache2)
+            if consent PORT_APACHE "apache2 serves port $PUBLIC_PORT; stop and disable it so the node can use the port"; then
+                systemctl disable --now apache2 >/dev/null 2>&1 || die PORT_BUSY "apache2 would not stop"
+            fi
             ;;
-        letsencrypt)
-            if [[ "$SKIP_CERT" == true ]]; then
-                le_cert_exists || die TLS_CERT_MISSING "missing Let's Encrypt certificate in $(le_cert_dir)"
-                write_nginx_config "$(le_cert_dir)"
-                reload_nginx
-                TLS_SUMMARY="Let's Encrypt ($(le_cert_dir))"
-                return
-            fi
-            if le_cert_exists && [[ "$FORCE_CERT" == false ]]; then
-                log "Let's Encrypt certificate already present in $(le_cert_dir)"
-                write_nginx_config "$(le_cert_dir)"
-                reload_nginx
-                TLS_SUMMARY="Let's Encrypt ($(le_cert_dir))"
-                return
-            fi
-            # Bootstrap: serve :443 with a self-signed cert so the site (and the
-            # ACME location on :80) is up before issuance.
-            generate_selfsigned_certificate
-            write_nginx_config "$CERT_DIR"
-            reload_nginx
-            if obtain_letsencrypt; then
-                write_nginx_config "$(le_cert_dir)"
-                reload_nginx
-                TLS_SUMMARY="Let's Encrypt ($(le_cert_dir)); auto-renew via certbot.timer"
-            else
-                TLS_SUMMARY="self-signed bootstrap (${CERT_DIR}) — Let's Encrypt issuance failed, see warnings above"
-            fi
+        *)
+            fact free_port "$(free_port_near 8444)"
+            consent PUBLIC_PORT_TAKEN "port $PUBLIC_PORT is in use by ${owners//$'\n'/, }; choose another port" || true
             ;;
     esac
+    if [[ -z "$DOMAIN" || "$SERVER_NAME" == "_" ]]; then
+        local other
+        other="$(nginx_default_elsewhere "$PUBLIC_PORT")"
+        if [[ -n "$other" ]]; then
+            fact free_port "$(free_port_near 8444)"
+            consent PUBLIC_PORT_TAKEN "another site ($other) is port $PUBLIC_PORT's default; a node on a bare IP needs a port of its own" || true
+        fi
+    fi
+    if [[ "$NO_HTTP" == false ]]; then
+        owners="$(port_owners 80)"
+        case "$owners" in
+            "" | nginx) ;;
+            apache2) if allowed PORT_APACHE; then :; else NO_HTTP=true; issue HTTP_SKIPPED info "port 80 is apache2's; serving no plain HTTP"; fi ;;
+            *) NO_HTTP=true; issue HTTP_SKIPPED info "port 80 is in use by $owners; serving no plain HTTP" ;;
+        esac
+    fi
+    owners="$(port_owners "$NODE_PORT")"
+    if [[ -n "$owners" && "$owners" != java ]]; then
+        NODE_PORT="$(free_port_near "$NODE_PORT")"
+        issue NODE_PORT_MOVED info "the node's local port is taken by $owners; using $NODE_PORT"
+    fi
+}
+
+# ufw, if it is already on, lets the node's ports through. It is never turned on.
+open_firewall_ports() {
+    command -v ufw >/dev/null 2>&1 || return 0
+    ufw status 2>/dev/null | grep -q '^Status: active' || return 0
+    ufw allow "$PUBLIC_PORT/tcp" >/dev/null
+    [[ "$NO_HTTP" == true ]] || ufw allow 80/tcp >/dev/null
+    issue UFW_OPENED info "ufw is on: allowed $PUBLIC_PORT/tcp${NO_HTTP:+}$([[ "$NO_HTTP" == true ]] || printf ' and 80/tcp')"
+}
+
+# What the node advertises about itself, rewritten on every run (the operator's node.env wins).
+write_managed_env() {
+    install -d -m 0755 "$(dirname "$MANAGED_ENV_FILE")"
+    {
+        printf '# Written by setup-node.sh on every run; put overrides in %s.\n' "$NODE_ENV_FILE"
+        printf 'VMESSENGER_PUBLIC_HOST=%s\n' "$URL_HOST"
+        printf 'VMESSENGER_ADVERTISED_DHT_URL=%s\n' "$(node_url /dht)"
+    } > "$MANAGED_ENV_FILE"
+    chmod 0644 "$MANAGED_ENV_FILE"
 }
 
 start_node_service() {
@@ -1379,23 +1584,52 @@ start_node_service() {
     systemctl restart vmessenger-node
 }
 
+# The node answers locally, through nginx with the pin (or the CA), and upgrades /relay; and it
+# advertises the URL clients will use. A node that fails any of it is rolled back.
 health_check() {
-    local i
-    for i in $(seq 1 30); do
+    local i ok=false
+    for i in $(seq 1 45); do
         if curl -fsS -m 2 "http://127.0.0.1:${NODE_PORT}/healthz" 2>/dev/null | grep -q '^ok'; then
-            log "node healthy on 127.0.0.1:${NODE_PORT}"
+            ok=true
             break
         fi
         sleep 1
-        if [[ "$i" -eq 30 ]]; then
-            journalctl -u vmessenger-node -n 30 --no-pager >&2 || true
-            die HEALTH_LOCAL_FAILED "node did not become healthy on 127.0.0.1:${NODE_PORT}"
-        fi
     done
-    if curl -fsSk -m 5 --resolve "${DOMAIN:-localhost}:443:127.0.0.1" "https://${DOMAIN:-localhost}/healthz" 2>/dev/null | grep -q '^ok'; then
-        log "nginx → node path healthy on :443"
-    else
-        warn "https://127.0.0.1/healthz did not answer 'ok' — check: nginx -t; journalctl -u nginx"
+    if [[ "$ok" == false ]]; then
+        journalctl -u vmessenger-node -n 30 --no-pager >&2 || true
+        rollback_node && die HEALTH_LOCAL_FAILED "the new node did not start; the previous one is back"
+        die HEALTH_LOCAL_FAILED "node did not become healthy on 127.0.0.1:${NODE_PORT} ($(node_start_failure))"
+    fi
+    log "node healthy on 127.0.0.1:${NODE_PORT}"
+    local base tls=()
+    base="https://$(url_authority "$URL_HOST")"
+    if [[ -n "$PIN" ]]; then
+        tls=(-k --pinnedpubkey "sha256//$(printf '%s' "$PIN" | tr '_-' '/+')=")
+    fi
+    local resolve=(--resolve "$URL_HOST:$PUBLIC_PORT:127.0.0.1")
+    [[ "$URL_HOST" == *:* ]] && resolve=(--resolve "[$URL_HOST]:$PUBLIC_PORT:127.0.0.1")
+    if ! curl -fsS -m 10 "${tls[@]}" "${resolve[@]}" "$base/healthz" 2>/dev/null | grep -q '^ok'; then
+        die HEALTH_TLS_FAILED "https://$(url_authority "$URL_HOST")/healthz through nginx did not answer with the expected certificate"
+    fi
+    local code
+    code="$(curl -sS -m 10 -o /dev/null -w '%{http_code}' "${tls[@]}" "${resolve[@]}" --http1.1 \
+        -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' \
+        -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' "$base/relay" 2>/dev/null || true)"
+    [[ "$code" == 101 ]] || die RELAY_UPGRADE_FAILED "/relay answered $code through nginx, not 101"
+    if ! curl -fsS -m 5 "http://127.0.0.1:${NODE_PORT}/healthz?verbose=1" 2>/dev/null | grep -qF "advertisedDhtUrl=$(node_url /dht)"; then
+        issue ADVERTISED_URL_MISMATCH warn "the node advertises a DHT URL other than $(node_url /dht) (an override in $NODE_ENV_FILE?)"
+    fi
+    log "nginx → node healthy on $base"
+}
+
+# Why the node did not start, from its journal.
+node_start_failure() {
+    local journal
+    journal="$(journalctl -u vmessenger-node -n 60 --no-pager 2>/dev/null || true)"
+    if grep -q 'UnsupportedClassVersionError' <<<"$journal"; then printf 'the JRE is too old'
+    elif grep -q 'Address already in use' <<<"$journal"; then printf 'port %s is taken' "$NODE_PORT"
+    elif grep -q 'OutOfMemoryError' <<<"$journal"; then printf 'out of memory'
+    else printf 'see journalctl -u vmessenger-node'
     fi
 }
 
@@ -1412,16 +1646,17 @@ print_terminal_qr() {
 }
 
 print_success() {
-    local bootstrap_link="vmnode:bootstrap:wss://${PUBLIC_NAME}/dht"
-    local relay_link="vmnode:relay:wss://${PUBLIC_NAME}/relay"
+    local bootstrap_link relay_link
+    bootstrap_link="vmnode:bootstrap:$(node_url /dht)"
+    relay_link="vmnode:relay:$(node_url /relay)"
     local install_one_liner="curl -fsSL ${SETUP_SCRIPT_URL} | sudo bash -s --"
     cat <<EOF
 
 vMessenger node is running.
 
-  Health:  https://${PUBLIC_NAME}/healthz
-  DHT:     wss://${PUBLIC_NAME}/dht
-  Relay:   wss://${PUBLIC_NAME}/relay
+  Health:  https://$(url_authority "$URL_HOST")/healthz
+  DHT:     $(node_url /dht)
+  Relay:   $(node_url /relay)
 
 TLS:      ${TLS_SUMMARY}
 Service:  systemctl status vmessenger-node
@@ -1688,8 +1923,12 @@ json_array() {
 write_result() {
     local status="$1" exit_status="$2" file="$RUN_DIR/result.json" java_version mode
     java_version="$("${JAVA_BIN:-java}" -version 2>&1 | sed -n '1s/.*version "\([^"]*\)".*/\1/p' || true)"
-    mode="ip"
-    [[ -n "$DOMAIN" ]] && mode="domain"
+    mode="$NODE_MODE"
+    local cert_pem="" replaces=() url
+    [[ -n "$CERT_PEM_FILE" && -f "$CERT_PEM_FILE" ]] && cert_pem="$(cat "$CERT_PEM_FILE")"
+    for url in $PREVIOUS_URLS; do
+        [[ "$url" == "$(node_url /relay)" || "$url" == "$(node_url /dht)" ]] || replaces+=("$url")
+    done
     {
         printf '{\n'
         printf '  "schema": 1,\n'
@@ -1701,11 +1940,15 @@ write_result() {
         printf '  "nodeId": %s,\n' "$(json_str "$NODE_ID")"
         printf '  "mode": %s,\n' "$(json_str "$mode")"
         printf '  "tls": %s,\n' "$(json_str "$TLS_MODE")"
-        printf '  "publicHost": %s,\n' "$(json_str "$PUBLIC_NAME")"
+        printf '  "publicHost": %s,\n' "$(json_str "$URL_HOST")"
+        printf '  "publicPort": %s,\n' "$PUBLIC_PORT"
         printf '  "domain": %s,\n' "$(json_str "$DOMAIN")"
-        printf '  "bootstrapUrl": %s,\n' "$(json_str "${PUBLIC_NAME:+wss://$PUBLIC_NAME/dht}")"
-        printf '  "relayUrl": %s,\n' "$(json_str "${PUBLIC_NAME:+wss://$PUBLIC_NAME/relay}")"
-        printf '  "healthUrl": %s,\n' "$(json_str "${PUBLIC_NAME:+https://$PUBLIC_NAME/healthz}")"
+        printf '  "bootstrapUrl": %s,\n' "$(json_str "${URL_HOST:+$(node_url /dht)}")"
+        printf '  "relayUrl": %s,\n' "$(json_str "${URL_HOST:+$(node_url /relay)}")"
+        printf '  "healthUrl": %s,\n' "$(json_str "${URL_HOST:+https://$(url_authority "$URL_HOST")/healthz}")"
+        printf '  "pin": %s,\n' "$(json_str "$PIN")"
+        printf '  "certPem": %s,\n' "$(json_str "$cert_pem")"
+        printf '  "replacesUrls": %s,\n' "$(json_array "${replaces[@]:-}")"
         printf '  "os": {"id": %s, "version": %s, "arch": %s},\n' \
             "$(json_str "$OS_ID")" "$(json_str "$OS_VERSION_ID")" "$(json_str "$ARCH")"
         printf '  "java": %s,\n' "$(json_str "$java_version")"
@@ -1754,6 +1997,10 @@ setup_production() {
         configure_firewall
         step firewall ok
     fi
+    step ports start
+    check_ports
+    open_firewall_ports
+    step ports ok
     step files start
     acquire_dist
     create_system_user
@@ -1761,17 +2008,17 @@ setup_production() {
     install_node_files
     remove_legacy_artifacts
     step files ok
+    step tls start
+    configure_tls_and_nginx
+    step tls ok
     step config start
     write_node_env
+    write_managed_env
     write_systemd_unit
-    write_realip_snippet
     step config ok
     step service start
     start_node_service
     step service ok
-    step tls start
-    configure_tls_and_nginx
-    step tls ok
     step health start
     health_check
     read_node_id

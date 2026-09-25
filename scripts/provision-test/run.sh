@@ -41,10 +41,13 @@ fail() { printf 'provision-test: %s\n' "$*" >&2; exit 1; }
 image_tag() { printf 'vm-provision:%s' "$(printf '%s' "$1" | tr ':/' '--')"; }
 target_name() { printf 'vm-target-%s' "$(printf '%s' "$1" | tr ':/.' '---')"; }
 
-# Slot N owns ports PORT_BASE+10N+{2,0,3}: ssh, http, https. Bound to 127.0.0.1 only.
+# Slot N owns ports PORT_BASE+10N+{2,0,3}: ssh, http, https. Bound to 127.0.0.1 only. The node is
+# installed with --public-port set to the https port, mapped to the same number inside, so the URLs
+# it reports are the ones a client on this machine (or an emulator, as 10.0.2.2) dials.
 ssh_port() { printf '%s' $((PORT_BASE + 10 * $1 + 2)); }
 http_port() { printf '%s' $((PORT_BASE + 10 * $1)); }
 https_port() { printf '%s' $((PORT_BASE + 10 * $1 + 3)); }
+ip_args() { printf -- '--ip 127.0.0.1 --public-port %s' "$(https_port "$1")"; }
 
 ensure_creds() {
     mkdir -p "$OUT"
@@ -89,7 +92,7 @@ up() {
     local args=(-d --name "$name" --hostname "${name#vm-target-}" --label "$LABEL" --network "$NET"
         --privileged --cgroupns=private --tmpfs /run --tmpfs /run/lock
         -p "127.0.0.1:$(ssh_port "$slot"):22" -p "127.0.0.1:$(http_port "$slot"):80"
-        -p "127.0.0.1:$(https_port "$slot"):443")
+        -p "127.0.0.1:$(https_port "$slot"):$(https_port "$slot")")
     [[ -n "$PLATFORM" ]] && args+=(--platform "$PLATFORM")
     if is_unsupported "$base"; then
         # systemd 237 and older cannot boot on a cgroup v2 host (Docker Desktop). The installer
@@ -218,10 +221,10 @@ scenario_happy_ip() {
     b="$(stage_bundle "$slot" alice)" || return 1
     local installer="sudo bash $b/setup-node.sh --from-app --bundle-dir $b"
     local extra="${ALLOW_ARGS:-}"
-    on "$slot" alice "$installer --preflight --ip 127.0.0.1 $extra" > "$log.preflight" 2>&1 \
+    on "$slot" alice "$installer --preflight $(ip_args "$slot") $extra" > "$log.preflight" 2>&1 \
         || { cat "$log.preflight" >&2; return 1; }
     grep -q '^##vm .* ev=end status=0$' "$log.preflight" || { cat "$log.preflight" >&2; return 1; }
-    on "$slot" alice "$installer --launch --ip 127.0.0.1 $extra" > "$log.launch" 2>&1 || { cat "$log.launch" >&2; return 1; }
+    on "$slot" alice "$installer --launch $(ip_args "$slot") $extra" > "$log.launch" 2>&1 || { cat "$log.launch" >&2; return 1; }
     run="$(sed -n 's/^##vm .* ev=launched run=\([0-9a-f-]*\).*/\1/p' "$log.launch")"
     [[ -n "$run" ]] || { cat "$log.launch" >&2; return 1; }
     on "$slot" alice "sudo bash $b/setup-node.sh --from-app --follow $run" > "$log.follow" 2>&1 || status=$?
@@ -230,7 +233,19 @@ scenario_happy_ip() {
     on "$slot" alice "sudo bash $b/setup-node.sh --from-app --result $run" > "$log.result.json"
     grep -q '"status": "ok"' "$log.result.json" || { cat "$log.result.json" >&2; return 1; }
     check_markers "$log.follow" || return 1
-    check_health "$slot"
+    check_health "$slot" || return 1
+    check_pin "$slot" "$log.result.json"
+}
+
+# The pin result.json reports is the key the node actually serves, and its URLs carry it.
+check_pin() {
+    local slot="$1" result="$2" reported served
+    reported="$(sed -n 's/.*"pin": "\([^"]*\)".*/\1/p' "$result")"
+    served="$(openssl s_client -connect "127.0.0.1:$(https_port "$slot")" </dev/null 2>/dev/null | openssl x509 -pubkey -noout \
+        | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')"
+    [[ -n "$reported" && "$reported" == "$served" ]] || { printf 'result pin %s, served key %s\n' "$reported" "$served" >&2; return 1; }
+    grep -q "\"relayUrl\": \"wss://127.0.0.1:$(https_port "$slot")/relay#pin-sha256=$served\"" "$result" \
+        || { printf 'relayUrl does not carry the pin\n' >&2; grep relayUrl "$result" >&2; return 1; }
 }
 
 # Every marker line parses, seq has no gaps, and every started step ends.
@@ -257,7 +272,7 @@ scenario_happy_ip_human() {
     local slot="$2" tar
     tar="$(basename "$(node_tarball)")"
     stage "$slot" || return 1
-    on "$slot" alice "sudo VMESSENGER_REPO=\$HOME/vm bash \$HOME/vm/scripts/setup-node.sh --ip 127.0.0.1 --dist-tar \$HOME/vm/$tar" \
+    on "$slot" alice "sudo VMESSENGER_REPO=\$HOME/vm bash \$HOME/vm/scripts/setup-node.sh $(ip_args "$slot") --dist-tar \$HOME/vm/$tar" \
         > "$OUT/$3.install.log" 2>&1 || { tail -30 "$OUT/$3.install.log" >&2; return 1; }
     check_health "$slot"
 }
@@ -273,13 +288,24 @@ scenario_not_root() {
     grep -q 'NOT_ROOT' "$OUT/$3.install.log"
 }
 
+# Installing again over a node keeps its key (same pin) and keeps the previous node for rollback.
+scenario_update_same() {
+    local slot="$2" first second
+    scenario_happy_ip "" "$slot" "$3.first" || return 1
+    first="$(sed -n 's/.*"pin": "\([^"]*\)".*/\1/p' "$OUT/$3.first.result.json")"
+    scenario_happy_ip "" "$slot" "$3.second" || return 1
+    second="$(sed -n 's/.*"pin": "\([^"]*\)".*/\1/p' "$OUT/$3.second.result.json")"
+    [[ -n "$first" && "$first" == "$second" ]] || { printf 'pin changed: %s -> %s\n' "$first" "$second" >&2; return 1; }
+    as_root "$slot" 'test -x /opt/vmessenger.prev/bin/node' || { printf 'no previous node kept\n' >&2; return 1; }
+}
+
 # A dropped connection mid-run: the install carries on, and --follow --from-byte picks the log up
 # again with nothing lost or repeated.
 scenario_resume() {
     local slot="$2" log="$OUT/$3" b run size
     b="$(stage_bundle "$slot" alice)" || return 1
     local installer="sudo bash $b/setup-node.sh --from-app --bundle-dir $b"
-    on "$slot" alice "$installer --launch --ip 127.0.0.1" > "$log.launch" 2>&1 || { cat "$log.launch" >&2; return 1; }
+    on "$slot" alice "$installer --launch $(ip_args "$slot")" > "$log.launch" 2>&1 || { cat "$log.launch" >&2; return 1; }
     run="$(sed -n 's/^##vm .* ev=launched run=\([0-9a-f-]*\).*/\1/p' "$log.launch")"
     [[ -n "$run" ]] || return 1
     # First connection: follow for a few seconds, then drop it.
@@ -305,9 +331,9 @@ scenario_busy() {
     local slot="$2" log="$OUT/$3" b first status=0
     b="$(stage_bundle "$slot" alice)" || return 1
     local installer="sudo bash $b/setup-node.sh --from-app --bundle-dir $b"
-    on "$slot" alice "$installer --launch --ip 127.0.0.1" > "$log.first" 2>&1 || return 1
+    on "$slot" alice "$installer --launch $(ip_args "$slot")" > "$log.first" 2>&1 || return 1
     first="$(sed -n 's/^##vm .* ev=launched run=\([0-9a-f-]*\).*/\1/p' "$log.first")"
-    on "$slot" alice "$installer --launch --ip 127.0.0.1" > "$log.second" 2>&1 || status=$?
+    on "$slot" alice "$installer --launch $(ip_args "$slot")" > "$log.second" 2>&1 || status=$?
     [[ "$status" -eq 40 ]] || { cat "$log.second" >&2; printf 'expected 40, got %s\n' "$status" >&2; return 1; }
     grep -q "ev=fact key=active_run value=$first" "$log.second" || { cat "$log.second" >&2; return 1; }
     grep -q 'ev=issue code=INSTALL_BUSY' "$log.second" || return 1
@@ -371,7 +397,7 @@ scenario_mirror_unreachable() {
 scenario_clock_skew() {
     local slot="$2" log="$OUT/$3" b status=0
     b="$(stage_bundle "$slot" alice)" || return 1
-    on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --preflight --ip 127.0.0.1 --clock-offset-ms 900000" \
+    on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --preflight $(ip_args "$slot") --clock-offset-ms 900000" \
         > "$log" 2>&1 || status=$?
     if [[ "$status" -ne 10 ]] || ! grep -q 'ev=issue code=CLOCK_SKEW severity=consent' "$log"; then
         cat "$log" >&2
@@ -385,7 +411,7 @@ scenario_untested_os() {
     local slot="$2" log="$OUT/$3" b status=0
     as_root "$slot" "sed -i -e 's/^VERSION_ID=.*/VERSION_ID=\"28.04\"/' -e 's/^PRETTY_NAME=.*/PRETTY_NAME=\"Ubuntu 28.04 LTS\"/' /etc/os-release" || return 1
     b="$(stage_bundle "$slot" alice)" || return 1
-    on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --preflight --ip 127.0.0.1" > "$log.preflight" 2>&1 \
+    on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --preflight $(ip_args "$slot")" > "$log.preflight" 2>&1 \
         || status=$?
     if [[ "$status" -ne 10 ]] || ! grep -q 'ev=issue code=OS_UNTESTED severity=consent' "$log.preflight"; then
         cat "$log.preflight" >&2
@@ -399,7 +425,7 @@ scenario_untested_os() {
 scenario_unsupported_os() {
     local slot="$2" log="$OUT/$3" b status=0
     b="$(stage_bundle "$slot" alice)" || return 1
-    on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --preflight --ip 127.0.0.1" > "$log" 2>&1 \
+    on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --preflight $(ip_args "$slot")" > "$log" 2>&1 \
         || status=$?
     if [[ "$status" -ne 20 ]] || ! grep -q 'ev=issue code=OS_UNSUPPORTED severity=fatal' "$log"; then
         cat "$log" >&2
@@ -414,7 +440,7 @@ scenario_corrupt_bundle() {
     local slot="$2" log="$OUT/$3" b status=0
     b="$(stage_bundle "$slot" alice)" || return 1
     on "$slot" alice "printf 'x' >> $b/deploy/nginx/vmessenger-node.conf.template"
-    on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --launch --ip 127.0.0.1" > "$log" 2>&1 || status=$?
+    on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --launch $(ip_args "$slot")" > "$log" 2>&1 || status=$?
     if [[ "$status" -ne 1 ]] || ! grep -q 'ev=issue code=BUNDLE_CORRUPT' "$log"; then
         cat "$log" >&2
         return 1
@@ -534,7 +560,7 @@ cmd_install() {
     done
     name="$(up "$base" "$slot")" || fail "$base did not come up"
     b="$(stage_bundle "$slot" alice)" || fail "could not upload the bundle"
-    run="$(on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --launch --ip 127.0.0.1" \
+    run="$(on "$slot" alice "sudo bash $b/setup-node.sh --from-app --bundle-dir $b --launch $(ip_args "$slot")" \
         | sed -n 's/^##vm .* ev=launched run=\([0-9a-f-]*\).*/\1/p')"
     [[ -n "$run" ]] || fail "the install did not start"
     on "$slot" alice "sudo bash $b/setup-node.sh --from-app --follow $run" > "$OUT/$name.install.log" 2>&1 \

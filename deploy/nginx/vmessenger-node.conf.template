@@ -1,5 +1,7 @@
 # vMessenger DHT + relay node — nginx site (rendered by scripts/setup-node.sh).
-# Placeholders: __SERVER_NAME__  __NODE_PORT__  __CERT_DIR__
+# Placeholders: __SERVER_NAME__  __NODE_PORT__  __CERT_DIR__  __PUBLIC_PORT__  __DEFAULT_SERVER__
+# Lines marked @HTTP@ are dropped when the node serves no plain HTTP (--no-http, or port 80 taken),
+# and lines marked @IPV6@ on a host without IPv6, where nginx would refuse to start.
 #
 # The JVM node listens on 127.0.0.1:__NODE_PORT__ over plain HTTP; nginx owns
 # TLS and the public :80/:443 surface. When the host sits behind a CDN
@@ -11,28 +13,29 @@ include /etc/nginx/snippets/vmessenger-realip.conf;
 limit_req_zone  $binary_remote_addr zone=vm_dht:10m   rate=30r/s;
 limit_conn_zone $binary_remote_addr zone=vm_relay:10m;
 
-server {
-    listen 80;
-    listen [::]:80;
-    server_name __SERVER_NAME__;
-
-    # ACME HTTP-01 (certbot --webroot). Kept on :80 and :443 so issuance works
-    # whether or not the CDN forces an HTTPS redirect before reaching us.
-    location ^~ /.well-known/acme-challenge/ {
-        root /var/www/acme;
-        default_type text/plain;
-    }
-
-    location / {
-        return 301 https://$host$request_uri;
-    }
-}
+server {                                                                          # @HTTP@
+    listen 80;                                                                    # @HTTP@
+    listen [::]:80;                                                               # @HTTP@ @IPV6@
+    server_name __SERVER_NAME__;                                                  # @HTTP@
+                                                                                  # @HTTP@
+    # ACME HTTP-01 (certbot --webroot). Kept on :80 and the TLS port so issuance  # @HTTP@
+    # works whether or not a CDN forces an HTTPS redirect before reaching us.     # @HTTP@
+    location ^~ /.well-known/acme-challenge/ {                                    # @HTTP@
+        root /var/www/acme;                                                       # @HTTP@
+        default_type text/plain;                                                  # @HTTP@
+    }                                                                             # @HTTP@
+                                                                                  # @HTTP@
+    location / {                                                                  # @HTTP@
+        return 301 https://$host:__PUBLIC_PORT__$request_uri;                     # @HTTP@
+    }                                                                             # @HTTP@
+}                                                                                 # @HTTP@
 
 # No http2: the app's WebSockets are HTTP/1.1 upgrades either way, and nginx 1.25 deprecated the
 # `listen … http2` form that older releases (Debian 11/12, Ubuntu 20.04–24.04) still need.
+# On a bare IP there is no SNI to pick a site by, so this one is the port's default_server.
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
+    listen __PUBLIC_PORT__ ssl__DEFAULT_SERVER__;
+    listen [::]:__PUBLIC_PORT__ ssl__DEFAULT_SERVER__;  # @IPV6@
     server_name __SERVER_NAME__;
 
     ssl_certificate     __CERT_DIR__/fullchain.pem;

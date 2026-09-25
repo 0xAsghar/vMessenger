@@ -40,6 +40,11 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
   stale) when the server's does not, falls back to the archives for end-of-life releases, retries on a lossy
   link, adds swap on small servers, and chooses a JRE 17+ that apt offers. It never edits the server's apt
   sources. Decisions — an untested release, setting the clock — are asked (`--allow`), not taken.
+- **The installer gives a node pinned addresses when no CA vouches for it** (Deployment §8.6): a kept EC
+  P-256 key, `ip-pinned` / `domain-ca` / `domain-pinned` modes with automatic fallback when Let's Encrypt is
+  not possible, `--public-host`, `--public-port`, `--no-http`, port-owner checks (apache2 stopped only when
+  allowed), transactional nginx changes, an atomic install with rollback, and health checked through nginx
+  with the pin. `result.json` carries the pin, the certificate and the URLs a client should use.
 - **Ubuntu 26.04 and Debian 13** are supported, after installing end to end in the harness.
 - **A Docker harness for the installer** (`scripts/provision-test/`): throwaway systemd + sshd
   containers on `127.0.0.1`, driven over real SSH, with scenarios for the happy path, resuming a

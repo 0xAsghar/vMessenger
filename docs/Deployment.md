@@ -236,8 +236,8 @@ Values are percent-encoded byte by byte: anything outside `A–Z a–z 0–9 . _
 | `status` | `run`, `state`, `exit`, `bytes` | Answer to `--status`. |
 | `end` | `status` | Last line of every invocation and of every run log; `status` is the exit status. |
 
-Step ids, in order: `preflight`, `apt`, `swap`, `java`, `packages`, `firewall`, `files`, `config`,
-`service`, `tls`, `health`, `finish`. `wait` means the step is waiting on something outside the
+Step ids, in order: `preflight`, `apt`, `swap`, `java`, `packages`, `ports`, `firewall`, `files`,
+`tls`, `config`, `service`, `health`, `finish`. `wait` means the step is waiting on something outside the
 installer — cloud-init, or another package manager holding the dpkg lock — for up to 15 minutes. Exit statuses are those of §3.4. A command that fails outside a known check is
 reported as `INTERNAL` with its line, and exits 1.
 
@@ -250,9 +250,11 @@ copies it to `/etc/vmessenger/install.json`, which is how a later run knows what
 {
   "schema": 1, "status": "ok", "exitStatus": 0, "code": null,
   "runId": "20260924-171207-8d53", "nodeVersion": "2.0.0", "nodeId": "c7fd…",
-  "mode": "ip", "tls": "selfsigned", "publicHost": "203.0.113.10", "domain": null,
-  "bootstrapUrl": "wss://203.0.113.10/dht", "relayUrl": "wss://203.0.113.10/relay",
-  "healthUrl": "https://203.0.113.10/healthz",
+  "mode": "ip-pinned", "tls": "selfsigned", "publicHost": "203.0.113.10", "publicPort": 443, "domain": null,
+  "bootstrapUrl": "wss://203.0.113.10/dht#pin-sha256=PS3w…Xl0",
+  "relayUrl": "wss://203.0.113.10/relay#pin-sha256=PS3w…Xl0",
+  "healthUrl": "https://203.0.113.10/healthz", "pin": "PS3w…Xl0", "certPem": "-----BEGIN CERTIFICATE-----\n…",
+  "replacesUrls": [],
   "os": {"id": "ubuntu", "version": "24.04", "arch": "x86_64"}, "java": "21.0.4",
   "warnings": []
 }
@@ -312,3 +314,32 @@ was written, which is why the check exists):
   (amd64 only; its security suite comes from security.debian.org).
 
 `--apt-mirror URL` names one outright.
+
+### 8.6 Addresses, certificates and ports
+
+| Mode | When | URLs |
+|---|---|---|
+| `ip-pinned` | No domain, or the domain does not point at this server (`DOMAIN_NOT_HERE`) | `wss://<public host>[:port]/…#pin-sha256=<pin>` |
+| `domain-ca` | A domain, and Let's Encrypt issued a certificate | `wss://<domain>[:port]/…`, no pin |
+| `domain-pinned` | A domain that points here, but no certificate (`ACME_UNREACHABLE`, `LE_FAILED`, `LE_RATE_LIMITED`, `LE_SKIPPED`) | `wss://<domain>[:port]/…#pin-sha256=<pin>` |
+
+- **The certificate.** Self-signed, EC P-256, in `/etc/vmessenger/tls`. Its key is kept across runs, so the
+  pin survives a renewed certificate or a changed address; the certificate is remade when it names another
+  host or expires within 30 days. Before certbot, an HTTP probe checks that the domain reaches this server,
+  so a domain pointing elsewhere does not spend Let's Encrypt's rate limit.
+- **Ports.** `--public-port` (default 443) is what nginx serves TLS on and what every URL names. Who holds it
+  is checked first: nginx is fine (and, for a bare IP, our site becomes the port's `default_server`); a stock
+  apache2 is stopped only with `--allow PORT_APACHE`; anything else, or another site that is already the
+  port's default, is `PUBLIC_PORT_TAKEN` (a decision, with a `fact free_port` suggestion). Port 80 in use
+  means no plain HTTP (`HTTP_SKIPPED`); a taken local node port moves to the next free one. An active ufw
+  gets the node's ports opened (`UFW_OPENED`); ufw is never turned on.
+- **nginx is changed transactionally.** An already-invalid configuration stops the install
+  (`NGINX_CONFIG_BROKEN`) before anything is touched; a new site nginx refuses is taken back out
+  (`NGINX_NEW_CONFIG_FAILED`); other sites are left alone.
+- **What the node advertises** is written to `/etc/vmessenger/node.managed.env` on every run
+  (`VMESSENGER_PUBLIC_HOST`, the pinned `VMESSENGER_ADVERTISED_DHT_URL`); `node.env` still wins.
+- **The install is atomic.** The new node goes to `/opt/vmessenger.new` and is swapped in; the previous one
+  stays in `/opt/vmessenger.prev`, and a node that does not come up is rolled back (`HEALTH_LOCAL_FAILED`).
+  Installing an older version over a newer one needs `--allow DOWNGRADE`. `node.seed` is never touched.
+- **Health** is checked locally, then through nginx with the pin (`curl --pinnedpubkey`) or the CA, then
+  `/relay` must upgrade (101), and the node must advertise the URL it will be reached at.

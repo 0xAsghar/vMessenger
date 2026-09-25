@@ -485,5 +485,7 @@ a certificate with that key.
   name for an IP address, or its expiry, adds nothing a matching key does not already prove. An
   unpinned address is validated against the platform's CAs exactly as before — the two never mix.
 - **Constant-time comparison** (`MessageDigest.isEqual`), leaf certificate only.
-- **Rotation.** Up to four pins per address; a certificate matching any is accepted.
+- **Rotation.** Up to four pins per address; a certificate matching any is accepted. The installer
+  keeps a node's key across re-runs, so its pin does not change when its certificate is renewed or its
+  address changes (Deployment §8.6).
 - **Fails closed for old versions** (L20).

@@ -1,5 +1,5 @@
 # vMessenger DHT + relay node — systemd unit (rendered by scripts/setup-node.sh).
-# Placeholders: __INSTALL_DIR__  __NODE_PORT__  __PUBLIC_NAME__  __JAVA_HOME__  __HEAP_MB__
+# Placeholders: __INSTALL_DIR__  __NODE_PORT__  __JAVA_HOME__  __HEAP_MB__
 [Unit]
 Description=vMessenger DHT + relay node
 After=network-online.target
@@ -12,7 +12,6 @@ Group=vmessenger
 WorkingDirectory=__INSTALL_DIR__
 StateDirectory=vmessenger
 Environment=VMESSENGER_NODE_PORT=__NODE_PORT__
-Environment=VMESSENGER_PUBLIC_HOST=__PUBLIC_NAME__
 Environment=VMESSENGER_STATE_DIR=/var/lib/vmessenger
 Environment=VMESSENGER_TRUST_PROXY=1
 # The JRE the installer chose (17 or newer); bin/node runs $JAVA_HOME/bin/java.
@@ -21,7 +20,9 @@ Environment=JAVA_HOME=__JAVA_HOME__
 # state dir (system /tmp may be mounted noexec). The node loads no native
 # code of its own. journald stamps every line, so the SimpleLogger date is off.
 Environment="JAVA_OPTS=-Xms64m -Xmx__HEAP_MB__m -XX:+UseSerialGC -Djava.io.tmpdir=/var/lib/vmessenger/tmp -Dorg.slf4j.simpleLogger.defaultLogLevel=info -Dorg.slf4j.simpleLogger.showDateTime=false"
-# Operator overrides (limits, peer nodes, log level) — optional.
+# Written by the installer on every run: the public host and the (pinned) DHT URL the node
+# advertises. Then the operator's overrides (limits, peer nodes, log level), which win.
+EnvironmentFile=-/etc/vmessenger/node.managed.env
 EnvironmentFile=-/etc/vmessenger/node.env
 ExecStart=__INSTALL_DIR__/bin/node
 Restart=always
