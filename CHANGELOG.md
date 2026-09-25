@@ -13,6 +13,19 @@ version** (currently 25, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-25
+
+The first stable V2 release: everything in 2.0.0-beta.1 below, plus setting up your own node from the
+app. **Database schema 24 → 25** (20 → 25 from 1.1.2); migrations included, no action needed. **Wire
+protocol stays major 2**, so phones on 1.1.2 still exchange messages with 2.0.0 — but see Deprecated.
+
+### Deprecated
+
+- **1.1.2 is deprecated.** It gets no further fixes; install 2.0.0 over it (the upgrade keeps every
+  message, contact and setting — Testing §1, the V1 regression suite). A 2.0.0 phone keeps talking to a
+  1.1.2 phone for now, but 1.1.2 cannot place or answer calls, reach pinned nodes (Security L20), or see
+  albums, message timers and group roles.
+
 ### Removed
 
 - **The in-app updater.** The app no longer contacts GitHub to look for, download or install a new
@@ -608,4 +621,7 @@ before a 1.x build is installed**, and identity and contacts do not survive that
 - **The reference node was hardened**: connection and record limits, listener-proof freshness and
   replay rejection, record expiry, and rejection counters on `/healthz?verbose=1`.
 
-[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/0xAsghar/vMessenger/compare/v1.1.2...v2.0.0
+[2.0.0-beta.1]: https://github.com/0xAsghar/vMessenger/compare/v1.1.2...v2.0.0-beta.1
+[1.1.2]: https://github.com/0xAsghar/vMessenger/compare/v1.1.1...v1.1.2
