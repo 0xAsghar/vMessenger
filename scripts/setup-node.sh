@@ -539,7 +539,7 @@ find_repo_root() {
         return
     fi
     local script_dir
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || script_dir=""
     if [[ -n "$script_dir" && -f "$script_dir/../gradlew" ]]; then
         REPO_ROOT="$(cd "$script_dir/.." && pwd)"
         return

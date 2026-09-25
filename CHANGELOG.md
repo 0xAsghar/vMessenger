@@ -13,6 +13,11 @@ version** (currently 25, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
 
+### Fixed
+
+- **CI's shellcheck flagged `setup-node.sh`** (SC2015, an `A && B || C` when locating the checkout); it is
+  rewritten with the same behaviour.
+
 ## [2.0.0] - 2026-09-25
 
 The first stable V2 release: everything in 2.0.0-beta.1 below, plus setting up your own node from the
