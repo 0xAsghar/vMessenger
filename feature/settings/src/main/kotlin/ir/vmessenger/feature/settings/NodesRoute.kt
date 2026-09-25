@@ -259,7 +259,8 @@ private fun NodeRow(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             VmText(
-                text = node.address,
+                // An address reads left to right in either language; the isolate keeps it so in RTL.
+                text = "\u2066${node.displayAddress}\u2069",
                 style = VmTheme.typography.bodyMd.copy(fontFamily = FontFamily.Monospace),
                 color = VmTheme.colors.textPrimary,
                 maxLines = 1,
@@ -291,8 +292,9 @@ private fun NodeRow(
 
 @Composable
 private fun nodeHealthText(node: NetworkNode): String {
-    val prefix = if (node.builtIn) stringResource(R.string.nodes_builtin) + " · " else ""
-    return prefix + when {
+    val builtIn = if (node.builtIn) stringResource(R.string.nodes_builtin) + " · " else ""
+    val pinned = if (node.isPinned) stringResource(R.string.nodes_pinned) + " · " else ""
+    return builtIn + pinned + when {
         node.failCount > 0 ->
             stringResource(R.string.nodes_health_fail) + " (" +
                 stringResource(R.string.nodes_failures, node.failCount) + ")"

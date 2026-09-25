@@ -1,6 +1,7 @@
 package ir.vmessenger.domain.model
 
 import ir.vmessenger.core.common.network.NodeTrust
+import ir.vmessenger.core.common.network.NodeUrl
 
 enum class NetworkNodeRole {
     /** A bootstrap/DHT node used for discovery. */
@@ -30,6 +31,12 @@ data class NetworkNode(
     val trust: NodeTrust,
 ) {
     val builtIn: Boolean get() = source == SOURCE_BUILT_IN
+
+    /** The node's certificate key is pinned in its address (`#pin-sha256=…`). */
+    val isPinned: Boolean get() = NodeUrl.parse(address)?.isPinned == true
+
+    /** The address as people read it: without the pin, which is shown as a badge instead. */
+    val displayAddress: String get() = NodeUrl.parse(address)?.displayText ?: address
 
     val community: Boolean get() = trust == NodeTrust.COMMUNITY
 

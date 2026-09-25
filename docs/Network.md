@@ -169,6 +169,11 @@ is the one parser; the grammar is in [Protocol.md](Protocol.md) §19.
   (`RelayDns`), which later relay sockets try first. (This used to be called "pinning"; the word now
   means certificate keys. It was recorded from an OkHttp `EventListener`, which OkHttp does not give
   WebSocket calls, so until 2.0 it never actually took effect.)
+- **One row per location.** Stored addresses are canonical (`NodeUrl.canonical`), and a location
+  (`NodeUrl.locationKey`) has one row. An address the person adds with a new pin replaces that row and
+  resets its health; imports from peers, the DHT or signed records never change a stored location's
+  pin; a backup restore (`NodeAddMode.KeepExisting`) keeps the row that is here. The Nodes screen shows
+  the address without its pin, left to right, and a «کلید سنجاق‌شده» / "Pinned key" badge.
 - **Bounded.** Unpinned, untargeted sockets (most DHT requests) use the base client; pinned or
   targeted variants are kept in a 32-entry LRU, since their addresses can come from DHT peers. The
   shared dispatcher is uncapped: an open WebSocket holds its call for its whole life.

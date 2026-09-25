@@ -28,6 +28,7 @@ import ir.vmessenger.domain.model.Identity
 import ir.vmessenger.domain.model.NetworkNode
 import ir.vmessenger.domain.model.NetworkNodeRole
 import ir.vmessenger.domain.repository.IdentityRepository
+import ir.vmessenger.domain.repository.NodeAddMode
 import ir.vmessenger.domain.repository.NodeManagementRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -410,7 +411,11 @@ class FakeNodeRepository : NodeManagementRepository {
 
     override fun observeNodes(): Flow<List<NetworkNode>> = flowOf(nodes.toList())
 
-    override suspend fun addNode(input: String, fallbackRole: NetworkNodeRole): AppResult<NetworkNode> {
+    override suspend fun addNode(
+        input: String,
+        fallbackRole: NetworkNodeRole,
+        mode: NodeAddMode,
+    ): AppResult<NetworkNode> {
         val node = NetworkNode(
             address = input,
             role = fallbackRole,

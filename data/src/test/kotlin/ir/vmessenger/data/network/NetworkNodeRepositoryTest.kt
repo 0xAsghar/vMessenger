@@ -12,6 +12,7 @@ import ir.vmessenger.core.crypto.LazysodiumCryptoEngine
 import ir.vmessenger.core.proto.app.v1.NodeRole
 import ir.vmessenger.data.activity.testActivityLogger
 import ir.vmessenger.domain.model.NetworkNodeRole
+import ir.vmessenger.domain.repository.NodeAddMode
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -240,5 +241,44 @@ class NetworkNodeRepositoryTest {
         assertEquals(listOf(NetworkConfig.DEFAULT_RELAY_URL, "wss://user.example/relay"), repo.enabledRelayUrls())
         repo.recordRelayResult("wss://user.example/relay", ok = true)
         assertEquals(listOf("wss://user.example/relay", NetworkConfig.DEFAULT_RELAY_URL), repo.enabledRelayUrls())
+    }
+
+    @Test
+    fun aUserAddWithANewPinReplacesTheLocationsRow() = runTest {
+        val repo = repository()
+        repo.addNode("wss://203.0.113.10/relay#pin-sha256=$PIN_A", NetworkNodeRole.RELAY)
+        repo.recordRelayResult("wss://203.0.113.10/relay#pin-sha256=$PIN_A", ok = false)
+        repo.addNode("WSS://203.0.113.10:443/relay#pin-sha256=$PIN_B", NetworkNodeRole.RELAY)
+        val relays = relayDao.getAll().filter { "203.0.113.10" in it.address }
+        assertEquals(listOf("wss://203.0.113.10/relay#pin-sha256=$PIN_B"), relays.map { it.address })
+        assertEquals(0, relays.single().failCount)
+    }
+
+    @Test
+    fun theNetworkCannotChangeAStoredLocationsPin() = runTest {
+        val repo = repository()
+        repo.addNode("wss://203.0.113.10/relay#pin-sha256=$PIN_A", NetworkNodeRole.RELAY)
+        repo.importExchangedNodes(emptyList(), listOf("wss://203.0.113.10/relay#pin-sha256=$PIN_B"))
+        repo.importExchangedNodes(emptyList(), listOf("wss://203.0.113.10/relay"))
+        assertEquals(
+            listOf("wss://203.0.113.10/relay#pin-sha256=$PIN_A"),
+            relayDao.getAll().filter { "203.0.113.10" in it.address }.map { it.address },
+        )
+    }
+
+    @Test
+    fun aRestoredBackupKeepsTheNewerPin() = runTest {
+        val repo = repository()
+        repo.addNode("wss://203.0.113.10/relay#pin-sha256=$PIN_B", NetworkNodeRole.RELAY)
+        repo.addNode("wss://203.0.113.10/relay#pin-sha256=$PIN_A", NetworkNodeRole.RELAY, NodeAddMode.KeepExisting)
+        assertEquals(
+            listOf("wss://203.0.113.10/relay#pin-sha256=$PIN_B"),
+            relayDao.getAll().filter { "203.0.113.10" in it.address }.map { it.address },
+        )
+    }
+
+    private companion object {
+        const val PIN_A = "601FQOh6ckV1-Qbw-9F3cGprfojLs5_j4Hkn7DPKFfc"
+        const val PIN_B = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA"
     }
 }

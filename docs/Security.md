@@ -480,7 +480,9 @@ a certificate with that key.
 - **What the pin trusts.** Whoever gave you the address chose the key. A `vmnode:` link from a friend,
   a signed endpoint record from a contact, the installer's result over an SSH connection whose host
   key you confirmed — the pin is exactly as trustworthy as that channel, the same as the address itself
-  always was.
+  always was. Only the person changes a pin: an address they add replaces the stored row for that
+  node location, while a node learned from the network never adds a second pin for a location already
+  stored, and a restored backup keeps the pin that is here now (`NetworkNodeRepository`).
 - **Name and dates are not checked on a pinned connection.** The pin is the identity; a certificate
   name for an IP address, or its expiry, adds nothing a matching key does not already prove. An
   unpinned address is validated against the platform's CAs exactly as before — the two never mix.

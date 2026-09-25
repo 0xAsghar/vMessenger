@@ -68,6 +68,10 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
   picks pinned or CA trust and the relay backend; the copies in the relay transport and the listener are gone.
   Variants share one base client, the shared dispatcher is uncapped (an open WebSocket holds its call for its
   whole life), and the variant cache is a bounded LRU because DHT peers supply addresses.
+- **One row per node location, and only the person changes its pin.** Adding a node at a stored location
+  with a new key replaces the row; peers, the DHT and signed records cannot add a second pin for it; a
+  restored backup keeps the pin that is here. The Nodes screen shows pinned nodes with a badge and the
+  address without the pin; the activity log records it that way too.
 - **A malformed pin is an error** (`MALFORMED_PIN`, «کلید سنجاق‌شده … معتبر نیست»), not ignored, and a stored
   node that no longer passes the address policy is skipped when choosing a relay or bootstrap node.
 - **"Pinned" relay IPs are now "sticky"** (`RelayDns.stick`, `clearStickyIps`): "pin" means a certificate key.

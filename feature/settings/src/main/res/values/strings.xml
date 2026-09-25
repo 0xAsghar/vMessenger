@@ -82,6 +82,7 @@
     <string name="nodes_copy_link">کپی لینک</string>
     <string name="nodes_close">بستن</string>
     <string name="nodes_builtin">پیش‌فرض</string>
+    <string name="nodes_pinned">کلید سنجاق‌شده</string>
     <string name="nodes_health_ok">اتصال موفق اخیر</string>
     <string name="nodes_health_fail">خطای اتصال</string>
     <string name="nodes_health_never">بدون سابقه اتصال</string>

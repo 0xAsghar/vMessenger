@@ -82,6 +82,7 @@
     <string name="nodes_copy_link">Copy link</string>
     <string name="nodes_close">Close</string>
     <string name="nodes_builtin">Default</string>
+    <string name="nodes_pinned">Pinned key</string>
     <string name="nodes_health_ok">Connected recently</string>
     <string name="nodes_health_fail">Connection error</string>
     <string name="nodes_health_never">Never connected</string>

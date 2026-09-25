@@ -8,6 +8,7 @@ import ir.vmessenger.core.common.network.NodeAddressPolicy
 import ir.vmessenger.core.common.network.NodeRankKey
 import ir.vmessenger.core.common.network.NodeRanking
 import ir.vmessenger.core.common.network.NodeTrust
+import ir.vmessenger.core.common.network.NodeUrl
 import ir.vmessenger.core.database.dao.BootstrapNodeDao
 import ir.vmessenger.core.database.dao.RelayNodeDao
 import ir.vmessenger.core.database.entity.ActivityKind
@@ -19,6 +20,7 @@ import ir.vmessenger.data.activity.ActivityLogger
 import ir.vmessenger.domain.model.NetworkNode
 import ir.vmessenger.domain.model.NetworkNodeRole
 import ir.vmessenger.domain.network.NodeLinkCodec
+import ir.vmessenger.domain.repository.NodeAddMode
 import ir.vmessenger.domain.repository.NodeManagementRepository
 import ir.vmessenger.network.bootstrap.BootstrapNode
 import ir.vmessenger.network.bootstrap.BootstrapProviderId
@@ -40,7 +42,10 @@ import javax.inject.Singleton
  *   enabled with priority 100;
  * - every stored address passes [NodeAddressPolicy] (release: `wss://` only);
  * - ordering is [NodeRanking] over the unordered DAO result, so the built-in
- *   relay is displaced only by a user relay or after three consecutive failures.
+ *   relay is displaced only by a user relay or after three consecutive failures;
+ * - one row per node location ([NodeUrl.locationKey]), stored in canonical form. Only the
+ *   person changes a location's key pin (an explicit add replaces the row); nothing learned
+ *   from the network adds a second pin for a location already stored.
  *
  * Records are never trusted with plaintext; this layer only manages *where* to
  * reach the network. Endpoint records returned by any node are still
@@ -166,14 +171,44 @@ class NetworkNodeRepository(
         return bootstrap to relay
     }
 
-    suspend fun addBootstrapNode(address: String, source: String = SOURCE_USER) {
+    suspend fun addBootstrapNode(
+        address: String,
+        source: String = SOURCE_USER,
+        mode: NodeAddMode = NodeAddMode.ReplaceByLocation,
+    ) {
+        val stored = bootstrapNodeDao.getAll().map { it.address }
+        if (!claimLocation(address, mode, stored, bootstrapNodeDao::deleteByAddress)) return
         seedBootstrapNode(address, source, NodeTrust.USER)
         AppLogger.info("Nodes", "added bootstrap node $address")
     }
 
-    suspend fun addRelayNode(address: String, source: String = SOURCE_USER) {
+    suspend fun addRelayNode(
+        address: String,
+        source: String = SOURCE_USER,
+        mode: NodeAddMode = NodeAddMode.ReplaceByLocation,
+    ) {
+        val stored = relayNodeDao.getAll().map { it.address }
+        if (!claimLocation(address, mode, stored, relayNodeDao::deleteByAddress)) return
         seedRelayNode(address, source, NodeTrust.USER)
         AppLogger.info("Nodes", "added relay node $address")
+    }
+
+    /**
+     * Makes room for a user-added [address]: rows at the same location with another spelling or key
+     * are removed ([NodeAddMode.ReplaceByLocation]), or left alone and the add skipped
+     * ([NodeAddMode.KeepExisting]). False when the add should not happen.
+     */
+    private suspend fun claimLocation(
+        address: String,
+        mode: NodeAddMode,
+        stored: List<String>,
+        delete: suspend (String) -> Unit,
+    ): Boolean {
+        val canonical = canonicalOf(address)
+        val others = stored.filter { locationOf(it) == locationOf(address) && it != canonical }
+        if (others.isNotEmpty() && mode == NodeAddMode.KeepExisting) return false
+        others.forEach { delete(it) }
+        return true
     }
 
     suspend fun setBootstrapEnabled(address: String, enabled: Boolean) =
@@ -197,10 +232,11 @@ class NetworkNodeRepository(
     override suspend fun addNode(
         input: String,
         fallbackRole: NetworkNodeRole,
+        mode: NodeAddMode,
     ): AppResult<NetworkNode> {
         val link = NodeLinkCodec.decode(input)
         val role = link?.role ?: fallbackRole
-        val address = (link?.address ?: input).trim()
+        val address = canonicalOf((link?.address ?: input).trim())
         val rejection = when (role) {
             NetworkNodeRole.RELAY -> addressPolicy().checkRelay(address)
             NetworkNodeRole.BOOTSTRAP -> addressPolicy().checkBootstrap(address)
@@ -209,8 +245,8 @@ class NetworkNodeRepository(
             return AppResult.Error(AppError.NodeAddressRejected(rejection, relay = role == NetworkNodeRole.RELAY))
         }
         when (role) {
-            NetworkNodeRole.BOOTSTRAP -> addBootstrapNode(address)
-            NetworkNodeRole.RELAY -> addRelayNode(address)
+            NetworkNodeRole.BOOTSTRAP -> addBootstrapNode(address, mode = mode)
+            NetworkNodeRole.RELAY -> addRelayNode(address, mode = mode)
         }
         val node = NetworkNode(
             address = address,
@@ -224,7 +260,7 @@ class NetworkNodeRepository(
         )
         // The address, not the link: a vmnode: link can carry more than the address, and only the
         // address is needed to answer "which node did I add, and when".
-        activityLogger.record(ActivityKind.NodeAdded, address)
+        activityLogger.record(ActivityKind.NodeAdded, node.displayAddress)
         return AppResult.Success(node)
     }
 
@@ -301,13 +337,15 @@ class NetworkNodeRepository(
      * the node list without bound.
      */
     private suspend fun seedBootstrapNode(
-        address: String,
+        rawAddress: String,
         source: String,
         trust: NodeTrust,
         learnedFromHash: ByteArray? = null,
     ) {
+        val address = canonicalOf(rawAddress)
         val existing = bootstrapNodeDao.getByAddress(address)
-        if (existing != null && !upgrades(existing.trust, trust)) return
+        val keyed = trust != NodeTrust.USER && bootstrapNodeDao.getAll().any { pinnedElsewhere(it.address, address) }
+        if (keyed || existing != null && !upgrades(existing.trust, trust)) return
         if (existing == null && communityTableFull(trust, bootstrapNodeDao.getAll().count { it.isCommunity() })) return
         bootstrapNodeDao.upsert(
             BootstrapNodeEntity(
@@ -326,13 +364,15 @@ class NetworkNodeRepository(
     }
 
     private suspend fun seedRelayNode(
-        address: String,
+        rawAddress: String,
         source: String,
         trust: NodeTrust,
         learnedFromHash: ByteArray? = null,
     ) {
+        val address = canonicalOf(rawAddress)
         val existing = relayNodeDao.getByAddress(address)
-        if (existing != null && !upgrades(existing.trust, trust)) return
+        val keyed = trust != NodeTrust.USER && relayNodeDao.getAll().any { pinnedElsewhere(it.address, address) }
+        if (keyed || existing != null && !upgrades(existing.trust, trust)) return
         if (existing == null && communityTableFull(trust, relayNodeDao.getAll().count { it.isCommunity() })) return
         relayNodeDao.upsert(
             RelayNodeEntity(
@@ -383,4 +423,12 @@ class NetworkNodeRepository(
         /** Upper bound on peer/DHT-learned (community) rows per table, whatever the number of peers. */
         const val MAX_COMMUNITY_ROWS = 50
     }
+
+    /** The same node location, stored with a different key pin or spelling. */
+    private fun pinnedElsewhere(stored: String, address: String): Boolean =
+        stored != address && locationOf(stored) == locationOf(address)
+
+    private fun canonicalOf(address: String): String = NodeUrl.parse(address)?.canonical ?: address
+
+    private fun locationOf(address: String): String = NodeUrl.parse(address)?.locationKey ?: address
 }

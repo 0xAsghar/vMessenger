@@ -11,6 +11,7 @@ import ir.vmessenger.core.proto.backup.v1.BackupNode
 import ir.vmessenger.core.proto.backup.v1.BackupPayload
 import ir.vmessenger.domain.model.NetworkNodeRole
 import ir.vmessenger.domain.model.RestoreSummary
+import ir.vmessenger.domain.repository.NodeAddMode
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -155,11 +156,14 @@ class BackupRestoreWriter @Inject constructor(
         }
     }
 
-    /** User-added nodes go through the normal add path, which validates the address and skips known ones. */
+    /**
+     * User-added nodes go through the normal add path, which validates the address and skips known
+     * ones. A location already stored keeps its row: a backup's key pin is older than the one here.
+     */
     private suspend fun restoreNodes(nodes: List<BackupNode>) {
         for (node in nodes) {
             val role = NetworkNodeRole.entries.firstOrNull { it.name == node.role } ?: continue
-            store.nodeRepository.addNode(node.address, role)
+            store.nodeRepository.addNode(node.address, role, NodeAddMode.KeepExisting)
         }
     }
 }
