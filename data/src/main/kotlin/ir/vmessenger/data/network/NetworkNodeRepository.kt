@@ -303,9 +303,9 @@ class NetworkNodeRepository(
             it.rankKey()
         }
 
-    private fun BootstrapNodeEntity.rankKey() = NodeRankKey(priority, failCount, lastOkUnixMs)
+    private fun BootstrapNodeEntity.rankKey() = NodeRankKey(priority, failCount, lastOkUnixMs, lastFailUnixMs)
 
-    private fun RelayNodeEntity.rankKey() = NodeRankKey(priority, failCount, lastOkUnixMs)
+    private fun RelayNodeEntity.rankKey() = NodeRankKey(priority, failCount, lastOkUnixMs, lastFailUnixMs)
 
     private fun BootstrapNodeEntity.toNetworkNode(role: NetworkNodeRole) = NetworkNode(
         address = address,

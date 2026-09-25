@@ -21,6 +21,7 @@ import ir.vmessenger.data.repository.findByIdentityHash
 import ir.vmessenger.data.repository.findContactForInbound
 import ir.vmessenger.data.repository.updateLearnedKeys
 import ir.vmessenger.domain.repository.IdentityRepository
+import ir.vmessenger.domain.repository.RelayControl
 import ir.vmessenger.domain.usecase.discovery.JoinNetworkUseCase
 import ir.vmessenger.domain.usecase.discovery.PublishNetworkEndpointsUseCase
 import ir.vmessenger.network.messaging.MessagingService
@@ -62,8 +63,11 @@ class NetworkCoordinator @Inject constructor(
     private val activityLogger: ActivityLogger,
     @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
-) {
+) : RelayControl {
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher + loggingExceptionHandler("Network"))
+
+    @Volatile
+    private var publishedRelay: String? = null
 
     @Volatile
     private var started = false
@@ -274,6 +278,7 @@ class NetworkCoordinator @Inject constructor(
             ed25519PrivateKeyProvider = { selfIdentityCache.ed25519PrivateKey() },
         )
         AppLogger.info("Network", "relay listener starting")
+        scope.launch { followConnectedRelay(directHost, directPort) }
         if (ir.vmessenger.core.common.network.P2PConfig.relayPeerModeEnabled) {
             peerRelayCoordinator.logStatus()
         }
@@ -294,6 +299,7 @@ class NetworkCoordinator @Inject constructor(
         relayUrl: String,
         retry: Boolean,
     ) {
+        publishedRelay = relayUrl
         val suffix = if (retry) " after retry" else ""
         val publish = publishNetworkEndpointsUseCase(
             directHost = directHost,
@@ -308,6 +314,26 @@ class NetworkCoordinator @Inject constructor(
         }
         endpointAnnouncer.start(directHost = directHost, directPort = directPort, relayUrl = relayUrl)
         if (publish is AppResult.Error) endpointAnnouncer.announceNow()
+    }
+
+    /**
+     * The listener picks its relay afresh on every reconnect — a relay the person added, or the next
+     * one when this one keeps failing. The endpoint record has to name that relay, or peers dial one
+     * this device is no longer on: whenever the listener lands somewhere other than what was
+     * published, publish again and re-arm the announcer with it.
+     */
+    private suspend fun followConnectedRelay(directHost: String?, directPort: Int?) {
+        relayListener.connectedRelay.collect { connected ->
+            if (connected != null && shouldRetarget(publishedRelay, connected)) {
+                AppLogger.info("Network", "listener is on $connected now; publishing it")
+                NetworkPathTracker.setActiveRelay(connected)
+                publishAndArmReannounce(directHost, directPort, connected, retry = false)
+            }
+        }
+    }
+
+    override fun reselectRelay() {
+        relayListener.reselect()
     }
 
     /** Waits until an identity exists *and* its key material is unwrappable (the cache serves it). */
@@ -402,3 +428,7 @@ class NetworkCoordinator @Inject constructor(
         private const val KEY_POLL_MS = 100L
     }
 }
+
+/** The listener is connected to a relay other than the one the endpoint record names. */
+internal fun shouldRetarget(published: String?, connected: String?): Boolean =
+    connected != null && connected != published

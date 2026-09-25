@@ -8,6 +8,7 @@ import dagger.hilt.components.SingletonComponent
 import ir.vmessenger.data.backup.RoomTransactionRunner
 import ir.vmessenger.data.backup.TransactionRunner
 import ir.vmessenger.data.network.ContactRequestService
+import ir.vmessenger.data.network.NetworkCoordinator
 import ir.vmessenger.data.network.NetworkNodeRepository
 import ir.vmessenger.data.network.OutboxDispatcher
 import ir.vmessenger.data.network.OutboxWaker
@@ -36,6 +37,7 @@ import ir.vmessenger.domain.repository.LocationAccessRepository
 import ir.vmessenger.domain.repository.LocationRepository
 import ir.vmessenger.domain.repository.NodeManagementRepository
 import ir.vmessenger.domain.repository.PairingRepository
+import ir.vmessenger.domain.repository.RelayControl
 import ir.vmessenger.network.messaging.SessionPostHandshakeHandler
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -112,6 +114,9 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindNodeManagementRepository(impl: NetworkNodeRepository): NodeManagementRepository
+
+    @Binds
+    abstract fun bindRelayControl(impl: NetworkCoordinator): RelayControl
 
     @Binds
     @Singleton

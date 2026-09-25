@@ -17,6 +17,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okhttp3.Response
@@ -73,13 +76,16 @@ class RelayListener @Inject constructor(
     /** Circuits a local component asked for by name; see [claimCircuits]. */
     private val claims = ConcurrentHashMap<String, InboundConnectionHandler>()
 
+    private val connected = MutableStateFlow<String?>(null)
+
     /**
      * The relay this device can be reached on right now: the one its control channel is connected
-     * to, or null between sessions. What a peer has to dial to get a circuit to this listener.
+     * to, or null between sessions. What a peer has to dial to get a circuit to this listener, and
+     * so what the published endpoint record has to name (NetworkCoordinator follows it).
      */
-    @Volatile
-    var connectedRelayUrl: String? = null
-        private set
+    val connectedRelay: StateFlow<String?> = connected.asStateFlow()
+
+    val connectedRelayUrl: String? get() = connected.value
 
     /**
      * [ed25519PrivateKeyProvider] is consulted per connection attempt so the key
@@ -110,6 +116,17 @@ class RelayListener @Inject constructor(
     fun stop() {
         running = false
         scope.cancel()
+    }
+
+    /**
+     * Drops the current control channel and connects again to whichever relay ranks first now —
+     * a relay the person just added, say — instead of waiting for this one to end.
+     */
+    fun reselect() {
+        if (!running) return
+        AppLogger.info(TAG, "reselecting the relay")
+        stop()
+        start()
     }
 
     /**
@@ -204,12 +221,12 @@ class RelayListener @Inject constructor(
         val webSocket = WebSocketFrameClient.openWebSocket(url, targetIp, session)
         try {
             session.openLatch.await()
-            connectedRelayUrl = url
+            connected.value = url
             val keepAlive = scope.launch { keepAliveLoop(webSocket, session.closeLatch) }
             session.closeLatch.await()
             keepAlive.cancel()
         } finally {
-            connectedRelayUrl = null
+            connected.value = null
             webSocket.cancel()
         }
         return session.end

@@ -83,6 +83,14 @@ version** (currently 24, [docs/Database.md](docs/Database.md)).
 
 ### Fixed
 
+- **The published endpoint record never followed the relay listener to a new relay**, so after adding a
+  relay — or when the chosen one failed and the listener moved on — peers dialled a relay this device was no
+  longer on. The record is now re-published whenever the listener lands elsewhere, and a change to the relay
+  list reconnects the listener at once.
+- **A broken user-added relay could hold the listener forever**: once the default relay also had three old
+  failures, priority alone decided and the user's relay always won. Among failing relays, the one that failed
+  longest ago is tried first now.
+- The Add node dialog stayed open after a node was added.
 - **Sticky relay IPs never took effect.** They were recorded from an OkHttp `EventListener`, which OkHttp does
   not give WebSocket calls, so every relay socket fell back to resolver order. The backend is now recorded
   when a socket dialled to it opens.

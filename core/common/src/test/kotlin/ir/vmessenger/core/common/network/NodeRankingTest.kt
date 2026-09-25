@@ -64,4 +64,14 @@ class NodeRankingTest {
         assertEquals(NodeRanking.PRIORITY_BUILT_IN, NodeRanking.defaultPriority(NodeTrust.BUILT_IN))
         assertEquals(NodeTrust.COMMUNITY, NodeTrust.fromName("garbage"))
     }
+
+    @Test
+    fun whenAllAreFailingTheOneThatFailedLongestAgoGoesFirst() {
+        val brokenUser = NodeRankKey(NodeRanking.PRIORITY_USER, 7, lastOkUnixMs = null, lastFailUnixMs = 2_000)
+        val staleDefault = NodeRankKey(NodeRanking.PRIORITY_BUILT_IN, 10, lastOkUnixMs = 1, lastFailUnixMs = 1_000)
+        assertEquals(listOf(staleDefault, brokenUser), NodeRanking.rankKeys(listOf(brokenUser, staleDefault)))
+        // Once the default fails too, the user relay gets its turn again.
+        val justFailedDefault = staleDefault.copy(lastFailUnixMs = 3_000)
+        assertEquals(listOf(brokenUser, justFailedDefault), NodeRanking.rankKeys(listOf(brokenUser, justFailedDefault)))
+    }
 }

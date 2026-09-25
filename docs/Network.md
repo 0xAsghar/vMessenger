@@ -174,6 +174,12 @@ is the one parser; the grammar is in [Protocol.md](Protocol.md) §19.
   resets its health; imports from peers, the DHT or signed records never change a stored location's
   pin; a backup restore (`NodeAddMode.KeepExisting`) keeps the row that is here. The Nodes screen shows
   the address without its pin, left to right, and a «کلید سنجاق‌شده» / "Pinned key" badge.
+- **The published relay follows the listener.** The listener picks its relay afresh on every
+  reconnect, and exposes the one it is on (`RelayListener.connectedRelay`); whenever that differs from
+  the relay the endpoint record names, `NetworkCoordinator` publishes again and re-arms the announcer.
+  Adding, enabling, disabling or removing a relay reconnects the listener at once (`RelayControl`).
+  When every relay is failing, ranking tries the one that failed longest ago first, so a broken
+  user-added relay cannot hold the listener while a working default waits (`NodeRanking`).
 - **Bounded.** Unpinned, untargeted sockets (most DHT requests) use the base client; pinned or
   targeted variants are kept in a 32-entry LRU, since their addresses can come from DHT peers. The
   shared dispatcher is uncapped: an open WebSocket holds its call for its whole life.

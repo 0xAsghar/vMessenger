@@ -118,7 +118,7 @@ fun NodesRoute(
     if (showAddDialog) {
         AddNodeDialog(
             error = addError?.toUiText(),
-            onAdd = { input, role -> viewModel.addNode(input, role) },
+            onAdd = { input, role -> viewModel.addNode(input, role) { showAddDialog = false } },
             onScan = {
                 showAddDialog = false
                 viewModel.clearAddError()

@@ -48,10 +48,14 @@ class NodesViewModel @Inject constructor(
     /** What went wrong, not a sentence: the screen words it in the app's language. */
     val addError: StateFlow<AppError?> = _addError.asStateFlow()
 
-    fun addNode(input: String, role: NetworkNodeRole) {
+    /** [onAdded] runs once the node is stored — the dialog closes then, and stays open on an error. */
+    fun addNode(input: String, role: NetworkNodeRole, onAdded: () -> Unit = {}) {
         viewModelScope.launch {
             when (val result = addNetworkNode(input, role)) {
-                is AppResult.Success -> _addError.value = null
+                is AppResult.Success -> {
+                    _addError.value = null
+                    onAdded()
+                }
                 is AppResult.Error -> _addError.value = result.error
             }
         }

@@ -5,6 +5,7 @@ data class NodeRankKey(
     val priority: Int,
     val failCount: Int,
     val lastOkUnixMs: Long?,
+    val lastFailUnixMs: Long? = null,
 )
 
 /**
@@ -12,7 +13,10 @@ data class NodeRankKey(
  * policy lives in one unit-testable place.
  *
  * Order: healthy bucket first (`failCount < UNHEALTHY_FAIL_COUNT`), then
- * `priority DESC`, then `failCount ASC`, then `lastOkUnixMs DESC`. With the
+ * `priority DESC`, then `failCount ASC`, then `lastOkUnixMs DESC`. Within the unhealthy
+ * bucket the node that failed longest ago comes first: when every candidate is failing, the one
+ * that just failed yields to the others instead of winning again on priority — a broken
+ * user-added relay would otherwise hold the listener forever while a working default waits. With the
  * default priorities (built-in 100, user 150, community 80) the built-in relay is
  * displaced only by a user-added relay or after three consecutive failures; a
  * successful connection (`markOk`) resets the counter and restores it.
@@ -29,6 +33,7 @@ object NodeRanking {
     fun <T> rank(nodes: List<T>, key: (T) -> NodeRankKey): List<T> =
         nodes.sortedWith(
             compareBy<T> { key(it).failCount >= UNHEALTHY_FAIL_COUNT }
+                .thenBy { if (key(it).failCount >= UNHEALTHY_FAIL_COUNT) key(it).lastFailUnixMs ?: 0L else 0L }
                 .thenByDescending { key(it).priority }
                 .thenBy { key(it).failCount }
                 .thenByDescending { key(it).lastOkUnixMs ?: Long.MIN_VALUE },
