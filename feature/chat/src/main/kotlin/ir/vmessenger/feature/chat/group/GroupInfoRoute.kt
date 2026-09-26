@@ -216,21 +216,6 @@ private fun GroupInfoHeader(state: GroupInfoUiState) {
                 )
             }
         }
-        if (state.auditRetention) {
-            // Shown to everyone, not only the creator. The feature is defensible because the
-            // people it applies to are told it applies to them, so this banner is not decoration.
-            VmSurface(
-                color = VmTheme.colors.bgWarningSubtle,
-                contentColor = VmTheme.colors.textPrimary,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                VmText(
-                    text = stringResource(R.string.feature_chat_group_audit_banner),
-                    style = VmTheme.typography.bodyMd,
-                    modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
-                )
-            }
-        }
         Avatar(
             seed = state.seed.bytes,
             name = state.name,

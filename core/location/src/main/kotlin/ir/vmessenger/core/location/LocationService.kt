@@ -97,13 +97,13 @@ class LocationService : Service(), LocationListener {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.location_notification_title))
-            .setContentText(getString(R.string.location_notification_body))
+            .setContentTitle(localised().getString(R.string.location_notification_title))
+            .setContentText(localised().getString(R.string.location_notification_body))
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setOngoing(true)
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
-                getString(R.string.location_notification_stop),
+                localised().getString(R.string.location_notification_stop),
                 stopPending,
             )
             .build()
@@ -113,7 +113,7 @@ class LocationService : Service(), LocationListener {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(
             CHANNEL_ID,
-            getString(R.string.location_notification_channel),
+            localised().getString(R.string.location_notification_channel),
             NotificationManager.IMPORTANCE_LOW,
         )
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

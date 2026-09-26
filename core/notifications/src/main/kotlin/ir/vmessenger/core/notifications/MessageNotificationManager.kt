@@ -31,7 +31,7 @@ class MessageNotificationManager @Inject constructor(
     init {
         val channel = NotificationChannel(
             CHANNEL_MESSAGES,
-            context.getString(R.string.notification_channel_messages),
+            context.localised().getString(R.string.notification_channel_messages),
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
@@ -46,7 +46,7 @@ class MessageNotificationManager @Inject constructor(
         conversationId: String,
         hideContent: Boolean,
     ) {
-        val generic = context.getString(R.string.notification_new_message)
+        val generic = context.localised().getString(R.string.notification_new_message)
         // Isolated because the shade is drawn by the system's own TextView, which follows the
         // device locale rather than this app's forced RTL — no TextStyle of ours reaches it, and
         // the direction differs between a Persian-locale phone and an English one.
@@ -78,11 +78,11 @@ class MessageNotificationManager @Inject constructor(
      */
     @Suppress("TooGenericExceptionCaught")
     fun showLocationRequest(senderName: String, conversationId: String, hideContent: Boolean) {
-        val generic = context.getString(R.string.notification_location_request_generic)
+        val generic = context.localised().getString(R.string.notification_location_request_generic)
         val text = if (hideContent) {
             generic
         } else {
-            context.getString(R.string.notification_location_request, BidiText.isolate(senderName))
+            context.localised().getString(R.string.notification_location_request, BidiText.isolate(senderName))
         }
         val notification = baseBuilder()
             .setContentIntent(conversationIntent(conversationId))

@@ -110,11 +110,10 @@
     <string name="feature_chat_timer_at_confirm">Set</string>
     <string name="feature_chat_call_start">Voice call</string>
     <!-- Group-admin review of edited and deleted messages (§3.2). Disclosed to every member. -->
-    <string name="feature_chat_group_audit_banner">Admins of this group can review edited and deleted messages.</string>
     <string name="feature_chat_group_audit_row">Review edited and deleted messages</string>
-    <string name="feature_chat_group_audit_row_body">When this is on, the text of a message is kept for the group admins before it is edited or deleted, and every member is told about it.</string>
+    <string name="feature_chat_group_audit_row_body">When this is on, the text of a message is kept for the group admins before it is edited or deleted.</string>
     <string name="feature_chat_group_audit_on_title">Turn on review?</string>
-    <string name="feature_chat_group_audit_on_body">From now on, the text of messages in this group is kept before it is edited or deleted, and the group admins can see it. This is announced in the conversation and stays visible to every member. This setting has no effect on private conversations.</string>
+    <string name="feature_chat_group_audit_on_body">From now on, the text of messages in this group is kept before it is edited or deleted, and the group admins can see it. This is announced in the conversation. This setting has no effect on private conversations.</string>
     <string name="feature_chat_group_audit_off_title">Turn off review?</string>
     <string name="feature_chat_group_audit_off_body">Message text will no longer be kept, and what has been kept so far is erased.</string>
     <string name="feature_chat_group_audit_confirm">Confirm</string>
@@ -124,7 +123,7 @@
     <string name="feature_chat_group_demote_body">%1$s will no longer have access to message review in this group.</string>
     <string name="feature_chat_group_member_admin">Admin</string>
     <string name="feature_chat_group_audit_title">Message review</string>
-    <string name="feature_chat_group_audit_screen_notice">This list holds the text of messages that group members edited or deleted and that this device saw. Every member of the group knows this feature is on.</string>
+    <string name="feature_chat_group_audit_screen_notice">This list holds the text of messages that group members edited or deleted and that this device saw.</string>
     <string name="feature_chat_group_audit_off_state_title">Review is not on</string>
     <string name="feature_chat_group_audit_off_state_body">The group creator has not turned this feature on, or turned it off and what had been kept was erased.</string>
     <string name="feature_chat_group_audit_empty_title">Nothing to review</string>

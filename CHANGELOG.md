@@ -13,8 +13,20 @@ version** (currently 25, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
 
+### Changed
+
+- **A timed message shows its timer only to its sender.** The person receiving it no longer sees the
+  timer icon on the bubble; the message still disappears on time for both.
+- **No standing banner for message review.** A group with review of edited and deleted messages on no
+  longer carries the "admins can review…" banner on its screen; switching review on or off is still
+  written into the group's history. The app runs on organization-managed phones whose staff are told
+  how it works at install (Security L19, §14).
+
 ### Fixed
 
+- **The location-request and location-sharing notifications could show in English** while the app was
+  in Persian. They, and the message notification, now use the app's language rather than the
+  device's, as the call and network notifications already did.
 - **CI's shellcheck flagged `setup-node.sh`** (SC2015, an `A && B || C` when locating the checkout); it is
   rewritten with the same behaviour.
 

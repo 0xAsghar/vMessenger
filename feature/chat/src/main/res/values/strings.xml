@@ -110,11 +110,10 @@
     <string name="feature_chat_timer_at_confirm">تنظیم</string>
     <string name="feature_chat_call_start">تماس صوتی</string>
     <!-- Group-admin review of edited and deleted messages (§3.2). Disclosed to every member. -->
-    <string name="feature_chat_group_audit_banner">مدیران این گروه می‌توانند پیام‌های ویرایش‌شده و حذف‌شده را بازبینی کنند.</string>
     <string name="feature_chat_group_audit_row">بازبینی پیام‌های ویرایش‌شده و حذف‌شده</string>
-    <string name="feature_chat_group_audit_row_body">اگر روشن باشد، متن پیام‌ها پیش از ویرایش یا حذف برای مدیران گروه نگه داشته می‌شود و همهٔ اعضا از این موضوع آگاه می‌شوند.</string>
+    <string name="feature_chat_group_audit_row_body">اگر روشن باشد، متن پیام‌ها پیش از ویرایش یا حذف برای مدیران گروه نگه داشته می‌شود.</string>
     <string name="feature_chat_group_audit_on_title">روشن‌کردن بازبینی؟</string>
-    <string name="feature_chat_group_audit_on_body">از این پس متن پیام‌های این گروه پیش از ویرایش یا حذف نگه داشته می‌شود و مدیران گروه می‌توانند آن را ببینند. این موضوع در گفتگو اعلام می‌شود و برای همهٔ اعضا نمایش داده می‌ماند. این تنظیم روی گفتگوهای خصوصی اثری ندارد.</string>
+    <string name="feature_chat_group_audit_on_body">از این پس متن پیام‌های این گروه پیش از ویرایش یا حذف نگه داشته می‌شود و مدیران گروه می‌توانند آن را ببینند. این موضوع در گفتگو اعلام می‌شود. این تنظیم روی گفتگوهای خصوصی اثری ندارد.</string>
     <string name="feature_chat_group_audit_off_title">خاموش‌کردن بازبینی؟</string>
     <string name="feature_chat_group_audit_off_body">نگه‌داشتن متن پیام‌ها متوقف می‌شود و آنچه تا کنون نگه داشته شده است پاک می‌شود.</string>
     <string name="feature_chat_group_audit_confirm">تأیید</string>
@@ -124,7 +123,7 @@
     <string name="feature_chat_group_demote_body">%1$s دیگر به بازبینی پیام‌های این گروه دسترسی ندارد.</string>
     <string name="feature_chat_group_member_admin">مدیر</string>
     <string name="feature_chat_group_audit_title">بازبینی پیام‌ها</string>
-    <string name="feature_chat_group_audit_screen_notice">این فهرست متن پیام‌هایی است که اعضای گروه ویرایش یا حذف کرده‌اند و این دستگاه آن را دیده است. همهٔ اعضای گروه از فعال بودن این قابلیت آگاه هستند.</string>
+    <string name="feature_chat_group_audit_screen_notice">این فهرست متن پیام‌هایی است که اعضای گروه ویرایش یا حذف کرده‌اند و این دستگاه آن را دیده است.</string>
     <string name="feature_chat_group_audit_off_state_title">بازبینی فعال نیست</string>
     <string name="feature_chat_group_audit_off_state_body">سازندهٔ گروه این قابلیت را روشن نکرده است، یا آن را خاموش کرده و آنچه نگه داشته شده بود پاک شده است.</string>
     <string name="feature_chat_group_audit_empty_title">موردی برای بازبینی نیست</string>
