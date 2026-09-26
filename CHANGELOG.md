@@ -13,6 +13,14 @@ version** (currently 25, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
 
+### Added
+
+- **Call from a contact's page and from the contacts list.** A contact's page has *Chat* and *Call*
+  side by side, and each contact in the Contacts tab has chat and call icons for one-tap starts.
+- **First-run permissions are asked where they're needed**: background activity (the battery-optimisation
+  exemption) as the node step ends, and location right after the ID is created. Refusing either still
+  moves on.
+
 ### Changed
 
 - **A timed message shows its timer only to its sender.** The person receiving it no longer sees the

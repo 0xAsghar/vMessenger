@@ -143,6 +143,7 @@ data class ContactsNavigation(
     val onAddByHash: () -> Unit = {},
     val onOpenContact: (String) -> Unit = {},
     val onStartChat: (String) -> Unit = {},
+    val onStartCall: (String) -> Unit = {},
 )
 
 /** The taps a contacts row can produce, bundled so the list keeps a short parameter list. */
@@ -150,6 +151,8 @@ data class ContactsNavigation(
 data class ContactsListCallbacks(
     val onOpenContact: (String) -> Unit,
     val onLongPressContact: (String) -> Unit,
+    val onChat: (String) -> Unit,
+    val onCall: (String) -> Unit,
     val onApproveRequest: (String) -> Unit,
     val onRejectRequest: (String) -> Unit,
 )

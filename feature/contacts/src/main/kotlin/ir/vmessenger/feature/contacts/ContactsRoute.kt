@@ -87,6 +87,8 @@ fun ContactsRoute(
             callbacks = ContactsListCallbacks(
                 onOpenContact = navigation.onOpenContact,
                 onLongPressContact = viewModel::onSheetFor,
+                onChat = navigation.onStartChat,
+                onCall = navigation.onStartCall,
                 onApproveRequest = viewModel::onApproveRequest,
                 onRejectRequest = viewModel::onRejectRequest,
             ),

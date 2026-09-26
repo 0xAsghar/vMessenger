@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import ir.vmessenger.core.designsystem.component.Avatar
 import ir.vmessenger.core.designsystem.component.SectionHeader
 import ir.vmessenger.core.designsystem.component.UserHashText
+import ir.vmessenger.core.designsystem.component.VmIconButton
 import ir.vmessenger.core.designsystem.component.VmListRow
 import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.component.VmTextButton
@@ -70,6 +74,8 @@ internal fun ContactsList(
                 contact = contact,
                 onClick = { callbacks.onOpenContact(contact.id) },
                 onLongClick = { callbacks.onLongPressContact(contact.id) },
+                onChat = { callbacks.onChat(contact.id) },
+                onCall = { callbacks.onCall(contact.id) },
             )
         }
     }
@@ -80,6 +86,8 @@ private fun ContactRowItem(
     contact: ContactRow,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onChat: () -> Unit,
+    onCall: () -> Unit,
 ) {
     val subtitle = contactSubtitle(contact)
     VmListRow(
@@ -90,22 +98,39 @@ private fun ContactRowItem(
         } else {
             null
         },
-        trailing = { ContactRowTrailing(contact = contact) },
+        trailing = { ContactRowTrailing(contact = contact, onChat = onChat, onCall = onCall) },
         avatar = { Avatar(seed = contact.identityHash, name = contact.name) },
     )
 }
 
+/** Status marks, then — for someone we can talk to — one tap to chat and one to call. */
 @Composable
-private fun ContactRowTrailing(contact: ContactRow) {
-    Column(
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(VmSpacing.xs),
-    ) {
-        if (contact.keyChangePending) {
-            KeyChangeShield()
+private fun ContactRowTrailing(contact: ContactRow, onChat: () -> Unit, onCall: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(VmSpacing.xs),
+        ) {
+            if (contact.keyChangePending) {
+                KeyChangeShield()
+            }
+            if (contact.status != ContactRelationshipStatus.APPROVED) {
+                ContactStatusChip(status = contact.status)
+            }
         }
-        if (contact.status != ContactRelationshipStatus.APPROVED) {
-            ContactStatusChip(status = contact.status)
+        if (contact.canChat) {
+            VmIconButton(
+                icon = Icons.Outlined.ChatBubbleOutline,
+                contentDescription = stringResource(R.string.contacts_action_chat, contact.name),
+                onClick = onChat,
+                tint = VmTheme.colors.iconSecondary,
+            )
+            VmIconButton(
+                icon = Icons.Outlined.Call,
+                contentDescription = stringResource(R.string.contacts_action_call, contact.name),
+                onClick = onCall,
+                tint = VmTheme.colors.iconSecondary,
+            )
         }
     }
 }

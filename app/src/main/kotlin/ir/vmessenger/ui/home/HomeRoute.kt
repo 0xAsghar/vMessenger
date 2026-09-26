@@ -44,6 +44,7 @@ import ir.vmessenger.feature.lock.PinSetupDialog
 import ir.vmessenger.feature.map.MapRoute
 import ir.vmessenger.feature.settings.SettingsRoute
 import ir.vmessenger.navigation.VmRoute
+import ir.vmessenger.ui.call.rememberCallLauncher
 import ir.vmessenger.ui.network.AppAlertBanner
 import ir.vmessenger.ui.network.LocalAppAlertHost
 import ir.vmessenger.ui.network.visibleAppAlert
@@ -191,6 +192,7 @@ private fun HomeTabNavHost(
                     onAddByHash = navigation.onAddByHash,
                     onOpenContact = navigation.onOpenContact,
                     onStartChat = onStartChat,
+                    onStartCall = rememberCallLauncher(),
                 ),
             )
         }

@@ -12,6 +12,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Call
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.DriveFileRenameOutline
 import androidx.compose.material.icons.outlined.LockOpen
@@ -52,6 +54,7 @@ import ir.vmessenger.core.designsystem.theme.VmTheme
 @Immutable
 private data class ContactDetailCallbacks(
     val onStartChat: () -> Unit,
+    val onStartCall: () -> Unit,
     val onResend: () -> Unit,
     val onAcceptKeyChange: () -> Unit,
     val onVerifiedChange: (Boolean) -> Unit,
@@ -69,6 +72,7 @@ private data class ContactDetailCallbacks(
 fun ContactDetailRoute(
     onNavigateBack: () -> Unit,
     onOpenConversation: (String) -> Unit,
+    onStartCall: (String) -> Unit = {},
     viewModel: ContactDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -99,6 +103,7 @@ fun ContactDetailRoute(
                 scroll = scroll,
                 callbacks = ContactDetailCallbacks(
                     onStartChat = viewModel::onStartChat,
+                    onStartCall = { onStartCall(contact.id) },
                     onResend = viewModel::onResendRequest,
                     onAcceptKeyChange = viewModel::onAcceptKeyChange,
                     onVerifiedChange = viewModel::onVerifiedChange,
@@ -141,8 +146,7 @@ private fun ContactDetailContent(
         ContactPrimaryActions(
             contact = contact,
             canResend = state.canResendRequest,
-            onStartChat = callbacks.onStartChat,
-            onResend = callbacks.onResend,
+            callbacks = callbacks,
         )
         state.location?.let { ContactLocationCard(location = it) }
         state.safetyNumberKeys?.let { (local, remote) ->
@@ -207,8 +211,7 @@ private fun ContactDetailHeader(contact: ContactRow) {
 private fun ContactPrimaryActions(
     contact: ContactRow,
     canResend: Boolean,
-    onStartChat: () -> Unit,
-    onResend: () -> Unit,
+    callbacks: ContactDetailCallbacks,
 ) {
     Column(
         modifier = Modifier
@@ -216,16 +219,26 @@ private fun ContactPrimaryActions(
             .padding(horizontal = VmSpacing.lg),
         verticalArrangement = Arrangement.spacedBy(VmSpacing.sm),
     ) {
-        VmButton(
-            text = stringResource(R.string.contacts_start_chat),
-            onClick = onStartChat,
-            enabled = contact.canChat,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(VmSpacing.sm)) {
+            VmButton(
+                text = stringResource(R.string.contacts_sheet_chat),
+                onClick = callbacks.onStartChat,
+                enabled = contact.canChat,
+                leadingIcon = Icons.Outlined.ChatBubbleOutline,
+                modifier = Modifier.weight(1f),
+            )
+            VmOutlinedButton(
+                text = stringResource(R.string.contacts_call),
+                onClick = callbacks.onStartCall,
+                enabled = contact.canChat,
+                leadingIcon = Icons.Outlined.Call,
+                modifier = Modifier.weight(1f),
+            )
+        }
         if (canResend) {
             VmOutlinedButton(
                 text = stringResource(R.string.contacts_resend_request),
-                onClick = onResend,
+                onClick = callbacks.onResend,
                 modifier = Modifier.fillMaxWidth(),
             )
         }

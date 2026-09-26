@@ -6,6 +6,7 @@ import androidx.navigation.compose.composable
 import ir.vmessenger.feature.contacts.ContactDetailRoute
 import ir.vmessenger.feature.settings.ActivityLogRoute
 import ir.vmessenger.feature.settings.BlockedContactsRoute
+import ir.vmessenger.ui.call.rememberCallLauncher
 
 /**
  * Contact destinations that are full screens rather than tab content.
@@ -15,11 +16,13 @@ import ir.vmessenger.feature.settings.BlockedContactsRoute
  */
 internal fun NavGraphBuilder.contactsGraph(navController: NavHostController) {
     composable<VmRoute.ContactDetail> { entry ->
+        val startCall = rememberCallLauncher()
         ContactDetailRoute(
             onNavigateBack = { navController.popIfCurrent(entry) },
             onOpenConversation = { conversationId ->
                 navController.navigate(VmRoute.Conversation(conversationId)) { launchSingleTop = true }
             },
+            onStartCall = startCall,
         )
     }
     composable<VmRoute.BlockedContacts> { entry ->

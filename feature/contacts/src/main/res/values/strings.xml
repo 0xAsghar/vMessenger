@@ -12,7 +12,6 @@
     <string name="contacts_my_qr">QR من</string>
     <string name="contacts_scan_qr">اسکن QR</string>
     <string name="contacts_section_contacts">مخاطبین</string>
-    <string name="contacts_start_chat">شروع گفتگو</string>
     <string name="contacts_cancel">انصراف</string>
 
     <string name="contacts_status_approved">تأیید شده</string>
@@ -80,4 +79,7 @@
     <string name="contact_detail_verified_body">اگر شمارهٔ امنیتی را از راه دیگری (تماس یا حضوری) با مخاطب مقایسه کرده‌اید، این گزینه را روشن کنید.</string>
     <string name="contacts_last_heard">آخرین ارتباط %1$s</string>
     <string name="contacts_never_heard">هنوز پاسخی دریافت نشده</string>
+    <string name="contacts_call">تماس</string>
+    <string name="contacts_action_chat">گفتگو با %1$s</string>
+    <string name="contacts_action_call">تماس با %1$s</string>
 </resources>
