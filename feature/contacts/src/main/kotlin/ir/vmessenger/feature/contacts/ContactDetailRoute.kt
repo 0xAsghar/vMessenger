@@ -149,6 +149,7 @@ private fun ContactDetailContent(
             callbacks = callbacks,
         )
         state.location?.let { ContactLocationCard(location = it) }
+        if (contact.isApproved) ContactLocationHistory(history = state.locationHistory)
         state.safetyNumberKeys?.let { (local, remote) ->
             SafetyNumberDisplay(localPublicKey = local, remotePublicKey = remote)
             // Sits under the number it refers to: the switch only records that the user

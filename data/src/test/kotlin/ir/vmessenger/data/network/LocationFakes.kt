@@ -76,6 +76,12 @@ class FakeLocationSampleDao : LocationSampleDao {
 
     override suspend fun getLatest(shareId: String): LocationSampleEntity? = getLatestSync(shareId)
 
+    override fun observeForContact(
+        contactId: String,
+        direction: MessageDirection,
+        limit: Int,
+    ): Flow<List<LocationSampleEntity>> = flowOf(emptyList())
+
     override suspend fun samplesForShare(shareId: String): List<LocationSampleEntity> =
         samples.filter { it.shareId == shareId }.sortedBy { it.sampledAtUnixMs }
 

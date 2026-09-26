@@ -82,4 +82,9 @@
     <string name="contacts_call">تماس</string>
     <string name="contacts_action_chat">گفتگو با %1$s</string>
     <string name="contacts_action_call">تماس با %1$s</string>
+    <string name="contact_detail_location_last">آخرین اشتراک %1$s</string>
+    <string name="contact_detail_history_section">تاریخچهٔ موقعیت</string>
+    <string name="contact_detail_history_empty">در ۲۴ ساعت گذشته موقعیتی با شما به اشتراک گذاشته نشده است.</string>
+    <string name="contact_detail_history_more">نمایش همه (%1$s)</string>
+    <string name="contact_detail_history_note">موقعیت‌هایی که این مخاطب در ۲۴ ساعت گذشته با شما به اشتراک گذاشته است.</string>
 </resources>

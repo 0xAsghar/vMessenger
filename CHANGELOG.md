@@ -15,6 +15,9 @@ version** (currently 25, [docs/Database.md](docs/Database.md)).
 
 ### Added
 
+- **Location history on a contact's page.** Every position a contact shared with you in the last
+  24 hours, newest first, with the route drawn on the map — also after they stop sharing, where the
+  map shows where they last were. Before, the page showed a position only while a share was open.
 - **Call from a contact's page and from the contacts list.** A contact's page has *Chat* and *Call*
   side by side, and each contact in the Contacts tab has chat and call icons for one-tap starts.
 - **First-run permissions are asked where they're needed**: background activity (the battery-optimisation

@@ -370,11 +370,15 @@ instantly. `MyQrViewModel`, `AddByHashViewModel` and `QrScanViewModel` share `Pa
 
 [`ContactsRoute`](../feature/contacts/src/main/kotlin/ir/vmessenger/feature/contacts/ContactsRoute.kt)
 is the tab: pending requests first, then contacts, each row carrying a relationship-status chip, a
-key-change shield where relevant, and a distance badge when a contact is sharing location.
+key-change shield where relevant, a distance badge when a contact is sharing location, and — for a
+contact you can talk to — chat and call icons for one-tap starts.
 [`ContactDetailRoute`](../feature/contacts/src/main/kotlin/ir/vmessenger/feature/contacts/ContactDetailRoute.kt)
 is a real destination in the outer graph rather than remembered state, which is what makes system
 back close the detail rather than leave the tab, and lets it pop itself when the contact stops
-existing after a delete. Formatting helpers — `distanceLabel`, `statusLabel`, `ContactStatusChip`,
+existing after a delete. It leads with *Chat* and *Call*; below them, the contact's location — live
+while they share, otherwise where they last shared, with the route they shared drawn on the map — and
+their location history: every position they shared with you inside the 24-hour retention window,
+newest first (`ContactLocationHistory`). Formatting helpers — `distanceLabel`, `statusLabel`, `ContactStatusChip`,
 `KeyChangeShield` — live in `ContactFormatting.kt`.
 
 ### 5.4 `feature:chat`

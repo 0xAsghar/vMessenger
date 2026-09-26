@@ -180,6 +180,10 @@ class LocationRepositoryImpl @Inject constructor(
         return locationSampleDao.samplesForShare(share.shareId).map { it.toDomain() }
     }
 
+    override fun observeSharedHistory(contactId: String, limit: Int): Flow<List<LocationSample>> =
+        locationSampleDao.observeForContact(contactId, MessageDirection.INCOMING, limit)
+            .map { rows -> rows.map { it.toDomain() } }
+
     private fun LocationSampleEntity.toDomain() = LocationSample(
         shareId = shareId,
         latitude = latitude,

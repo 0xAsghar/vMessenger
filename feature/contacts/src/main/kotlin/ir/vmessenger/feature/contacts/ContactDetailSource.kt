@@ -20,6 +20,8 @@ internal data class ContactDetailData(
     val localPublicKey: ByteArray?,
     /** Their latest position while they share it with us; null when they do not. */
     val sharedLocation: LocationSample? = null,
+    /** What they shared with us inside the retention window, newest first. */
+    val history: List<LocationSample> = emptyList(),
 )
 
 /**
@@ -43,12 +45,14 @@ class ContactDetailSource @Inject constructor(
         locationAccess.observeAll(),
         localPublicKey,
         locationRepository.observeIncomingLocations().map { it[contactId] },
-    ) { contacts, access, identityKey, location ->
+        locationRepository.observeSharedHistory(contactId, HISTORY_LIMIT),
+    ) { contacts, access, identityKey, location, history ->
         ContactDetailData(
             contact = contacts.firstOrNull { it.id == contactId } ?: contactRepository.getContact(contactId),
             canSeeMyLocation = access[contactId] == true,
             localPublicKey = identityKey,
             sharedLocation = location,
+            history = history,
         )
     }
 
@@ -58,3 +62,6 @@ class ContactDetailSource @Inject constructor(
     suspend fun setLocationAccess(contactId: String, granted: Boolean) =
         locationAccess.setAccess(contactId, granted)
 }
+
+/** The newest positions the contact page lists and draws; retention keeps a day of them. */
+private const val HISTORY_LIMIT = 100

@@ -25,22 +25,39 @@ import ir.vmessenger.core.designsystem.theme.VmTheme
 import ir.vmessenger.core.map.CameraRequest
 import ir.vmessenger.core.map.MapCameraMode
 import ir.vmessenger.core.map.MapContent
+import ir.vmessenger.core.map.MapCoordinate
 import ir.vmessenger.core.map.MapMarker
 import ir.vmessenger.core.map.VmMapCallbacks
 import ir.vmessenger.core.map.VmMapOptions
 import ir.vmessenger.core.map.VmMapView
 import ir.vmessenger.domain.model.Contact
 import ir.vmessenger.domain.model.LocationSample
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 
 private val MiniMapHeight = 200.dp
 private const val MILLIS_PER_SECOND = 1_000L
 
-/** A contact's shared position as the detail screen draws it: their pin, and when it was taken. */
+/**
+ * A contact's position as the detail screen draws it: their pin, when it was taken, whether they are
+ * sharing right now, and the route they shared (oldest first).
+ */
 @Immutable
 data class ContactLocation(
     val marker: MapMarker,
     val sampledAtUnixMs: Long,
+    val live: Boolean = true,
+    val path: ImmutableList<MapCoordinate> = persistentListOf(),
+)
+
+/** One position in a contact's location history. */
+@Immutable
+data class LocationHistoryEntry(
+    val sampledAtUnixMs: Long,
+    val latitude: Double,
+    val longitude: Double,
+    val accuracyM: Float,
 )
 
 internal fun LocationSample.toContactLocation(contact: Contact) = ContactLocation(
@@ -54,6 +71,13 @@ internal fun LocationSample.toContactLocation(contact: Contact) = ContactLocatio
     ),
     sampledAtUnixMs = sampledAtUnixMs,
 )
+
+/** The live position when they share now, otherwise the last one they shared; with the route either way. */
+internal fun locationOf(data: ContactDetailData, contact: Contact): ContactLocation? {
+    val latest = data.sharedLocation ?: data.history.firstOrNull() ?: return null
+    val path = data.history.asReversed().map { MapCoordinate(it.latitude, it.longitude) }
+    return latest.toContactLocation(contact).copy(live = data.sharedLocation != null, path = path.toImmutableList())
+}
 
 /**
  * Where a contact is, on the contact's own screen, while they share their position with us.
@@ -70,6 +94,7 @@ internal fun ContactLocationCard(location: ContactLocation, modifier: Modifier =
     val content = remember(location) {
         MapContent(
             markers = persistentListOf(location.marker),
+            path = location.path,
             camera = CameraRequest(
                 mode = MapCameraMode.FitAll,
                 token = (location.sampledAtUnixMs / MILLIS_PER_SECOND).toInt(),
@@ -109,7 +134,7 @@ internal fun ContactLocationCard(location: ContactLocation, modifier: Modifier =
         }
         VmText(
             text = stringResource(
-                R.string.contact_detail_location_updated,
+                if (location.live) R.string.contact_detail_location_updated else R.string.contact_detail_location_last,
                 VmDateFormat.relative(location.sampledAtUnixMs),
             ),
             style = VmTheme.typography.bodySm,

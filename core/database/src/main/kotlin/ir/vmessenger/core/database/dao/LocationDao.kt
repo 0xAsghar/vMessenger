@@ -61,6 +61,18 @@ interface LocationSampleDao {
     @Query("SELECT * FROM location_sample WHERE shareId = :shareId ORDER BY sampledAtUnixMs DESC LIMIT 1")
     suspend fun getLatest(shareId: String): LocationSampleEntity?
 
+    /**
+     * A contact's positions in one [direction], across all their sharing sessions still inside
+     * retention, newest first. Reactive on both tables, so a new sample or an ended share updates it.
+     */
+    @Query(
+        "SELECT location_sample.* FROM location_sample " +
+            "INNER JOIN location_share ON location_sample.shareId = location_share.shareId " +
+            "WHERE location_share.contactId = :contactId AND location_share.direction = :direction " +
+            "ORDER BY location_sample.sampledAtUnixMs DESC LIMIT :limit",
+    )
+    fun observeForContact(contactId: String, direction: MessageDirection, limit: Int): Flow<List<LocationSampleEntity>>
+
     /** Every sample of one session, oldest first: the route as it was shared. */
     @Query("SELECT * FROM location_sample WHERE shareId = :shareId ORDER BY sampledAtUnixMs ASC")
     suspend fun samplesForShare(shareId: String): List<LocationSampleEntity>

@@ -8,6 +8,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import ir.vmessenger.core.designsystem.component.UiMessage
 import ir.vmessenger.core.designsystem.component.UiMessageBus
 import ir.vmessenger.domain.model.ContactRelationshipStatus
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,8 +33,10 @@ data class ContactDetailUiState(
     val localPublicKey: ByteArray? = null,
     val remotePublicKey: ByteArray? = null,
     val canSeeMyLocation: Boolean = false,
-    /** Where they are, while they share their position with us. */
+    /** Where they are while they share with us, or were when they last did (with the route). */
     val location: ContactLocation? = null,
+    /** Everything they shared with us inside the retention window, newest first. */
+    val locationHistory: ImmutableList<LocationHistoryEntry> = persistentListOf(),
     val dialog: ContactDialog = ContactDialog.None,
 ) {
     /** The contact is gone (deleted here, or after the peer's revoke); the screen has to pop. */

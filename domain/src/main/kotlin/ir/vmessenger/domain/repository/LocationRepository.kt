@@ -45,4 +45,10 @@ interface LocationRepository {
      * where someone tends to be.
      */
     suspend fun sharedPath(contactId: String): List<LocationSample>
+
+    /**
+     * The positions a contact has shared with us, newest first, across their sessions inside the
+     * retention window (at most [limit]): their location history, as the contact page shows it.
+     */
+    fun observeSharedHistory(contactId: String, limit: Int): Flow<List<LocationSample>>
 }
