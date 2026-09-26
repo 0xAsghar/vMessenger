@@ -1,6 +1,7 @@
 package ir.vmessenger.data.network
 
 import com.google.protobuf.ByteString
+import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.database.entity.ContactRelationshipStatus
 import ir.vmessenger.core.database.entity.MessageDirection
 import ir.vmessenger.core.location.LocationUpdate
@@ -117,6 +118,27 @@ class LocationSharingCoordinatorTest {
         assertTrue(harness.shareDao.activeIds("c", MessageDirection.OUTGOING).isEmpty())
         assertEquals(listOf("a"), harness.messaging.sent.map { it.first })
         assertEquals(1, harness.serviceControl.starts)
+    }
+
+    @Test
+    fun startingWithNobodyTickedSharesWithEveryReachableContact() = runTest {
+        harness.contactDao.contacts += InboundFixtures.contact("a", peerA)
+        harness.contactDao.contacts += InboundFixtures.contact("b", peerB, blocked = true)
+        harness.contactDao.contacts +=
+            InboundFixtures.contact("c", peerC, status = ContactRelationshipStatus.PENDING_IN)
+
+        val result = coordinator.startSharingToGrantedContacts()
+
+        assertTrue(result is AppResult.Success)
+        assertEquals(listOf("a"), harness.locationAccessRepository.granted)
+        assertEquals(1, harness.shareDao.activeIds("a", MessageDirection.OUTGOING).size)
+        assertEquals(1, harness.serviceControl.starts)
+    }
+
+    @Test
+    fun startingWithNoContactAtAllIsReported() = runTest {
+        assertTrue(coordinator.startSharingToGrantedContacts() is AppResult.Error)
+        assertEquals(0, harness.serviceControl.starts)
     }
 
     @Test

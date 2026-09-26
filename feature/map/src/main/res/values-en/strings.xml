@@ -11,7 +11,7 @@
 
     <string name="feature_map_share_switch">Share my location</string>
     <string name="feature_map_share_targets">With: %1$s</string>
-    <string name="feature_map_share_nobody">No contacts selected yet</string>
+    <string name="feature_map_share_nobody">Turning it on shares with all your contacts</string>
     <string name="feature_map_pick_contacts">Select contacts</string>
     <string name="feature_map_picker_title">Who can see my location?</string>
     <string name="feature_map_picker_empty">You have no approved contacts</string>
@@ -33,7 +33,7 @@
     <string name="feature_map_tiles_error">The map did not load — check your internet connection</string>
     <string name="feature_map_retry">Try again</string>
 
-    <string name="feature_map_select_contact_first">Select at least one contact first</string>
+    <string name="feature_map_select_contact_first">No contact can receive your location yet</string>
 
     <string name="feature_map_distance_m">%1$s m</string>
     <string name="feature_map_distance_km">%1$s km</string>

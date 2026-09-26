@@ -125,7 +125,8 @@ class MapViewModel @Inject constructor(
                 hint.value = null
                 locationSharingCoordinator.stopAllSharing()
             } else {
-                // The only start failure today is "no approved contact selected".
+                // With nobody ticked this shares with every approved contact; the only failure left
+                // is that there is none.
                 val result = locationSharingCoordinator.startSharingToGrantedContacts()
                 hint.value = if (result is AppResult.Error) MapHint.SelectContactFirst else null
             }

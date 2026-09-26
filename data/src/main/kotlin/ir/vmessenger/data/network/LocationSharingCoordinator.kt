@@ -170,8 +170,13 @@ class LocationSharingCoordinator @Inject constructor(
             .onFailure { AppLogger.warn("Location", "service restart failed: ${it.message}") }
     }
 
+    /**
+     * Starts sharing with every contact ticked in "who may see me". With nobody ticked, turning
+     * sharing on means everyone who can receive it: every approved, unblocked contact is ticked
+     * first, so the picker shows who sees the position.
+     */
     suspend fun startSharingToGrantedContacts(): AppResult<Unit> {
-        val granted = locationAccessRepository.grantedContactIds()
+        val granted = locationAccessRepository.grantedContactIds().ifEmpty { grantEveryReachableContact() }
         if (granted.isEmpty()) return noContactSelectedError()
         val started = shareMutex.withLock { startSharesFor(granted) }
         // Reported rather than left silently "off": the usual cause is that every ticked contact
@@ -225,6 +230,10 @@ class LocationSharingCoordinator @Inject constructor(
                 .onFailure { AppLogger.warn("Location", "service restart failed: ${it.message}") }
         }
     }
+
+    private suspend fun grantEveryReachableContact(): List<String> =
+        contactDao.getAll().filter { it.canReceiveOurLocation() }.map { it.id }
+            .onEach { locationAccessRepository.setAccess(it, true) }
 
     private fun ContactEntity.canReceiveOurLocation(): Boolean =
         relationshipStatus == ContactRelationshipStatus.APPROVED && !blocked

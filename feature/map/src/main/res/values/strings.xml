@@ -11,7 +11,7 @@
 
     <string name="feature_map_share_switch">اشتراک‌گذاری موقعیت من</string>
     <string name="feature_map_share_targets">برای: %1$s</string>
-    <string name="feature_map_share_nobody">هنوز مخاطبی انتخاب نشده است</string>
+    <string name="feature_map_share_nobody">با روشن‌کردن، با همهٔ مخاطبانتان به اشتراک گذاشته می‌شود</string>
     <string name="feature_map_pick_contacts">انتخاب مخاطبین</string>
     <string name="feature_map_picker_title">چه کسی موقعیت من را ببیند؟</string>
     <string name="feature_map_picker_empty">مخاطب تأییدشده‌ای ندارید</string>
@@ -33,7 +33,7 @@
     <string name="feature_map_tiles_error">نقشه بارگذاری نشد — اتصال اینترنت را بررسی کنید</string>
     <string name="feature_map_retry">تلاش دوباره</string>
 
-    <string name="feature_map_select_contact_first">ابتدا حداقل یک مخاطب را انتخاب کنید</string>
+    <string name="feature_map_select_contact_first">هنوز مخاطبی نیست که موقعیتتان را دریافت کند</string>
 
     <string name="feature_map_distance_m">%1$s متر</string>
     <string name="feature_map_distance_km">%1$s کیلومتر</string>

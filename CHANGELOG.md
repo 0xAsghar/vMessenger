@@ -23,6 +23,9 @@ version** (currently 25, [docs/Database.md](docs/Database.md)).
 
 ### Changed
 
+- **Location sharing turns on without choosing contacts first.** With nobody ticked in "who may see
+  me", switching sharing on shares with every approved contact and ticks them, so the list shows who
+  sees you. Contacts can still be unticked one by one.
 - **A timed message shows its timer only to its sender.** The person receiving it no longer sees the
   timer icon on the bubble; the message still disappears on time for both.
 - **No standing banner for message review.** A group with review of edited and deleted messages on no
