@@ -13,10 +13,14 @@ version** (currently 25, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-09-26
+
+Fixes and small additions to 2.0.0. No database or wire changes: schema stays 25, protocol major 2.
+
 ### Added
 
-- **Location history on a contact's page.** Every position a contact shared with you in the last
-  24 hours, newest first, with the route drawn on the map — also after they stop sharing, where the
+- **Location history on a contact's page.** Every place a contact shared with you in the last
+  24 hours, newest first (a stay is one entry, timed when they arrived), with the route drawn on the map — also after they stop sharing, where the
   map shows where they last were. Before, the page showed a position only while a share was open.
 - **Call from a contact's page and from the contacts list.** A contact's page has *Chat* and *Call*
   side by side, and each contact in the Contacts tab has chat and call icons for one-tap starts.
@@ -652,7 +656,8 @@ before a 1.x build is installed**, and identity and contacts do not survive that
 - **The reference node was hardened**: connection and record limits, listener-proof freshness and
   replay rejection, record expiry, and rejection counters on `/healthz?verbose=1`.
 
-[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/0xAsghar/vMessenger/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/0xAsghar/vMessenger/compare/v1.1.2...v2.0.0
 [2.0.0-beta.1]: https://github.com/0xAsghar/vMessenger/compare/v1.1.2...v2.0.0-beta.1
 [1.1.2]: https://github.com/0xAsghar/vMessenger/compare/v1.1.1...v1.1.2
