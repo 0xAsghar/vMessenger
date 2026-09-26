@@ -25,9 +25,11 @@ import ir.vmessenger.core.proto.app.v1.GroupMemberRole as ProtoGroupMemberRole
  * There is no server to arbitrate, so authority is pinned to the group's creator
  * and to a version that only moves forward by one:
  *
- * - `CREATE`/`SNAPSHOT` are accepted only from the creator, and only when they do
- *   not move the group backwards. They replace the membership wholesale, which is
- *   how a device that missed something recovers.
+ * - `CREATE`/`SNAPSHOT` are accepted only from the creator — for a group we
+ *   already hold, the creator stored for it — and only when they do not move the
+ *   group backwards. They replace the membership wholesale, which is how a device
+ *   that missed something recovers. An `ADD` naming us, for a group we do not
+ *   hold yet, is applied the same way: it is how a member added later joins.
  * - `UPDATE_NAME`/`ADD`/`REMOVE`/`CLOSE` are accepted only from the creator and
  *   only at exactly `local + 1`. A gap means a control was missed: the receiver
  *   asks for a snapshot and drops the control rather than applying a change it
@@ -39,7 +41,8 @@ import ir.vmessenger.core.proto.app.v1.GroupMemberRole as ProtoGroupMemberRole
  * not in, a `REMOVE` naming someone who is not a member — is dropped and logged.
  */
 @Singleton
-@Suppress("TooManyFunctions") // one handler per control type, plus their shared guards
+// One handler per control type plus their shared guards; one dependency per thing a control can touch.
+@Suppress("TooManyFunctions", "LongParameterList")
 class GroupControlHandler @Inject constructor(
     private val groupDao: GroupDao,
     private val conversationDao: ConversationDao,
@@ -47,6 +50,7 @@ class GroupControlHandler @Inject constructor(
     private val writer: ConversationWriter,
     private val controlSender: GroupControlSender,
     private val selfIdentity: SelfIdentityCache,
+    private val auditHistory: GroupAuditHistory,
 ) {
     /**
      * Handles one inbound control. The sender is taken from [contactId] — the
@@ -67,6 +71,9 @@ class GroupControlHandler @Inject constructor(
         dispatch(Incoming(groupId, senderKey, self, control))
     }
 
+    /** Once per start: captures a member's device kept before 2.0.2 under a review since switched off. */
+    suspend fun eraseReviewLeftovers() = auditHistory.eraseLeftovers()
+
     private class Incoming(
         val groupId: String,
         val senderKey: String,
@@ -75,6 +82,7 @@ class GroupControlHandler @Inject constructor(
     ) {
         val creatorKey: String get() = control.creatorIdentityHash.toStringUtf8()
         val version: Long get() = control.version
+        val targetKey: String get() = control.targetIdentityHash.toStringUtf8()
     }
 
     private suspend fun dispatch(incoming: Incoming) {
@@ -85,6 +93,15 @@ class GroupControlHandler @Inject constructor(
             -> applySnapshot(incoming, local)
             GroupControlType.GROUP_CONTROL_TYPE_SNAPSHOT_REQUEST -> answerSnapshotRequest(incoming, local)
             GroupControlType.GROUP_CONTROL_TYPE_LEAVE -> applyLeave(incoming, local)
+            // The ADD that names us is how a member added after creation first hears of the group. It
+            // carries the whole member list, the name and the policy, so it is applied as a snapshot,
+            // under the same checks; an ADD naming someone else still needs the group.
+            GroupControlType.GROUP_CONTROL_TYPE_ADD ->
+                if (local == null && incoming.targetKey == incoming.selfKey) {
+                    applySnapshot(incoming, null)
+                } else {
+                    applyIncremental(incoming, local)
+                }
             else -> applyIncremental(incoming, local)
         }
     }
@@ -99,6 +116,9 @@ class GroupControlHandler @Inject constructor(
         val members = GroupControlCodec.members(incoming.control, incoming.groupId, incoming.creatorKey, now)
         val rejection = when {
             incoming.senderKey != incoming.creatorKey -> "sender is not the creator"
+            // A member could otherwise name itself creator of a group we hold and take it over —
+            // and, with review on, erase what this device kept of its edits.
+            local != null && incoming.creatorKey != local.creatorIdentityHash -> "creator mismatch"
             local != null && incoming.version < local.version -> "stale version ${incoming.version}"
             members.none { it.identityHash == incoming.selfKey } -> "we are not in it"
             else -> null
@@ -131,6 +151,22 @@ class GroupControlHandler @Inject constructor(
         GroupSyncTracker.recordSnapshotApplied(incoming.groupId)
         val conversationId = ensureConversation(incoming.groupId, now)
         if (local == null) writer.recordGroupEvent(conversationId, GroupEventText.created(group.name))
+        if (group.auditRetention != (local?.auditRetention ?: false)) {
+            applyRetentionChange(incoming.groupId, conversationId, group.auditRetention)
+        }
+    }
+
+    /**
+     * Message review changed, or this device just joined a group that has it on. Every member's
+     * history says so, not only the creator's — members are the people it applies to — and switching
+     * it off erases what this device kept under it, as the creator's device does.
+     */
+    private suspend fun applyRetentionChange(groupId: String, conversationId: String, on: Boolean) {
+        if (!on) auditHistory.erase(groupId)
+        writer.recordGroupEvent(
+            conversationId,
+            if (on) GroupEventText.AUDIT_RETENTION_ON else GroupEventText.AUDIT_RETENTION_OFF,
+        )
     }
 
     /** Only the creator holds the authoritative membership, so only the creator answers. */
@@ -249,6 +285,8 @@ class GroupControlHandler @Inject constructor(
         groupDao.markRemoved(incoming.groupId, target, System.currentTimeMillis())
         if (target == incoming.selfKey) {
             groupDao.setClosed(incoming.groupId, true)
+            // Out of the group, this device no longer hears when review is switched off.
+            auditHistory.erase(incoming.groupId)
             writer.recordGroupEvent(conversationId, GroupEventText.REMOVED_ME)
         } else {
             writer.recordGroupEvent(conversationId, GroupEventText.removed(member.displayName))

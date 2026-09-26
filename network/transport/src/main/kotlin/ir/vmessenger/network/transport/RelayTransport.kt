@@ -2,7 +2,6 @@ package ir.vmessenger.network.transport
 
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
-import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.NodeAddressPolicy
 import ir.vmessenger.core.common.network.RelayDns
 import ir.vmessenger.core.common.network.TransportIds
@@ -60,7 +59,9 @@ open class RelayTransport @Inject constructor() : Transport {
     ): Result<Connection> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val url = endpoint.address.ifBlank { NetworkConfig.DEFAULT_RELAY_URL }
+                // A relay endpoint without an address names no relay; dialling the built-in one in its
+                // place would reach a node the person may have switched off.
+                val url = endpoint.address.ifBlank { error("relay endpoint without an address") }
                 require(relayTargetId.size == 32) { "relayTargetId must be 32 bytes" }
                 val hello = RelayHello.newBuilder()
                     .setRole(RelayRole.RELAY_ROLE_DIALER)

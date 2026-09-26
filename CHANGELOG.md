@@ -13,17 +13,47 @@ version** (currently 25, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-09-26
+
+Four fixes to 2.0.1, and what reviewing them turned up. No database or wire changes: schema stays 25,
+protocol major 2.
+
+### Fixed
+
+- **A phone with a group chat could not make a backup.** A group conversation has no contact, and the
+  export failed on it. The backup now holds one-to-one conversations and leaves group chats out; the
+  backup screen says so.
+- **The built-in node was used even when switched off.** With both built-in rows off in *Network nodes*,
+  the app still listened on, published and joined the DHT through `relay.vmessenger.ir`. It now uses only
+  the nodes that are on: with no relay on it listens on none and publishes only a direct endpoint, and
+  switching a node off or on takes effect at once for the DHT as well as the relay, without a restart.
+- **A contact request raised no notification.** It was seen only when the app was next opened. It now
+  raises one, once per request (the requester's app re-sends until answered), under the same privacy
+  settings as messages; approving or rejecting clears it.
+- **Group message review on members' phones.** Switching review off erased only the creator's captures;
+  every member's phone kept what it had captured, with the kept files. Now each phone erases when the
+  switch reaches it, or when it leaves or is removed from the group, and at start-up erases what a 2.0.1
+  phone left behind. Each member's history also gets the "review on/off" line, not only the creator's.
+- **A member added to a group after it was created never received it.** The ADD naming them was dropped
+  as "unknown group"; it now brings them into the group.
+- **A call-flow diagram in Protocol.md did not render**: a semicolon inside a Mermaid note ends the
+  statement.
+
+### Security
+
+- **A group member could claim to be the creator of a group others held** and replace its membership
+  with a snapshot, which since the review fix would also have erased the others' captures. A snapshot
+  naming a creator other than the one stored for the group is now dropped.
+- **Messages on a timer are no longer written into a backup.** The backup format has no deadline, so a
+  restored copy would never have expired. A backup made with 2.0.1 or earlier may still hold such
+  messages.
+
 ### Changed
 
 - **The documentation was audited against 2.0.1** for the handover: `README.md`, `AGENTS.md` and every
   document in `docs/` were checked claim by claim against the code and corrected where they had fallen
   behind it (for example the design system replacing Material 3, schema 25, voice calls, 100-member groups,
   the English UI, New node, the known-limitations table).
-
-### Fixed
-
-- **A call-flow diagram in Protocol.md did not render**: a semicolon inside a Mermaid note ends the
-  statement.
 
 ### Removed
 
@@ -673,7 +703,8 @@ before a 1.x build is installed**, and identity and contacts do not survive that
 - **The reference node was hardened**: connection and record limits, listener-proof freshness and
   replay rejection, record expiry, and rejection counters on `/healthz?verbose=1`.
 
-[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v2.0.1...HEAD
+[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v2.0.2...HEAD
+[2.0.2]: https://github.com/0xAsghar/vMessenger/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/0xAsghar/vMessenger/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/0xAsghar/vMessenger/compare/v1.1.2...v2.0.0
 [2.0.0-beta.1]: https://github.com/0xAsghar/vMessenger/compare/v1.1.2...v2.0.0-beta.1

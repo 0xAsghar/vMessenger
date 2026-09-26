@@ -24,6 +24,7 @@ class ContactRequestHandlerTest {
     private lateinit var contactDao: FakeContactDao
     private lateinit var requests: FakeContactRequestRepository
     private lateinit var handler: ContactRequestHandler
+    private val notifier = FakeIncomingMessageNotifier()
 
     @Before
     fun setUp() {
@@ -37,7 +38,7 @@ class ContactRequestHandlerTest {
         handler = ContactRequestHandler(
             contactRequestRepository = requests,
             contactRepository = FakeContactRepository(contactDao),
-            contactRequestNotifier = ContactRequestNotifier(),
+            contactRequestNotifier = ContactRequestNotifier(notifier, requests),
             contactRequestService = ContactRequestService(
                 identityRepository,
                 SelfIdentityCache(identityRepository, cryptoEngine),
@@ -64,6 +65,8 @@ class ContactRequestHandlerTest {
         val saved = requests.saved.single()
         val provenHash = UserHashEncoder.encode(peer.identityHash)
         assertEquals(provenHash, saved.requesterUserHash)
+        // A saved request raises exactly one notification, named as the card is.
+        assertEquals(listOf(provenHash to saved.requestId), notifier.contactRequests)
         assertEquals("name falls back to the derived hash, not the claimed one", provenHash, saved.requesterDisplayName)
         assertArrayEquals(peer.identityHash, saved.requesterIdentityHash)
         assertArrayEquals(peer.ed25519PublicKey, saved.requesterEd25519PublicKey)
@@ -78,6 +81,7 @@ class ContactRequestHandlerTest {
         handler.handleRequest(InboundFixtures.requestEnvelope("cr-0000000000000000000000000000dead"), peer)
 
         assertTrue(requests.saved.isEmpty())
+        assertTrue("an ignored request raises no notification", notifier.contactRequests.isEmpty())
     }
 
     @Test
@@ -89,7 +93,28 @@ class ContactRequestHandlerTest {
         handler.handleRequest(InboundFixtures.requestEnvelope(requestIdFrom(us), displayName = "Me"), us)
 
         assertTrue(requests.saved.isEmpty())
+        assertTrue(notifier.contactRequests.isEmpty())
         assertEquals(ContactRelationshipStatus.PENDING_OUT, contactDao.getById("me")!!.relationshipStatus)
+    }
+
+    @Test
+    fun resentRequestAlertsOnlyOnce() = runTest {
+        // The requester's app re-sends every few minutes until we answer; each copy must not alert again.
+        val request = InboundFixtures.requestEnvelope(requestIdFrom(peer), displayName = "Sara")
+        repeat(3) { handler.handleRequest(request, peer) }
+
+        assertEquals(1, requests.saved.size)
+        assertEquals(1, notifier.contactRequests.size)
+    }
+
+    @Test
+    fun silentlyDeclinedRequestRaisesNoNotification() = runTest {
+        requests.rejectCount = 2
+
+        handler.handleRequest(InboundFixtures.requestEnvelope(requestIdFrom(peer), displayName = "Sara"), peer)
+
+        assertTrue(requests.saved.isEmpty())
+        assertTrue(notifier.contactRequests.isEmpty())
     }
 
     @Test

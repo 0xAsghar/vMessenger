@@ -19,19 +19,21 @@ class RelayDirectoryImpl @Inject constructor(
     @Volatile
     private var lastSelected: SelectedRelay? = null
 
-    override suspend fun activeRelay(): SelectedRelay {
+    override suspend fun activeRelay(): SelectedRelay? {
         val default = NetworkConfig.DEFAULT_RELAY_URL
         val ranked = if (P2PConfig.multiNodeEnabled) nodeRepository.enabledRelayUrls() else emptyList()
         NetworkConfig.rankedRelayUrls = ranked
+        // The node list is the whole truth: the built-in relay is one row in it, seeded unless the
+        // person declined it, and switching it off has to mean it. Only the legacy single-node mode
+        // (multi-node off) still falls back to it.
         val url = selectActiveRelay(
             rankedRelays = ranked,
-            default = default,
+            fallback = default.takeUnless { P2PConfig.multiNodeEnabled },
         )
-        NetworkConfig.relayAddress = url
-        val selected = SelectedRelay(
-            url = url,
-            source = if (url == default) RelaySource.DEFAULT else RelaySource.RANKED,
-        )
+        NetworkConfig.relayAddress = url.orEmpty()
+        val selected = url?.let {
+            SelectedRelay(url = it, source = if (it == default) RelaySource.DEFAULT else RelaySource.RANKED)
+        }
         lastSelected = selected
         return selected
     }
@@ -47,8 +49,8 @@ class RelayDirectoryImpl @Inject constructor(
 }
 
 /**
- * Picks the relay to use: the healthiest enabled relay, or the built-in default
- * when none are available. Pure so it can be unit-tested independently of the DB.
+ * Picks the relay to use: the healthiest enabled relay, else [fallback] (null: no relay at all).
+ * Pure so it can be unit-tested independently of the DB.
  */
-fun selectActiveRelay(rankedRelays: List<String>, default: String): String =
-    rankedRelays.firstOrNull() ?: default
+fun selectActiveRelay(rankedRelays: List<String>, fallback: String?): String? =
+    rankedRelays.firstOrNull() ?: fallback

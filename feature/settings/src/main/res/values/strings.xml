@@ -88,7 +88,7 @@
     <string name="settings_about">درباره</string>
     <string name="settings_backup_section">پشتیبان‌گیری</string>
     <string name="settings_backup_export">ساخت فایل پشتیبان</string>
-    <string name="settings_backup_export_body">شامل هویت، مخاطبین و گفتگوها؛ رمزنگاری‌شده با گذرواژهٔ شما</string>
+    <string name="settings_backup_export_body">شامل هویت، مخاطبین و گفتگوهای دونفره (بدون گروه‌ها)؛ رمزنگاری‌شده با گذرواژهٔ شما</string>
     <string name="settings_backup_icon">پشتیبان‌گیری</string>
     <string name="settings_backup_passphrase_title">گذرواژهٔ فایل پشتیبان</string>
     <string name="settings_backup_passphrase_body">برای بازیابی به همین گذرواژه نیاز دارید و راهی برای بازیابی آن وجود ندارد؛ آن را در جای امنی نگه دارید.</string>

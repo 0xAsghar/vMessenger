@@ -91,6 +91,36 @@ class MinimalDhtTest {
     }
 
     @Test
+    fun bootstrapNodeSwitchedOffIsNoLongerDialled() = runBlocking {
+        // The built-in node answers with itself too, as a peer's find-value reply may.
+        val own = "wss://own.example/dht"
+        val sender = FakeDhtRpcSender(nodes = listOf("${NetworkConfig.RELAY_HOST}:8443"))
+        val dht = MinimalDht(sender, verifier)
+        assertTrue(dht.bootstrap(listOf(node(NetworkConfig.DEFAULT_DHT_URL))) is AppResult.Success)
+
+        assertTrue(dht.bootstrap(listOf(node(own))) is AppResult.Success)
+        sender.sent.clear()
+        dht.lookup(ByteArray(32))
+        assertTrue(dht.publish(EndpointRecord.newBuilder().setSequence(1).build()) is AppResult.Success)
+
+        assertEquals(setOf(own), sender.sent.map { it.first }.toSet())
+        assertEquals(setOf(own), dht.knownNodeAddresses())
+    }
+
+    @Test
+    fun everyBootstrapNodeSwitchedOffLeavesNothingToDial() = runBlocking {
+        val sender = FakeDhtRpcSender()
+        val dht = MinimalDht(sender, verifier)
+        assertTrue(dht.bootstrap(listOf(node(NetworkConfig.DEFAULT_DHT_URL))) is AppResult.Success)
+
+        assertTrue(dht.bootstrap(emptyList()) is AppResult.Error)
+        sender.sent.clear()
+
+        assertTrue(dht.publish(EndpointRecord.newBuilder().setSequence(1).build()) is AppResult.Error)
+        assertTrue(sender.sent.isEmpty())
+    }
+
+    @Test
     fun allTargetsFailingIsAnError() = runBlocking {
         val sender = FakeDhtRpcSender()
         val dht = MinimalDht(sender, verifier)

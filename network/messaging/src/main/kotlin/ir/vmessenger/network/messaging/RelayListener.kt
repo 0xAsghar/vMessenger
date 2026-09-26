@@ -77,6 +77,7 @@ class RelayListener @Inject constructor(
     private val claims = ConcurrentHashMap<String, InboundConnectionHandler>()
 
     private val connected = MutableStateFlow<String?>(null)
+    private val relayless = MutableStateFlow(false)
 
     /**
      * The relay this device can be reached on right now: the one its control channel is connected
@@ -86,6 +87,12 @@ class RelayListener @Inject constructor(
     val connectedRelay: StateFlow<String?> = connected.asStateFlow()
 
     val connectedRelayUrl: String? get() = connected.value
+
+    /**
+     * True while no relay is enabled at all. The listener then waits instead of dialling anything, and
+     * the endpoint record should name no relay (NetworkCoordinator follows this too).
+     */
+    val noRelay: StateFlow<Boolean> = relayless.asStateFlow()
 
     /**
      * [ed25519PrivateKeyProvider] is consulted per connection attempt so the key
@@ -115,6 +122,7 @@ class RelayListener @Inject constructor(
 
     fun stop() {
         running = false
+        relayless.value = false
         scope.cancel()
     }
 
@@ -145,34 +153,48 @@ class RelayListener @Inject constructor(
         claims.remove(prefix)
     }
 
-    @Suppress("TooGenericExceptionCaught") // any failure of the control channel is retried with backoff
     private suspend fun maintainControlChannel() {
         var backoffMs = 1_000L
         while (running && scope.isActive) {
             val credentials = credentials()
-            if (credentials == null) {
-                delay(1_000)
-                continue
-            }
-            val selected = relayDirectory.activeRelay()
-            val url = selected.url
-            try {
-                AppLogger.info(TAG, "control channel connecting via $url")
-                val end = connectControlChannel(url, credentials)
-                relayDirectory.reportResult(url, ok = true)
-                NetworkPathTracker.reportConnectionSuccess()
-                backoffMs = 1_000L
-                AppLogger.info(TAG, "control channel ended (${end.name}), reconnecting in ${end.pauseMs}ms")
-                delay(end.pauseMs)
-            } catch (e: Exception) {
-                relayDirectory.reportResult(url, ok = false)
-                NetworkPathTracker.reportConnectionError(e)
-                AppLogger.warn(TAG, "control channel lost ($url): ${e.message}, retry in ${backoffMs}ms")
-                delay(backoffMs)
-                backoffMs = (backoffMs * 2).coerceAtMost(60_000L)
+            val selected = credentials?.let { relayDirectory.activeRelay() }
+            when {
+                credentials == null -> delay(1_000)
+                selected == null -> waitForARelay()
+                else -> {
+                    relayless.value = false
+                    backoffMs = holdControlChannel(selected.url, credentials, backoffMs)
+                }
             }
         }
     }
+
+    /** No relay is enabled: listen on none, and look again later. */
+    private suspend fun waitForARelay() {
+        if (!relayless.value) AppLogger.info(TAG, "no relay is enabled; not listening on any")
+        relayless.value = true
+        // Enabling or adding a relay calls reselect(), which restarts the loop at once.
+        delay(NO_RELAY_RECHECK_MS)
+    }
+
+    /** One control-channel session on [url]; returns the backoff for the next attempt. */
+    @Suppress("TooGenericExceptionCaught") // any failure of the control channel is retried with backoff
+    private suspend fun holdControlChannel(url: String, credentials: Credentials, backoffMs: Long): Long =
+        try {
+            AppLogger.info(TAG, "control channel connecting via $url")
+            val end = connectControlChannel(url, credentials)
+            relayDirectory.reportResult(url, ok = true)
+            NetworkPathTracker.reportConnectionSuccess()
+            AppLogger.info(TAG, "control channel ended (${end.name}), reconnecting in ${end.pauseMs}ms")
+            delay(end.pauseMs)
+            1_000L
+        } catch (e: Exception) {
+            relayDirectory.reportResult(url, ok = false)
+            NetworkPathTracker.reportConnectionError(e)
+            AppLogger.warn(TAG, "control channel lost ($url): ${e.message}, retry in ${backoffMs}ms")
+            delay(backoffMs)
+            (backoffMs * 2).coerceAtMost(60_000L)
+        }
 
     /** The three identity parts of a listener hello, or null while any of them is still missing. */
     private class Credentials(
@@ -356,6 +378,7 @@ class RelayListener @Inject constructor(
 
     companion object {
         private const val TAG = "Relay"
+        private const val NO_RELAY_RECHECK_MS = 30_000L
         private const val KEEPALIVE_INTERVAL_MS = 40_000L
         private const val NORMAL_CLOSE = 1000
         private val KEEPALIVE_FRAME = byteArrayOf(0)

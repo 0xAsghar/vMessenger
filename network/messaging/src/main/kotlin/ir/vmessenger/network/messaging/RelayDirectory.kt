@@ -9,12 +9,15 @@ import ir.vmessenger.core.common.network.SelectedRelay
  * the app can rotate away from failing relays instead of depending on a single
  * hardcoded one.
  *
- * The implementation lives in the data layer (DB-backed). The default fallback
- * remains available because the built-in relay is always seeded as one entry.
+ * The implementation lives in the data layer (DB-backed). The built-in relay is seeded as one
+ * entry the person can switch off like any other; with every relay switched off there is none.
  */
 interface RelayDirectory {
-    /** The relay URL to connect through right now (healthiest enabled relay). */
-    suspend fun activeRelay(): SelectedRelay
+    /**
+     * The relay URL to connect through right now (the healthiest enabled relay), or null when no relay
+     * is enabled — the person switched them all off, or declined the built-in nodes at first run.
+     */
+    suspend fun activeRelay(): SelectedRelay?
 
     /** Last relay returned by [activeRelay]; useful for publish/listener alignment tests. */
     fun lastSelectedRelay(): SelectedRelay?

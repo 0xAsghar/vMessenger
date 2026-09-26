@@ -3,9 +3,15 @@ package ir.vmessenger.data.network
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
 import ir.vmessenger.core.common.group.GroupSyncTracker
 import ir.vmessenger.core.database.entity.ConversationEntity
+import ir.vmessenger.core.database.entity.DeliveryStatus
 import ir.vmessenger.core.database.entity.GroupEntity
 import ir.vmessenger.core.database.entity.GroupMemberEntity
 import ir.vmessenger.core.database.entity.GroupMemberRole
+import ir.vmessenger.core.database.entity.MessageContentType
+import ir.vmessenger.core.database.entity.MessageDirection
+import ir.vmessenger.core.database.entity.MessageEditHistoryEntity
+import ir.vmessenger.core.database.entity.MessageEntity
+import ir.vmessenger.core.database.entity.MessageRevisionKind
 import ir.vmessenger.core.proto.app.v1.GroupControlType
 import ir.vmessenger.core.proto.app.v1.MessageEnvelope
 import ir.vmessenger.data.repository.GroupEventText
@@ -246,9 +252,172 @@ class GroupControlHandlerTest {
         assertEquals(3L, harness.groupDao.getById(GroupFixtures.GROUP_ID)?.version)
     }
 
+    @Test
+    fun `review switched off by the creator erases this member's captures and says so`() = runTest {
+        seedLocalGroup(version = 1L, retention = true)
+        // One capture kept a deleted message's file; one is an edit that shares the live message's.
+        harness.historyDao.rows += capture("m-deleted", attachment = "files/attachments/deleted.vma")
+        harness.historyDao.rows += capture("m-edited", attachment = "files/attachments/live.vma")
+        harness.messageDao.messages += MessageEntity(
+            messageId = "m-edited",
+            conversationId = GROUP_CONVERSATION_ID,
+            direction = MessageDirection.INCOMING,
+            contentType = MessageContentType.IMAGE,
+            body = null,
+            replyToMessageId = null,
+            status = DeliveryStatus.DELIVERED,
+            createdAtUnixMs = 1,
+            sentAtUnixMs = 1,
+            deliveredAtUnixMs = 1,
+            readAtUnixMs = null,
+            attachmentPath = "files/attachments/live.vma",
+            senderIdentityHash = key(peerB),
+        )
+
+        handler.handle(
+            "a",
+            retentionControl(GroupControlType.GROUP_CONTROL_TYPE_SNAPSHOT, version = 2L, retention = false),
+        )
+
+        assertFalse(harness.groupDao.getById(GroupFixtures.GROUP_ID)!!.auditRetention)
+        assertTrue(harness.historyDao.rows.isEmpty())
+        assertEquals(listOf("files/attachments/deleted.vma"), harness.attachmentFiles.deleted)
+        assertTrue(harness.messageDao.messages.any { it.body == GroupEventText.AUDIT_RETENTION_OFF })
+    }
+
+    @Test
+    fun `review switched on by the creator is announced to this member`() = runTest {
+        seedLocalGroup(version = 1L, retention = false)
+
+        handler.handle(
+            "a",
+            retentionControl(GroupControlType.GROUP_CONTROL_TYPE_SNAPSHOT, version = 2L, retention = true),
+        )
+
+        assertTrue(harness.groupDao.getById(GroupFixtures.GROUP_ID)!!.auditRetention)
+        assertEquals(GroupEventText.AUDIT_RETENTION_ON, harness.messageDao.messages.single().body)
+        assertTrue(harness.attachmentFiles.deleted.isEmpty())
+    }
+
+    @Test
+    fun `joining a group that already reviews messages tells the new member`() = runTest {
+        handler.handle(
+            "a",
+            retentionControl(GroupControlType.GROUP_CONTROL_TYPE_CREATE, version = 1L, retention = true),
+        )
+
+        val lines = harness.messageDao.messages.map { it.body }
+        assertEquals(listOf(GroupEventText.created("Team"), GroupEventText.AUDIT_RETENTION_ON), lines)
+    }
+
+    @Test
+    fun `a snapshot that leaves review as it was writes nothing`() = runTest {
+        seedLocalGroup(version = 1L, retention = true)
+        harness.historyDao.rows += capture("m1", attachment = null)
+
+        handler.handle(
+            "a",
+            retentionControl(GroupControlType.GROUP_CONTROL_TYPE_SNAPSHOT, version = 2L, retention = true),
+        )
+
+        assertEquals(1, harness.historyDao.rows.size)
+        assertTrue(harness.messageDao.messages.isEmpty())
+    }
+
+    @Test
+    fun `a member naming itself creator of a group we hold is dropped and erases nothing`() = runTest {
+        seedLocalGroup(version = 1L, retention = true)
+        harness.historyDao.rows += capture("m-deleted", attachment = "files/attachments/deleted.vma")
+        val forged = GroupControlCodec.envelope(
+            selfIdentityHash = peerB.identityHash,
+            group = GroupFixtures.group(creatorKey = key(peerB), name = "Team"),
+            type = GroupControlType.GROUP_CONTROL_TYPE_SNAPSHOT,
+            members = members(),
+            version = 2L,
+        )
+
+        handler.handle("b", forged)
+
+        val group = harness.groupDao.getById(GroupFixtures.GROUP_ID)!!
+        assertEquals(key(peerA), group.creatorIdentityHash)
+        assertTrue(group.auditRetention)
+        assertEquals(1L, group.version)
+        assertEquals(1, harness.historyDao.rows.size)
+        assertTrue(harness.attachmentFiles.deleted.isEmpty())
+        assertTrue(harness.messageDao.messages.isEmpty())
+    }
+
+    @Test
+    fun `a member added after creation joins from the add that names it`() = runTest {
+        handler.handle("a", control(GroupControlType.GROUP_CONTROL_TYPE_ADD, version = 3L, target = selfKey()))
+
+        assertEquals(3L, harness.groupDao.getById(GroupFixtures.GROUP_ID)!!.version)
+        assertEquals(1, harness.conversationDao.conversations.size)
+        assertEquals(GroupEventText.created("Team"), harness.messageDao.messages.single().body)
+    }
+
+    @Test
+    fun `an add for a group we do not hold is dropped unless the creator names us`() = runTest {
+        val other = GroupFixtures.routingKey(MEMBER_SEED)
+        handler.handle("a", control(GroupControlType.GROUP_CONTROL_TYPE_ADD, version = 3L, target = other))
+        handler.handle("b", control(GroupControlType.GROUP_CONTROL_TYPE_ADD, version = 3L, target = selfKey()))
+
+        assertNull(harness.groupDao.getById(GroupFixtures.GROUP_ID))
+        assertTrue(harness.messageDao.messages.isEmpty())
+    }
+
+    @Test
+    fun `captures a member kept under a review since switched off are erased at start`() = runTest {
+        seedLocalGroup(version = 2L, retention = false)
+        harness.historyDao.rows += capture("m-deleted", attachment = "files/attachments/deleted.vma")
+        harness.historyDao.rows += capture("m-other", attachment = null).copy(groupId = "still-reviewed")
+        harness.groupDao.insert(
+            GroupFixtures.group(id = "still-reviewed", creatorKey = key(peerA)).copy(auditRetention = true),
+        )
+
+        handler.eraseReviewLeftovers()
+
+        assertEquals(listOf("still-reviewed"), harness.historyDao.rows.map { it.groupId })
+        assertEquals(listOf("files/attachments/deleted.vma"), harness.attachmentFiles.deleted)
+    }
+
+    @Test
+    fun `being removed erases what this device kept under review`() = runTest {
+        seedLocalGroup(version = 1L, retention = true)
+        harness.historyDao.rows += capture("m1", attachment = null)
+
+        handler.handle("a", control(GroupControlType.GROUP_CONTROL_TYPE_REMOVE, version = 2L, target = selfKey()))
+
+        assertTrue(harness.historyDao.rows.isEmpty())
+    }
+
+    /** A control from the creator carrying the message-review policy [retention]. */
+    private fun retentionControl(type: GroupControlType, version: Long, retention: Boolean): MessageEnvelope =
+        GroupControlCodec.envelope(
+            selfIdentityHash = peerA.identityHash,
+            group = claimedGroup("Team").copy(auditRetention = retention),
+            type = type,
+            members = members(),
+            version = version,
+        )
+
+    private fun capture(messageId: String, attachment: String?) = MessageEditHistoryEntity(
+        messageId = messageId,
+        groupId = GroupFixtures.GROUP_ID,
+        authorIdentityHash = key(peerB),
+        revision = MessageRevisionKind.DELETE,
+        body = "before",
+        caption = null,
+        attachmentName = attachment?.substringAfterLast('/'),
+        attachmentPath = attachment,
+        capturedAtUnixMs = 1L,
+    )
+
     /** Creator A, member B and us, already stored locally with its conversation. */
-    private suspend fun seedLocalGroup(version: Long) {
-        harness.groupDao.insert(GroupFixtures.group(creatorKey = key(peerA), version = version))
+    private suspend fun seedLocalGroup(version: Long, retention: Boolean = false) {
+        harness.groupDao.insert(
+            GroupFixtures.group(creatorKey = key(peerA), version = version).copy(auditRetention = retention),
+        )
         harness.groupDao.upsertMembers(members())
         harness.conversationDao.conversations += ConversationEntity(
             id = GROUP_CONVERSATION_ID,

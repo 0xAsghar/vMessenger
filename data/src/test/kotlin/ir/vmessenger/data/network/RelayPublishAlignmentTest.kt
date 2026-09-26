@@ -14,7 +14,7 @@ class RelayPublishAlignmentTest {
     @Test
     fun publishedRelayEndpointMatchesSelectedRelay() {
         val ranked = listOf("wss://node-a/relay", "wss://node-b/relay")
-        val selectedUrl = selectActiveRelay(ranked, default)
+        val selectedUrl = selectActiveRelay(ranked, fallback = null)!!
         val selected = SelectedRelay(url = selectedUrl, source = RelaySource.RANKED)
 
         val publishedRelay = Endpoint(transport = TransportIds.RELAY, address = selected.url)
@@ -25,8 +25,8 @@ class RelayPublishAlignmentTest {
     }
 
     @Test
-    fun defaultRelayAlignmentWhenListEmpty() {
-        val selectedUrl = selectActiveRelay(emptyList(), default)
+    fun defaultRelayAlignmentWhenListEmptyInLegacyMode() {
+        val selectedUrl = selectActiveRelay(emptyList(), fallback = default)!!
         val selected = SelectedRelay(url = selectedUrl, source = RelaySource.DEFAULT)
         val published = Endpoint(transport = TransportIds.RELAY, address = selected.url)
         assertEquals(default, published.address)

@@ -242,8 +242,15 @@ object GroupFixtures {
     const val GROUP_ID = "0123456789abcdef0123456789abcdef"
 }
 
-/** In-memory audit captures, so the retention policy can be asserted without a database. */
-class FakeMessageEditHistoryDao : MessageEditHistoryDao {
+/**
+ * In-memory audit captures, so the retention policy can be asserted without a database. [referenced]
+ * answers "does a message row still point at this file?" for [orphanedAttachmentPaths], [reviewed]
+ * "is this group held with review on?" for [groupsHeldWithoutReview].
+ */
+class FakeMessageEditHistoryDao(
+    private val referenced: (String) -> Boolean = { false },
+    private val reviewed: (String) -> Boolean = { false },
+) : MessageEditHistoryDao {
     val rows = mutableListOf<MessageEditHistoryEntity>()
 
     override suspend fun insert(entity: MessageEditHistoryEntity) {
@@ -260,6 +267,12 @@ class FakeMessageEditHistoryDao : MessageEditHistoryDao {
         rows.filter { it.messageId == messageId }.sortedBy { it.capturedAtUnixMs }
 
     override suspend fun countForGroup(groupId: String): Int = rows.count { it.groupId == groupId }
+
+    override suspend fun orphanedAttachmentPaths(groupId: String): List<String> =
+        rows.filter { it.groupId == groupId }.mapNotNull { it.attachmentPath }.distinct().filterNot(referenced)
+
+    override suspend fun groupsHeldWithoutReview(): List<String> =
+        rows.map { it.groupId }.distinct().filterNot(reviewed)
 
     override suspend fun deleteForGroup(groupId: String) {
         rows.removeAll { it.groupId == groupId }

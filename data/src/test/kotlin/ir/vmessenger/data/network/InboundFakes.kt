@@ -128,6 +128,7 @@ class FakeInboundRoutes : InboundRoutes {
 class FakeIncomingMessageNotifier : IncomingMessageNotifier {
     val shown = mutableListOf<Triple<String, String, String>>()
     val locationRequests = mutableListOf<Pair<String, String>>()
+    val contactRequests = mutableListOf<Pair<String, String>>()
 
     override suspend fun notify(senderName: String, preview: String, conversationId: String) {
         shown += Triple(senderName, preview, conversationId)
@@ -135,6 +136,10 @@ class FakeIncomingMessageNotifier : IncomingMessageNotifier {
 
     override suspend fun notifyLocationRequest(senderName: String, conversationId: String) {
         locationRequests += senderName to conversationId
+    }
+
+    override suspend fun notifyContactRequest(requesterName: String, requestId: String) {
+        contactRequests += requesterName to requestId
     }
 }
 
@@ -272,7 +277,9 @@ class FakeContactRequestRepository : ContactRequestRepository {
 
     override suspend fun rejectRequest(requestId: String) = Unit
 
-    override suspend fun rejectCountOf(requestId: String): Int = 0
+    var rejectCount = 0
+
+    override suspend fun rejectCountOf(requestId: String): Int = rejectCount
 }
 
 /** Deterministic test identities: keys are fixed byte patterns, hashes are the real SHA-256 derivation. */

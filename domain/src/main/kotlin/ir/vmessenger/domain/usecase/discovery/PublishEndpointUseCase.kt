@@ -1,8 +1,8 @@
 package ir.vmessenger.domain.usecase.discovery
 
+import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.network.Endpoint
-import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.TransportIds
 import ir.vmessenger.domain.repository.DiscoveryRepository
 import javax.inject.Inject
@@ -24,13 +24,13 @@ class PublishNetworkEndpointsUseCase @Inject constructor(
                     ),
                 )
             }
-            val relay = relayUrl ?: NetworkConfig.DEFAULT_RELAY_URL
-            add(
-                Endpoint(
-                    transport = TransportIds.RELAY,
-                    address = relay,
-                ),
-            )
+            // No relay means none is enabled: the record names none rather than the built-in one.
+            if (!relayUrl.isNullOrBlank()) {
+                add(Endpoint(transport = TransportIds.RELAY, address = relayUrl))
+            }
+        }
+        if (endpoints.isEmpty()) {
+            return AppResult.Error(AppError.Validation("no endpoint to publish: no relay is enabled"))
         }
         return discoveryRepository.publishEndpoints(endpoints)
     }

@@ -159,16 +159,16 @@ class DebugViewModel @Inject constructor(
             val publish = if (devMode) {
                 NetworkConfig.useDevBootstrap = true
                 val port = _uiState.value.forwardPort
-                AppLogger.info("Debug", "publishing dev endpoints 10.0.2.2:$port relay=${selectedRelay.url}")
+                AppLogger.info("Debug", "publishing dev endpoints 10.0.2.2:$port relay=${selectedRelay?.url}")
                 publishNetworkEndpointsUseCase(
                     directHost = "10.0.2.2",
                     directPort = port,
-                    relayUrl = selectedRelay.url,
+                    relayUrl = selectedRelay?.url,
                 )
             } else {
                 NetworkConfig.useDevBootstrap = false
-                AppLogger.info("Debug", "publishing production relay endpoint ${selectedRelay.url}")
-                publishNetworkEndpointsUseCase(relayUrl = selectedRelay.url)
+                AppLogger.info("Debug", "publishing production relay endpoint ${selectedRelay?.url}")
+                publishNetworkEndpointsUseCase(relayUrl = selectedRelay?.url)
             }
             when (publish) {
                 is AppResult.Success -> AppLogger.info("Debug", "publish success")

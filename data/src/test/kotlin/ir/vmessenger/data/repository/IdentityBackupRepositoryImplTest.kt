@@ -18,6 +18,7 @@ import ir.vmessenger.core.database.entity.MessageDirection
 import ir.vmessenger.core.database.entity.MessageEntity
 import ir.vmessenger.core.proto.backup.v1.BackupContact
 import ir.vmessenger.core.proto.backup.v1.BackupConversation
+import ir.vmessenger.core.proto.backup.v1.BackupPayload
 import ir.vmessenger.data.backup.BackgroundBackupCodec
 import ir.vmessenger.data.backup.BackupPayloadExporter
 import ir.vmessenger.data.backup.BackupRestoreWriter
@@ -246,6 +247,47 @@ class IdentityBackupRepositoryImplTest {
         assertNotNull(added)
         assertEquals("local-conv", added!!.conversationId)
         assertEquals("new text", added.body)
+    }
+
+    /**
+     * A group conversation has no contact (its contactId is null), and the backup format has no place for
+     * groups: the export must leave it out rather than fail. Before 2.0.2 it threw inside protobuf's
+     * setter, so any phone with a group chat could not make a backup at all. A message on a timer is
+     * left out as well.
+     */
+    @Test
+    fun exportSkipsGroupConversationsInsteadOfFailing() = runTest {
+        val source = device()
+        source.identityRepository.generateIdentity("Ali")
+        source.contactDao.contacts += fixtures.approvedContact("c1", "Sara")
+        source.conversationDao.conversations += conversation("conv1", "c1", "m1", 1_000L)
+        source.conversationDao.conversations += ConversationEntity(
+            id = "group-conv",
+            contactId = null,
+            groupId = "g1",
+            lastMessageId = "gm1",
+            lastActivityUnixMs = 2_000L,
+            unreadCount = 0,
+            muted = false,
+        )
+        source.messageDao.messages += fixtures.textMessage("m1", "conv1", MessageDirection.INCOMING, 1_000L)
+        source.messageDao.messages += fixtures.textMessage("gm1", "group-conv", MessageDirection.INCOMING, 2_000L)
+        // On a timer: the format has no deadline, so a restored copy would never expire.
+        source.messageDao.messages += fixtures.textMessage("m2", "conv1", MessageDirection.INCOMING, 1_500L)
+            .copy(expiresAtUnixMs = 9_000L)
+
+        val export = source.repository.exportBundle(passphrase)
+        assertTrue("export failed: $export", export is AppResult.Success)
+        val payload = BackupPayload.parseFrom(codec.decode((export as AppResult.Success).data, passphrase))
+        assertEquals(listOf("conv1"), payload.conversationsList.map { it.id })
+        assertEquals(listOf("m1"), payload.conversationsList.flatMap { it.messagesList }.map { it.messageId })
+
+        val target = device()
+        val imported = target.repository.importBundle(export.data, passphrase)
+        val summary = (imported as AppResult.Success).data
+        assertEquals(RestoreSummary(contacts = 1, conversations = 1, messages = 1), summary)
+        assertEquals("c1", target.conversationDao.conversations.single().contactId)
+        assertNull(target.messageDao.getById("gm1"))
     }
 
     private fun device(): Device = Device()

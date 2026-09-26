@@ -100,6 +100,41 @@ class MessageNotificationManager @Inject constructor(
         }
     }
 
+    /**
+     * Someone asking to become a contact. Tapping it opens the app, where the request waits with
+     * approve and reject; nothing is decided from the notification.
+     */
+    @Suppress("TooGenericExceptionCaught")
+    fun showContactRequest(requesterName: String, requestId: String, hideContent: Boolean) {
+        val strings = context.localised()
+        val generic = strings.getString(R.string.notification_contact_request_generic)
+        val text = if (hideContent) {
+            generic
+        } else {
+            strings.getString(R.string.notification_contact_request, BidiText.isolate(requesterName))
+        }
+        val builder = baseBuilder()
+            .setContentTitle(if (hideContent) APP_TITLE else BidiText.isolate(requesterName))
+            .setContentText(text)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            // A requester's app re-sends until answered; the same id then updates this one silently.
+            .setOnlyAlertOnce(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicVersion(hideContent, generic))
+        launchAppIntent()?.let(builder::setContentIntent)
+        try {
+            manager.notify(contactRequestTag(requestId).hashCode(), builder.build())
+        } catch (e: Exception) {
+            android.util.Log.w("Notifications", "contact request notify failed: ${e.message}")
+        }
+    }
+
+    /** Dismisses the notification of request [requestId] (it was approved or rejected). */
+    fun cancelContactRequest(requestId: String) {
+        runCatching { manager.cancel(contactRequestTag(requestId).hashCode()) }
+    }
+
     /** Dismisses the notification of [conversationId] (the chat was opened or marked read). */
     fun cancel(conversationId: String) {
         runCatching { manager.cancel(conversationId.hashCode()) }
@@ -169,3 +204,5 @@ class MessageNotificationManager @Inject constructor(
         private const val APP_TITLE = "vMessenger"
     }
 }
+
+private fun contactRequestTag(requestId: String) = "contact-request:$requestId"

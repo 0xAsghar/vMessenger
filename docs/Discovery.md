@@ -151,7 +151,7 @@ sequenceDiagram
 Once a contact's identity is known, reaching them is a DHT operation.
 
 - Announce: this device publishes a signed `EndpointRecord` keyed by its identity hash, listing its current endpoints with a 20-minute TTL, and re-announces every 10 minutes (see [DHT.md](DHT.md)).
-- Resolve: to message a contact, the app (`EndpointResolveService`) first consults the verified peer cache; otherwise it looks up the contact's identity hash, retrieves the signed record, verifies it, and hands the endpoints to the dialer. With no record, or when discovery fails, it falls back to the relay, since a relay circuit needs only the identity hash.
+- Resolve: to message a contact, the app (`EndpointResolveService`) first consults the verified peer cache; otherwise it looks up the contact's identity hash, retrieves the signed record, verifies it, and hands the endpoints to the dialer. With no record, or when discovery fails, it falls back to this device's own active relay, since a relay circuit needs only the identity hash. With every relay switched off there is no such fallback (since 2.0.2 the built-in relay is not used in their place).
 
 ```mermaid
 sequenceDiagram

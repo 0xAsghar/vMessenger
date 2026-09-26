@@ -238,11 +238,11 @@ class NetworkCoordinator @Inject constructor(
                 is AppResult.Success -> {
                     AppLogger.info("Network", "join network recovered after retry")
                     val selectedRelay = relayDirectory.activeRelay()
-                    NetworkPathTracker.setActiveRelay(selectedRelay.url)
+                    NetworkPathTracker.setActiveRelay(selectedRelay?.url)
                     publishAndArmReannounce(
                         directHost = directHost,
                         directPort = directPort,
-                        relayUrl = selectedRelay.url,
+                        relayUrl = selectedRelay?.url,
                         retry = true,
                     )
                     // Connectivity recovered — flush anything that piled up offline.
@@ -264,12 +264,12 @@ class NetworkCoordinator @Inject constructor(
         // Resolve the active relay first so the endpoint we publish matches the
         // relay our listener will actually connect through (multi-relay support).
         val selectedRelay = relayDirectory.activeRelay()
-        NetworkPathTracker.setActiveRelay(selectedRelay.url)
-        AppLogger.info("Network", "active relay=${selectedRelay.url} source=${selectedRelay.source}")
+        NetworkPathTracker.setActiveRelay(selectedRelay?.url)
+        AppLogger.info("Network", "active relay=${selectedRelay?.url ?: "none"} source=${selectedRelay?.source}")
         publishAndArmReannounce(
             directHost = directHost,
             directPort = directPort,
-            relayUrl = selectedRelay.url,
+            relayUrl = selectedRelay?.url,
             retry = false,
         )
         messagingService.startRelayListener(
@@ -279,6 +279,7 @@ class NetworkCoordinator @Inject constructor(
         )
         AppLogger.info("Network", "relay listener starting")
         scope.launch { followConnectedRelay(directHost, directPort) }
+        scope.launch { followNoRelay(directHost, directPort) }
         if (ir.vmessenger.core.common.network.P2PConfig.relayPeerModeEnabled) {
             peerRelayCoordinator.logStatus()
         }
@@ -296,7 +297,7 @@ class NetworkCoordinator @Inject constructor(
     private suspend fun publishAndArmReannounce(
         directHost: String?,
         directPort: Int?,
-        relayUrl: String,
+        relayUrl: String?,
         retry: Boolean,
     ) {
         publishedRelay = relayUrl
@@ -332,8 +333,29 @@ class NetworkCoordinator @Inject constructor(
         }
     }
 
+    /**
+     * With every relay switched off the listener waits on none, so the record must stop naming the one
+     * it was published with: peers would keep dialling a relay this device is no longer on.
+     */
+    private suspend fun followNoRelay(directHost: String?, directPort: Int?) {
+        relayListener.noRelay.collect { none ->
+            if (none && publishedRelay != null) {
+                AppLogger.info("Network", "no relay is enabled; publishing without one")
+                NetworkPathTracker.setActiveRelay(null)
+                publishAndArmReannounce(directHost, directPort, relayUrl = null, retry = false)
+            }
+        }
+    }
+
     override fun reselectRelay() {
         relayListener.reselect()
+        // The DHT follows too: a bootstrap node switched off is dropped now, not at the next start.
+        if (started) {
+            scope.launch {
+                joinNetworkUseCase()
+                endpointAnnouncer.announceNow()
+            }
+        }
     }
 
     /** Waits until an identity exists *and* its key material is unwrappable (the cache serves it). */

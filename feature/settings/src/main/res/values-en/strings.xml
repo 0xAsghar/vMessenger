@@ -88,7 +88,7 @@
     <string name="settings_about">About</string>
     <string name="settings_backup_section">Backup</string>
     <string name="settings_backup_export">Create a backup file</string>
-    <string name="settings_backup_export_body">Includes your identity, contacts and conversations; encrypted with your passphrase</string>
+    <string name="settings_backup_export_body">Includes your identity, contacts and one-to-one conversations (not groups); encrypted with your passphrase</string>
     <string name="settings_backup_icon">Backup</string>
     <string name="settings_backup_passphrase_title">Backup file passphrase</string>
     <string name="settings_backup_passphrase_body">You need this same passphrase to restore, and there is no way to recover it; keep it somewhere safe.</string>

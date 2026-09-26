@@ -500,12 +500,13 @@ is stored as a tombstone and applied when the message lands.
 | Scope | whichever `content` arm the envelope carries, not only `chat`. Sent today on a `chat` envelope and on an attachment's `AttachmentInfo` header — photos, albums, files and voice alike; chunks carry no deadline, the header's governs the transfer |
 | Stamped by | the sender, from the chat's timer (`ConversationTimerAction`, `MessageTimer`): off, 1 h, 24 h, 7 d — each message `now + duration` — or a chosen date and time, which gives every message sent before it that same moment and switches itself off once it passes. Stored on the row as `message.expiresAtUnixMs`, copied onto the envelope by `applyExpiry` (`OutboxDispatcher`, `AttachmentSender`) |
 
-There is no server, so **the devices enforce the deadline themselves**, at five points:
+There is no server, so **the devices enforce the deadline themselves**, at six points:
 
 - **On arrival** (`IncomingMessageCollector`, `AttachmentReceiver`): an envelope whose deadline has already passed — a slow hop, or a mailbox blob replayed after the fact — is never surfaced. A `DELIVERED` receipt is still enqueued, so the sender stops re-sending something that was meant to be gone. A file keeps its header's deadline while its chunks arrive, and one whose deadline passes mid-transfer is discarded rather than stored.
 - **Before a send** (`OutboxDispatcher.processItem`): a queued row whose timer ran out before delivery is dropped from the outbox rather than transmitted.
 - **On a holder** (`MailboxService.enqueueForRecipient`): a sealed store-and-forward copy (§11) carries `expires_at_unix_ms = min(now + 24 h, deadline)`, and every device that stores it purges by that and refuses to hand it out past it — so a parked copy of a timed message lives no longer than the message. A message already past its deadline is not parked at all.
 - **At the deadline** (`MessageExpiryScheduler`): while the network stack is up, the app waits for the soonest deadline on the device (`MessageDao.observeNextExpiry`) and erases what is due at that moment, re-arming for the next. The wait is taken a minute at a time against the wall clock, since a coroutine delay does not count deep sleep. It stops with the network — on a strict lock, for instance — and purges whatever came due as soon as it starts again.
+- **In a backup** (`BackupPayloadExporter`): a message on a timer is never exported. The backup format has no deadline to carry, so a restored copy would never expire. A backup made with 2.0.1 or earlier may hold such messages without their deadline.
 - **On a sweep** (`ExpiryPurgeWorker`, `PurgeExpiredMessagesUseCase`): expired rows are erased every 15 minutes — the shortest period WorkManager allows — and the worker is a no-op while the strict app lock holds the database shut. It is the backstop for a process that is not running: the worst case is that an expired row lingers on disk until the next sweep. Before 2.0.0-beta.1 this was the only mechanism, and an expired message stayed on screen until it ran.
 
 A 1.0.x or 1.1.2 peer ignores the unknown scalar, so a timed message simply does not self-destruct on an older client. Nor can anything here verify that a peer of any version honoured it: like delete-for-everyone (§8.6), the deadline is **best-effort against an adversarial peer** — it is enforced on the devices that choose to, and a modified client can keep the plaintext.
@@ -617,12 +618,14 @@ Membership is **creator-authoritative and versioned**. Without a server there ha
 
 | Control | Accepted from | Accepted when |
 |---|---|---|
-| `CREATE`, `SNAPSHOT` | the named `creator_identity_hash`, and only if that is the session peer | `version >= local` (a re-sent snapshot at the current version still repairs drift) |
+| `CREATE`, `SNAPSHOT` | the named `creator_identity_hash`, and only if that is the session peer — and, for a group already held, the creator stored for it | `version >= local` (a re-sent snapshot at the current version still repairs drift) |
 | `UPDATE_NAME`, `ADD`, `REMOVE`, `CLOSE`, `SET_ROLE` | the creator | `version == local + 1` |
 | `LEAVE` | the member it is about | always |
 | `SNAPSHOT_REQUEST` | any approved contact (the creator does not check that the asker is a member) | answered only by the creator |
 
 A control at `version > local + 1` means one was missed: the receiver sends a `SNAPSHOT_REQUEST` and **drops** the control rather than applying a change it cannot place. A control below the local version is a replay and is ignored. Every structural control carries the full member list, so a snapshot is always enough to recover.
+
+An `ADD` naming us, for a group we do not hold, is how a member added after creation joins: it carries the full member list, the name, the version and the policy, so it is applied as a snapshot under the snapshot's checks (`GroupControlHandler.dispatch`). Before 2.0.2 it was dropped as "unknown group", and a member added later never received the group until the creator next sent a snapshot.
 
 Two further rules close the obvious gaps: a snapshot that does not list us is dropped (a creator cannot push us into a group we are not in), and a `REMOVE` naming us marks the local group `closed` — the history stays readable, but nothing more is sent or accepted.
 
@@ -660,11 +663,11 @@ Two readings are deliberately fail-closed (`GroupControlCodec.roleOf`):
 
 It is carried in **every** control the creator authors, not only the one that changes it (`GroupControlCodec.envelope`), so a device that missed a message cannot be left applying a stale policy. A receiver takes the value from the control rather than preserving its local one (`GroupControlHandler.applySnapshot`), and `false` from a 1.1.2 peer — which has no such field — is the safe reading of silence: no retention.
 
-Only the creator can switch it, and the switch is sent as a `SNAPSHOT` rather than a bespoke type, so the full membership travels with the new policy (`GroupRepositoryImpl.setAuditRetention`). Turning it off erases the captures on the creator's device; the other members' devices stop capturing, but keep what they had already captured — `GroupControlHandler.applySnapshot` takes the new value without erasing anything. The privacy consequences, the disclosure to members and the 90-day bound are in [Security.md](Security.md).
+Only the creator can switch it, and the switch is sent as a `SNAPSHOT` rather than a bespoke type, so the full membership travels with the new policy (`GroupRepositoryImpl.setAuditRetention`). Turning it off erases the captures on every device: the creator's at the switch, each member's when the snapshot arrives (`GroupControlHandler.applySnapshot`, since 2.0.2), and each device writes the on/off line into its own history. A member that misses the "off" snapshot and then receives a later "on" keeps what it captured before; the version gap is not visible in the policy field. The privacy consequences, the disclosure to members and the 90-day bound are in [Security.md](Security.md).
 
 ### 10.5 Non-goals
 
-Deliberately not implemented, and still absent in 2.0.1: creator transfer, uploaded group avatars, invite links, message forwarding, and mentions. Each of them needs either a shared secret or a trusted third party, which is what this design is built to avoid. Admin *roles* now exist (§10.3), but only the creator holds authority and there is no way to hand that over; timed messages now exist too, per-conversation rather than per-group (§8.7).
+Deliberately not implemented, and still absent in 2.0.2: creator transfer, uploaded group avatars, invite links, message forwarding, and mentions. Each of them needs either a shared secret or a trusted third party, which is what this design is built to avoid. Admin *roles* now exist (§10.3), but only the creator holds authority and there is no way to hand that over; timed messages now exist too, per-conversation rather than per-group (§8.7).
 
 ---
 

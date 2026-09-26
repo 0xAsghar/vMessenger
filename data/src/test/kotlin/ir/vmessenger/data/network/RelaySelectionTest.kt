@@ -5,6 +5,8 @@ import ir.vmessenger.core.common.network.NodeAddressPolicy
 import ir.vmessenger.data.activity.testActivityLogger
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RelaySelectionTest {
@@ -17,8 +19,29 @@ class RelaySelectionTest {
     }
 
     @Test
-    fun fallsBackToDefaultWhenNoRelaysAvailable() {
+    fun fallsBackOnlyWhenAFallbackIsGiven() {
+        // The legacy single-node mode passes the built-in relay as the fallback...
         assertEquals(default, selectActiveRelay(emptyList(), default))
+        // ...multi-node mode passes none: with every relay switched off there is no relay.
+        assertNull(selectActiveRelay(emptyList(), null))
+    }
+
+    @Test
+    fun switchingOffTheBuiltInRelayLeavesNoRelay() = runTest {
+        val relayDao = FakeRelayNodeDao()
+        val repo = NetworkNodeRepository(FakeBootstrapNodeDao(), relayDao, testActivityLogger()) {
+            NodeAddressPolicy.RELEASE
+        }
+        repo.seedDefaults()
+        val directory = RelayDirectoryImpl(repo)
+        assertEquals(NetworkConfig.DEFAULT_RELAY_URL, directory.activeRelay()?.url)
+
+        repo.setRelayEnabled(NetworkConfig.DEFAULT_RELAY_URL, enabled = false)
+        assertNull("the built-in relay must not come back as a fallback", directory.activeRelay())
+        assertTrue(NetworkConfig.relayFallbackEndpoints().isEmpty())
+
+        repo.addNode("wss://relay.example.org/relay", ir.vmessenger.domain.model.NetworkNodeRole.RELAY)
+        assertEquals("wss://relay.example.org/relay", directory.activeRelay()?.url)
     }
 
     @Test

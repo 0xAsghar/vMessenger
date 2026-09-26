@@ -95,8 +95,7 @@ class ContactRequestHandler @Inject constructor(
             AppLogger.info("Contact", "silently declined repeat request from $userHash")
             return
         }
-        contactRequestRepository.saveRequest(domainRequest)
-        contactRequestNotifier.notify(domainRequest)
+        contactRequestNotifier.saveAndNotify(domainRequest)
         AppLogger.info("Contact", "incoming contact request from $userHash")
     }
 

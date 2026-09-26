@@ -14,7 +14,10 @@ class ObserveNetworkNodesUseCase @Inject constructor(
     operator fun invoke(): Flow<List<NetworkNode>> = repository.observeNodes()
 }
 
-/** A relay change takes effect at once: the listener moves, and the published record follows it. */
+/**
+ * A node change takes effect at once: the relay listener moves and the published record follows it,
+ * and the DHT drops a bootstrap node switched off and joins through one added.
+ */
 class AddNetworkNodeUseCase @Inject constructor(
     private val repository: NodeManagementRepository,
     private val relayControl: RelayControl,
@@ -23,7 +26,7 @@ class AddNetworkNodeUseCase @Inject constructor(
         input: String,
         fallbackRole: NetworkNodeRole,
     ): AppResult<NetworkNode> = repository.addNode(input, fallbackRole).also { result ->
-        if (result is AppResult.Success && result.data.role == NetworkNodeRole.RELAY) relayControl.reselectRelay()
+        if (result is AppResult.Success) relayControl.reselectRelay()
     }
 }
 
@@ -33,7 +36,7 @@ class SetNetworkNodeEnabledUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(address: String, role: NetworkNodeRole, enabled: Boolean) {
         repository.setEnabled(address, role, enabled)
-        if (role == NetworkNodeRole.RELAY) relayControl.reselectRelay()
+        relayControl.reselectRelay()
     }
 }
 
@@ -43,7 +46,7 @@ class RemoveNetworkNodeUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(address: String, role: NetworkNodeRole): AppResult<Unit> =
         repository.removeNode(address, role).also { result ->
-            if (result is AppResult.Success && role == NetworkNodeRole.RELAY) relayControl.reselectRelay()
+            if (result is AppResult.Success) relayControl.reselectRelay()
         }
 }
 

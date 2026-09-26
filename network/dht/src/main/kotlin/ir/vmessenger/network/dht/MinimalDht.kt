@@ -78,7 +78,9 @@ private fun String.splitHostPort(): Pair<String, Int> {
 interface Dht {
     /**
      * Pings each candidate node and returns the subset that responded, so callers
-     * can record per-node health and rotate away from unreachable nodes.
+     * can record per-node health and rotate away from unreachable nodes. [nodes]
+     * replace the bootstrap set: one left out since the last call was switched off
+     * and is no longer dialled, nor learned back from a peer's answer.
      */
     suspend fun bootstrap(nodes: List<BootstrapNode>): AppResult<List<BootstrapNode>>
 
@@ -105,13 +107,16 @@ class MinimalDht @Inject constructor(
     /** Addresses of the (enabled) bootstrap nodes handed to [bootstrap]; always acceptable RPC targets. */
     private val bootstrapAddresses: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
+    /** Bootstrap nodes the person switched off while this process ran; never dialled until back on. */
+    private val switchedOff: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     /** Consecutive RPC failures per target; reset on the first success. */
     private val failures = ConcurrentHashMap<String, Int>()
 
     override suspend fun bootstrap(nodes: List<BootstrapNode>): AppResult<List<BootstrapNode>> =
         runCatching {
             AppLogger.info("Dht", "bootstrap ${nodes.size} node(s): ${nodes.joinToString { it.address }}")
-            bootstrapAddresses.addAll(nodes.map { it.address })
+            replaceBootstrapSet(nodes.map { it.address }.toSet())
             val responders = mutableListOf<BootstrapNode>()
             for (node in nodes) {
                 if (pingNode(node.address)) {
@@ -129,6 +134,17 @@ class MinimalDht @Inject constructor(
                 AppResult.Error(AppError.Network(it.message ?: "Bootstrap failed"))
             },
         )
+
+    private fun replaceBootstrapSet(wanted: Set<String>) {
+        val dropped = bootstrapAddresses - wanted
+        switchedOff.removeAll(wanted)
+        switchedOff.addAll(dropped)
+        knownNodes.removeAll(dropped)
+        dropped.forEach { failures.remove(it) }
+        bootstrapAddresses.retainAll(wanted)
+        bootstrapAddresses.addAll(wanted)
+        if (dropped.isNotEmpty()) AppLogger.info("Dht", "forgot switched-off node(s): ${dropped.joinToString()}")
+    }
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun pingNode(address: String): Boolean = try {
@@ -194,7 +210,7 @@ class MinimalDht @Inject constructor(
                 }
                 if (response.hasFindValue()) {
                     response.findValue.nodesList.forEach { node ->
-                        normalizeDhtRpcAddress(node.address, bootstrapAddresses)?.let { knownNodes.add(it) }
+                        dialable(node.address)?.let { knownNodes.add(it) }
                     }
                 }
             }
@@ -228,8 +244,10 @@ class MinimalDht @Inject constructor(
 
     override fun knownNodeAddresses(): Set<String> = knownNodes.toSet()
 
-    private fun rpcTargets(): Set<String> =
-        knownNodes.mapNotNull { normalizeDhtRpcAddress(it, bootstrapAddresses) }.toSet()
+    private fun rpcTargets(): Set<String> = knownNodes.mapNotNull(::dialable).toSet()
+
+    private fun dialable(address: String): String? =
+        normalizeDhtRpcAddress(address, bootstrapAddresses)?.takeUnless { it in switchedOff }
 
     private companion object {
         const val MAX_TARGET_FAILURES = 3

@@ -81,6 +81,8 @@ class DiscoveryRepositoryImpl @Inject constructor(
                 }
             }
             is AppResult.Error -> {
+                // Every bootstrap node is off: forget the ones a previous join used.
+                dht.bootstrap(emptyList())
                 _status.value = _status.value.copy(lastError = nodes.error.message)
                 nodes
             }

@@ -57,12 +57,16 @@ object NetworkConfig {
     fun effectiveRelayEndpoint(): Endpoint =
         Endpoint(transport = TransportIds.RELAY, address = relayAddress)
 
+    /**
+     * Our own enabled relays, to try a peer through when its record gives nothing better. Empty when
+     * none is enabled: the built-in relay is only a fallback in the legacy single-node mode.
+     */
     fun relayFallbackEndpoints(): List<Endpoint> {
         val urls = buildList {
             add(relayAddress)
             addAll(rankedRelayUrls)
-            if (isEmpty()) add(DEFAULT_RELAY_URL)
-        }.distinct()
+            if (all { it.isBlank() } && !P2PConfig.multiNodeEnabled) add(DEFAULT_RELAY_URL)
+        }.filter { it.isNotBlank() }.distinct()
         return urls.map { Endpoint(transport = TransportIds.RELAY, address = it) }
     }
 }

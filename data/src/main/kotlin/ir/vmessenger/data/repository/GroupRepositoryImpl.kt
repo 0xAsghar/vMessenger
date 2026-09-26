@@ -10,13 +10,13 @@ import ir.vmessenger.core.database.dao.ContactDao
 import ir.vmessenger.core.database.dao.ConversationDao
 import ir.vmessenger.core.database.dao.GroupDao
 import ir.vmessenger.core.database.dao.IdentityDao
-import ir.vmessenger.core.database.dao.MessageEditHistoryDao
 import ir.vmessenger.core.database.entity.ContactEntity
 import ir.vmessenger.core.database.entity.ConversationEntity
 import ir.vmessenger.core.database.entity.GroupEntity
 import ir.vmessenger.core.database.entity.GroupMemberEntity
 import ir.vmessenger.core.database.entity.GroupMemberRole
 import ir.vmessenger.core.proto.app.v1.GroupControlType
+import ir.vmessenger.data.network.GroupAuditHistory
 import ir.vmessenger.data.network.GroupControlCodec
 import ir.vmessenger.data.network.GroupControlFanOut
 import ir.vmessenger.data.network.GroupControlFanOutRequest
@@ -58,7 +58,7 @@ class GroupRepositoryImpl @Inject constructor(
     private val contactRepository: ContactRepository,
     private val fanOut: GroupControlFanOut,
     private val cryptoEngine: CryptoEngine,
-    private val historyDao: MessageEditHistoryDao,
+    private val auditHistory: GroupAuditHistory,
 ) : GroupRepository {
 
     override fun observeGroup(groupId: String): Flow<Group?> =
@@ -77,7 +77,7 @@ class GroupRepositoryImpl @Inject constructor(
     override suspend fun getGroup(groupId: String): Group? = groupDao.getById(groupId)?.toDomain(selfKey())
 
     override fun observeAuditEntries(groupId: String): Flow<List<GroupAuditEntry>> =
-        historyDao.observeForGroup(groupId, AUDIT_PAGE_SIZE).map { rows ->
+        auditHistory.observe(groupId, AUDIT_PAGE_SIZE).map { rows ->
             val names = groupDao.activeMembers(groupId).associate { it.identityHash to it.displayName }
             rows.map { row ->
                 GroupAuditEntry(
@@ -264,6 +264,8 @@ class GroupRepositoryImpl @Inject constructor(
         )
         groupDao.markRemoved(group.id, self, System.currentTimeMillis())
         groupDao.setClosed(group.id, true)
+        // Out of the group, this device no longer hears when review is switched off.
+        auditHistory.erase(group.id)
         return AppResult.Success(Unit)
     }
 
@@ -291,7 +293,7 @@ class GroupRepositoryImpl @Inject constructor(
             groupDao.setAuditRetention(groupId, enabled, version)
             // Switching it off erases what the old policy kept. Leaving a stockpile behind would
             // mean the group's members are still exposed by a rule that no longer applies.
-            if (!enabled) historyDao.deleteForGroup(groupId)
+            if (!enabled) auditHistory.erase(groupId)
             fanOut.send(
                 GroupControlFanOutRequest(
                     group = group.copy(version = version, auditRetention = enabled),

@@ -4,6 +4,8 @@
     <string name="notification_new_message">New message</string>
     <string name="notification_location_request">%1$s is asking you to share your location</string>
     <string name="notification_location_request_generic">Location sharing request</string>
+    <string name="notification_contact_request">%1$s wants to add you as a contact</string>
+    <string name="notification_contact_request_generic">New contact request</string>
 
     <!-- Network: the ongoing connection notification and its channel. -->
     <string name="notification_channel_network">Network</string>

@@ -72,6 +72,7 @@ class IncomingMessageCollector @Inject constructor(
         }
         routes.start()
         receiptSender.start()
+        scope.launch { groupControlHandler.eraseReviewLeftovers() }
         // Envelopes are routed straight from the session read loop that
         // decrypted them: a full worker queue for one contact suspends that
         // session only, never the others. The flow only drains whatever

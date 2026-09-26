@@ -14,6 +14,9 @@ interface IncomingMessageNotifier {
 
     /** A verified contact asking us to share our location; raises the prompt, changes nothing. */
     suspend fun notifyLocationRequest(senderName: String, conversationId: String)
+
+    /** Someone asking to become a contact; opening it shows the request to approve or reject. */
+    suspend fun notifyContactRequest(requesterName: String, requestId: String)
 }
 
 @Singleton
@@ -35,6 +38,14 @@ class DefaultIncomingMessageNotifier @Inject constructor(
         messageNotificationManager.showLocationRequest(
             senderName = senderName,
             conversationId = conversationId,
+            hideContent = hideContent(),
+        )
+    }
+
+    override suspend fun notifyContactRequest(requesterName: String, requestId: String) {
+        messageNotificationManager.showContactRequest(
+            requesterName = requesterName,
+            requestId = requestId,
             hideContent = hideContent(),
         )
     }

@@ -65,7 +65,11 @@ class InboundHarness(
         outboxWaker = waker,
     )
     val conversationResolver = InboundConversationResolver(conversationDao, contactDao, groupDao)
-    val historyDao = FakeMessageEditHistoryDao()
+    val contactRequests = FakeContactRequestRepository()
+    val historyDao = FakeMessageEditHistoryDao(
+        referenced = { path -> messageDao.messages.any { it.attachmentPath == path } },
+        reviewed = { id -> groupDao.groups.any { it.id == id && it.auditRetention } },
+    )
     val auditRecorder = MessageAuditRecorder(groupDao, historyDao)
     val revisionHandler =
         MessageRevisionHandler(messageDao, conversationDao, contactDao, attachmentFiles, auditRecorder)
@@ -77,6 +81,7 @@ class InboundHarness(
         writer = writer,
         controlSender = GroupControlSender(groupDao, contactDao, messaging, selfIdentityCache),
         selfIdentity = selfIdentityCache,
+        auditHistory = GroupAuditHistory(historyDao, attachmentFiles),
     )
     val receiptSender = ReceiptSender(messaging, selfIdentityCache, contactDao, Dispatchers.Unconfined)
         .also { it.start() }
@@ -87,9 +92,9 @@ class InboundHarness(
         conversationDao = conversationDao,
         messageDao = messageDao,
         contactRequestHandler = ContactRequestHandler(
-            contactRequestRepository = FakeContactRequestRepository(),
+            contactRequestRepository = contactRequests,
             contactRepository = FakeContactRepository(contactDao),
-            contactRequestNotifier = ContactRequestNotifier(),
+            contactRequestNotifier = ContactRequestNotifier(notifier, contactRequests),
             contactRequestService = ContactRequestService(
                 identityRepository,
                 selfIdentityCache,

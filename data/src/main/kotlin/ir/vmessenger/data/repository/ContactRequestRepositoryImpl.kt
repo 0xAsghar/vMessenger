@@ -5,6 +5,7 @@ import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.database.dao.ContactRequestDao
 import ir.vmessenger.core.database.entity.ContactRequestEntity
 import ir.vmessenger.core.database.entity.ContactRequestStatus
+import ir.vmessenger.core.notifications.MessageNotificationManager
 import ir.vmessenger.domain.model.Contact
 import ir.vmessenger.domain.model.ContactRequest
 import ir.vmessenger.domain.repository.ContactRepository
@@ -18,6 +19,7 @@ import javax.inject.Singleton
 class ContactRequestRepositoryImpl @Inject constructor(
     private val contactRequestDao: ContactRequestDao,
     private val contactRepository: ContactRepository,
+    private val notifications: MessageNotificationManager,
 ) : ContactRequestRepository {
 
     override fun observePendingRequests(): Flow<List<ContactRequest>> =
@@ -60,6 +62,7 @@ class ContactRequestRepositoryImpl @Inject constructor(
         ).also { result ->
             if (result is AppResult.Success) {
                 contactRequestDao.update(entity.copy(status = ContactRequestStatus.ACCEPTED))
+                notifications.cancelContactRequest(requestId)
             }
         }
     }
@@ -72,6 +75,7 @@ class ContactRequestRepositoryImpl @Inject constructor(
                 rejectCount = entity.rejectCount + 1,
             ),
         )
+        notifications.cancelContactRequest(requestId)
     }
 
     private fun ContactRequestEntity.toDomain() = ContactRequest(

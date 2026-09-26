@@ -50,12 +50,22 @@ class BackupPayloadExporter @Inject constructor(
         return builder.build()
     }
 
+    /**
+     * One-to-one conversations only. A group conversation has no contact, and the format has nowhere to
+     * put a group (its members, roles and policy live outside the conversation), so it is left out —
+     * passing its null contact id to protobuf used to fail the whole export.
+     *
+     * A message on a timer stays out too: the format has no deadline to carry, so a restored copy
+     * would never expire.
+     */
     private suspend fun conversations(): List<BackupConversation> =
-        store.conversationDao.observeAll().first().map { conversation ->
+        store.conversationDao.observeAll().first().mapNotNull { conversation ->
+            val contactId = conversation.contactId ?: return@mapNotNull null
             val messages = store.messageDao.observeConversation(conversation.id).first()
+                .filter { it.expiresAtUnixMs == null }
             BackupConversation.newBuilder()
                 .setId(conversation.id)
-                .setContactId(conversation.contactId)
+                .setContactId(contactId)
                 .setMuted(conversation.muted)
                 .addAllMessages(messages.map { it.toBackup() })
                 .build()
