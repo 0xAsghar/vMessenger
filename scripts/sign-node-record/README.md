@@ -15,7 +15,7 @@ The app embeds the operator's Ed25519 public key in
 `core/common/src/main/kotlin/ir/vmessenger/core/common/network/NetworkConfig.kt`
 as `OPERATOR_ED25519_PUBLIC_KEY_HEX` (64 hex chars).
 
-**The constant is still a placeholder (all zeros) in 2.0.1.** While it is zero
+**The constant is still a placeholder (all zeros) in 2.0.2.** While it is zero
 `NetworkConfig.operatorEd25519PublicKey()` returns `null` and no record can become
 OFFICIAL: every valid record a peer sends is a COMMUNITY node.
 
