@@ -12,10 +12,12 @@ default language and English the second; both are first-class.
 
 ## Environment
 
-- **JDK:** Gradle runs on JDK 17. The repository keeps one at `.jdk/jdk-17`; on macOS it is
-  `.jdk/jdk-17/Contents/Home`. Gradle provisions the 21 toolchain it compiles with (foojay). JVM
-  libraries emit Java 17 bytecode; `:node:verifyBytecodeLevel` refuses anything newer.
-- **Android SDK:** in-repo at `.android-sdk` (SDK 35, Build Tools 35). Set `ANDROID_SDK_ROOT` to it.
+- **JDK:** Gradle runs on JDK 17. The maintainer's checkout keeps one at `.jdk/jdk-17` (git-ignored, so
+  not in a fresh clone; any JDK 17 will do); on macOS it is `.jdk/jdk-17/Contents/Home`. Gradle
+  provisions the 21 toolchain it compiles with (foojay). JVM libraries emit Java 17 bytecode;
+  `:node:verifyBytecodeLevel` refuses anything newer.
+- **Android SDK:** kept at `.android-sdk` in the maintainer's checkout, also git-ignored (SDK 35, Build
+  Tools 35). Set `ANDROID_SDK_ROOT` to it, or to your own SDK.
 - **Docker** (optional): only for the installer harness (`scripts/provision-test/`).
 
 ```bash
@@ -28,12 +30,12 @@ export JAVA_HOME=$PWD/.jdk/jdk-17/Contents/Home ANDROID_SDK_ROOT=$PWD/.android-s
 |---|---|
 | The gate — run before every commit | `./gradlew detekt unitTests assembleDebug :node:installDist` |
 | One module's tests | `./gradlew :data:testDebugUnitTest` (Android) or `./gradlew :core:common:test` (JVM) |
-| One test class | `./gradlew :data:testDebugUnitTest --tests '*RelayListenerTest'` |
+| One test class | `./gradlew :network:messaging:testDebugUnitTest --tests '*RelayListenerTest'` |
 | Fix formatting in one module | `./gradlew :feature:chat:detekt --auto-correct` — never project-wide: it rewrites unrelated files |
 | Release build (local, debug-signed without the keystore) | `./gradlew :app:assembleRelease :node:distTar` |
 | The node, locally | `./gradlew :node:run --args="--tcp"` then `./scripts/emulator-connect.sh` |
 | The installer against throwaway servers | `scripts/provision-test/run.sh test` (see docs/Testing.md §2.1) |
-| The New node engine against a real server | `scripts/provision-test/run.sh test --scenario engine` |
+| The New node engine against a harness server, over real SSH | `scripts/provision-test/run.sh test --scenario engine` |
 | `setup-node.sh` lint | `shellcheck -S style scripts/*.sh scripts/provision-test/*.sh` |
 
 `unitTests` is the aggregate: a plain `testDebugUnitTest` skips the JVM modules (`:core:common`, `:domain`,
@@ -42,7 +44,8 @@ the gate needs both.
 
 ## Emulators
 
-Two AVDs, `Pixel_8` (emulator-5554) and `TestB` (emulator-5556), arm64 system images. Boot headless:
+Two AVDs, `Pixel_8` (emulator-5554) and `TestB` (emulator-5556), arm64 system images (created as in
+docs/Testing.md §3.2). Boot headless:
 
 ```bash
 .android-sdk/emulator/emulator -avd Pixel_8 -port 5554 -no-window -no-audio -gpu swiftshader_indirect -no-snapshot
@@ -58,7 +61,8 @@ procedure is docs/Testing.md §3; New node against a harness server is §2.2.
 app/                  application, navigation (VmRoute, graphs), MainActivity, onboarding
 domain/               pure Kotlin: models, repository interfaces, use cases
 data/                 repository implementations, network coordinators, wipe, backup, NodeSetupController
-feature/              identity, pairing, contacts, chat, map, settings, debug, about, provision (New node)
+feature/              identity, lock (app lock), pairing, contacts, chat, map, settings, debug, about,
+                      provision (New node)
 network/              discovery, dht, bootstrap, transport, messaging
 core/common           shared types, NodeUrl / SpkiPin / PinnedTls, AppResult, logging
 core/crypto, proto    libsodium engine; protobuf wire formats
@@ -83,10 +87,11 @@ scripts/setup-node.sh the one installer: by hand, and in machine mode for the ap
 
 ## UI rules
 
-- **Never add `androidx.compose.material3`** (or material). The design system is our own, on Compose
-  Foundation: use `core:designsystem` components (`VMessengerScaffold`, `VmButton`, `VmTextField`,
-  `VmSecretField`, `VmNotice`, `VmStepList`, `ConfirmDialog`, …) and add one there when a screen needs
-  something new. Don't copy code from Element or other AGPL projects.
+- **Never add `androidx.compose.material3`** (or `androidx.compose.material:material`; the Material
+  icon set, `material-icons-extended`, is the only Material dependency). The design system is our
+  own, on Compose Foundation: use `core:designsystem` components (`VMessengerScaffold`, `VmButton`,
+  `VmTextField`, `VmSecretField`, `VmNotice`, `VmStepList`, `ConfirmDialog`, …) and add one there when a
+  screen needs something new. Don't copy code from Element or other AGPL projects.
 - Every user-visible string is a resource, **in Persian (`values/`) and English (`values-en/`) in the same
   change**. Escape apostrophes in XML (`\'`). A ViewModel emits a `UiMessage` or a resource id, never a
   sentence.
@@ -118,7 +123,9 @@ baselined signature that you change must be updated, not left to fail.
 ## Security rules
 
 - No secret — keys, passphrases, SSH passwords or keys, the database key — in a log, `SavedStateHandle`,
-  `rememberSaveable`, DataStore, the database or a backup. Hold them as arrays, and wipe them when done.
+  `rememberSaveable`, DataStore, the database or a backup, unless it is wrapped by the Android Keystore.
+  The one deliberate exception is the identity key pair, which the passphrase-encrypted backup carries.
+  Hold them as arrays, and wipe them when done.
 - New persistent state must be covered by secure wipe (`SecureWipeCoordinator`, docs/Security.md §9).
 - Only the person changes a node's certificate pin. Peers, the DHT and imports never add a second pin for
   a stored location.
@@ -129,8 +136,8 @@ baselined signature that you change must be updated, not left to fail.
 
 - **Never** SSH into, deploy to or restart the production node (`relay.vmessenger.ir`) or any real server
   without the maintainer's explicit permission for that action. Test against the Docker harness.
-- Never push tags, publish releases or touch signing secrets (`ANDROID_KEYSTORE_*`) without the
-  maintainer's go-ahead. Never fake a signature or a signing step.
+- Never push tags, publish releases or touch signing secrets (`ANDROID_KEYSTORE_*`, `ANDROID_KEY_*`)
+  without the maintainer's go-ahead. Never fake a signature or a signing step.
 - Throwaway harness credentials live in `scripts/provision-test/out/` and are never committed.
 
 ## Docs, changelog, commits

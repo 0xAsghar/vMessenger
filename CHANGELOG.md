@@ -13,6 +13,23 @@ version** (currently 25, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
 
+### Changed
+
+- **The documentation was audited against 2.0.1** for the handover: `README.md`, `AGENTS.md` and every
+  document in `docs/` were checked claim by claim against the code and corrected where they had fallen
+  behind it (for example the design system replacing Material 3, schema 25, voice calls, 100-member groups,
+  the English UI, New node, the known-limitations table).
+
+### Fixed
+
+- **A call-flow diagram in Protocol.md did not render**: a semicolon inside a Mermaid note ends the
+  statement.
+
+### Removed
+
+- **`node/state/node.seed`**, the identity seed of a local development node, committed by mistake.
+  `node/state/` is now ignored.
+
 ## [2.0.1] - 2026-09-26
 
 Fixes and small additions to 2.0.0. No database or wire changes: schema stays 25, protocol major 2.

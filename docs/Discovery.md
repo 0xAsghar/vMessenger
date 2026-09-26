@@ -35,17 +35,22 @@ Keeping these separate is what lets the network stay decentralized: identity is 
 The only coupling between Discovery and Messaging is a single contract:
 
 ```kotlin
+// network/discovery/.../DiscoveryProvider.kt
 interface DiscoveryProvider {
     val id: DiscoveryProviderId
-    suspend fun announce(self: Identity, endpoints: List<Endpoint>): Result<Unit>
-    suspend fun resolve(identityHash: IdentityHash): Result<List<Endpoint>>
+    suspend fun announce(
+        self: DiscoveryIdentity,
+        endpoints: List<Endpoint>,
+        ed25519PrivateKey: ByteArray,
+    ): AppResult<Unit>
+    suspend fun resolve(identityHash: ByteArray): AppResult<List<Endpoint>>
 }
 ```
 
 - `announce` makes this device findable (MVP: publish a signed endpoint record into the DHT).
 - `resolve` turns a contact's identity hash into current endpoints.
 
-Messaging depends only on this interface. Swapping the DHT for mDNS/LAN discovery, BLE discovery, or a future technique is a binding change, not a refactor.
+Messaging reaches this interface only through `EndpointResolveService`, which consults the verified peer cache first and adds the relay fallback (Section 6). Swapping the DHT for mDNS/LAN discovery, BLE discovery, or a future technique is a binding change, not a refactor.
 
 ---
 
@@ -58,11 +63,11 @@ flowchart TD
   Manager["DiscoveryManager"] --> P1["DhtDiscoveryProvider (MVP)"]
   Manager --> P2["LanDiscoveryProvider (future, mDNS/NSD)"]
   Manager --> P3["BleDiscoveryProvider (future)"]
-  Manager --> Merge["Merge + dedupe endpoints by transport, freshest first"]
+  Manager --> Merge["Merge + drop duplicate (transport, address) pairs"]
 ```
 
-- `resolve` queries providers in parallel and merges results; endpoints are tagged by transport (see [Network.md](Network.md)) and ranked by freshness and reachability.
-- `announce` fans out to all providers so the device is discoverable through every available channel.
+- `resolve` asks the providers one after another and merges what they return, dropping duplicate (transport, address) pairs; it fails only when every provider failed. Endpoints are tagged by transport and ordered later, by `EndpointOrder` (see [Network.md](Network.md) §5).
+- `DiscoveryManager.announce` tries the providers in turn and stops at the first success. The app does not call it today: it publishes through `DhtDiscoveryProvider` directly (`DiscoveryRepositoryImpl`).
 - Only `DhtDiscoveryProvider` is registered today; the others are designed-for but not implemented.
 
 ---
@@ -71,9 +76,9 @@ flowchart TD
 
 QR is the strongest pairing method because it is in-person and offline - an authenticated key exchange with no network and no MITM opportunity.
 
-- The "My QR Code" screen renders a `PairingDescriptor` (see [Protocol.md](Protocol.md) Section 12) containing the Ed25519 public key, the User Hash, an optional display label, a version, and a self-signature.
-- The QR Scanner screen decodes the descriptor, verifies the self-signature, derives the identity hash, and creates a `Contact`. No endpoints are exchanged.
-- Encoding: the serialized Protobuf descriptor is Base32/Base45-encoded into the QR for density and reliable scanning; the payload is small (a public key plus metadata).
+- The "My QR Code" screen (`MyQrRoute`) renders a `PairingDescriptor` (see [Protocol.md](Protocol.md) §8.5) containing the Ed25519 public key, the User Hash, an optional display label, a version, and a self-signature.
+- The QR Scanner screen (`QrScannerRoute`) decodes the descriptor, verifies the self-signature, derives the identity hash, and saves a `Contact` as `PENDING_OUT`; a contact request then goes out in the background (Section 5.1). No endpoints are exchanged.
+- Encoding: the serialized Protobuf descriptor is standard Base64-encoded into the QR (`PairingDescriptorCodec.encodeBase64`); the payload is small (a public key plus metadata).
 
 ```mermaid
 sequenceDiagram
@@ -82,8 +87,9 @@ sequenceDiagram
   A->>A: render PairingDescriptor (self-signed)
   B->>A: scan QR
   B->>B: verify signature, derive identity hash
-  B->>B: save Contact (no network)
-  Note over A,B: For two-way, A scans B's QR as well, or B shares back
+  B->>B: save Contact PENDING_OUT
+  B->>A: ContactRequest (over the network, Section 5.1)
+  Note over A,B: A approves, and both sides become APPROVED
 ```
 
 ---
@@ -92,7 +98,7 @@ sequenceDiagram
 
 When scanning is impractical, users exchange a User Hash out-of-band (spoken, messaged through another channel, printed).
 
-- Derivation: `identity hash = SHA-256(Ed25519 public key)`. The User Hash is a human-readable, checksummed encoding of that identity hash.
+- Derivation: `identity hash = SHA-256(Ed25519 public key)`. The User Hash is a human-readable, checksummed encoding of the first 16 bytes of that identity hash.
 - Encoding goals: typable, unambiguous (avoid easily confused characters), checksummed to catch typos, and chunked for readability.
 - Format v2 (`core/common/.../encoding/UserHashEncoder.kt`): `vm-` followed by Crockford base32 of `prefix16 || SHA256("vmessenger-userhash-v2" || prefix16)[0..2)`, grouped `5-5-5-5-5-4` (29 symbols), e.g. `vm-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXX`. The checksum covers all 16 prefix bytes and decoding is canonical-only (leftover pad bits must be zero). `vm-` and the older `vm2-` (written before 2.0.0-beta.1, and by 1.1.2) are accepted; a `vm1-` string fails with reason `missing_prefix`.
 
@@ -100,11 +106,11 @@ When scanning is impractical, users exchange a User Hash out-of-band (spoken, me
 flowchart LR
   Pk["Ed25519 public key"] --> Sha["SHA-256"]
   Sha --> Idh["identity hash (32 bytes)"]
-  Idh --> Enc["Crockford Base32 + checksum + grouping"]
+  Idh --> Enc["first 16 bytes: Crockford Base32 + checksum + grouping"]
   Enc --> UH["User Hash: vm-XXXXX-XXXXX-..."]
 ```
 
-- Security note: the User Hash carries the first 16 bytes of `SHA256(identity_pub)`, so all routing tables key on that prefix (`IdentityHashMatcher.routingKeyHex`). A hash-only contact is matched on the prefix during the handshake and the full identity key is adopted from the first authenticated session, then pinned. There is **no** out-of-band safety-number screen — pairing is trust-on-first-use (see [Security.md](Security.md) "Known limitations").
+- Security note: the User Hash carries the first 16 bytes of `SHA256(identity_pub)`, so all routing tables key on that prefix (`IdentityHashMatcher.routingKeyHex`). A hash-only contact is matched on the prefix during the handshake and the full identity key is adopted from the first authenticated session, then pinned. Pairing is trust-on-first-use: the contact page shows the pair's safety number («شماره امنیتی») and a «تأیید شده» ("Verified") switch, but nothing forces the comparison (see [Security.md](Security.md) §5 and "Known limitations", L4).
 
 ### 5.1 User Hash add flow (v0.2.0 — mutual approval)
 
@@ -121,7 +127,7 @@ Hash-only adds are **not** instant contacts. They initiate a contact-request pro
 
 QR pairing (Section 4) runs the same protocol from step 2, with the peer's real key in place of a placeholder: the signed descriptor proves who they are, not that they consent. (Up to 1.1.1 a scan was `APPROVED` immediately, which left a one-sided contact whose messages the peer silently dropped.)
 
-Until approval, only `contact_request` / `contact_response` frames are accepted from the stranger; chat and location are rejected. See [Protocol.md](Protocol.md) §8.1 and [Security.md](Security.md) §11.1.
+Until approval, only `contact_request` / `contact_response` frames are accepted from the stranger; chat and location are rejected. See [Protocol.md](Protocol.md) §8.1 and §8.5, and [Security.md](Security.md) §6.
 
 ```mermaid
 sequenceDiagram
@@ -144,32 +150,32 @@ sequenceDiagram
 
 Once a contact's identity is known, reaching them is a DHT operation.
 
-- Announce: this device publishes a signed `EndpointRecord` keyed by its identity hash, listing its current endpoints with a TTL (see [DHT.md](DHT.md)).
-- Resolve: to message a contact, the app looks up the contact's identity hash, retrieves the signed record, verifies the signature against the contact's known public key, and hands the endpoints to the Transport selector.
+- Announce: this device publishes a signed `EndpointRecord` keyed by its identity hash, listing its current endpoints with a 20-minute TTL, and re-announces every 10 minutes (see [DHT.md](DHT.md)).
+- Resolve: to message a contact, the app (`EndpointResolveService`) first consults the verified peer cache; otherwise it looks up the contact's identity hash, retrieves the signed record, verifies it, and hands the endpoints to the dialer. With no record, or when discovery fails, it falls back to the relay, since a relay circuit needs only the identity hash.
 
 ```mermaid
 sequenceDiagram
   participant App as Messaging
   participant Disc as DhtDiscoveryProvider
-  participant DHT as DHT
+  participant DHT as MinimalDht
   App->>Disc: resolve(identityHash of contact)
   Disc->>DHT: lookup(identityHash)
+  DHT->>DHT: verify signature + hash + TTL (EndpointRecordVerifier)
   DHT-->>Disc: signed EndpointRecord
-  Disc->>Disc: verify signature + TTL + sequence
   Disc-->>App: List<Endpoint>
 ```
 
-Verification rules (also in [Security.md](Security.md)):
+Verification rules (`EndpointRecordVerifier`; also in [Protocol.md](Protocol.md) §14):
 
-- Signature must validate against the public key whose SHA-256 equals the looked-up identity hash.
-- Expired records (past TTL) are discarded; the freshest valid sequence number wins.
+- The record must be a v2 transcript, `SHA-256(identity_pub)` must equal the record's `identity_hash`, and the signature must validate against `identity_pub`. The record is not compared with the key that was looked up. A wrong record can therefore send the dial to the wrong address, but it cannot put anyone else on the line: the handshake authenticates the contact's pinned key (or, for a hash-only contact, the hash prefix), so such a dial fails.
+- Expired records (past TTL), a TTL over 24 hours and a `published_at` more than 5 minutes ahead are refused. A lookup takes the first valid record a node returns; `sequence` is enforced where records are kept: a node refuses a record that is not newer than the one it holds, and the peer cache never replaces an entry with an older or equal one.
 
 ---
 
 ## 7. Privacy considerations
 
-- Pairing leaks nothing to the network (offline).
-- Announce publishes only ephemeral, signed endpoint hints - never identity, contacts, or content.
+- The key exchange itself is offline. The contact request that follows is an ordinary encrypted session, with the same metadata exposure to relay and DHT nodes as any message.
+- Announce publishes only ephemeral, signed endpoint hints and the public identity key they are signed with (in a production build, just the relay URL the device listens on) - never contacts, names, or content.
 - Resolve reveals to storing DHT nodes that someone is interested in a particular identity hash. This metadata exposure is a known limitation; there is no private or blinded lookup (see [Security.md](Security.md) "Known limitations").
 - Endpoint records have short TTLs so stale location/IP exposure is minimized.
 
@@ -184,4 +190,4 @@ The same `DiscoveryProvider` contract absorbs future mechanisms with no impact o
 - Wi-Fi Direct discovery: peer-to-peer group formation for transport without an access point.
 - Mesh discovery: multi-hop neighbor discovery for store-and-forward routing.
 
-Each provider produces transport-tagged endpoints; the `DiscoveryManager` merges them, and the `TransportSelector` (see [Network.md](Network.md)) picks the best path automatically.
+Each provider produces transport-tagged endpoints; the `DiscoveryManager` merges them, `EndpointOrder` ranks them and the dialer tries them in turn through the `TransportSelector` (see [Network.md](Network.md) §5).

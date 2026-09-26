@@ -16,8 +16,8 @@ Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Securi
 - FR-4 Messaging: send and receive end-to-end encrypted 1:1 text messages.
 - FR-5 Delivery semantics: track per-message status (queued, sent, delivered, read, failed).
 - FR-6 Queues: retry transient failures; hold messages in an offline queue until the peer is reachable.
-- FR-7 Live Location: share live location through a foreground service with a per-contact allow list; render mutual shares on a MapLibre map; stop/revoke at any time.
-- FR-8 Storage: persist contacts, conversations, messages, wrapped private keys, settings, contact requests, location access grants and location history, encrypted at rest. Encryption sessions are **not** persisted — they are connection-scoped (see [Protocol.md](Protocol.md) §6).
+- FR-7 Live Location: share live location through a foreground service with a per-contact allow list; render the shares we receive on a MapLibre map; stop/revoke at any time.
+- FR-8 Storage: persist contacts, conversations, messages, wrapped private keys, contact requests, location access grants and location history, encrypted at rest; settings live in DataStore. Encryption sessions are **not** persisted — they are connection-scoped (see [Protocol.md](Protocol.md) §6).
 - FR-9 Contact management: list, rename (local alias), verify, block, and delete contacts; show pending/rejected relationship status; gate chat and location to `APPROVED` contacts only.
 
 ### 1.2 Non-functional requirements
@@ -25,16 +25,16 @@ Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Securi
 - NFR-1 Security: confidentiality, integrity, authenticity, forward secrecy, and replay protection for all messages; private keys never leave the device. See [Security.md](Security.md).
 - NFR-2 Decentralization: no central authentication, database, or message server; no single point of failure or control.
 - NFR-3 Modularity: each layer (Identity, Discovery, Transport, Encryption, Messaging) is replaceable behind an interface without changing the others.
-- NFR-4 Extensibility: future features (groups, calls, file transfer, additional transports, mesh, plugins) can be added without breaking existing code.
+- NFR-4 Extensibility: future features (video calls, additional transports, mesh, plugins) can be added without breaking existing code — as groups, voice calls and file transfer were.
 - NFR-5 Performance and battery: fixed 15s location interval during active sharing (MVP); efficient connection reuse; responsive UI on Android 8+ devices.
 - NFR-6 Reliability: graceful degradation when the network, DHT, or a peer is unavailable; durable local queues.
 - NFR-7 Privacy: minimize metadata; routing records are ephemeral and signed; no analytics or tracking.
 - NFR-8 Testability: domain logic is pure and unit-testable; network and crypto layers are interface-driven and fakeable.
-- NFR-9 Internationalization: Persian-first, full RTL, Material 3, light/dark. See [UI.md](UI.md).
+- NFR-9 Internationalization: Persian first with English as the second language (right to left in Persian, left to right in English), the in-house design system on Compose Foundation (no Material), light/dark. See [UI.md](UI.md).
 
 ### 1.3 Constraints and assumptions
 
-- Minimum SDK 26 (Android 8.0); target the latest stable SDK.
+- Minimum SDK 26 (Android 8.0); target and compile SDK 35.
 - The app uses direct TCP when possible and falls back to an encrypted circuit relay (`relay.vmessenger.ir` or user-configured nodes). ICE/STUN hole punching is not implemented.
 - Bootstrap nodes are used only to join the DHT; after joining, the verified peer-endpoint cache carries day-to-day resolution (see [DHT.md](DHT.md) Section 4.1).
 
@@ -99,7 +99,7 @@ flowchart TD
 
 - Identity: owns the device keypair, identity hash, User Hash, and signing. Source of truth for "who am I" and "who is this peer". See [Security.md](Security.md).
 - Discovery: turns an identity hash into reachable endpoints. Independent of Messaging. Implemented for MVP via QR/User Hash (identity exchange) and the DHT (endpoint resolution). See [Discovery.md](Discovery.md).
-- Transport: establishes raw bidirectional byte channels to an endpoint. Implemented: Internet (TCP), relay circuits over WebSocket, and a UDP transport that is off by default. Bluetooth, Wi-Fi Direct and mesh do not exist. See [Network.md](Network.md).
+- Transport: establishes raw bidirectional byte channels to an endpoint. Implemented: Internet (TCP) and relay circuits over WebSocket. A `UdpTransport` class exists but is not registered with the transport selector, so nothing dials over UDP. Bluetooth, Wi-Fi Direct and mesh do not exist. See [Network.md](Network.md).
 - Encryption: performs the handshake, key derivation, ratcheting, and AEAD framing. Plaintext crosses this boundary only on the device. See [Security.md](Security.md) and [Protocol.md](Protocol.md).
 - Messaging: sequences, acknowledges, retries, and queues application messages over an encrypted session. See [Protocol.md](Protocol.md).
 
@@ -113,9 +113,9 @@ Each layer depends only on the interface of the layer beneath it, so any layer c
 
 Pure Kotlin, no Android or framework dependencies. Contains:
 
-- Entities and value objects: `Identity`, `Contact`, `ContactRequest`, `ContactRelationshipStatus`, `Conversation`, `Message`, `DeliveryStatus`, `EndpointRecord`, `LocationSample`, `SessionState`, and the group model in `domain/model/Group.kt`.
-- Repository interfaces: `ContactRepository`, `ContactRequestRepository`, `MessageRepository`, `IdentityRepository`, `DiscoveryRepository`, `LocationRepository`, `LocationAccessRepository`, `SettingsRepository`, `GroupRepository`.
-- Use cases: small, single-responsibility classes that orchestrate repositories, for example `GenerateIdentityUseCase`, `UpdateDisplayNameUseCase`, `AddContactByQrUseCase`, `AddContactByHashUseCase`, `SendContactRequestUseCase`, `SendMessageUseCase`, `SendVoiceUseCase`, `ObserveConversationUseCase`, `ResolveEndpointUseCase`, and the group set under `domain/usecase/group/` (`CreateGroupUseCase`, `AddGroupMembersUseCase`, `RemoveGroupMemberUseCase`, `UpdateGroupNameUseCase`, `LeaveGroupUseCase`, `CloseGroupUseCase`, `ObserveGroupUseCase`, `ObserveGroupMembersUseCase`, `AddContactFromGroupMemberUseCase`).
+- Entities and value objects: `Identity`, `Contact`, `ContactRequest`, `ContactRelationshipStatus`, `Conversation`, `ChatMessage`, `DeliveryStatus`, `LocationSample`, `NetworkNode`, `ManagedNode`, `ActivityEvent`, and the group model in `domain/model/Group.kt`. Endpoint records and session state are not domain types: the records are protobuf messages in `core:proto`, and sessions exist only inside `network:messaging`.
+- Repository interfaces: `ContactRepository`, `ContactRequestRepository`, `ConversationRepository`, `IdentityRepository`, `IdentityBackupRepository`, `PairingRepository`, `DiscoveryRepository`, `LocationRepository`, `LocationAccessRepository`, `GroupRepository`, `NodeManagementRepository`, `ManagedNodeRepository`, and the narrower ports `ContactRequestSender`, `ProfileBroadcaster`, `RelayControl` and `SecureWipeService`. Settings have no repository: they are DataStore preferences in `core:datastore`.
+- Use cases: small, single-responsibility classes that orchestrate repositories, for example `GenerateIdentityUseCase`, `UpdateDisplayNameUseCase`, `AddContactByQrUseCase`, `AddContactByHashUseCase`, `SendContactRequestUseCase`, `SendMessageUseCase`, `SendVoiceUseCase`, `ObserveMessagesPagedUseCase`, `PublishEndpointUseCase`, `CompleteNodeProvisioningUseCase`, and the group set under `domain/usecase/group/` (`CreateGroupUseCase`, `AddGroupMembersUseCase`, `RemoveGroupMemberUseCase`, `UpdateGroupNameUseCase`, `LeaveGroupUseCase`, `CloseGroupUseCase`, `ObserveGroupUseCase`, `ObserveGroupMembersUseCase`, `AddContactFromGroupMemberUseCase`, `SetGroupMemberAdminUseCase`, `SetGroupAuditRetentionUseCase`, `ObserveGroupAuditUseCase`). Endpoint resolution has no use case; `network:discovery` does it for the messaging stack.
 
 Use cases express application business rules and are independently unit-testable with fake repositories.
 
@@ -123,7 +123,7 @@ Use cases express application business rules and are independently unit-testable
 
 Implements the domain repository interfaces and coordinates local and networking data sources.
 
-- Local data sources: Room DAOs (over SQLCipher) and encrypted DataStore for settings. See [Database.md](Database.md).
+- Local data sources: Room DAOs (over SQLCipher) and Preferences DataStore for settings. DataStore is not encrypted: the keys in it — the database passphrase and the attachment key — are Keystore-wrapped blobs, and unsent composer drafts are kept there in plain text (app-private storage). See [Database.md](Database.md) and [Security.md](Security.md) §2.1.
 - Networking services facade: a thin boundary that exposes the networking stack (Discovery, Transport, Encryption, Messaging) to repositories as suspend functions and Flows.
 - Mappers: convert between Protobuf wire models, Room entities, and domain models. The three representations are kept separate so wire and storage formats can evolve independently.
 
@@ -134,7 +134,7 @@ The data layer enforces offline-first behavior: writes go to the database first,
 Jetpack Compose with MVVM. See [UI.md](UI.md) for screen specifications.
 
 - Each screen has a `ViewModel` exposing an immutable `UiState` via `StateFlow` and accepting user intents as function calls.
-- ViewModels depend only on use cases, never on repositories or the network directly.
+- ViewModels work through `domain`: use cases, or a domain repository interface where a use case would only forward the call. The ones that reach past `domain` — into `data`, `network:messaging` or a `core:*` module — are declared in their module's `build.gradle.kts` and listed in [FolderStructure.md](FolderStructure.md) §8.
 - Navigation is centralized in the `:app` module's navigation host.
 
 ---
@@ -164,13 +164,13 @@ The project is a Gradle multi-module build. Full details and package layout are 
 
 ```mermaid
 flowchart TD
-  app["app"] --> features["feature:identity, pairing, contacts,<br/>chat, map, settings, debug, about, provision"]
+  app["app"] --> features["feature:identity, lock, pairing, contacts,<br/>chat, map, settings, debug, about, provision"]
   app --> network["network:discovery, dht, bootstrap,<br/>transport, messaging"]
   app --> coredata["data"]
   features --> domain["domain"]
   features --> designsystem["core:designsystem"]
-  featmap["feature:map"] --> coremap["core:map"]
-  featmap --> coredata
+  featdata["feature:map, contacts, settings,<br/>debug, lock"] --> coredata
+  featmap["feature:map, contacts"] --> coremap["core:map"]
   coremap --> designsystem
   coremap --> corelocation["core:location"]
   coredata --> domain
@@ -178,33 +178,39 @@ flowchart TD
   coredata --> datastore["core:datastore"]
   coredata --> corelocation
   coredata --> notifications["core:notifications"]
+  coredata --> audio["core:audio"]
   coredata --> network
   network --> crypto["core:crypto"]
   network --> proto["core:proto"]
   network --> common["core:common"]
+  network --> database
+  database --> crypto
+  database --> datastore
   database --> common
+  crypto --> proto
   crypto --> common
+  designsystem --> common
   domain --> common
-  node["node (JVM)"] --> proto
-  node --> common
+  node["node (JVM)"] --> common
+  node -.->|same proto schema files| proto
   featprov["feature:provision"] --> nodesetup["core:nodesetup (JVM)"]
   coredata --> nodesetup
   nodesetup --> ssh["core:ssh (JVM, sshj)"]
   nodesetup --> common
 ```
 
-`feature:map` is the one feature module that depends on `data`, because live-location sharing is driven by `LocationSharingCoordinator` rather than by a use case. Map rendering itself is factored out into `core:map` (MapLibre wrapper, camera, marker layer, location puck), which `feature:map` and the chat location preview both consume.
+Five feature modules depend on `data` directly, each for a coordinator that has no use case in front of it: `feature:map` (`LocationSharingCoordinator`, which drives live-location sharing), `feature:contacts` (`ContactRequestHandler`, to approve or reject a request), `feature:settings` (the app lock and the activity log), `feature:debug` (the P2P flags) and `feature:lock` (`AppLockCoordinator`). [FolderStructure.md](FolderStructure.md) §8 lists every exception. Map rendering itself is factored out into `core:map` (MapLibre wrapper, camera, marker and route layers, location puck), which `feature:map` and the location card on a contact's page in `feature:contacts` both consume. `core:audio` holds the audio side of voice calls (capture, playback, Opus, jitter buffer) for the call media path in `data`.
 
 Three module changes are recent enough to note explicitly. `core:storage` has been removed — it never held anything but a placeholder, and encrypted blob storage lives in `data` alongside the attachment pipeline. `feature:location` was replaced by the `core:map` / `feature:map` pair. And `core:update`, the in-app updater, was removed after 2.0.0-beta.1: the app no longer contacts GitHub, and a new build is installed by hand over the old one. `LegacyUpdaterCleanup` in `data` deletes the files it left on installs that ran it.
 
 Key rules:
 
 - `domain` depends on nothing but `core:common` (pure Kotlin).
-- `feature:*` modules depend on `domain` and `core:designsystem`, and never on `network` internals directly; `feature:map` is the documented exception for its `data` dependency.
+- `feature:*` modules depend on `domain` and `core:designsystem`. The exceptions — `data` in the five modules above, `network:messaging` in `feature:debug`, and a few `core:*` modules — are declared in each module's `build.gradle.kts` and listed in [FolderStructure.md](FolderStructure.md) §8. `feature:lock` works on `data` alone and has no `domain` dependency.
 - `data` is the only module that wires repositories to `network`, `database`, and `datastore`.
-- `network:*` modules depend on `core:crypto`, `core:proto`, and `core:common`, and never on `feature` or `presentation` code.
+- `network:*` modules depend on `core:common`, `core:proto` and (all but `network:transport`) `core:crypto`; `network:dht` also uses `core:database` for the embedded DHT node's record store. None depends on `feature` or presentation code.
 - `feature:provision` depends on `core:nodesetup` for the setup's contract types (state, issues, steps) and on the `NodeSetupSession` interface there; `data` binds that interface to `NodeSetupController`, which owns the engine and the credentials. `core:nodesetup` and `core:ssh` are plain JVM modules, so the whole engine runs in unit tests and against Docker servers from Gradle.
-- `node` is a JVM module that shares `core:proto` and `core:common` with the app so transcripts and framing cannot drift between the two.
+- `node` is a JVM module that shares `core:common` and the `.proto` files of `core:proto` (compiled into the node with the full protobuf-java runtime) with the app, so transcripts and framing cannot drift between the two.
 
 This guarantees the Dependency Rule and keeps build times and blast radius small.
 
@@ -214,10 +220,10 @@ This guarantees the Dependency Rule and keeps build times and blast radius small
 
 Hilt provides compile-time-verified DI with Android lifecycle integration.
 
-- Scopes: `@Singleton` for identity, crypto engine, database, networking stack, and the DHT client; `@ViewModelScoped` for per-screen collaborators; `@ServiceComponent` bindings for the location foreground service.
-- Modules bind interfaces to implementations, for example `@Binds` for each repository, `Transport`, `DiscoveryProvider`, `BootstrapProvider`, and `CryptoEngine`. Swapping an implementation is a one-line binding change, which is how new transports and discovery providers are introduced.
-- Qualifiers distinguish multiple implementations of the same interface (for example `@InternetTransport` vs a future `@BluetoothTransport`) and dispatchers (`@IoDispatcher`, `@DefaultDispatcher`, `@MainDispatcher`).
-- Multibinding (`@IntoSet`) is used for pluggable collections such as the set of active `Transport`s, the set of `BootstrapProvider`s, and future plugins, enabling the transport selector and bootstrap manager to iterate over all registered providers.
+- Scopes: `@Singleton` for identity, crypto engine, database, networking stack, the coordinators and the DHT client; screens get their collaborators through `@HiltViewModel` constructors. There are no `@ViewModelScoped` or service-component bindings: `NetworkLifecycleService` and `CallForegroundService` are `@AndroidEntryPoint`s that inject singletons, broadcast receivers use `@EntryPoint` accessors, the WorkManager workers are `@HiltWorker`s, and `LocationService` (in `core:location`) takes no injection at all.
+- Modules bind interfaces to implementations: `@Binds` for each repository (`data/di/RepositoryModule.kt`), `@Provides` for `CryptoEngine`, and `@IntoSet` bindings for each `Transport`, `DiscoveryProvider` and `BootstrapProvider` (`@Provides` in the network modules' `di/` packages, `@Binds` for the database-backed bootstrap provider in `data`). Swapping an implementation is a one-line binding change, which is how new transports and discovery providers are introduced.
+- Qualifiers are few: the dispatchers `@IoDispatcher` and `@DefaultDispatcher` (declared in `data/di/RepositoryModule.kt`) and `@AppVersionName`. Transports are not told apart by qualifiers but by their `id` in the multibound set.
+- Multibinding (`@IntoSet`) is used for pluggable collections — the set of active `Transport`s, of `DiscoveryProvider`s and of `BootstrapProvider`s (`data` adds the database-backed one) — enabling the transport selector, discovery manager and bootstrap manager to iterate over all registered providers.
 
 ---
 
@@ -225,16 +231,16 @@ Hilt provides compile-time-verified DI with Android lifecycle integration.
 
 vMessenger is built on Kotlin Coroutines and Flow with structured concurrency.
 
-- Dispatchers are injected, never referenced as globals, so they can be replaced with test dispatchers.
+- In `data`, the coordinators and repositories take their dispatchers by injection so tests can replace them:
   - `@IoDispatcher` for disk, database, and network I/O.
   - `@DefaultDispatcher` for CPU-bound work (crypto, serialization, parsing).
-  - `@MainDispatcher` for UI updates.
+  - There is no `@MainDispatcher`; UI work runs on `viewModelScope`. The `network:*` modules, the `app` services and receivers, a few ViewModels and, in `data`, the New node and app-lock code still name `Dispatchers.IO` / `Default` / `Main` directly.
 - Suspend functions for one-shot operations (send a message, resolve an endpoint); Flow for streams (observe a conversation, observe connection state, location updates).
 - Scopes:
   - `viewModelScope` for UI-bound work.
-  - A `@Singleton` application-level `CoroutineScope` (with a `SupervisorJob`) owns long-lived network tasks: the DHT maintenance loop, endpoint republish/refresh, the outbox/retry worker, and inbound session listeners.
-  - The location foreground service owns its own scope tied to the service lifecycle.
-- Backpressure and buffering: inbound message Flows are conflated or buffered as appropriate; the outbox is drained by a single worker to preserve ordering per conversation.
+  - There is no shared application scope. Each long-lived `@Singleton` — `NetworkCoordinator`, `EndpointAnnouncer`, `OutboxDispatcher`, `IncomingMessageCollector`, `ContactRequestRetryWorker`, `MessagingService`, `RelayListener`, `LocationSharingCoordinator`, `CallCoordinator` and others — owns a `CoroutineScope(SupervisorJob() + dispatcher)`, and `NetworkCoordinator.start()` / `stop()` start and stop the network ones together. `VMessengerApplication` keeps a small scope of its own for start-up work.
+  - `LocationService` has no coroutine scope: it is a `LocationListener` that emits into `LocationUpdateBus`, which `LocationSharingCoordinator` collects in its own scope.
+- Backpressure and buffering: inbound message Flows are conflated or buffered as appropriate; the outbox is drained by one loop in `OutboxDispatcher`, which keeps order per (conversation, recipient) and runs different recipients concurrently, up to a bound.
 - Cancellation is cooperative and propagated; closing a session cancels its read/write coroutines deterministically.
 
 ---
@@ -242,8 +248,9 @@ vMessenger is built on Kotlin Coroutines and Flow with structured concurrency.
 ## 9. Background execution
 
 - Live Location runs in a foreground service (`LocationService`, `foregroundServiceType="location"`) with a persistent notification and a 15s GPS/network sampling interval. `LocationSharingCoordinator` encrypts samples and sends `LocationPacket`s to granted approved contacts. See [UI.md](UI.md).
-- Outbox delivery and DHT endpoint refresh run in the application scope while the app is alive, and are additionally scheduled with WorkManager for periodic refresh and retry when the app is backgrounded, subject to OS constraints.
-- The messaging service keeps at most one outbound session per contact and re-handshakes after 65 536 frames or 12 hours; sessions are never persisted. `NetworkLifecycleService` (`foregroundServiceType="remoteMessaging|dataSync"`) keeps the listener and relay control channel alive, and `BootCompletedReceiver` restarts it after a reboot.
+- Outbox delivery and endpoint republishing run in the network coordinators' own scopes for as long as the process lives. WorkManager holds two periodic jobs, each every 15 minutes: `NetworkKeepAliveWorker` restarts the network service if it has died (or, when Android refuses a background start, brings the network up in the worker's own process), and `ExpiryPurgeWorker` deletes self-destructing messages whose deadline has passed.
+- The messaging service keeps at most one outbound session per contact and re-handshakes after 65 536 frames or 12 hours; sessions are never persisted. `NetworkLifecycleService` (`foregroundServiceType="remoteMessaging|dataSync"`) keeps the listener and relay control channel alive, and `BootCompletedReceiver` restarts it after a reboot. The first run asks for the battery-optimisation exemption (as the node step ends) so this service keeps running in the background and messages and calls arrive; refusing it still moves on.
+- A voice call holds `CallForegroundService` (`foregroundServiceType="microphone"`) from the moment it is placed or answered until it ends — never while an incoming call is only ringing, which holds a full-screen notification that opens `CallActivity` over the lock screen. See [Security.md](Security.md) §13.
 
 ---
 
@@ -254,14 +261,14 @@ vMessenger is built on Kotlin Coroutines and Flow with structured concurrency.
 1. The user enters a display name (2–32 characters, Persian OK).
 2. `GenerateIdentityUseCase` asks the Identity service to create an Ed25519 keypair.
 3. The private key is stored wrapped by the Android Keystore; the public key, identity hash, display name, and User Hash are persisted. See [Security.md](Security.md).
-4. The UI transitions from the Create Identity screen to Home.
+4. The app asks for location permission (a refusal still moves on) and goes from the Create Identity screen to Home. On a new install this screen comes after the node question (`NodeSetupRoute`), which asks for the battery-optimisation exemption as it ends.
 
 ### 10.2 Add a contact (QR or User Hash)
 
 **QR (key proven in person, approval still required):**
 
 1. The user scans a QR. The payload carries the contact's Ed25519 public key plus metadata; see [Discovery.md](Discovery.md) and [Protocol.md](Protocol.md).
-2. `AddContactByQrUseCase` validates the descriptor signature, derives the identity hash, and stores a `Contact` with `relationshipStatus = PENDING_OUT` and the real key (no placeholder).
+2. `AddContactByQrUseCase` hands the descriptor to `ContactRepository.addContactByDescriptor`, which validates its signature, derives the identity hash, and stores a `Contact` with `relationshipStatus = PENDING_OUT` and the real key (no placeholder).
 3. It then sends a `ContactRequest` exactly as a User Hash add does (steps 2–5 below). The QR proves *who* the contact is, not that they want us: up to 1.1.1 a scan approved on the spot, which showed a working contact whose every message the peer dropped. If the peer has already added us, their side auto-accepts and the contact becomes `APPROVED` within one round trip.
 
 **User Hash (mutual approval, v0.2.0):**
@@ -273,7 +280,7 @@ vMessenger is built on Kotlin Coroutines and Flow with structured concurrency.
 5. On reject: recipient sends `ContactResponse REJECT`; sender may mark `REJECTED`.
 6. An undelivered request is retried by `ContactRequestRetryWorker` (backoff to 5 min, 48 attempts, then hourly for the first week while the peer stays unreachable and daily after). It stops once the peer sends something only a peer who has us would send — node-exchange frames, which follow every handshake to strangers too, do not count. Re-adding someone we deleted withdraws the revoke still queued for them in `pending_revoke`, or the two raced when the peer came online.
 
-Strangers may complete a handshake, but only `ContactRequest` / `ContactResponse` envelopes are accepted from them; chat, attachments, location, control, receipts and node hints from a non-approved contact are dropped by `InboundPolicy`. See [Security.md](Security.md) "Inbound authorization".
+Strangers may complete a handshake, but only `ContactRequest` / `ContactResponse` envelopes are accepted from them; chat, attachments, location, control, receipts, node hints, group controls, edits and deletes, profile updates and call signals from a non-approved contact are dropped by `InboundPolicy`, and a location request needs a verified contact too. See [Security.md](Security.md) "Inbound authorization".
 
 ### 10.3 Send a message
 
@@ -282,7 +289,7 @@ sequenceDiagram
   participant UI as Conversation Screen
   participant VM as ViewModel
   participant UC as SendMessageUseCase
-  participant Repo as MessageRepository
+  participant Repo as ConversationRepository
   participant DB as Room (SQLCipher)
   participant Msg as Messaging
   participant Enc as Encryption
@@ -294,7 +301,7 @@ sequenceDiagram
   UC->>Repo: persist(message, status = QUEUED)
   Repo->>DB: insert message + enqueue outbox
   Repo-->>UI: Flow emits message (optimistic)
-  Repo->>Msg: deliver(message)
+  Repo->>Msg: OutboxDispatcher drains the outbox
   Msg->>Disc: resolveEndpoint(identityHash)
   Disc-->>Msg: signed endpoint record
   Msg->>Tx: connect(endpoint)
@@ -318,12 +325,13 @@ If endpoint resolution or connection fails, the message remains in the offline/r
 
 ### 10.5 Share live location
 
-1. The user grants location access per approved contact in `location_access` (`LocationAccessRepository`).
-2. Starting share calls `LocationSharingCoordinator.startSharingToGrantedContacts()`, which starts `LocationService` (FGS) and creates outgoing `location_share` rows per granted contact.
+1. The user grants location access per approved contact in `location_access` (`LocationAccessRepository`) — or ticks nobody.
+2. Starting share calls `LocationSharingCoordinator.startSharingToGrantedContacts()`. With nobody ticked it first grants every approved, unblocked contact, so the picker shows who sees the position; then it creates outgoing `location_share` rows per granted contact and starts `LocationService` (FGS) once the first share exists.
 3. The coordinator sends `CONTROL_TYPE_LOCATION_SHARE_START`, then encrypts each GPS sample (15s interval via `LocationUpdateBus`) as a `LocationPacket`.
 4. Inbound location/control frames update `location_share` and `location_sample` via `IncomingMessageCollector` → `LocationSharingCoordinator`.
-5. The map screen (`MapRoute` in `:feature:map`, rendering through `VmMapView` in `:core:map`) draws one marker per active **incoming** share joined to a known contact, plus the device's own position as a location puck. Mutual visibility is the intended rule — a contact's position is meant to appear only while we also share to them — and is enforced in `LocationRepositoryImpl`, not in the map screen.
+5. The map screen (`MapRoute` in `:feature:map`, rendering through `VmMapView` in `:core:map`) draws one marker per active **incoming** share from an approved, unblocked contact (`LocationRepository.observeIncomingLocations()`), the selected contact's route for their last session, and the device's own position as a location puck while we share or the user asks for it. Visibility is the sender's choice: a contact's position appears whenever they share with us, whether or not we share back. (`LocationRepositoryImpl.observeLatestSamples()` still applies a mutual rule, but nothing in the app calls it.)
 6. Stopping share sends `CONTROL_TYPE_LOCATION_SHARE_STOP` plus a final `LocationPacket` with `is_final = true`, stops the FGS, and clears active shares.
+7. A contact's page (`ContactDetailRoute` in `:feature:contacts`) lists the places they shared with us, newest first and one entry per stay (`LocationRepository.observeSharedHistory`), and draws the route on a `VmMapView` — also after they stop sharing. The coordinator's hourly retention pass bounds that history: samples older than 24 hours are deleted, and each share keeps only its newest 500.
 
 ---
 
@@ -358,19 +366,19 @@ from what the finished one left.
 
 ## 11. Error handling
 
-- The domain expresses failures with a sealed `Result`/`AppError` type rather than exceptions crossing layer boundaries.
+- The domain expresses failures with the sealed `AppResult` / `AppError` types from `core:common` rather than exceptions crossing layer boundaries.
 - Network and crypto errors are categorized (transient vs permanent) so the retry policy can decide whether to back off and retry or surface a permanent failure.
-- The UI renders errors as calm, localized (Persian) messages and never exposes raw stack traces; a Debug screen surfaces diagnostics for development builds (see [UI.md](UI.md)).
+- The UI renders errors as calm messages in the app's language, Persian or English (`AppError.toUiText()` in `core:designsystem`), and never exposes raw stack traces or `AppError.message`; a Debug screen surfaces diagnostics in debug builds, and in release builds once developer mode is unlocked in About (see [UI.md](UI.md)).
 
 ---
 
 ## 12. Testing strategy (overview)
 
-- Domain: pure unit tests for use cases with fake repositories.
-- Data: repository tests with an in-memory Room database and fake networking services; mapper round-trip tests.
+- Domain: `domain`'s own tests cover `NodeLinkCodec` (`vmnode:` links). The use cases are thin and have no tests of their own; much of what they call is tested through the repository implementations in `data`.
+- Data: coordinator and repository tests against hand-written fake DAOs and networking fakes (there is no Robolectric and no in-memory Room); migrations are replayed on an in-memory SQLite through `sqlite-jdbc` in `core:database`.
 - Crypto: known-answer tests and round-trip seal/open tests; negative tests for tampered frames and replays. See [Security.md](Security.md).
 - Network/DHT: deterministic tests using an in-memory transport and a simulated DHT; TTL/refresh/expiry behavior tests. See [DHT.md](DHT.md).
-- Presentation: ViewModel state tests with test dispatchers; Compose UI tests for critical screens.
+- Presentation: JVM tests of UI-state mapping and screen logic in the feature modules (contacts, chat, identity, lock, provision); two instrumented Compose tests in `app/src/androidTest` (swipe-back gesture, bidi rendering) run on a device and are not part of `unitTests`.
 - Shared fakes and fixtures live in each module's own `src/test` source set; there is no separate testing module. `./gradlew unitTests` runs every module's unit tests (Android `testDebugUnitTest` plus the JVM modules' `test`) — see [Testing.md](Testing.md).
 
 ---
@@ -379,7 +387,7 @@ from what the finished one left.
 
 - New transport (Bluetooth, Wi-Fi Direct, mesh): add a module implementing `Transport`, register it with a Hilt `@IntoSet` binding; the transport selector picks it automatically. No changes to Messaging or UI.
 - Groups: delivered without a new session type. A group message is fanned out pairwise over the existing 1:1 sessions and membership is creator-authoritative; see [Protocol.md](Protocol.md) and [Security.md](Security.md). The absorbed cost was schema and fan-out, not a second encryption strategy.
-- Calls (voice/video): add a real-time media module that reuses Identity, Discovery, and the handshake for signaling.
+- Calls: voice calls were added this way. Signalling (`CallSignal`) rides the existing 1:1 session, and audio travels on its own connections — direct TCP or a relay circuit — under a per-call key, with `core:audio` for capture, playback and Opus (see [Protocol.md](Protocol.md) §17–18 and [Security.md](Security.md) §13). Video is not implemented.
 - Plugin system: plugins register via multibinding into well-defined extension points (transports, discovery providers, message handlers).
 
 The open gaps are listed in the "Known limitations" section of the [README](../README.md).

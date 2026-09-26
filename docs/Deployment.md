@@ -8,7 +8,7 @@ from a downloaded release tarball, or as a one-liner on a fresh Ubuntu/Debian ho
 ## 0. Set up from the app (New node)
 
 Most people never need the rest of this runbook. In the app, **Settings → Nodes → Set up a new server**
-(or **Create a node** in the first-run node question) opens *New node* (`:feature:provision`):
+(or **Create a new node** in the first-run node question) opens *New node* (`:feature:provision`):
 
 1. **Server** — the address (IP or name), SSH port and user, and a password or a private key file (OpenSSH or
    PEM, with its passphrase). `user@host` typed into the address field is split; Persian digits are accepted.
@@ -21,15 +21,15 @@ Most people never need the rest of this runbook. In the app, **Settings → Node
    login succeeds), and *Use as my relay*.
 4. **Review**, then **install**. The app shows the server's host-key fingerprint and sends nothing until it is
    trusted; asks for the sudo password if the user needs one; asks before anything that needs consent
-   (an untested OS release, stopping Apache, another public port, a clock fix, a downgrade — §8.5); uploads
-   the installer bundled in the APK (only files the server lacks, checked with `sha256sum`); runs it detached
-   (§8), following its log and reconnecting where it left off if the connection drops; and finally checks the
+   (an untested OS release, stopping Apache, a public port that is taken, a clock fix, a downgrade — §8.5,
+   §8.6); uploads the installer bundled in the APK (only files the server lacks, checked with `sha256sum`); runs
+   it detached (§8), following its log and reconnecting where it left off if the connection drops; and finally checks the
    node from the phone over TLS with the pin. A node that answers with another certificate is not added.
 5. **Done** — the node's bootstrap and relay addresses join the app's nodes, the relay listener moves to it
    when *Use as my relay* is on, and the server appears under **Your servers**.
 
 The app keeps no SSH secret. The password, key and passphrase live in memory for the one setup and are wiped
-when it ends however it ends (Security §17). **Your servers** keeps the host, SSH port and user, the host-key
+when it ends however it ends (Security §18). **Your servers** keeps the host, SSH port and user, the host-key
 fingerprint, the addresses, the TLS mode and the node version; *Update* appears when the app carries a newer
 node and asks for the login again, and a changed host key stops it before anything is sent.
 
@@ -93,9 +93,11 @@ ssh root@<host> 'VMESSENGER_REPO=/root/vmessenger-deploy /root/vmessenger-deploy
 
 The installer is idempotent: re-running it re-renders the unit and the nginx site, reinstalls the node
 files, restarts `vmessenger-node`, reloads nginx and health-checks `127.0.0.1:<port>/healthz` and
-`https://<domain>/healthz` through nginx. Use `--skip-cert` on re-runs once a certificate exists.
+`https://<domain>/healthz` through nginx. An existing Let's Encrypt certificate is reused (`certbot.timer`
+renews it) and the self-signed one is kept while it is current (§8.6); `--skip-cert` lets a re-run with
+`--tls letsencrypt` leave out `--acme-email`.
 
-Once a GitHub Release carries `vmessenger-node-<version>.tar.gz`, the one-liner form downloads it itself:
+GitHub Releases carry `vmessenger-node-<version>.tar.gz`, so the one-liner form downloads the latest one itself:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/setup-node.sh | sudo bash -s -- --domain relay.example.com --acme-email ops@example.com
@@ -106,21 +108,24 @@ curl -fsSL https://raw.githubusercontent.com/0xAsghar/vMessenger/main/scripts/se
 | Flag | Meaning |
 |---|---|
 | `--domain HOST` | Public hostname (TLS SAN + advertised URLs). Enables Let's Encrypt by default. |
-| `--ip ADDRESS` | Public IP when there is no domain (default: auto-detected). Self-signed TLS only. |
+| `--ip ADDRESS` / `--public-host HOST` | Public IP (or name) when there is no domain (default: auto-detected). Self-signed TLS only. |
+| `--public-port PORT` / `--no-http` | The TLS port nginx serves and every URL names (default 443) / serve nothing on port 80 (§8.6). |
 | `--tls letsencrypt\|selfsigned` | Default: `letsencrypt` with `--domain`, else `selfsigned`. |
 | `--acme-email EMAIL` / `--acme-no-email` | Let's Encrypt account contact (one of the two is required for issuance). |
 | `--behind-cdn arvan\|none` | Installs the real-IP snippet (`deploy/nginx/arvan-ips.conf`) so nginx and the node see client IPs. |
-| `--firewall` | ufw: allow OpenSSH, 80/tcp, 443/tcp; deny other inbound. |
+| `--firewall` | ufw: allow OpenSSH, 80/tcp, 443/tcp; deny other inbound. ufw's `OpenSSH` profile is port 22: with sshd on another port, allow that port first. |
 | `--dist-tar PATH` / `--dist-url URL` | Install this tarball instead of the latest GitHub release. |
-| `--build` | Build from a repo checkout (JDK 17 + the Gradle toolchain's 21 + Android SDK — prefer a tarball on servers). |
-| `--skip-cert` / `--force-cert` | Reuse existing certificates / regenerate the self-signed one. |
+| `--build` | Build from a repo checkout (installs OpenJDK 21 and git; needs an Android SDK for Gradle configuration — prefer a tarball on servers). |
+| `--skip-cert` / `--force-cert` | Let `--tls letsencrypt` run without `--acme-email` or `--acme-no-email`, for a certificate already issued / regenerate the self-signed one. |
 | `--install-dir`, `--cert-dir`, `--node-port` | Paths and port (defaults `/opt/vmessenger`, `/etc/vmessenger/tls`, `8443`). |
 | `--dev` | Run the raw-TCP DHT dev node on `:46555` for emulator testing (no nginx/systemd). |
-| `--allow CODE[,CODE]` | Go ahead where the installer would stop to ask: `OS_UNTESTED`, `CLOCK_SKEW` (§8.5). |
+| `--allow CODE[,CODE]` | Go ahead where the installer would stop to ask: `OS_UNTESTED`, `CLOCK_SKEW` (§8.5), `PORT_APACHE`, `PUBLIC_PORT_TAKEN`, `DOWNGRADE` (§8.6). |
 | `--clock-offset-ms N` | How far the server's clock is behind a trusted one, in ms (the app measures it). |
 | `--apt-mirror URL` | Fetch packages from this mirror for this install; the server's sources stay as they are. |
 | `--offline` | Download nothing but apt packages and certificates (needs `--dist-tar` or `--bundle-dir`). |
 | `--bundle-dir DIR` | Templates and tarball from an app-style bundle, checked against its `SHA256SUMS` (§8). |
+| `--secure`, `--key-only-ssh --ssh-user USER` | Harden the server (§8.7); `--key-only-ssh` works only with `--from-app`. |
+| `--uninstall [--purge]` | Remove the node (§8.1). |
 
 ### 3.3 What gets written
 
@@ -154,7 +159,8 @@ Every fatal error prints `error: [CODE] message`, and the exit status says what 
 ## 4. TLS
 
 Clients validate the certificate they see. Behind a CDN that is the CDN's edge certificate; without a CDN it is
-the origin's, so the origin must present a publicly trusted chain (Let's Encrypt).
+the origin's, so the origin must present a publicly trusted chain (Let's Encrypt), or the node's addresses must
+carry its key pin (`#pin-sha256=`, §8.6).
 
 1. **Let's Encrypt via HTTP-01 (default).** The installer first brings nginx up on a self-signed bootstrap cert,
    probes `http://<domain>/.well-known/acme-challenge/` (through the CDN if there is one), runs
@@ -162,8 +168,11 @@ the origin's, so the origin must present a publicly trusted chain (Let's Encrypt
    automatic (`certbot.timer`); verify with `certbot renew --dry-run`.
 2. **DNS-01** when port 80 cannot reach the origin: `certbot certonly --manual --preferred-challenges dns -d <domain>`,
    add the TXT record, then re-run the installer with `--tls letsencrypt --skip-cert`.
-3. **Self-signed only** (`--tls selfsigned`) is fine for CDN→origin pulls in a non-strict SSL mode and for
-   private test nodes; apps will reject it unless a CDN fronts the host.
+3. **Self-signed only** (`--tls selfsigned`, and the fallback when Let's Encrypt fails) is fine for CDN→origin
+   pulls in a non-strict SSL mode. The installer's addresses then carry the certificate's key pin, which apps
+   from 2.0 on accept; 1.1.2 and older reject a self-signed origin. The pin is the origin's key, so behind a CDN
+   (whose own certificate is what clients see) give out the addresses without `#pin-sha256=…`, and set the
+   unpinned `VMESSENGER_ADVERTISED_DHT_URL` in `node.env`.
 
 ## 5. Behind Arvan CDN (relay.vmessenger.ir)
 
@@ -200,7 +209,8 @@ ss -ltnp | grep -E ':(80|443|8443) '        # 8443 must be loopback only
 nginx -t; certbot renew --dry-run
 ```
 
-From the app (تنظیمات → اشکال‌زدایی → لاگ‌ها, or `files/logs/vmessenger.log` on a debug build) a healthy node shows
+From the app (تنظیمات → اشکال‌زدایی → مشاهده لاگ‌ها — a release build shows اشکال‌زدایی once developer mode is
+turned on in About — or `files/logs/vmessenger.log` on a debug build) a healthy node shows
 `Dht: bootstrap OK`, `Dht: publish/store OK`, `Relay: control channel connected`; a `Chain validation failed` line
 means the client does not trust the certificate it sees (usually a wrong device clock — the app shows a banner — or a
 self-signed origin exposed without a CDN).
@@ -215,7 +225,7 @@ self-signed origin exposed without a CDN).
 - A restart closes every listener with `GOING_AWAY`; apps reconnect within a second. DHT records and listener
   registrations are in-memory and are re-published by the apps (records expire after 20 minutes anyway).
 - Redeploy = build a new tarball, `scp`, re-run the installer with `--dist-tar … --skip-cert`. Keep the previous
-  tarball on the host to roll back the same way.
+  tarball on the host to roll back the same way, adding `--allow DOWNGRADE` (§8.6).
 - Second node: run the installer on another host and, on the first node, set
   `VMESSENGER_PEER_NODES=wss://<other>/dht` so `findNode` advertises it; users add it in the app via its
   `vmnode:` link.
@@ -226,7 +236,7 @@ The app's **New node** drives this same script over SSH. It uploads a *bundle* �
 `deploy/`, `vmessenger-node-<version>.tgz`, `manifest.json` (`{"protocol": 1, "nodeVersion": "…"}`)
 and `SHA256SUMS` — to `~/.vmessenger-installer/<version>/` and runs it with `--from-app`. The bundle
 is built by `:app:bundleNodeInstaller` and carried in the APK as assets under `node-installer/`
-(about 12.8 MB, stored uncompressed: the tarball is already gzip). It is `.tgz` because Android's
+(about 13 MB, stored uncompressed: the tarball is already gzip). It is `.tgz` because Android's
 asset packager gunzips anything ending in `.gz`; the installer accepts either name. Machine mode
 never downloads anything but apt packages and certificates: no GitHub, no clone, no tarball fetch.
 
@@ -265,18 +275,22 @@ Values are percent-encoded byte by byte: anything outside `A–Z a–z 0–9 . _
 
 | Event | Keys | Meaning |
 |---|---|---|
-| `hello` | `proto`, `installer`, `action`, `run` | First line of every invocation. |
+| `hello` | `proto`, `installer`, `action`, `run` | First line of a preflight, an uninstall and every run log. |
 | `fact` | `key`, `value` | Something learned about the server (`os_id`, `arch`, `node_id`, `active_run`, …). |
 | `step` | `id`, `state`, `note` | `state` is `start`, `ok`, `skip`, `warn`, `fail` or `wait`. |
 | `issue` | `code`, `severity`, `step`, `detail` | `severity` is `fatal`, `consent`, `warn` or `info`. A fatal issue is followed by the step's `fail` and the end. `consent` is a decision (§8.5). |
 | `launched` | `run` | `--launch` started a run. |
 | `result` | `status`, `file` | `result.json` was written (`status` is `ok` or `failed`). |
 | `status` | `run`, `state`, `exit`, `bytes` | Answer to `--status`. |
-| `end` | `status` | Last line of every invocation and of every run log; `status` is the exit status. |
+| `run` | `run`, `exit` | One per run in `--list-runs`; `exit` is its exit status, or `running`. |
+| `confirmed` | `run` | `--confirm-ssh` recorded the fresh key-only login. |
+| `end` | `status` | Last line of every invocation except `--version`, `--follow` and `--result`, and of every run log; `status` is the exit status. |
 
-Step ids, in order: `preflight`, `apt`, `swap`, `java`, `packages`, `ports`, `firewall`, `files`,
-`tls`, `config`, `service`, `health`, `fail2ban`, `updates`, `timesync`, `ssh`, `finish`. `wait` means the step is waiting on something outside the
-installer — cloud-init, or another package manager holding the dpkg lock — for up to 15 minutes. Exit statuses are those of §3.4. A command that fails outside a known check is
+Step ids, in order: `preflight`, `apt`, `swap`, `java`, `packages`, `firewall` (only with `--firewall`,
+which the app never passes), `ports`, `files`, `tls`, `config`, `service`, `health`, `fail2ban`, `updates`,
+`timesync`, `ssh`, `finish`; `--uninstall` reports `uninstall`. `wait` means the step is waiting on something outside the
+installer: `apt` on cloud-init or another package manager holding the dpkg lock (up to 15 minutes), `ssh` on the fresh
+key-only login (§8.7), and a preflight's `preflight` on the decisions of §8.5. Exit statuses are those of §3.4. A command that fails outside a known check is
 reported as `INTERNAL` with its line, and exits 1.
 
 ### 8.3 `result.json` (schema 1)
@@ -293,7 +307,8 @@ copies it to `/etc/vmessenger/install.json`, which is how a later run knows what
   "relayUrl": "wss://203.0.113.10/relay#pin-sha256=PS3w…Xl0",
   "healthUrl": "https://203.0.113.10/healthz", "pin": "PS3w…Xl0", "certPem": "-----BEGIN CERTIFICATE-----\n…",
   "replacesUrls": [],
-  "os": {"id": "ubuntu", "version": "24.04", "arch": "x86_64"}, "java": "21.0.4",
+  "os": {"id": "ubuntu", "version": "24.04", "arch": "x86_64"}, "java": "21.0.4", "aptSources": null,
+  "hardening": {"fail2ban": "on", "autoUpdates": "on", "timeSync": "on", "keyOnlySsh": "off"},
   "warnings": []
 }
 ```
@@ -316,7 +331,7 @@ Found before anything changes (preflight, which every run repeats):
 | `RAM_TOO_LOW`, `DISK_LOW` | fatal (30) | Under 450 MB of memory; under ~1.5 GB free on `/var` (2.5 GB when a swapfile is needed), counting what `apt-get clean` would free. |
 | `OS_EOL` | warn | Ubuntu 20.04, Debian 11. |
 | `OS_UNTESTED` | consent | A release newer than the tested ones. |
-| `CLOCK_SKEW` | consent | The app measured the server's clock more than 5 minutes off (`--clock-offset-ms`); allowed, the installer turns on time sync and, if that does not fix it, sets the clock. |
+| `CLOCK_SKEW` | consent | The app measured the server's clock more than 5 minutes off (`--clock-offset-ms`). Allowed, the install goes on; the clock is corrected (time sync on, then set from the measured offset) only if apt later reports its lists "not valid yet", and *Secure this server* turns time sync on (§8.7). |
 | `INSTALL_BUSY` | fatal (40) | Another install is running. |
 
 Fixed on the way, reported as `info` (or `warn` where the result is worse than a clean install):
@@ -370,7 +385,8 @@ was written, which is why the check exists):
   apache2 is stopped only with `--allow PORT_APACHE`; anything else, or another site that is already the
   port's default, is `PUBLIC_PORT_TAKEN` (a decision, with a `fact free_port` suggestion). Port 80 in use
   means no plain HTTP (`HTTP_SKIPPED`); a taken local node port moves to the next free one. An active ufw
-  gets the node's ports opened (`UFW_OPENED`); ufw is never turned on.
+  gets the node's ports opened (`UFW_OPENED`); ufw is turned on only by `--firewall` (§3.2), which the app never
+  passes.
 - **nginx is changed transactionally.** An already-invalid configuration stops the install
   (`NGINX_CONFIG_BROKEN`) before anything is touched; a new site nginx refuses is taken back out
   (`NGINX_NEW_CONFIG_FAILED`); other sites are left alone.
@@ -380,7 +396,8 @@ was written, which is why the check exists):
   stays in `/opt/vmessenger.prev`, and a node that does not come up is rolled back (`HEALTH_LOCAL_FAILED`).
   Installing an older version over a newer one needs `--allow DOWNGRADE`. `node.seed` is never touched.
 - **Health** is checked locally, then through nginx with the pin (`curl --pinnedpubkey`) or the CA, then
-  `/relay` must upgrade (101), and the node must advertise the URL it will be reached at.
+  `/relay` must upgrade (101). A node that advertises another URL than the one it will be reached at (an
+  override in `node.env`) is reported as `ADVERTISED_URL_MISMATCH`, a warning.
 
 ### 8.7 Securing the server
 
@@ -397,4 +414,4 @@ was written, which is why the check exists):
 3. A rollback timer (`vmessenger-ssh-rollback`) is armed **before** sshd reloads.
 4. The run waits (`step ssh wait`) for the app to log in again **with the key only** and run `--confirm-ssh`. Confirmed: the timer is stopped. Not confirmed within 170 s: the drop-in is removed and passwords work again (`HARDEN_SSH_ROLLED_BACK`).
 
-`result.json` reports `"hardening": {"fail2ban", "autoUpdates", "timeSync", "keyOnlySsh"}` (`on`, `off`, `existing`, `applied`, `rolled-back`, `skipped`). There is no firewall option: an active ufw only gets the node's ports opened (§8.6).
+`result.json` reports `"hardening": {"fail2ban", "autoUpdates", "timeSync", "keyOnlySsh"}` (`on`, `off`, `existing`, `applied`, `rolled-back`, `skipped`). `--secure` turns no firewall on, and the app never passes `--firewall`: an active ufw only gets the node's ports opened (§8.6).

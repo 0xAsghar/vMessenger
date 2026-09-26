@@ -12,7 +12,7 @@ This file replaces the old `P2P-Testing.md`.
 ./gradlew unitTests
 ```
 
-`unitTests` is a root aggregate task (`build.gradle.kts`) that depends on `testDebugUnitTest` in every Android module **and** `test` in every module applying the Kotlin JVM plugin — today `:core:common`, `:domain` and `:node`. A plain `./gradlew testDebugUnitTest` silently skips those three, which is why the task exists and why both CI and the release workflow call it.
+`unitTests` is a root aggregate task (`build.gradle.kts`) that depends on `testDebugUnitTest` in every Android module **and** `test` in every module applying the Kotlin JVM plugin — today `:core:common`, `:domain`, `:core:ssh`, `:core:nodesetup` and `:node`. A plain `./gradlew testDebugUnitTest` silently skips those five, which is why the task exists and why both CI and the release workflow call it.
 
 Static analysis runs alongside:
 
@@ -20,33 +20,36 @@ Static analysis runs alongside:
 ./gradlew detekt unitTests
 ```
 
-Detekt is applied to every subproject from the root build with a shared config (`config/detekt/detekt.yml`) and a per-module baseline (`<module>/detekt-baseline.xml`) — pre-existing structural findings live in the baseline, new code must stay clean.
+Detekt is applied to every subproject from the root build with a shared config (`config/detekt/detekt.yml`) and, in the modules that have one, a baseline (`<module>/detekt-baseline.xml`) — pre-existing structural findings live in the baseline, new code must stay clean.
 
 ### Where the tests live
 
-84 test files across 13 modules:
+163 test files across 21 modules:
 
 | Module | Focus |
 |---|---|
-| `:core:common` | `Canonical` encodings, `EndpointRecordTranscript`, `RelayProof`, `UserHashEncoder`, `IdentityHashMatcher`, `NodeRanking`, `NodeAddressPolicy`, `KeyedMutex`, `NetworkPathTracker` |
-| `:core:crypto` | `LazysodiumCryptoEngine`, `WrappedKeyBlob`, `PairingDescriptorCodec`, `BackupBundleCodec` |
-| `:core:database` | `DatabaseKeyProvider` (passphrase caching/concurrency, without the Android Keystore); `MigrationTest` |
-| `:core:datastore`, `:core:designsystem` | preference defaults, design tokens |
+| `:core:common` | `Canonical` encodings, `EndpointRecordTranscript`, `RelayProof`, `UserHashEncoder`, `IdentityHashMatcher`, `NodeRanking`, `NodeAddressPolicy`, `KeyedMutex`, `NetworkPathTracker`, `NodeUrl` / `SpkiPin` / `PinnedTls` (pinned node addresses), `SemVer`, `BidiText`, `GroupSyncTracker` |
+| `:core:crypto` | `LazysodiumCryptoEngine`, `WrappedKeyBlob`, `PairingDescriptorCodec`, `BackupBundleCodec`, `PinVerifier` |
+| `:core:database` | `DatabaseKeyProvider` (passphrase caching/concurrency, without the Android Keystore); `MigrationTest`, `CascadeTest`, `V1DatabaseUpgradeTest` |
+| `:core:proto` | `V1WireCompatibilityTest`, `V1WireRoundTripTest` (below) |
+| `:core:audio` | `JitterBuffer`, `OpusCodec` (voice calls) |
+| `:core:datastore`, `:core:designsystem` | preference defaults, DHT node id, theme mode; text direction, locale formatting, album rows, avatar seeds |
 | `:network:messaging` | `HandshakeTranscriptTest`, `SecureChannelFactoryTest`, `SymmetricRatchetTest`, `MessagingServiceFrameGuardTest`, `MessagingServiceKeyChangeTest`, `MessagingServiceConcurrencyTest`, `MessagingServiceProvisionalContactTest`, `FrameParserFuzzTest`, `RelayHelloProofInteropTest`, `RelayListenerTest`, `PeerRelayServiceTest`, `EndpointOrderingTest` |
 | `:network:dht`, `:network:discovery`, `:network:transport` | record verification, embedded-DHT routing, endpoint resolution, transport selection |
-| `:data` | inbound policy and collector, receipts, attachments, contact requests, mailbox seal/protocol, outbox error codes, relay selection vs. published endpoint, signature domain separation, backup, wipe plan, group control authority, per-recipient delivery and its aggregate |
-| `:domain` | use cases |
-| `:feature:identity` | ViewModel |
+| `:data` | inbound policy and collector, receipts, attachments, contact requests, mailbox seal/protocol, outbox error codes, relay selection vs. published endpoint, signature domain separation, backup, wipe plan, group control authority, per-recipient delivery and its aggregate; voice calls (state, media frames and session), location sharing and retention, message timers and group audit retention, the activity log export, the node repository and signed node records |
+| `:domain` | `NodeLinkCodec` (`vmnode:` links) |
+| `:feature:identity` | display-name validation |
+| `:feature:chat`, `:feature:contacts`, `:feature:lock` | album grouping, chat-list rows, message timers, voice recording and playback; contact list state, location history; PIN entry |
 | `:feature:provision` | `ServerInputTest`: Persian digits, bidi marks and `user@host` normalised; shell-unsafe input refused; every `IssueCode` has words |
-| `:core:ssh` | sshj against an embedded Apache MINA SSHD: key formats, host-key capture and mismatch, streaming, exit codes, SFTP and its fallback, timeouts |
+| `:core:ssh` | sshj against an embedded Apache MINA SSHD: key formats, host-key capture and mismatch, streaming, exit codes, SFTP and its fallback, secrets wiped and never printed |
 | `:core:nodesetup` | `ContractTest` (the script's codes, steps and protocol match the Kotlin), `ProtocolTest`, `InstallResultTest`, `NodeSetupEngineTest` (a whole setup, resume after a dropped follow, host key changed or not trusted, decisions); `ProvisionE2eTest` runs only through the harness (§2.1) |
 | `:node` | see §2 |
 
-There are **no** `androidTest` (instrumented) sources in the repository; everything runs on the JVM.
+Two instrumented tests live in `app/src/androidTest` — `SwipeToGoBackTest` and `BidiRenderingTest`, which need a real text layout and gesture dispatch. They run on a device or emulator (`./gradlew :app:connectedDebugAndroidTest`) and are not part of `unitTests` or CI; everything else runs on the JVM.
 
 ### Migrations are replayed on a real SQLite engine
 
-`core/database/src/test/.../migration/MigrationTest.kt` runs **every** migration 1 → 18 against an in-memory SQLite through `sqlite-jdbc`, then asserts the results of the newest step: the re-keyed `outbox`, the dropped `session` table, the now-nullable `conversation.contactId`, the unique-per-group constraint and the new `message` columns.
+`core/database/src/test/.../migration/MigrationTest.kt` runs **every** migration 1 → 25 (the current schema) against an in-memory SQLite through `sqlite-jdbc`, and asserts what each step from 17 → 18 on produces: for 18 the re-keyed `outbox`, the dropped `session` table, the now-nullable `conversation.contactId`, the unique-per-group constraint and the new `message` columns; after it the edit, deletion, timer and album columns, group audit retention arriving off, the edit-history table (23), the activity log (24) and `managed_node` (25), which must hold no secret. `CascadeTest` beside it checks the foreign-key cascades.
 
 It needs no emulator and no Room. `JdbcSupportDatabase` builds a `SupportSQLiteDatabase` as a `java.lang.reflect.Proxy` that implements exactly one method — `execSQL` — and fails loudly on anything else; that is all a `Migration` ever calls, and it keeps the helper to a few lines instead of stubbing a ~50-method interface.
 
@@ -98,6 +101,9 @@ The reference node is a plain JVM module, so:
 | `NodeIdentityTest` | persisted node seed |
 | `NodeStatsTest` | counter JSON |
 | `ClientIpTest` | `VMESSENGER_TRUST_PROXY` / `X-Forwarded-For` handling |
+| `Ed25519VerifierTest` | the JDK's Ed25519 holding libsodium's line: an RFC 8032 vector, non-canonical `S`, small-order keys and `R`, `y ≥ p` |
+
+The node's tests run on a Java 17 launcher (`node/build.gradle.kts`), the oldest JRE a server may give the node.
 
 Run the node locally:
 
@@ -171,10 +177,10 @@ On the emulator the server is `10.0.2.2`, SSH port `22000 + 10·slot + 2`. Its H
 *Public port* field, which debug builds show. Settings → Nodes → *Set up a new server*: log in as `alice`
 with a key file pushed to the device (`adb push scripts/provision-test/out/alice_ed25519 /sdcard/Download/`),
 or as `bob` with his password (sudo asks for it again). Check: the fingerprint dialog appears before anything
-is sent; the steps advance; leaving mid-install and setting up again joins the running install; *Add* puts
-the node's `wss://…#pin-sha256=` addresses in the lists and under *Your servers*; a second emulator reaches
-the first through that relay. Rebuilding the container (a new host key) and choosing *Update* must stop at
-`SSH_HOST_KEY_MISMATCH`. `scripts/provision-test/run.sh down <name>` removes it.
+is sent; the steps advance; leaving mid-install and setting up again joins the running install; *Add to my
+nodes* puts the node's `wss://…#pin-sha256=` addresses in the lists and under *Your servers*; a second emulator
+reaches the first through that relay. Rebuilding the container (a new host key) and choosing *Set up again* (or
+*Update*, when the app carries a newer node) must stop at `SSH_HOST_KEY_MISMATCH`. `scripts/provision-test/run.sh down <name>` removes it.
 
 ---
 
@@ -219,10 +225,10 @@ adb -s emulator-5556 forward tcp:48666 tcp:48555         # device B
 ### 3.4 Install and point a device at the dev bootstrap
 
 ```bash
-adb install -r -g app/build/outputs/apk/debug/app-debug.apk
+adb install -r -g app/build/outputs/apk/debug/app-arm64-v8a-debug.apk   # ABI splits: or app-universal-debug.apk
 ```
 
-Debug and locally built release APKs share `~/.android/debug.keystore`; a build signed with a *previous* debug key fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` and needs `adb uninstall ir.vmessenger.android` first. After `pm clear`, the notification-permission dialog (ALLOW) appears on first launch.
+Debug and locally built release APKs share `~/.android/debug.keystore`; a build signed with a *previous* debug key fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` and needs `adb uninstall ir.vmessenger.android` first. After `pm clear`, first run asks the node question («انتخاب گره»), then for the battery-optimisation exemption (a system dialog, unless the app is already exempt), creates the ID, asks for location, and only once past those screens explains notifications («اجازهٔ اعلان‌ها», «ادامه») before the system ALLOW dialog.
 
 `NetworkLifecycleService` is not exported, so switching a device to the dev bootstrap needs `adb root` first:
 
@@ -236,13 +242,13 @@ Device B uses `--ei forward_port 48666`.
 
 ### 3.5 Reading logs
 
-App logs are written to `/data/data/ir.vmessenger.android/files/logs/*.log` (readable with `adb root`). Useful tags: `Network`, `Discovery`, `Dht`, `Relay`, `Messaging`, `Contact`, `Outbox`, `Ratchet`, `Attachment`, `Backup`, `Identity`, `Wipe`.
+App logs are written to `/data/data/ir.vmessenger.android/files/logs/*.log` (readable with `adb root`). Useful tags: `Network`, `Discovery`, `Dht`, `Relay`, `Messaging`, `Contact`, `Outbox`, `Ratchet`, `Attachment`, `Backup`, `Identity`, `Wipe`, `Call`, `Location`, `Nodes`, `NodeSetup`.
 
 ### 3.6 Driving the UI
 
-`uiautomator dump` plus a small helper that prints the tap centre for a text or class match (it resolves to the enclosing clickable). Dialogs shift when the IME opens — re-dump before each tap. RTL `AlertDialog` buttons land far to the left.
+`uiautomator dump` plus a small helper that prints the tap centre for a text or class match (it resolves to the enclosing clickable). Dialogs shift when the IME opens — re-dump before each tap. In Persian (RTL) the dialog buttons (`VmDialog`) land far to the left.
 
-Typical flow: Intro "شروع" → name field → "ساخت هویت" → the hash text matches `^vm-` → "ادامه"; Contacts FAB → hash field → "افزودن"; on the peer, the overlay's "تأیید".
+Typical flow: the node question → Intro "شروع" → name field → "ساخت هویت" → the hash text matches `^vm-` → "ادامه"; Contacts FAB → hash field → "افزودن"; on the peer, the overlay's "تأیید".
 
 ### 3.7 Two traps
 
@@ -286,23 +292,23 @@ Both workflows live in `.github/workflows/`.
 ### CI (`ci.yml`, every push/PR to `main`)
 
 ```
-detekt → assembleDebug + :node:installDist → unitTests
+shellcheck → detekt → assembleDebug + :node:installDist → unitTests
 ```
 
 ### Release (`release-apk.yml`)
 
-Triggered by a `v*` tag (publishes) or by a change to `gradle/version.properties` on `main` (build-only check).
+Triggered by a `v*` tag (publishes), by a change to `gradle/version.properties` on `main`, or by hand (`workflow_dispatch`); the last two are build-only checks.
 
 1. **Tag must match `versionName`** in `gradle/version.properties`, or the build fails.
 2. **Refuse to publish without the release keystore** — a tag build with no `ANDROID_KEYSTORE_BASE64` secret fails rather than shipping a debug-signed APK.
 3. **Quality gates**: `./gradlew detekt unitTests`.
 4. **Build**: `:app:assembleRelease` (per-ABI + universal) and `:node:distTar`.
-5. **Package** into `dist/` as `vMessenger-<version>-<abi>.apk`, plus `vmessenger-node-<version>.tar.gz` and the R8 `mapping.txt`.
+5. **Package** into `dist/` as `vMessenger-<version>-<abi>.apk`, plus `vmessenger-node-<version>.tar.gz` and the R8 mapping as `vMessenger-<version>-mapping.txt`.
 6. **Checksums**: `sha256sum *.apk *.tar.gz > SHA256SUMS.txt`, plus a per-APK `.sha256` file.
 7. **Signature verification** with `apksigner` from the newest installed build-tools:
    - `apksigner verify --print-certs` for each APK into `dist/SIGNING.txt`;
    - the build **fails** if any certificate is `CN=Android Debug`;
-   - the build **fails** unless every APK has exactly one `Signer #1` digest and all of them are identical — Android refuses to install one ABI's APK over another's if they are signed by different certificates.
+   - the build **fails** unless every APK has exactly one distinct certificate SHA-256 digest and all of them are identical — Android refuses to install one ABI's APK over another's if they are signed by different certificates.
 8. **Publish** as GitHub Release assets (not Actions artifacts, which are quota-limited): the APKs, their `.sha256` files, the node tarball, `SHA256SUMS.txt`, `SIGNING.txt` and the mapping file. A tag containing `-rc`, `-beta` or `-alpha` is marked pre-release and does not become `latest`.
 
 ### Verifying a downloaded release by hand
@@ -312,4 +318,4 @@ sha256sum -c SHA256SUMS.txt
 "$ANDROID_SDK_ROOT"/build-tools/*/apksigner verify --print-certs vMessenger-<version>-arm64-v8a.apk
 ```
 
-The printed `Signer #1 certificate SHA-256 digest` must match the one in `SIGNING.txt` for that release and must not be the Android debug certificate.
+The printed certificate SHA-256 digest (`Signer #1 certificate SHA-256 digest`, or `V2 Signer: certificate SHA-256 digest` depending on the apksigner version and signature schemes) must match the one in `SIGNING.txt` for that release and must not be the Android debug certificate.

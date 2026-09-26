@@ -37,6 +37,7 @@ No accounts, phone numbers or email addresses exist. Identity is an on-device Ed
 | Attachment master key | 32 random bytes, Keystore-wrapped, `wrapped_attachment_key` in the same DataStore |
 | Message and contact data | SQLCipher database |
 | Attachment files | App-private `files/attachments`, `VMA1` container |
+| Unsent composer drafts | `vmessenger_drafts` DataStore, one entry per conversation, **plain text** in app-private storage (not inside SQLCipher); removed when sent, when the conversation or contact is deleted, and by the wipe (`DraftPreferences`) |
 | Social graph, timing, endpoint records | Partly visible to relay and DHT nodes (§3) |
 
 ### 2.2 Adversaries considered
@@ -124,7 +125,7 @@ Contacts are trust-on-first-use (TOFU): the key you receive when pairing is the 
 | Column | Meaning |
 |---|---|
 | `contact.ed25519Public` | Pinned identity key. A handshake whose `identity_pub` differs is rejected with `Identity key mismatch`. |
-| `contact.x25519StaticPublic` | Pinned X25519 static key. All-zero (placeholder) means "not yet learned" and is filled in on first successful handshake. |
+| `contact.x25519StaticPublic` | Pinned X25519 static key. Null or all-zero (placeholder) means "not yet learned" and is filled in on first successful handshake. |
 | `contact.pendingX25519StaticPublic` | A different static key the peer presented. The handshake that observed it was **refused**. |
 | `contact.keyChangedAtUnixMs` | When that happened. |
 
@@ -132,8 +133,8 @@ Flow (`SecureChannelFactory.checkPinnedStaticKey`, `MessagingService.recordPeerK
 
 1. Peer presents a static key that does not match the pin → `PeerKeyChangedException`; the handshake aborts and `CLOSE{AUTH_FAILED}` is sent.
 2. Both directions record the presented key as *pending* — the initiator via `peerKeyChangeRecorder`, the responder inside the inbound resolver. The pin itself is never overwritten automatically.
-3. Outbox rows for that contact fail with the code `peer_key_changed` and the message "کلید مخاطب تغییر کرده است؛ تأیید مجدد لازم است".
-4. `ContactRepository.acceptKeyChange(id)` promotes the pending key to the pin and clears `keyChangedAtUnixMs`. Until then the contact is unreachable.
+3. Outbox rows for that contact fail with the code `peer_key_changed`, which the chat shows as «کلید امنیتی مخاطب تغییر کرده است؛ ابتدا آن را تأیید کنید» ("The contact's safety number has changed; verify it first").
+4. `ContactRepository.acceptKeyChange(id)` promotes the pending key to the pin, clears `keyChangedAtUnixMs` and resets the contact's `verified` flag. Until then the contact is unreachable.
 
 The user's side of step 4 is the contact detail screen (`feature/contacts/.../ContactDetailRoute.kt`): a `KeyChangeBanner` appears on a contact whose key changed, and accepting it calls `acceptKeyChange`. The same screen shows the pair's safety number (`SafetyNumberDisplay`) and a "verified" switch, so a change can be compared out of band before it is accepted rather than waved through.
 
@@ -204,7 +205,7 @@ The passphrase is created on first use, wrapped by the Keystore master key and s
 | Hardware | StrongBox requested on API 28+; **any** failure (not just `StrongBoxUnavailableException`) falls back to the TEE-backed key, because many devices advertise the API without the hardware and refusing would make the app permanently unusable there |
 | Blob format | `0x02 || iv(12) || ciphertext` — the version byte makes the format self-describing; unversioned 0.x dev blobs are **rejected**, never guessed at |
 | Associated data | `"vmessenger:" + alias` — so a blob wrapped for the database cannot be unwrapped as an attachment key or an identity key |
-| Aliases | `db`, `attachments`, `identity-ed25519`, `identity-x25519-static` — all under `vmessenger_master`. Strict mode adds a **separate** alias, `vmessenger_app_lock` (§7.4) |
+| Aliases | `db`, `attachments`, `identity-ed25519`, `identity-x25519-static` — all under `vmessenger_master`. Strict mode wraps under a **separate** Keystore key, `vmessenger_app_lock`, with the AAD alias `db-strict` (§7.4) |
 
 **Deliberate trade-off:** the master key is created **without** `setUserAuthenticationRequired` and **without** `setUnlockedDeviceRequired`. The network foreground service must open the encrypted database to receive messages while the screen is locked; requiring an unlocked device would stop delivery whenever the phone is in a pocket. At-rest protection therefore rests on the Keystore (and StrongBox where present), not on the lock state. The consequence is stated plainly in §10.
 
@@ -218,11 +219,12 @@ The boot receiver is intentionally **not** direct-boot aware (`app/src/main/Andr
 Added in 1.1; off until the user sets a PIN.
 
 **Default mode protects the screen, not the data,** and the settings copy says exactly that in
-Persian. Messages still arrive, the database is opened as before, and anyone who compromises the
+Persian and English. Messages still arrive, the database is opened as before, and anyone who compromises the
 running OS — or holds the unlocked device — reads everything. The PIN is verified against an
 AEAD-sealed witness over a known constant, not a bare hash comparison, with Argon2id (ops 3,
-64 MiB, 16-byte salt) over the PIN. That is a constant factor, not a rate limit: a 4–6 digit
-keyspace is 10⁴–10⁶ and falls offline whatever the KDF costs. So the default mode does rate-limit,
+64 MiB, 16-byte salt) over the PIN. That is a constant factor, not a rate limit: a PIN of the
+usual 4–6 digits (the keypad accepts 4 to 32) is a keyspace of 10⁴–10⁶ and falls offline
+whatever the KDF costs. So the default mode does rate-limit,
 in software and always: four wrong PINs are free, then the wait doubles from five seconds to a
 five-minute cap, kept on disk and judged by two clocks so that neither force-stopping the app nor
 moving the device date shortens it. The attempt counter is written **before** the attempt is
@@ -284,7 +286,7 @@ install that still opens rather than one that opens with neither key.
 | No cleartext traffic in release | `app/src/main/res/xml/network_security_config.xml` — `cleartextTrafficPermitted="false"`; the debug build type overlays it for the emulator/LAN bootstrap |
 | Address policy enforced in code as well | `core/common/.../network/NodeAddressPolicy.kt` — release builds accept only `wss://`; `ws://` and bare `host:port` require a debug build **and** a local host (`10.0.2.2`, loopback, `localhost`, RFC 1918). Applied by the node repository on every add/import **and** by the transports before dialing, so a stored row from an older build cannot bypass it |
 | Screenshot / recents protection | `FLAG_SECURE` set in `MainActivity.onCreate` before anything renders, then driven by `PrivacyPreferences.screenSecurityEnabled` (default **on**). A screen holding a secret forces it on whatever that switch says (`RequireSecureWindow`, reference-counted in `SecureWindowRequests`); New node does |
-| Lock-screen privacy | Message channel and every notification are `VISIBILITY_PRIVATE`; the public version carries no sender and no preview. With "hide notification content" on it is `VISIBILITY_SECRET`, so nothing reaches the lock screen (`core/notifications/.../MessageNotificationManager.kt`) |
+| Lock-screen privacy | The message channel and every message and location-request notification are `VISIBILITY_PRIVATE`; the public version carries no sender and no preview. With "hide notification content" on it is `VISIBILITY_SECRET`, so nothing reaches the lock screen (`core/notifications/.../MessageNotificationManager.kt`). Calls are the exception: a ringing call names the caller over the lock screen (a `VISIBILITY_PUBLIC` channel and a full-screen call screen, `CallNotificationManager`), whatever that switch says |
 | No cloud backup of app data | `android:allowBackup="false"` |
 | Foreground service type | `remoteMessaging|dataSync` — `remoteMessaging` (API 34+) is exempt from Android 15's 6 h `dataSync` cap and from the Android 14 `BOOT_COMPLETED` start restriction |
 | Microphone service only where a user action reached | `CallState.holdsMicrophoneService` is false in `Idle`, `IncomingRinging` and `Ending`, so a ringing phone holds a notification and nothing more; the microphone service starts on the answer (§13) |
@@ -307,17 +309,17 @@ install that still opens rather than one that opens with neither key.
 | 5 | `database` | `clearAllTables()` then `close()` |
 | 6 | `database-files` | delete `vmessenger.db` and its `-wal` / `-shm` / `-journal` siblings |
 | 7 | `files` | delete `files/attachments`, `files/logs`, everything in `cacheDir`, and the files the removed in-app updater left behind (`LegacyUpdaterCleanup`) |
-| 8 | `preferences` | clear every DataStore: draft, security, privacy, p2p, discovery, theme, node-setup, contact-retry, and the app lock's own store |
-| 9 | `memory` | zeroize cached identity, DB passphrase and attachment key; clear log buffer, network path tracker, sticky relay IPs; reset `P2PConfig` |
+| 8 | `preferences` | clear every DataStore: draft, security (which also holds the app lock's PIN verifier, attempt counter and strict-mode passphrase copy, removed again by `AppLockPreferences.clear()`), privacy, p2p, discovery, theme, node-setup, contact-retry. The app-language choice, a SharedPreferences file of `AppLocaleController`'s own, is kept |
+| 9 | `memory` | zeroize cached identity, DB passphrase and attachment key; clear log buffer, network path tracker, group sync tracker, sticky relay IPs; reset `P2PConfig` |
 | 10 | `keystore` | delete **both** aliases — `vmessenger_master` and strict mode's `vmessenger_app_lock` — **last**, because every earlier step may still need to decrypt |
 
 Properties:
 
 - **Every step runs even if an earlier one throws.** Stopping at the first failure would leave data behind. The failed step names are logged.
 - **Cancellation is rethrown, not swallowed**, and the whole wipe runs under `NonCancellable` on the IO dispatcher — a half-done wipe that destroyed the Keystore key while the wrapped passphrase survived would leave an unopenable install with no way back.
-- Destroying the master key alone makes every leftover wrapped blob undecryptable, so even a failure in steps 5–8 still ends with unreadable data.
-- The app lock's store was added to the preferences step in 1.1 after it was found to survive a wipe. Two things were left behind: the PIN verifier, which is an offline-crackable record of a 4–6 digit secret the user may reuse elsewhere; and, under strict mode, a wrapped passphrase whose presence makes the passphrase source refuse to mint a new one — so the next start threw on a database that no longer existed.
-- The process then exits and is relaunched by an inexact `AlarmManager` alarm ~300 ms later (the app does not request `SCHEDULE_EXACT_ALARM`).
+- Destroying the master key alone makes every leftover wrapped blob undecryptable, so even a failure in steps 5–8 still ends with unreadable data — except the plain-text drafts (step 8) and the diagnostic log in `files/logs` (step 7), which are only deleted, never encrypted.
+- The app lock's state lives in the security store, so the preferences step erases it, and `AppLockPreferences.clear()` removes it explicitly as well. Two things there must not survive: the PIN verifier, which is an offline-crackable record of a short numeric secret the user may reuse elsewhere; and, under strict mode, a wrapped passphrase whose presence makes the passphrase source refuse to mint a new one — so the next start would throw on a database that no longer exists.
+- The process then exits and is relaunched by an `AlarmManager` alarm ~300 ms later: `setExact` where the platform allows it, otherwise an inexact alarm, since the app does not request `SCHEDULE_EXACT_ALARM`.
 
 **Known limitation:** Android's background-activity-start restriction means the relaunch does not bring the app to the foreground. The data is destroyed and the service restarts, but the user has to tap the launcher icon, which then opens onboarding.
 
@@ -332,21 +334,21 @@ These are real, current gaps. None of them is hidden behind a "future work" labe
 | L1 | **No post-compromise security; no Double Ratchet** | `SymmetricRatchet` is a one-way chain KDF with no DH ratchet. An attacker who obtains live session state can follow that session until it ends. Forward secrecy holds only for earlier frames of the same session, and only because session keys are never persisted and are zeroized on close. |
 | L2 | **Metadata is visible to the relay** | A relay node sees which identity hashes are online, their IPs, who dials whom, circuit lifetimes and byte counts. A DHT node sees every published endpoint record and every lookup. There is no padding, no cover traffic and no private/blinded lookup. |
 | L3 | **No forward secrecy for mailbox-delivered messages** | `MailboxBlob.sealed_payload` is a `crypto_box_seal` to the recipient's long-term X25519 static key. Anyone who later obtains that static key can decrypt every stored blob. **As of 1.1 this feature is ON by default**, because until then it delivered nothing: blobs were parked in the sender's own database and `putBlob` had no caller. The 24 h TTL bounds the exposure. |
-| L15 | **A mailbox host learns who has mail waiting** | Handing a sealed blob to a third party tells that peer someone holds a message for a given routing key, and roughly when — metadata the direct path does not emit. Hosts are limited to approved contacts, a peer is asked to hold at most 5 blobs per session, and the quotas in §"Mailbox" bound the rest. |
-| L4 | **Trust-on-first-use for contact keys** | QR pairing is in-person trust; User Hash pairing trusts whatever key answers for that hash prefix first. The contact detail screen shows the pair's safety number and a "verified" switch, so a comparison is *possible* — but nothing forces it, nothing warns that it has not happened, and the flag has no effect beyond a badge. |
+| L15 | **A mailbox host learns who has mail waiting** | Handing a sealed blob to a third party tells that peer someone holds a message for a given routing key, and roughly when — metadata the direct path does not emit. Hosts are limited to approved contacts, a peer is asked to hold at most 5 blobs per session, and the per-sender quota (§6, Mailbox) bounds the rest. |
+| L4 | **Trust-on-first-use for contact keys** | QR pairing is in-person trust; User Hash pairing trusts whatever key answers for that hash prefix first. The contact detail screen shows the pair's safety number and a "verified" switch, so a comparison is *possible* — but nothing forces it, nothing warns that it has not happened, and beyond a badge the flag gates only location requests (§16). |
 | L5 | **Nothing verifies that the user actually compared** | A key change is surfaced and can be accepted from the contact screen (§5), which is the honest minimum. It is still one tap: an unattentive user can accept a key change from an attacker exactly as easily as one from a friend who reinstalled. |
-| L6 | **Operator key is a placeholder** | `NetworkConfig.OPERATOR_ED25519_PUBLIC_KEY_HEX` is 64 zeros, so `operatorEd25519PublicKey()` returns null and **no** `SignedNodeRecord` can ever be `OFFICIAL`. This must be set before release, or the operator-trust tier is dead code. |
+| L6 | **Operator key is a placeholder** | `NetworkConfig.OPERATOR_ED25519_PUBLIC_KEY_HEX` is 64 zeros, so `operatorEd25519PublicKey()` returns null and **no** `SignedNodeRecord` can ever be `OFFICIAL`. It is still unset in 2.0.1; until it is set in a release, the operator-trust tier is dead code. |
 | L7 | **Keystore key does not require device unlock by default** | Deliberate (§7.3) so the foreground service can decrypt while the screen is locked. An attacker who compromises the running OS also gets the data. The app lock's strict mode (§7.4) opts out of this for the key *at rest*, at the cost of background delivery while locked; with the lock off, or on but not strict, this limitation stands unchanged. |
-| L16 | **A locked app still holds its database key in memory** | Strict mode (§7.4) shuts the database and refuses to reopen it, but the passphrase remains inside SQLCipher's open helper until the process ends, because Hilt hands out one array and zeroing it destroys the process's only key rather than concealing it. So the lock resists someone picking up a running phone, and resists a cold start completely; it does not resist reading the memory of the running process. |
+| L16 | **A locked app still holds its database key in memory** | Strict mode (§7.4) stops background delivery and refuses a fresh open of the database, but it leaves the open instance open and the passphrase remains inside SQLCipher's open helper until the process ends, because Hilt hands out one array and zeroing it destroys the process's only key rather than concealing it. So the lock resists someone picking up a running phone, and resists a cold start completely; it does not resist reading the memory of the running process. |
 | L8 | **No initiator identity hiding, no deniability** | The initiator's identity and static keys are sent in the clear in handshake step 3, and both sides sign the transcript. |
 | L9 | **Sender clock is untrusted but still displayed** | `MessageEnvelope.sent_at_unix_ms` is advisory. Receipt timestamps are clamped; message timestamps are not. |
 | L10 | **Relay availability is a denial-of-service surface** | The node enforces caps and per-IP rate limits, but a device behind NAT with no reachable relay simply cannot be reached. |
 | L11 | **Replay window is bounded, not absolute** | `ReplayCache` on the node evicts the oldest entries at 200 000 and after its TTL; a listener proof older than `proofMaxSkewMs` (default 5 min) is refused, so the exposure is bounded by that window rather than eliminated. |
 | L12 | **A group is only as private as its smallest member set** | There is no group key and no group server: a group is client-side fan-out over pairwise sessions, so message content is protected exactly as in a 1:1 chat. But every member learns every other member's identity key from the snapshot, and the creator is the sole authority on membership — a malicious creator can add a device nobody else notices, and there is no mechanism (no admin transfer, no member-side veto) to stop them. Membership changes are also not signed independently of the transport: authority rests on the session having authenticated the creator. |
-| L13 | **Group fan-out is O(n) and observable** | One session, one transfer and one queue row per recipient, including for attachments. A relay therefore sees a burst of connections from one identity to the same set of peers whenever a group message is sent, which is a strong hint that those peers form a group. The 32-member cap bounds the cost, not the signal. |
+| L13 | **Group fan-out is O(n) and observable** | One session, one transfer and one queue row per recipient, including for attachments. A relay therefore sees a burst of connections from one identity to the same set of peers whenever a group message is sent, which is a strong hint that those peers form a group. The 100-member cap bounds the cost, not the signal. |
 | L17 | **The `ACCEPT` hands the peer this device's local addresses, and a relay carries calls that have no direct route** | The accepting side advertises its own local IPv4 addresses and its relay (§13), so the peer — an approved contact — learns those addresses. With no STUN, two devices with no direct route call through the relay: it cannot read the audio (sealed per frame under the per-call key) but sees the call's timing, duration and packet rate, as it does for relayed messaging. |
 | L18 | **A self-destruct deadline is only as good as the peer** | `expires_at_unix_ms` is sender-stamped and enforced locally on each device (Protocol.md §8.7). An older peer ignores the field and keeps the message; a modified client can keep the plaintext whatever the field says. Like delete-for-everyone it is a request honoured by cooperating software, not a control over another device. |
-| L19 | **Audit retention reverses local erasure for the groups that enable it** | Off by default and creator-only, announced to every member by a system line in the group's history, scoped to one group, never applied to a 1:1 chat, capped at 90 days and readable only on the device that captured it (§14). Within those bounds it is still what it looks like: a member of such a group is trusting that group's admins with the text of what they edited or withdrew. Leaving is the only opt-out. |
+| L19 | **Audit retention reverses local erasure for the groups that enable it** | Off by default and creator-only, scoped to one group, never applied to a 1:1 chat, capped at 90 days and readable only on the device that captured it (§14). The switch is written as a system line into the creator's own copy of the group's history only: a member's device applies the new policy from the snapshot without a line or a banner, so a plain member learns of it from the organization rather than from the app (an admin sees the review entry, §14). Within those bounds it is still what it looks like: a member of such a group is trusting that group's admins with the text of what they edited or withdrew. Leaving is the only opt-out. |
 | L20 | **A pinned node is invisible to apps older than pins** | An address with `#pin-sha256=` reads, to an older app, as an ordinary `wss://` URL whose certificate fails the CA check. It fails closed — it never trusts the unknown key — but a contact on an older version cannot reach you through a node set up on a bare IP. Nodes with a domain and a CA certificate carry no pin. |
 | L21 | **SSH secrets can't be fully erased from memory** | The New node wizard copies the password, key and passphrase into arrays it wipes when the setup ends (§18), but a Compose text field's own buffers and the JVM's copies inside sshj and BouncyCastle are not ours to zero; they are released to the garbage collector. The secrets never reach disk, a log or saved state. |
 | L22 | **The first contact with a server trusts its host key** | New node shows the server's SSH fingerprint and sends nothing until the person trusts it, but few people compare it with the provider's console. An interposer on that first connection could learn the password (not a key: key logins don't disclose the key). Updates are protected: the stored fingerprint must match, or the setup stops before logging in. |
@@ -426,15 +428,15 @@ This feature reverses a privacy property the app otherwise has — a delete real
 | **Creator-authored** | only the creator may switch it, and the switch goes out as a `SNAPSHOT`, so the full membership travels with the new policy |
 | **Carried in every control** | a device that missed a message cannot be left applying a stale policy, and an absent field reads `false` |
 | **Never on a 1:1** | `capture` returns false when there is no `groupId`, before it looks at anything else: no creator to author such a policy, no admin to read it, and a 1:1 delete keeps erasing |
-| **Announced to all members** | a system line written into the group's own history when the policy is switched on or off. The group screen carries no standing banner: the app runs on organization-managed phones whose staff are told how it works when it is installed |
+| **Announced** | on the creator's device, a system line written into the group's history when the policy is switched on or off (`GroupRepositoryImpl.setAuditRetention`). That line is local: the control that carries the policy is a `SNAPSHOT`, and a member's device applies it without writing a line of its own (`GroupControlHandler.applySnapshot`). The group screen carries no standing banner and only the creator sees the switch; while it is on, an admin also sees the review entry on the group screen, and a plain member sees nothing. The app runs on organization-managed phones whose staff are told how it works when it is installed |
 | **Review is local-only** | each device holds what it saw; the review screen reads this device's rows, and there is no fetch or request that would make one member's phone answer queries about a third party's words |
 | **Who may review** | the creator, or a member whose own row is `ADMIN`, and only while retention is on |
 | **Captures cascade with the message** | the row `CASCADE`s from `message`, so an expiry purge (Protocol.md §8.7) takes the captures with it — an audit table that outlived an expiry would quietly defeat the timer that was the point |
 | **90-day bound** | `MessageAuditRecorder` purges captures older than 90 days on each write. A review window, not an archive |
-| **Switching it off erases** | `historyDao.deleteForGroup`, because leaving a stockpile behind would mean members are still exposed by a rule that no longer applies |
-| **Not in a backup** | the backup payload carries contacts, location grants, user-added nodes and optionally conversations with their messages; this table is not in it, so retained content does not travel off the device that recorded it |
+| **Switching it off erases — on the creator's device** | `historyDao.deleteForGroup` runs where the creator switches it off, because leaving a stockpile behind would mean members are still exposed by a rule that no longer applies. Every member's device captures while retention is on, and a member's device does **not** erase its captures when the snapshot turns it off: they stay in its database, unreviewable in the app, until their message goes or a later capture on that device purges them past 90 days |
+| **Not in a backup** | the backup payload carries the identity, contacts, location grants, user-added nodes and optionally conversations with their messages; this table is not in it, so retained content does not travel off the device that recorded it |
 
-Only messages that were **actually sent** and later edited or withdrawn are captured — the text as it stood, the caption, the attachment name and path, the author's identity hash, and when this device saw the revision. A draft never leaves the composer and is recorded nowhere. With retention on, the attachment file is kept so a captured row still resolves; with it off the file goes as it always has.
+Only messages that were **actually sent** and later edited or withdrawn are captured — the text as it stood, the caption, the attachment name and path, the author's identity hash, and when this device saw the revision. A draft is never captured. With retention on, the attachment file is kept so a captured row still resolves; with it off the file goes as it always has. A file kept for a deleted message is referenced only by its capture, and nothing erases it when the capture goes — retention switched off, the 90-day purge, or the cascade from its message or conversation: it stays, encrypted and unreferenced, in `files/attachments` until a wipe.
 
 Where this is **best-effort**: enforcement is each device's own code. A member running modified software could keep captures with retention off, or keep them past ninety days, exactly as it could keep a message it was asked to delete. What the policy governs is the behaviour of the shipped app and what the group is told about it — not what a peer is able to do. And the honest summary of the feature is L19.
 
@@ -444,7 +446,7 @@ Where this is **best-effort**: enforcement is each device's own code. A member r
 
 `data/.../activity/ActivityLogger.kt`, `ActivityLogExport.kt`, `core/database/.../ActivityLogEntity.kt`.
 
-**The line the table holds to: it records what the user did to the app, never who they communicated with.** Identity created, app locked and unlocked, node added or removed, network up or down, a permission granted or denied, location sharing started or stopped, a call placed, received or ended, a contact added or blocked, the account wiped, and failures. Message bodies are never in it, and neither is the other party to a call or a conversation — a call is logged as having happened and in which direction, and nothing more. A contact's display name appears only for an action the user took deliberately on someone already in their own contacts (adding or blocking them).
+**The line the table holds to: it records what the user did to the app, never who they communicated with.** Identity created, app locked and unlocked, node added or removed, a node set up or updated over SSH, network up or down, a permission granted or denied, location sharing started or stopped, a call placed, received or ended, a contact added or blocked, the account wiped, and failures. Message bodies are never in it, and neither is the other party to a call or a conversation — a call is logged as having happened and in which direction, and nothing more. A contact's display name appears only for an action the user took deliberately on someone already in their own contacts (adding or blocking them).
 
 That line is what makes the log safe to export. A log that named peers would turn a diagnostics record into a contact graph the moment it left the device.
 
@@ -477,7 +479,7 @@ a certificate with that key.
 
 - **What the pin protects.** Someone on the path between the phone and the node (a network operator,
   a hostile Wi-Fi) cannot stand in for the node: they do not hold its private key. Relay traffic is
-  end-to-end encrypted in any case (§5); the pin protects the listener's registration, circuit
+  end-to-end encrypted in any case (§3–4); the pin protects the listener's registration, circuit
   metadata and DHT answers from an interposer.
 - **What the pin trusts.** Whoever gave you the address chose the key. A `vmnode:` link from a friend,
   a signed endpoint record from a contact, the installer's result over an SSH connection whose host

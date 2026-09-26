@@ -8,12 +8,12 @@ The wire format, handshake, and message semantics are specified in [Protocol.md]
 
 ## 1. Philosophy
 
-Networking is decomposed into independent, replaceable layers. Each layer is defined by an interface and communicates with adjacent layers only through that interface. This is what makes vMessenger able to evolve from a single Internet transport today into Bluetooth, Wi-Fi Direct, and mesh transports later without rewrites.
+Networking is decomposed into independent, replaceable layers. Each layer is defined by an interface and communicates with adjacent layers only through that interface. This is what makes vMessenger able to evolve from today's two Internet transports (direct TCP and a relay) into Bluetooth, Wi-Fi Direct, and mesh transports later without rewrites.
 
 The two hard rules:
 
 - The Discovery layer is completely independent from the Messaging layer. Messaging asks Discovery for endpoints; it never knows how they were found.
-- No plaintext crosses the Transport boundary. Encryption sits between Messaging and Transport, so Transport only ever moves opaque ciphertext frames.
+- No application plaintext crosses the Transport boundary. Encryption sits between Messaging and Transport, so Transport only ever moves opaque ciphertext frames (the handshake and `CLOSE` frames carry only public keys, signatures, capabilities and a close reason).
 
 ---
 
@@ -46,54 +46,73 @@ Responsibilities:
 
 ## 3. Layer contracts
 
-These are illustrative Kotlin interfaces that define the boundaries. Exact signatures are finalized during implementation, but the shapes are stable.
+These are the Kotlin types at each boundary, abridged; the file named above each block has the full signatures.
 
 ### 3.1 Identity
 
+There is no single identity service. The device's identity and keys come from the domain's `IdentityRepository`, and signing goes through `CryptoEngine`:
+
 ```kotlin
-interface IdentityService {
-    val self: Identity                       // public key, identity hash, user hash
-    fun sign(data: ByteArray): ByteArray     // Ed25519 signature
-    fun verify(publicKey: PublicKey, data: ByteArray, signature: ByteArray): Boolean
+// domain/.../repository/IdentityRepository.kt (abridged)
+interface IdentityRepository {
+    suspend fun getIdentity(): Identity?     // Ed25519 + X25519 public keys, identity hash, user hash
+    suspend fun getEd25519PrivateKey(): ByteArray?
+    suspend fun getX25519StaticPrivateKey(): ByteArray?
+}
+
+// core/crypto/.../CryptoEngine.kt (abridged)
+interface CryptoEngine {
+    fun signEd25519(message: ByteArray, privateKey: ByteArray): ByteArray
+    fun verifyEd25519(message: ByteArray, signature: ByteArray, publicKey: ByteArray): Boolean
 }
 ```
+
+The messaging layer carries a peer's keys as a `PeerIdentity` (identity hash, Ed25519 key, X25519 static key; see 3.4).
 
 ### 3.2 Discovery
 
 ```kotlin
+// network/discovery/.../DiscoveryProvider.kt
 interface DiscoveryProvider {
     val id: DiscoveryProviderId
 
-    // Make ourselves reachable (e.g. publish a signed endpoint record).
-    suspend fun announce(self: Identity, endpoints: List<Endpoint>): Result<Unit>
+    // Make ourselves reachable (publish a signed endpoint record).
+    suspend fun announce(
+        self: DiscoveryIdentity,             // identity hash + Ed25519 public key
+        endpoints: List<Endpoint>,
+        ed25519PrivateKey: ByteArray,
+    ): AppResult<Unit>
 
     // Resolve a peer's identity hash to current reachable endpoints.
-    suspend fun resolve(identityHash: IdentityHash): Result<List<Endpoint>>
+    suspend fun resolve(identityHash: ByteArray): AppResult<List<Endpoint>>
 }
 ```
 
-Multiple `DiscoveryProvider`s can be registered (QR/User Hash exchange feeds the contact's identity; the DHT provider resolves live endpoints). See [Discovery.md](Discovery.md).
+Multiple `DiscoveryProvider`s can be registered; `DhtDiscoveryProvider` is the only one today. QR / User Hash pairing supplies a contact's identity, not endpoints. See [Discovery.md](Discovery.md).
 
 ### 3.3 Transport
 
 ```kotlin
+// network/transport/.../Transport.kt
 interface Transport {
     val id: TransportId
-    val capabilities: TransportCapabilities  // reliability, ordering, MTU, reachability class
+    val capabilities: TransportCapabilities  // reliable, ordered, mtu
 
     fun canReach(endpoint: Endpoint): Boolean
     suspend fun connect(endpoint: Endpoint): Result<Connection>
-    fun listen(): Flow<Connection>           // inbound connections
+    fun listen(port: Int): Flow<Connection>  // inbound connections
 }
 
 interface Connection {
     val remote: Endpoint
-    val state: StateFlow<ConnectionState>
+    val state: StateFlow<ConnectionState>    // CONNECTING, OPEN, CLOSED, FAILED
     suspend fun write(frame: ByteArray): Result<Unit>
     fun read(): Flow<ByteArray>              // length-delimited frames
     suspend fun close()
 }
 ```
+
+`RelayTransport` is dialled with `connect(endpoint, relayTargetId)`, because a relay circuit is addressed by the peer's identity hash; inbound relay circuits arrive through `RelayListener`, not `listen`.
 
 ### 3.4 Encryption
 
@@ -124,10 +143,19 @@ The handshake is the three-step, doubly-signed v2 exchange with three Diffie-Hel
 ### 3.5 Messaging
 
 ```kotlin
-interface MessagingService {
-    suspend fun send(envelope: Envelope): Result<Unit>   // resolves, connects, seals, writes
-    fun incoming(): Flow<Envelope>                        // decrypted application messages
-    fun connectionEvents(): Flow<ConnectionEvent>
+// network/messaging/.../MessagingService.kt (abridged; a class, not an interface)
+class MessagingService {
+    // Reuses the contact's open session, or resolves, connects and handshakes; then seals and writes.
+    suspend fun send(
+        contactId: String,
+        self: PeerIdentity,
+        peer: PeerIdentity,
+        envelope: MessageEnvelope,
+        forceReconnect: Boolean = false,
+    ): AppResult<Unit>
+    val incoming: Flow<IncomingEnvelope>                  // decrypted, authenticated envelopes
+    fun startListening(listenPort: Int)                   // direct TCP listener
+    fun startRelayListener(/* identity, key provider */)  // inbound circuits through a relay
 }
 ```
 
@@ -138,14 +166,15 @@ interface MessagingService {
 An `Endpoint` is a transport-tagged address, never an identity. Identities are addressed by their identity hash; endpoints are how a transport reaches a device right now.
 
 ```kotlin
+// core/common/.../network/Endpoint.kt
 data class Endpoint(
-    val transport: TransportId,   // e.g. INTERNET, BLUETOOTH, WIFI_DIRECT
-    val address: String,          // e.g. "ip:port" for INTERNET; opaque for others
-    val expiresAt: Instant        // endpoints are ephemeral
+    val transport: TransportId,        // INTERNET or RELAY today (TransportIds); UDP is defined but unused
+    val address: String,               // "host:port" for INTERNET; a wss:// node URL for RELAY
+    val expiresAtUnixMs: Long? = null, // endpoints are ephemeral: published_at + ttl of the DHT record; null for the relay fallback
 )
 ```
 
-Endpoints are produced by Discovery (for MVP, from signed DHT records) and consumed by Transport. Because endpoints are transport-tagged, the same identity can be reachable simultaneously over several transports.
+Endpoints are produced by Discovery (for MVP, from signed DHT records, or the relay fallback when there is no record) and consumed by Transport. Because endpoints are transport-tagged, the same identity can be reachable simultaneously over several transports.
 
 ### 4.1 Node addresses and pinned certificates
 
@@ -188,39 +217,38 @@ is the one parser; the grammar is in [Protocol.md](Protocol.md) §19.
 
 ## 5. Transport abstraction and automatic selection
 
-A `TransportSelector` chooses the best transport for a target. All registered `Transport`s are injected as a set (Hilt multibinding), so adding a transport requires no change to the selector.
+A `TransportSelector` hands each endpoint to the transport registered for its `TransportId`, after checking `canReach()`. All registered `Transport`s are injected as a set (Hilt multibinding), so adding a transport requires no change to the selector. The order in which endpoints are tried is set by `EndpointOrder` (`network/messaging`), and `OutboundDialer` tries them in turn.
 
 ```mermaid
 flowchart TD
-  Need["Need to reach identity hash X"] --> Resolve["Discovery.resolve(X)"]
-  Resolve --> Endpoints["Candidate endpoints (per transport)"]
-  Endpoints --> Filter["Keep endpoints whose transport canReach() = true"]
-  Filter --> Rank["Rank by policy (cost, latency, power, reliability)"]
-  Rank --> Try["Try best; fall back to next on failure"]
-  Try --> Conn["Established Connection"]
+  Need["Need to reach identity hash X"] --> Resolve["EndpointResolveService.resolve(X): peer cache, else Discovery"]
+  Resolve --> Endpoints["Candidate endpoints (relay fallback when there are none)"]
+  Endpoints --> Rank["Order by transport: INTERNET, then RELAY (EndpointOrder)"]
+  Rank --> Try["Try each in turn: canReach, connect, handshake"]
+  Try --> Conn["Established session"]
 ```
 
-Selection policy (MVP and beyond):
+Selection policy:
 
-- Prefer already-open connections to the peer (connection reuse).
-- Prefer local/offline transports when available and cheaper (future: Bluetooth/Wi-Fi Direct in the same room) over Internet.
-- Prefer lower power and lower cost; degrade gracefully.
-- On failure, transparently fall back to the next candidate endpoint/transport.
+- Prefer the already-open session to the peer (session reuse).
+- Order by transport: direct `INTERNET` first, then `RELAY`; a transport `EndpointOrder` does not know is tried after the relay. With `P2PConfig.reduceDefaultRelayEnabled` (off by default) the built-in relay is tried after any other relay.
+- On failure, fall back to the next candidate endpoint. A protocol-version or pinned-key failure stops the fallback, since every endpoint would give the same answer.
+- Future: prefer local/offline transports (Bluetooth/Wi-Fi Direct in the same room) and lower power and cost. Nothing ranks by cost, latency or power today.
 
-For the MVP only the Internet transport is registered, so selection trivially resolves to it; the machinery is in place so future transports activate automatically.
+Two transports are registered: `InternetTransport` (direct TCP) and `RelayTransport` (WebSocket circuits through a relay node). `UdpTransport` exists but is deliberately not bound (`TransportModule`): it cannot carry a handshake.
 
 ---
 
 ## 6. Internet transport (MVP)
 
 - Reliable, ordered byte stream over TCP, carrying length-delimited frames (see [Protocol.md](Protocol.md)). TLS-style transport encryption is unnecessary because every frame is already end-to-end encrypted; the Encryption layer authenticates the peer by identity key, which is stronger than CA-based TLS for this use case.
-- Listens on a local port and registers its address as an `Endpoint` published via the DHT discovery provider.
+- Listens on TCP port 48555 (`NetworkLifecycleService.DEFAULT_LISTEN_PORT`). A phone does not know an address others can reach it on, so a production build publishes only its relay endpoint; a direct `INTERNET` endpoint (`10.0.2.2:<forward port>`) is published only in the emulator dev setup ([Testing.md](Testing.md)). Voice calls exchange direct addresses in their own signalling and use their own media path ([Protocol.md](Protocol.md) §17 and §18).
 - Connection reuse: an established connection is cached per peer and reused for subsequent messages and location packets.
-- **Direct-first, relay-fallback:** the app tries direct `INTERNET` before `RELAY`. The built-in relay at `wss://relay.vmessenger.ir/relay` bridges opaque E2E-encrypted frames when direct connectivity fails and never decrypts them. UDP candidates are only tried when `P2PConfig.natTraversalEnabled` is on, which it is not by default.
-- **Runtime flags (`core/common/.../network/P2PConfig.kt`):** endpoint resolution is cache-first and multiple bootstrap/relay nodes are health-ranked — both on by default. Peer exchange, embedded DHT participation, relay-peer mode, UDP attempts, store-and-forward and default-relay demotion (`reduceDefaultRelayEnabled`) all default to **false**; they are reachable code, not proven paths. See the "Known limitations" section of the [README](../README.md).
+- **Direct-first, relay-fallback:** the app tries direct `INTERNET` before `RELAY`. The relay (built in: `wss://relay.vmessenger.ir/relay`) bridges opaque E2E-encrypted frames when there is no direct path and never decrypts them. There are no UDP candidates: `UdpTransport` is not registered and nothing publishes a UDP endpoint, so `P2PConfig.natTraversalEnabled` (off by default) only changes how one would be ranked.
+- **Runtime flags (`core/common/.../network/P2PConfig.kt`):** endpoint resolution is cache-first, multiple bootstrap/relay nodes are health-ranked, and store-and-forward through approved contacts' mailboxes is on — all on by default. Peer exchange, embedded DHT participation, relay-peer mode, UDP attempts and default-relay demotion (`reduceDefaultRelayEnabled`) default to **false**; they are reachable code, not proven paths. See the "Known limitations" section of the [README](../README.md).
 - DHT bootstrap and store/find use `wss://relay.vmessenger.ir/dht` through Arvan CDN + nginx TLS.
 - Local emulator dev can use raw TCP bootstrap (`10.0.2.2:46555`) via `NetworkConfig.useDevBootstrap`.
-- There is no NAT traversal: a UDP transport exists and TCP endpoints can be mirrored as UDP candidates, but there is no STUN/ICE candidate gathering, no hole punching and no connectivity checks, and the UDP path is off by default. Full Kademlia routing and replication are likewise not implemented.
+- There is no NAT traversal: a `UdpTransport` class exists but is not registered, TCP endpoints are no longer mirrored as UDP candidates (`EndpointResolveService`), and there is no STUN/ICE candidate gathering, no hole punching and no connectivity checks. Full Kademlia routing and replication are likewise not implemented.
 
 ---
 
@@ -237,23 +265,23 @@ stateDiagram-v2
   Handshaking --> Failed: handshake/verify error
   Active --> Idle: no traffic
   Idle --> Active: new frame
-  Idle --> Closing: timeout / app paused
+  Idle --> Closing: idle timeout / session cap
   Active --> Closing: explicit close
   Closing --> [*]
   Failed --> [*]
 ```
 
 - Resolving and connecting failures feed the retry/offline queue (see [Protocol.md](Protocol.md)).
-- Idle connections are closed after a timeout to save battery; the next message re-establishes them.
+- Idle connections are closed after a timeout: a direct TCP socket after 120 s without a frame (`InternetTransport`), a relay circuit by the node after 10 minutes idle (`VMESSENGER_CIRCUIT_IDLE_TIMEOUT_MS`). A session also ends after 65 536 frames or 12 hours. The next message re-establishes it with a fresh handshake.
 
 ---
 
 ## 8. Resilience and failure handling
 
-- Resolution failure (peer offline / no fresh DHT record): message stays in the offline queue; the app periodically re-resolves and retries.
-- Connection failure: try the next candidate endpoint/transport; if all fail, back off with jitter and requeue.
+- Resolution failure (peer offline / no fresh DHT record): the relay is still tried, since a relay circuit needs only the identity hash; if that fails too, the message stays in the offline queue and the app periodically re-resolves and retries.
+- Connection failure: try the next candidate endpoint/transport; if all fail, back off exponentially (4 s, doubling, capped at 60 s; no jitter) and retry. After 12 attempts a sealed copy is also parked for store-and-forward, to be offered to reachable approved contacts ([Protocol.md](Protocol.md) §11), and after 24 hours the message is given up (`OutboxDispatcher`).
 - Handshake/verification failure: treated as a security event, not retried blindly; surfaced to the user if the peer key mismatches (possible MITM or key change). See [Security.md](Security.md).
-- Mid-session drop: sessions are never persisted, so the next send runs a fresh handshake. Messaging is at-least-once with per-conversation `message_id` deduplication, so nothing is lost or applied twice.
+- Mid-session drop: sessions are never persisted, so the next send runs a fresh handshake. Messaging is at-least-once with per-conversation `message_id` deduplication, so a retried chat message is not applied twice; a message is lost only when the retry window above runs out, and it is then marked failed.
 
 ---
 
@@ -261,9 +289,9 @@ stateDiagram-v2
 
 To add Bluetooth, Wi-Fi Direct, or mesh:
 
-1. Create a `:network:transport-<name>` module implementing `Transport` and `Connection`.
-2. Provide `TransportCapabilities` (reachability class, MTU, ordering/reliability) so the selector can rank it.
-3. Register it via a Hilt `@IntoSet` binding.
+1. Create a `:network:transport-<name>` module implementing `Transport` and `Connection`, with its `TransportCapabilities` (reliable, ordered, MTU).
+2. Register it via a Hilt `@IntoSet` binding.
+3. Give its `TransportId` a rank in `EndpointOrder`; an unranked transport is tried after the relay.
 4. Optionally add a matching `DiscoveryProvider` (for example, BLE advertisement scanning) that produces endpoints tagged with the new transport.
 
-No changes are required in Encryption, Messaging, Domain, or UI. That is the practical payoff of the layered design; no such transport module exists today.
+Apart from that one ranking entry, no changes are required in Encryption, Messaging, Domain, or UI. That is the practical payoff of the layered design; no such transport module exists today.

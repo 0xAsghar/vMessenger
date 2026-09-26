@@ -204,7 +204,7 @@ Binding the root to `SHA256(T3)` means any change to any advertised key, capabil
 
 - Outbound: the contact row supplies the expected identity. `matchIdentity` requires an exact Ed25519 match, except for a hash-only (placeholder, all-zero key) contact created by User Hash pairing, which is matched on the identity hash prefix (`IdentityHashMatcher`, 16 bytes).
 - Inbound: `acceptResolving` takes a resolver callback; the identity hash is recomputed as `SHA256(identity_pub)` from the key the peer actually presented, never from the payload.
-- `checkPinnedStaticKey`: an all-zero pin is trust-on-first-use and is filled in by the caller. A real pin that does not match throws `PeerKeyChangedException`; the handshake is refused and the presented key is stored as *pending* (§ [Security.md](Security.md)). The new key is never adopted automatically.
+- `checkPinnedStaticKey`: an all-zero pin is trust-on-first-use and is filled in by the caller. A real pin that does not match throws `PeerKeyChangedException`; the handshake is refused and the presented key is stored as *pending* ([Security.md](Security.md) §5). The new key is never adopted automatically.
 
 ### 5.5 Limits
 
@@ -237,7 +237,7 @@ Sessions are **connection-scoped and never persisted**. `ActiveSecureSession` (`
 | `MAX_SESSION_AGE_MS` | 12 h |
 | Write serialization | one `writeMutex` per session, so concurrent chat / receipt / protocol writers cannot race the send counter |
 | On expiry | the guard reports `sessionExpired`; `MessagingService` writes `CLOSE{SESSION_EXPIRED}` and closes. The next send re-handshakes |
-| On close | `ratchetState.wipe()` zeroizes both chain keys and every stored skipped key; a closed session refuses to seal or open |
+| On close | `ratchetState.wipe()` zeroizes both chain keys and every stored skipped key — but only when no write holds the session's `writeMutex` at that moment; if one does, the wipe is skipped and the keys are left to the garbage collector. A closed session refuses to seal or open either way |
 
 The outbound side keeps at most one open session per contact in a `SessionSlot` (`MessagingService.kt`); `sendBatch` holds that slot for a whole batch so an attachment transfer costs one handshake.
 
@@ -372,10 +372,10 @@ Sending (`data/.../network/ReceiptSender.kt`):
 
 Applying (`data/.../network/InboundReceiptHandler.kt`):
 
-- The referenced message must be `OUTGOING` **and** live in the conversation of the sending contact; anything else is logged and ignored, so a peer cannot flip ticks on another conversation's messages.
-- Statuses only move forward: `DELIVERED` needs `QUEUED`/`SENT`, `READ` needs `SENT`/`DELIVERED`.
+- The referenced message must be `OUTGOING` **and** the sending contact must be one of its recipients (`message_recipient`) — the recipient list rather than the conversation, because a group message legitimately gets a receipt from each member; anything else is logged and ignored, so a peer cannot flip ticks on messages that were not sent to it.
+- Statuses only move forward, per recipient: `MessageRecipientDao.advance` applies a receipt only to a row ranked below it (`QUEUED` < `FAILED` < `SENT` < `DELIVERED` < `READ`), and `DeliveryAggregator` then recomputes the message's status (§8.3).
 - `at_unix_ms` is clamped to `[createdAtUnixMs, now]`, so a peer cannot forge timestamps.
-- A confirmed message is removed from the outbox immediately, stopping receipt-wait re-sends.
+- The confirming recipient's outbox row is removed immediately, stopping receipt-wait re-sends to them.
 
 ### 8.3 Delivery status model
 
@@ -386,14 +386,14 @@ stateDiagram-v2
   SENT --> DELIVERED: DELIVERED receipt
   DELIVERED --> READ: READ receipt
   SENT --> READ: READ receipt (DELIVERED missed)
-  QUEUED --> FAILED: attempts exhausted
-  SENT --> FAILED: receipt-wait re-sends exhausted
+  QUEUED --> FAILED: retry window or attempt cap exhausted
+  SENT --> FAILED: re-send given up (attachment, or contact no longer sendable)
   FAILED --> QUEUED: manual retry
 ```
 
-The state above is the **aggregate** of one row per recipient (`message_recipient`). A 1:1 message has exactly one, so it behaves as it always did; a group message has one per member, and the aggregate is READ only when everyone read it, DELIVERED only when everyone received it, FAILED only when every recipient was given up on, and SENT as soon as any recipient has it on the wire. Showing two ticks while a member is still offline would be a lie, so it is not shown. Per-recipient rows only ever move forward (`MessageRecipientDao.advance`), which is what makes an out-of-order or replayed receipt harmless.
+The state above is the **aggregate** of one row per recipient (`message_recipient`). A 1:1 message has exactly one, so it behaves as it always did; a group message has one per member, and the aggregate is READ only when everyone read it, DELIVERED only when everyone received it, FAILED only when every recipient was given up on, and SENT as soon as any recipient has it on the wire. Showing two ticks while a member is still offline would be a lie, so it is not shown. Sends and receipts only ever move a per-recipient row forward (`MessageRecipientDao.advance`), which is what makes an out-of-order or replayed receipt harmless; the one move backwards is giving up on a recipient (`markFailed`), which may turn a SENT row FAILED.
 
-Outbox behaviour (`data/.../network/OutboxDispatcher.kt`): one queue row per `(message, recipient)`; exponential backoff from 2 s, doubling, capped at 60 s; `MAX_ATTEMPTS = 12`; after transport delivery the row is kept and re-sent every 15 s up to `MAX_RECEIPT_WAITS = 4` until a receipt arrives; a 24 h retry window **per recipient**, so one unreachable member is given up on without failing the message for the others; at most 8 `(conversation, recipient)` pairs drained in parallel; poll interval 5 s. Failure reasons are stored as stable codes (`peer_protocol_outdated`, `peer_key_changed`, `endpoint_not_found`, `network_unavailable`, `send_failed`, `mailbox_handoff`, `contact_missing`, `contact_blocked`, `contact_not_approved`).
+Outbox behaviour (`data/.../network/OutboxDispatcher.kt`): one queue row per `(message, recipient)`; exponential backoff from 2 s, doubling, capped at 60 s; at attempt `MAX_ATTEMPTS = 12`, with store-and-forward on, a sealed copy of a text or control message (never an attachment) is parked in the mailbox (§11) and direct retries carry on; after transport delivery the row is kept and re-sent every 15 s up to `MAX_RECEIPT_WAITS = 4` until a receipt arrives, and when those run out the row is dropped and the message left SENT, not FAILED. A row that is already SENT goes back into backoff instead when an attachment's re-send fails, or when the recipient has meanwhile been blocked, deleted or is no longer approved — that is the `SENT → FAILED` edge above. A recipient is given up on (FAILED) after a 24 h retry window **per recipient** or after `MAX_ATTEMPTS_BEFORE_GIVING_UP = 200` failed attempts, whichever comes first, so one unreachable member is given up on without failing the message for the others. The attempt cap is meant as a backstop for a clock that cannot be trusted, but at the 60 s backoff cap 200 attempts take about 3.3 hours of continuous retrying (plus the dials themselves), so for a recipient who stays offline it is normally what ends the retries. At most 8 `(conversation, recipient)` pairs are drained in parallel; poll interval 5 s. Failure reasons are stored as stable codes (`peer_protocol_outdated`, `peer_key_changed`, `endpoint_not_found`, `network_unavailable`, `send_failed`, `mailbox_handoff`, `contact_missing`, `contact_blocked`, `contact_not_approved`, `contact_revoked`).
 
 ### 8.4 Chat, control and location
 
@@ -418,7 +418,7 @@ message LocationPacket {
 }
 ```
 
-A sharing session starts with `LOCATION_SHARE_START` and ends with `LOCATION_SHARE_STOP` or a packet with `is_final = true`. The sender keeps a per-contact allow list (`location_access`); only granted, approved contacts receive outgoing shares.
+A sharing session starts with `LOCATION_SHARE_START` and ends with `LOCATION_SHARE_STOP` or a packet with `is_final = true`. The sender keeps a per-contact allow list (`location_access`); only granted, approved contacts receive outgoing shares. Switching sharing on with nobody granted first grants every approved, unblocked contact (`LocationSharingCoordinator.startSharingToGrantedContacts`), so the list shows who sees the position.
 
 ### 8.5 Pairing and contact requests
 
@@ -442,7 +442,7 @@ message PairingDescriptor {
 
 **User Hash format v2** (`core/common/.../encoding/UserHashEncoder.kt`): `vm-` (written since 2.0.0-beta.1; `vm2-`, written before it, still decodes to the same identity) followed by Crockford base32 of `prefix16 || SHA256("vmessenger-userhash-v2" || prefix16)[0..2)`, grouped `5-5-5-5-5-4` (29 symbols). The checksum covers all 16 prefix bytes; v1 only XOR-ed the last two. Decoding is canonical-only — leftover pad bits must be zero — and a `vm1-` string fails with reason `missing_prefix`.
 
-Contact requests (`ContactRequest` / `ContactResponse`, fields 27–28) carry display strings only. `data/.../network/ContactRequestHandler.kt`:
+Contact requests (`ContactRequest` / `ContactResponse`, fields 27–28) are trusted for their display strings only. `data/.../network/ContactRequestHandler.kt`:
 
 - If the payload names an identity key other than the authenticated session peer's, the request is ignored.
 - The `request_id` must be the deterministic id derived over `(requester hash, our hash)` — either our full hash or our 16-byte routing prefix — so a peer cannot overwrite another requester's pending row or dodge the reject cap.
@@ -460,7 +460,7 @@ message ProfileUpdate {
   string display_name = 1;
   int64  updated_at_unix_ms = 2;
   uint64 revision = 3;
-  bytes  avatar = 4;          // WebP, downscaled to fit the 64 KiB relay frame cap
+  bytes  avatar = 4;          // WebP by default; a receiver refuses more than 48 KiB
   string avatar_mime = 5;
   bytes  avatar_sha256 = 6;
 }
@@ -476,15 +476,16 @@ peer that ignores the arm keeps its copy. Nothing here can verify that it did no
 the app says so.
 
 **Both are idempotent on replay** and both enqueue a `DELIVERED` receipt. Without an ack the sender
-reopens a session every fifteen seconds forever (§8.2).
+reopens a session every fifteen seconds until its receipt waits run out (§8.3).
 
 A profile update is accepted only for a higher `revision` than the one already stored, and never
 overwrites a name the user typed for that contact themselves.
 
 **The app currently only ever sends the display name.** The avatar fields are carried, and the
-receiving side stores and renders a photo a peer sends, but nothing in the app lets a user choose
-one — so in practice no vMessenger client produces them. The wire format is ready; the picker is
-not written.
+receiving side verifies (SHA-256, at most 48 KiB) and stores a photo a peer sends
+(`ProfileUpdateHandler`), but nothing displays it — avatars are drawn from the identity (`Avatar` in
+`core:designsystem`) — and nothing in the app lets a user choose one, so in practice no vMessenger
+client produces them. The wire format is ready; the picker and the display are not written.
 
 A delete that arrives before the message it names, or during that message's attachment transfer,
 is stored as a tombstone and applied when the message lands.
@@ -619,7 +620,7 @@ Membership is **creator-authoritative and versioned**. Without a server there ha
 | `CREATE`, `SNAPSHOT` | the named `creator_identity_hash`, and only if that is the session peer | `version >= local` (a re-sent snapshot at the current version still repairs drift) |
 | `UPDATE_NAME`, `ADD`, `REMOVE`, `CLOSE`, `SET_ROLE` | the creator | `version == local + 1` |
 | `LEAVE` | the member it is about | always |
-| `SNAPSHOT_REQUEST` | any member | answered only by the creator |
+| `SNAPSHOT_REQUEST` | any approved contact (the creator does not check that the asker is a member) | answered only by the creator |
 
 A control at `version > local + 1` means one was missed: the receiver sends a `SNAPSHOT_REQUEST` and **drops** the control rather than applying a change it cannot place. A control below the local version is a replay and is ignored. Every structural control carries the full member list, so a snapshot is always enough to recover.
 
@@ -627,7 +628,7 @@ Two further rules close the obvious gaps: a snapshot that does not list us is dr
 
 ### 10.2 Membership and keys
 
-Members carry their own `identity_pub` and `x25519_static_pub` in the snapshot, so fan-out can address someone who is not a contact of ours. That is deliberate: sharing a group is not consent to a private chat, so a non-contact member is shown as «ناشناس» and adding them goes through the ordinary contact-request flow (`GroupRepository.addMemberAsContact`), never by silently creating an approved contact.
+Members carry their own `identity_pub` and `x25519_static_pub` in the snapshot, so a device knows exactly who a member is even when it holds no contact for them — but it does not send to them. That is deliberate: sharing a group is not consent to a private chat, so a non-contact member is shown as «ناشناس» (“Unknown” in English) and adding them goes through the ordinary contact-request flow (`GroupRepository.addMemberAsContact`, which derives their User Hash from `identity_pub`), never by silently creating an approved contact.
 
 Sending is restricted to members we hold an approved, unblocked contact for. A member we cannot address is skipped rather than queued forever; a message with no reachable recipient at all fails immediately with `NoReachableMembers` instead of spinning.
 
@@ -635,12 +636,12 @@ Departures are tombstones (`chat_group_member.removedAtUnixMs`), not deletes, so
 
 | Limit | Value |
 |---|---|
-| Members the picker will add (the user included) | 32 (`GroupLimits.MAX_MEMBERS`) |
-| Members a received snapshot may carry | 100 (`MAX_GROUP_MEMBERS`); an `ADD` above it is dropped |
+| Members of a group this app creates or grows (the user included) | 100 (`MAX_GROUP_MEMBERS`; the picker's `GroupLimits.MAX_MEMBERS` is kept equal to it) |
+| Members a received `ADD` may bring the group to | 100 (`MAX_GROUP_MEMBERS`); an `ADD` above it is dropped |
 | Group name | 64 characters |
 | Group id | 16 random bytes, lowercase hex |
 
-The two caps are different numbers in different layers, and the doc says so rather than picking one: this app will not build a group larger than 32, and will accept a creator's snapshot up to 100.
+The cap was raised from 32 to 100 in 2.0.0-beta.1. It is checked when this device builds or grows a group and on a received `ADD`; a received `CREATE` or `SNAPSHOT` is not checked against it (`GroupControlHandler.applySnapshot`).
 
 ### 10.3 Roles
 
@@ -659,11 +660,11 @@ Two readings are deliberately fail-closed (`GroupControlCodec.roleOf`):
 
 It is carried in **every** control the creator authors, not only the one that changes it (`GroupControlCodec.envelope`), so a device that missed a message cannot be left applying a stale policy. A receiver takes the value from the control rather than preserving its local one (`GroupControlHandler.applySnapshot`), and `false` from a 1.1.2 peer — which has no such field — is the safe reading of silence: no retention.
 
-Only the creator can switch it, and the switch is sent as a `SNAPSHOT` rather than a bespoke type, so the full membership travels with the new policy (`GroupRepositoryImpl.setAuditRetention`). Turning it off erases what the old policy kept. The privacy consequences, the disclosure to members and the 90-day bound are in [Security.md](Security.md).
+Only the creator can switch it, and the switch is sent as a `SNAPSHOT` rather than a bespoke type, so the full membership travels with the new policy (`GroupRepositoryImpl.setAuditRetention`). Turning it off erases the captures on the creator's device; the other members' devices stop capturing, but keep what they had already captured — `GroupControlHandler.applySnapshot` takes the new value without erasing anything. The privacy consequences, the disclosure to members and the 90-day bound are in [Security.md](Security.md).
 
 ### 10.5 Non-goals
 
-Deliberately not implemented, and not planned for 1.0: creator transfer, uploaded group avatars, invite links, message forwarding, and mentions. Each of them needs either a shared secret or a trusted third party, which is what this design is built to avoid. Admin *roles* now exist (§10.3), but only the creator holds authority and there is no way to hand that over; timed messages now exist too, per-conversation rather than per-group (§8.7).
+Deliberately not implemented, and still absent in 2.0.1: creator transfer, uploaded group avatars, invite links, message forwarding, and mentions. Each of them needs either a shared secret or a trusted third party, which is what this design is built to avoid. Admin *roles* now exist (§10.3), but only the creator holds authority and there is no way to hand that over; timed messages now exist too, per-conversation rather than per-group (§8.7).
 
 ---
 
@@ -739,7 +740,7 @@ A valid record signed by the operator key (`NetworkConfig.OPERATOR_ED25519_PUBLI
 `core/proto/src/main/proto/vmessenger/relay/v1/relay.proto`; server side in `node/src/main/kotlin/ir/vmessenger/node/`.
 
 ```proto
-enum RelayRole { UNSPECIFIED = 0; LISTENER = 1; DIALER = 2; ACCEPT = 3; }
+enum RelayRole { RELAY_ROLE_UNSPECIFIED = 0; RELAY_ROLE_LISTENER = 1; RELAY_ROLE_DIALER = 2; RELAY_ROLE_ACCEPT = 3; }
 
 message RelayHello {
   RelayRole role = 1;
@@ -752,7 +753,9 @@ message RelayHello {
   uint32 proof_version = 8; // 2 = v2 transcript; 0/1 = 0.x transcript
 }
 
-enum RelayEventType { UNSPECIFIED = 0; INCOMING = 1; READY = 2; ERROR = 3; }
+enum RelayEventType {
+  RELAY_EVENT_TYPE_UNSPECIFIED = 0; RELAY_EVENT_TYPE_INCOMING = 1; RELAY_EVENT_TYPE_READY = 2; RELAY_EVENT_TYPE_ERROR = 3;
+}
 message RelayEvent { RelayEventType type = 1; string circuit_id = 2; string message = 3; }
 ```
 
@@ -871,7 +874,7 @@ Major 2 is a deliberate clean break, not an incremental change. Nothing on the w
 
 - The handshake gained a responder signature over its own keys and a third DH; a v1 peer's step-2 message would not verify and its key schedule would not match.
 - The AEAD associated data, the ratchet KDF labels, the pairing descriptor, the endpoint record, the node record and the relay listener proof all moved to domain-separated, length-prefixed v2 transcripts.
-- The User Hash format changed from `vm1-` to `vm2-` with a different checksum, so identities are not even addressable across the boundary.
+- The User Hash format changed from `vm1-` to `vm2-` with a different checksum, so identities are not even addressable across the boundary. (Since 2.0.0-beta.1 the same v2 format is written with the label `vm-`; `vm2-` still decodes, §8.5.)
 - `Frame.counter` and the `CLOSE` frame did not exist in v1.
 
 Two transitional exceptions exist on the **node** only, because a node serves whatever clients connect to it: `NodeEndpointRecordVerifier` still accepts `transcript_version == 0` endpoint records, and `ListenerHandler` still accepts `proof_version` 0/1 relay listener proofs. The app never produces either.
@@ -975,10 +978,10 @@ sequenceDiagram
   participant B as Callee
   A->>B: INVITE {call_id, media_ephemeral_pub}
   B->>A: RING
-  Note over B: user answers; mic opens here and only here
+  Note over B: user answers — mic opens here and only here
   B->>A: ACCEPT {media_ephemeral_pub, media_endpoints}
   A->>B: every advertised path at once: TCP to each address, a named relay circuit (§18)
-  Note over A,B: sealed Opus frames on the path both bound, until HANGUP; a lost path is replaced
+  Note over A,B: sealed Opus frames on the path both bound, until HANGUP — a lost path is replaced
 ```
 
 Each signal rides an ordinary sealed `MessageEnvelope` on a messaging session, so the peer is whoever the v2 handshake proved (§5) — a call needs no second authentication.
