@@ -102,9 +102,7 @@ internal fun buildContactDetailState(
         remotePublicKey = contact?.ed25519PublicKey,
         canSeeMyLocation = data.canSeeMyLocation,
         location = contact?.let { locationOf(data, it) },
-        locationHistory = data.history.map {
-            LocationHistoryEntry(it.sampledAtUnixMs, it.latitude, it.longitude, it.accuracyM)
-        }.toImmutableList(),
+        locationHistory = locationChanges(data.history).toImmutableList(),
         dialog = dialogFor(action, contact?.displayName),
     )
 }

@@ -35,6 +35,11 @@ import ir.vmessenger.domain.model.LocationSample
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlin.math.asin
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
 
 private val MiniMapHeight = 200.dp
 private const val MILLIS_PER_SECOND = 1_000L
@@ -78,6 +83,37 @@ internal fun locationOf(data: ContactDetailData, contact: Contact): ContactLocat
     val path = data.history.asReversed().map { MapCoordinate(it.latitude, it.longitude) }
     return latest.toContactLocation(contact).copy(live = data.sharedLocation != null, path = path.toImmutableList())
 }
+
+/**
+ * The history as changes of place: [samples] (newest first) with each stay collapsed into one entry,
+ * at the stay's newest position and the time they got there. A sample within [MIN_MOVE_M] of the
+ * entry after it is the same place, so standing still for an hour is one row, not a thousand.
+ */
+internal fun locationChanges(samples: List<LocationSample>): List<LocationHistoryEntry> {
+    val changes = ArrayList<LocationHistoryEntry>()
+    for (sample in samples) {
+        val last = changes.lastOrNull()
+        val samePlace = last != null &&
+            metersBetween(last.latitude, last.longitude, sample.latitude, sample.longitude) < MIN_MOVE_M
+        if (last != null && samePlace) {
+            changes[changes.lastIndex] = last.copy(sampledAtUnixMs = sample.sampledAtUnixMs)
+        } else {
+            changes += LocationHistoryEntry(sample.sampledAtUnixMs, sample.latitude, sample.longitude, sample.accuracyM)
+        }
+    }
+    return changes
+}
+
+/** Great-circle distance; plain Kotlin so it runs in unit tests. */
+private fun metersBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val dLat = Math.toRadians(lat2 - lat1)
+    val dLon = Math.toRadians(lon2 - lon1)
+    val a = sin(dLat / 2).pow(2) + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2)
+    return 2 * EARTH_RADIUS_M * asin(sqrt(a))
+}
+
+private const val MIN_MOVE_M = 20.0
+private const val EARTH_RADIUS_M = 6_371_000.0
 
 /**
  * Where a contact is, on the contact's own screen, while they share their position with us.

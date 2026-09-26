@@ -63,5 +63,5 @@ class ContactDetailSource @Inject constructor(
         locationAccess.setAccess(contactId, granted)
 }
 
-/** The newest positions the contact page lists and draws; retention keeps a day of them. */
-private const val HISTORY_LIMIT = 100
+/** Samples read for the page; retention keeps a day of them, at most 500 per share. */
+private const val HISTORY_LIMIT = 1_000
