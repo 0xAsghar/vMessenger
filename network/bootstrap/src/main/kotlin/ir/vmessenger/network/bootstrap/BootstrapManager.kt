@@ -1,5 +1,6 @@
 package ir.vmessenger.network.bootstrap
 
+import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -17,7 +18,7 @@ class BootstrapManager @Inject constructor(
             mergeProviderNodes(provider.nodes(), merged, seen)
         }
         return if (merged.isEmpty()) {
-            AppResult.Error(ir.vmessenger.core.common.AppError.Network("هیچ گرهٔ بوت‌استرپی یافت نشد"))
+            AppResult.Error(AppError.NoBootstrapNode)
         } else {
             AppResult.Success(merged)
         }

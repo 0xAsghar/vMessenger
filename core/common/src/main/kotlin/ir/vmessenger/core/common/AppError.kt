@@ -49,9 +49,10 @@ sealed class AppError(open val message: String) {
     data object NoReachableMembers : AppError("no approved, reachable group members")
 
     // Network nodes -------------------------------------------------------------
+    /** No bootstrap node is switched on, so the phone cannot join the DHT; the app has none of its own. */
+    data object NoBootstrapNode : AppError("no bootstrap node is switched on")
+
     /** A node address the policy refused; [relay] says which kind of node it was meant to be. */
     data class NodeAddressRejected(val rejection: NodeAddressRejection, val relay: Boolean) :
         AppError("node address rejected: $rejection")
-
-    data object BuiltInNodeRemoval : AppError("a built-in node cannot be removed, only turned off")
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import dagger.hilt.android.qualifiers.ApplicationContext
+import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.concurrency.loggingExceptionHandler
 import ir.vmessenger.core.common.encoding.IdentityHashMatcher
@@ -167,8 +168,12 @@ class NetworkCoordinator @Inject constructor(
             is AppResult.Error -> {
                 AppLogger.error("Network", "join network failed: ${join.error.message}")
                 // Worth a line: from the user's side a failed join is indistinguishable from
-                // "nobody has messaged me", and the log is where they can tell the difference.
-                activityLogger.record(ActivityKind.Failure, join.error.message)
+                // "nobody has messaged me", and the log is where they can tell the difference. Not
+                // for a phone with no bootstrap node at all: that is a setting, not a failure, and
+                // it would add a line on every start; the home banner and Network nodes say it.
+                if (join.error !is AppError.NoBootstrapNode) {
+                    activityLogger.record(ActivityKind.Failure, join.error.message)
+                }
             }
         }
         publishAndStartRelay(directHost = directHost, directPort = directPort)
@@ -265,7 +270,7 @@ class NetworkCoordinator @Inject constructor(
         // relay our listener will actually connect through (multi-relay support).
         val selectedRelay = relayDirectory.activeRelay()
         NetworkPathTracker.setActiveRelay(selectedRelay?.url)
-        AppLogger.info("Network", "active relay=${selectedRelay?.url ?: "none"} source=${selectedRelay?.source}")
+        AppLogger.info("Network", "active relay=${selectedRelay?.url ?: "none"}")
         publishAndArmReannounce(
             directHost = directHost,
             directPort = directPort,

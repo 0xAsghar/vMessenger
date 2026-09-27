@@ -8,7 +8,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** Every migration up to 17, in order; [UP_TO_18]…[UP_TO_24] add the later ones. */
+/** Every migration up to 17, in order; [UP_TO_18]…[UP_TO_26] add the later ones. */
 internal val UP_TO_17 = listOf(
     MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
     MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
@@ -30,6 +30,7 @@ internal val UP_TO_23 = UP_TO_22 + MIGRATION_22_23
 
 internal val UP_TO_24 = UP_TO_23 + MIGRATION_23_24
 internal val UP_TO_25 = UP_TO_24 + MIGRATION_24_25
+internal val UP_TO_26 = UP_TO_25 + MIGRATION_25_26
 
 /**
  * Replays every migration on a real SQLite engine (JDBC, in memory), because a
@@ -123,10 +124,10 @@ class MigrationTest {
     fun `the whole chain replays cleanly onto an empty database`() {
         // The one test that would have caught a broken final step: every migration in order, on a
         // real engine, with nothing else going on.
-        UP_TO_24.forEach { it.migrate(database.db) }
+        UP_TO_26.forEach { it.migrate(database.db) }
 
         val tables = database.tables()
-        listOf("message", "chat_group", "message_edit_history", "activity_log")
+        listOf("message", "chat_group", "message_edit_history", "activity_log", "managed_node")
             .forEach { assertContains(tables, it) }
     }
 
@@ -445,5 +446,41 @@ class MigrationTest {
         database.exec("INSERT INTO `managed_node` VALUES ('a',$row")
         val duplicate = runCatching { database.exec("INSERT INTO `managed_node` VALUES ('b',$row") }
         assertTrue(duplicate.isFailure, "one row per host and SSH port")
+    }
+
+    @Test
+    fun `the 26 migration removes the old test node and keeps every other node`() {
+        UP_TO_25.forEach { it.migrate(database.db) }
+        val columns = "(address, publicKey, source, enabled, lastOkUnixMs, priority, lastFailUnixMs, " +
+            "failCount, trust, learnedFromHash)"
+        fun insert(table: String, address: String, source: String, trust: String) = database.exec(
+            "INSERT INTO `$table` $columns VALUES ('$address', NULL, '$source', 1, NULL, 100, NULL, 0, '$trust', NULL)",
+        )
+        // Seeded rows, and every spelling of that host however it got here: each clause of the delete.
+        insert("relay_node", "wss://other.example/relay", "BUILT_IN", "USER")
+        insert("bootstrap_node", "wss://other.example/dht", "USER", "BUILT_IN")
+        insert("relay_node", "wss://relay.vmessenger.ir/relay", "BUILT_IN", "BUILT_IN")
+        insert("bootstrap_node", "wss://relay.vmessenger.ir/dht", "BUILT_IN", "BUILT_IN")
+        insert("relay_node", "wss://relay.vmessenger.ir", "USER", "USER")
+        insert("relay_node", "wss://relay.vmessenger.ir?x=1", "USER", "USER")
+        insert("relay_node", "wss://relay.vmessenger.ir#pin-sha256=abc", "USER", "USER")
+        insert("bootstrap_node", "wss://relay.vmessenger.ir:443/dht", "CACHED_DHT", "COMMUNITY")
+        insert("bootstrap_node", "relay.vmessenger.ir:8443", "PEER_EXCHANGE", "COMMUNITY")
+        // Everything else stays, including a host that merely starts with that name.
+        insert("relay_node", "wss://node.example.org/relay", "USER", "USER")
+        insert("bootstrap_node", "wss://node.example.org/dht", "USER", "USER")
+        insert("bootstrap_node", "wss://relay.vmessenger.ir.example.org/dht", "USER", "USER")
+
+        MIGRATION_25_26.migrate(database.db)
+        MIGRATION_25_26.migrate(database.db) // idempotent
+
+        val relays = database.query("SELECT address FROM relay_node") { it.getString("address") }
+        val bootstraps = database.query("SELECT address FROM bootstrap_node") { it.getString("address") }
+        assertEquals(listOf("wss://node.example.org/relay"), relays)
+        assertEquals(
+            setOf("wss://node.example.org/dht", "wss://relay.vmessenger.ir.example.org/dht"),
+            bootstraps.toSet(),
+        )
+        assertEquals(10, database.columns("relay_node").size, "data only: no column changes")
     }
 }

@@ -119,14 +119,14 @@ fun NodesRoute(
                 )
             }
             NodeSection(
-                title = stringResource(R.string.nodes_bootstrap_section),
+                role = NetworkNodeRole.BOOTSTRAP,
                 nodes = state.bootstrapNodes,
                 onToggle = viewModel::setEnabled,
                 onRemove = viewModel::remove,
                 onShare = { shareNode = it },
             )
             NodeSection(
-                title = stringResource(R.string.nodes_relay_section),
+                role = NetworkNodeRole.RELAY,
                 nodes = state.relayNodes,
                 onToggle = viewModel::setEnabled,
                 onRemove = viewModel::remove,
@@ -304,16 +304,21 @@ private fun ServerSection(
 
 @Composable
 private fun NodeSection(
-    title: String,
+    role: NetworkNodeRole,
     nodes: List<NetworkNode>,
     onToggle: (NetworkNode, Boolean) -> Unit,
     onRemove: (NetworkNode) -> Unit,
     onShare: (NetworkNode) -> Unit,
 ) {
-    SettingsSection(title = title) {
+    val (title, emptyText) = when (role) {
+        NetworkNodeRole.BOOTSTRAP -> R.string.nodes_bootstrap_section to R.string.nodes_bootstrap_empty
+        NetworkNodeRole.RELAY -> R.string.nodes_relay_section to R.string.nodes_relay_empty
+    }
+    // The empty text says what is missing, not just that the list is empty: the app has no node of its own.
+    SettingsSection(title = stringResource(title)) {
         if (nodes.isEmpty()) {
             VmText(
-                text = stringResource(R.string.nodes_empty),
+                text = stringResource(emptyText),
                 style = VmTheme.typography.bodyMd,
                 color = VmTheme.colors.textSecondary,
                 modifier = Modifier.padding(horizontal = VmSpacing.lg, vertical = VmSpacing.md),
@@ -363,22 +368,19 @@ private fun NodeRow(
             onClick = { onShare(node) },
             tint = VmTheme.colors.iconSecondary,
         )
-        if (!node.builtIn) {
-            VmIconButton(
-                icon = Icons.Outlined.Delete,
-                contentDescription = stringResource(R.string.nodes_delete),
-                onClick = { onRemove(node) },
-                tint = VmTheme.colors.iconCritical,
-            )
-        }
+        VmIconButton(
+            icon = Icons.Outlined.Delete,
+            contentDescription = stringResource(R.string.nodes_delete),
+            onClick = { onRemove(node) },
+            tint = VmTheme.colors.iconCritical,
+        )
     }
 }
 
 @Composable
 private fun nodeHealthText(node: NetworkNode): String {
-    val builtIn = if (node.builtIn) stringResource(R.string.nodes_builtin) + " · " else ""
     val pinned = if (node.isPinned) stringResource(R.string.nodes_pinned) + " · " else ""
-    return builtIn + pinned + when {
+    return pinned + when {
         node.failCount > 0 ->
             stringResource(R.string.nodes_health_fail) + " (" +
                 stringResource(R.string.nodes_failures, node.failCount) + ")"

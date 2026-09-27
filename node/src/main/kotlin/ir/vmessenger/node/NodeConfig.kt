@@ -12,7 +12,8 @@ package ir.vmessenger.node
 data class NodeConfig(
     val port: Int = DEFAULT_PORT,
     val publicHost: String = DEFAULT_PUBLIC_HOST,
-    val advertisedDhtUrl: String = "wss://$publicHost/dht",
+    /** Blank: the node names no DHT address of its own in its answers (no public host is set). */
+    val advertisedDhtUrl: String = advertisedDhtUrlFor(publicHost),
     val peerNodes: List<String> = emptyList(),
     val stateDir: String = DEFAULT_STATE_DIR,
     val trustProxy: Boolean = false,
@@ -64,7 +65,14 @@ data class NodeConfig(
 
     companion object {
         const val DEFAULT_PORT = 8443
-        const val DEFAULT_PUBLIC_HOST = "relay.vmessenger.ir"
+
+        /**
+         * What a node run by hand with no `VMESSENGER_PUBLIC_HOST` says it is, in its logs only: such a
+         * node advertises no DHT address, so no phone learns one it cannot reach. `setup-node.sh` always
+         * sets the real host; before 2.2.2 this default named the developer's test node.
+         */
+        const val DEFAULT_PUBLIC_HOST = "localhost"
+
         const val DEFAULT_STATE_DIR = "./state"
         const val DEFAULT_MAX_LISTENERS = 20_000
         const val DEFAULT_MAX_LISTENERS_PER_IP = 64
@@ -84,6 +92,10 @@ data class NodeConfig(
         const val DEFAULT_WS_PING_PERIOD_MS = 30_000L
         const val DEFAULT_WS_TIMEOUT_MS = 60_000L
 
+        /** `wss://<host>/dht` for a real public host; blank for the unset [DEFAULT_PUBLIC_HOST]. */
+        fun advertisedDhtUrlFor(publicHost: String): String =
+            if (publicHost == DEFAULT_PUBLIC_HOST) "" else "wss://$publicHost/dht"
+
         /**
          * Builds a config from [env] (defaults to the process environment).
          * Unset or malformed values fall back to the defaults above.
@@ -93,7 +105,7 @@ data class NodeConfig(
             return NodeConfig(
                 port = env.int("VMESSENGER_NODE_PORT", DEFAULT_PORT),
                 publicHost = publicHost,
-                advertisedDhtUrl = env.string("VMESSENGER_ADVERTISED_DHT_URL", "wss://$publicHost/dht"),
+                advertisedDhtUrl = env.string("VMESSENGER_ADVERTISED_DHT_URL", advertisedDhtUrlFor(publicHost)),
                 peerNodes = env.list("VMESSENGER_PEER_NODES"),
                 stateDir = env.string("VMESSENGER_STATE_DIR", DEFAULT_STATE_DIR),
                 trustProxy = env.flag("VMESSENGER_TRUST_PROXY"),

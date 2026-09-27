@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
  * Exactly as it left it means created by Room from 1.1.2's own schema (20), the way every fresh
  * 1.1.2 install's was — not rebuilt through the migration chain from version 1, which is the path
  * [MigrationTest] replays and not one a 1.1.2 user necessarily took. One row in every table, every
- * column filled, then the migrations 2.0 ships for 20 → 24.
+ * column filled, then the migrations 2.x ships for 20 → 26.
  */
 class V1DatabaseUpgradeTest {
     private val database = JdbcSupportDatabase()
@@ -60,6 +60,28 @@ class V1DatabaseUpgradeTest {
         assertEquals(listOf(listOf<String?>(null, null, null)), added)
     }
 
+    @Test
+    fun `a 1_1_2 database loses its test-node rows and nothing else`() {
+        // Every 1.1.2 install had the seeded test node; 2.2.2 removes it on upgrade.
+        val before = populatedRelease()
+        val columns = "(address, publicKey, source, enabled, lastOkUnixMs, priority, lastFailUnixMs, " +
+            "failCount, trust, learnedFromHash)"
+        listOf("relay_node" to "wss://relay.vmessenger.ir/relay", "bootstrap_node" to "wss://relay.vmessenger.ir/dht")
+            .forEach { (table, address) ->
+                database.exec(
+                    "INSERT INTO `$table` $columns VALUES ('$address', NULL, 'BUILT_IN', 1, NULL, 100, NULL, 0, " +
+                        "'BUILT_IN', NULL)",
+                )
+            }
+
+        upgrade()
+
+        listOf("relay_node", "bootstrap_node").forEach { table ->
+            val rows = snapshot(table, released.tables.getValue(table))
+            assertEquals(before.getValue(table), rows, "only the test node's row goes from $table")
+        }
+    }
+
     /** Schema 20 as Room created it, one fully filled row per table; returns what each table holds. */
     private fun populatedRelease(): Map<String, List<List<String?>>> {
         released.create(database)
@@ -71,8 +93,14 @@ class V1DatabaseUpgradeTest {
         return released.tables.mapValues { (table, columns) -> snapshot(table, columns) }
     }
 
-    private fun upgrade() = listOf(MIGRATION_20_21, MIGRATION_21_22, MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25)
-        .forEach { it.migrate(database.db) }
+    private fun upgrade() = listOf(
+        MIGRATION_20_21,
+        MIGRATION_21_22,
+        MIGRATION_22_23,
+        MIGRATION_23_24,
+        MIGRATION_24_25,
+        MIGRATION_25_26,
+    ).forEach { it.migrate(database.db) }
 
     private fun snapshot(table: String, columns: List<RoomColumn>): List<List<String?>> =
         database.query("SELECT ${columns.joinToString { "`${it.name}`" }} FROM `$table`") { row ->
@@ -89,7 +117,7 @@ class V1DatabaseUpgradeTest {
     private companion object {
         /** The schema 1.1.2 shipped. */
         const val RELEASED_1_1_2 = 20
-        const val CURRENT = 25
+        const val CURRENT = 26
 
         /** Tables SQLite and Room keep for themselves. */
         val BOOKKEEPING = setOf("room_master_table", "sqlite_sequence", "android_metadata")

@@ -667,7 +667,7 @@ Only the creator can switch it, and the switch is sent as a `SNAPSHOT` rather th
 
 ### 10.5 Non-goals
 
-Deliberately not implemented, and still absent in 2.0.2: creator transfer, uploaded group avatars, invite links, message forwarding, and mentions. Each of them needs either a shared secret or a trusted third party, which is what this design is built to avoid. Admin *roles* now exist (§10.3), but only the creator holds authority and there is no way to hand that over; timed messages now exist too, per-conversation rather than per-group (§8.7).
+Deliberately not implemented, and still absent in 2.2.2: creator transfer, uploaded group avatars, invite links, message forwarding, and mentions. Each of them needs either a shared secret or a trusted third party, which is what this design is built to avoid. Admin *roles* now exist (§10.3), but only the creator holds authority and there is no way to hand that over; timed messages now exist too, per-conversation rather than per-group (§8.7).
 
 ---
 

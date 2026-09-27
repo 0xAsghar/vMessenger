@@ -50,6 +50,9 @@ class NodeUrl private constructor(
     /** For people: the dialled URL, without the pin. */
     val displayText: String get() = dialUrl
 
+    /** This node's address on [newPath] instead of its own path and query, with the same key pins. */
+    fun withPath(newPath: String): String = NodeUrl(scheme, host, port, newPath, null, pins).canonical
+
     private fun sortedPinText(): String = pins.map { it.text }.sorted().joinToString(",")
 
     override fun equals(other: Any?): Boolean = other is NodeUrl && canonical == other.canonical

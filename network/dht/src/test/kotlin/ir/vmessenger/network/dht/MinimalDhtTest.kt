@@ -25,13 +25,16 @@ class MinimalDhtTest {
 
     private fun node(address: String) = BootstrapNode(address = address, source = BootstrapProviderId("test"))
 
+    /** A bootstrap node the person added; the app has none of its own. */
+    private val seed = "wss://node.example.org/dht"
+
     @Test
     fun knownNodesConcurrentMutation() = runBlocking {
         // Every lookup learns new node addresses while other coroutines iterate the set:
         // with a plain HashSet this raced into ConcurrentModificationException.
         val learned = (1..200).map { "wss://node-$it.example/dht" }
         val dht = MinimalDht(FakeDhtRpcSender(nodes = learned), verifier)
-        assertTrue(dht.bootstrap(listOf(node(NetworkConfig.DEFAULT_DHT_URL))) is AppResult.Success)
+        assertTrue(dht.bootstrap(listOf(node(seed))) is AppResult.Success)
 
         withContext(Dispatchers.Default) {
             val writers = (1..8).map {
@@ -62,9 +65,9 @@ class MinimalDhtTest {
     @Test
     fun unknownPeerSuppliedAddressesAreIgnored() = runBlocking {
         val dht = MinimalDht(FakeDhtRpcSender(nodes = listOf("203.0.113.9:1234", "evil.example:80")), verifier)
-        assertTrue(dht.bootstrap(listOf(node(NetworkConfig.DEFAULT_DHT_URL))) is AppResult.Success)
+        assertTrue(dht.bootstrap(listOf(node(seed))) is AppResult.Success)
         launch { dht.lookup(ByteArray(32)) }.join()
-        assertEquals(setOf(NetworkConfig.DEFAULT_DHT_URL), dht.knownNodeAddresses())
+        assertEquals(setOf(seed), dht.knownNodeAddresses())
     }
 
     @Test
@@ -72,31 +75,31 @@ class MinimalDhtTest {
         val dead = "wss://dead.example/dht"
         val sender = FakeDhtRpcSender(nodes = listOf(dead), failing = setOf(dead))
         val dht = MinimalDht(sender, verifier)
-        assertTrue(dht.bootstrap(listOf(node(NetworkConfig.DEFAULT_DHT_URL))) is AppResult.Success)
+        assertTrue(dht.bootstrap(listOf(node(seed))) is AppResult.Success)
         // Learn the unreachable node from a find-value answer, then use it as an RPC target.
         assertTrue(dht.lookup(ByteArray(32)) is AppResult.Success)
-        assertEquals(setOf(NetworkConfig.DEFAULT_DHT_URL, dead), dht.knownNodeAddresses())
+        assertEquals(setOf(seed, dead), dht.knownNodeAddresses())
         sender.sent.clear()
 
         val record = EndpointRecord.newBuilder().setSequence(1).build()
         assertTrue(dht.publish(record) is AppResult.Success)
-        assertEquals(setOf(NetworkConfig.DEFAULT_DHT_URL, dead), sender.sent.map { it.first }.toSet())
+        assertEquals(setOf(seed, dead), sender.sent.map { it.first }.toSet())
         assertTrue(dht.lookup(ByteArray(32)) is AppResult.Success)
 
         // Repeated failures forget the learned node (once nobody re-advertises it);
         // the bootstrap node is never dropped.
         sender.nodes = emptyList()
         repeat(3) { dht.lookup(ByteArray(32)) }
-        assertEquals(setOf(NetworkConfig.DEFAULT_DHT_URL), dht.knownNodeAddresses())
+        assertEquals(setOf(seed), dht.knownNodeAddresses())
     }
 
     @Test
     fun bootstrapNodeSwitchedOffIsNoLongerDialled() = runBlocking {
-        // The built-in node answers with itself too, as a peer's find-value reply may.
+        // The switched-off node answers with itself too, as a peer's find-value reply may.
         val own = "wss://own.example/dht"
-        val sender = FakeDhtRpcSender(nodes = listOf("${NetworkConfig.RELAY_HOST}:8443"))
+        val sender = FakeDhtRpcSender(nodes = listOf(seed))
         val dht = MinimalDht(sender, verifier)
-        assertTrue(dht.bootstrap(listOf(node(NetworkConfig.DEFAULT_DHT_URL))) is AppResult.Success)
+        assertTrue(dht.bootstrap(listOf(node(seed))) is AppResult.Success)
 
         assertTrue(dht.bootstrap(listOf(node(own))) is AppResult.Success)
         sender.sent.clear()
@@ -111,7 +114,7 @@ class MinimalDhtTest {
     fun everyBootstrapNodeSwitchedOffLeavesNothingToDial() = runBlocking {
         val sender = FakeDhtRpcSender()
         val dht = MinimalDht(sender, verifier)
-        assertTrue(dht.bootstrap(listOf(node(NetworkConfig.DEFAULT_DHT_URL))) is AppResult.Success)
+        assertTrue(dht.bootstrap(listOf(node(seed))) is AppResult.Success)
 
         assertTrue(dht.bootstrap(emptyList()) is AppResult.Error)
         sender.sent.clear()
@@ -124,12 +127,12 @@ class MinimalDhtTest {
     fun allTargetsFailingIsAnError() = runBlocking {
         val sender = FakeDhtRpcSender()
         val dht = MinimalDht(sender, verifier)
-        assertTrue(dht.bootstrap(listOf(node(NetworkConfig.DEFAULT_DHT_URL))) is AppResult.Success)
-        sender.failing += NetworkConfig.DEFAULT_DHT_URL
+        assertTrue(dht.bootstrap(listOf(node(seed))) is AppResult.Success)
+        sender.failing += seed
         assertTrue(dht.lookup(ByteArray(32)) is AppResult.Error)
         assertTrue(dht.publish(EndpointRecord.newBuilder().setSequence(1).build()) is AppResult.Error)
         // The bootstrap node itself is kept so a later retry can reach it again.
-        assertEquals(setOf(NetworkConfig.DEFAULT_DHT_URL), dht.knownNodeAddresses())
+        assertEquals(setOf(seed), dht.knownNodeAddresses())
     }
 
     @Test
@@ -143,15 +146,16 @@ class MinimalDhtTest {
             normalizeDhtRpcAddress("ws://10.0.2.2:46555", trusted = setOf("ws://10.0.2.2:46555"), policy = release),
         )
         val dht = MinimalDht(FakeDhtRpcSender(nodes = listOf("ws://evil.example/dht")), verifier)
-        assertTrue(dht.bootstrap(listOf(node(NetworkConfig.DEFAULT_DHT_URL))) is AppResult.Success)
+        assertTrue(dht.bootstrap(listOf(node(seed))) is AppResult.Success)
         assertTrue(dht.lookup(ByteArray(32)) is AppResult.Success)
-        assertEquals(setOf(NetworkConfig.DEFAULT_DHT_URL), dht.knownNodeAddresses())
+        assertEquals(setOf(seed), dht.knownNodeAddresses())
     }
 
     @Test
     fun normalizeAcceptsAllowlistAndTrustedOnly() {
         assertEquals("wss://x/dht", normalizeDhtRpcAddress("wss://x/dht"))
-        assertEquals(NetworkConfig.DEFAULT_DHT_URL, normalizeDhtRpcAddress("${NetworkConfig.RELAY_HOST}:8443"))
+        // The old built-in node's `host:8443` alias is gone with it: a bare host:port is no target.
+        assertNull(normalizeDhtRpcAddress("relay.vmessenger.ir:8443"))
         assertEquals(NetworkConfig.DEV_BOOTSTRAP_ADDRESS, normalizeDhtRpcAddress(NetworkConfig.DEV_BOOTSTRAP_ADDRESS))
         assertNull(normalizeDhtRpcAddress("10.1.2.3:46555"))
         // A pinned node keeps its pin, and a malformed pin is not a target.

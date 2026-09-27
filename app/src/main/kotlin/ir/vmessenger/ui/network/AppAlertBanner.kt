@@ -54,7 +54,7 @@ import ir.vmessenger.core.designsystem.theme.VmTheme
 /**
  * What the app can raise at the top of the main tabs.
  *
- * All four share one shape: the app looks perfectly healthy while messages
+ * All of them share one shape: the app looks perfectly healthy while messages
  * cannot reach it, and nothing else in the UI would ever say so. They are ranked
  * rather than stacked — two banners across the top would only hide each other —
  * and the passing conditions come first, because the permission one is the only
@@ -74,6 +74,13 @@ internal enum class AppAlert(
     CLOCK_SKEW(R.string.alert_clock_title, R.string.alert_clock_skew_body),
     CLOCK_CERTIFICATE(R.string.alert_clock_title, R.string.alert_clock_certificate_body),
     NOTIFICATIONS_OFF(R.string.alert_notifications_title, R.string.alert_notifications_body),
+    NO_NODE(R.string.alert_no_node_title, R.string.alert_no_node_body),
+    NO_RELAY(R.string.alert_no_relay_title, R.string.alert_no_relay_body),
+    NO_BOOTSTRAP(R.string.alert_no_bootstrap_title, R.string.alert_no_bootstrap_body),
+    ;
+
+    /** A missing node is fixed on the Network nodes screen, which the banner opens. */
+    val opensNodes: Boolean get() = this == NO_NODE || this == NO_RELAY || this == NO_BOOTSTRAP
 }
 
 /**
@@ -130,6 +137,7 @@ internal fun visibleAppAlert(host: AppAlertHost): AppAlert? {
 internal fun AppAlertBanner(
     alert: AppAlert?,
     onDismiss: (AppAlert) -> Unit,
+    onOpenNodes: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Kept after the alert clears so the banner still has something to draw while it folds away.
@@ -141,20 +149,25 @@ internal fun AppAlertBanner(
         enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
         exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
     ) {
-        shown?.let { current -> AlertSurface(alert = current, onDismiss = { onDismiss(current) }) }
+        shown?.let { current ->
+            AlertSurface(alert = current, onDismiss = { onDismiss(current) }, onOpenNodes = onOpenNodes)
+        }
     }
 }
 
 private fun currentAlert(notificationsEnabled: Boolean, listenerAlert: ListenerAlert): AppAlert? = when {
+    listenerAlert == ListenerAlert.NO_NODE -> AppAlert.NO_NODE
+    listenerAlert == ListenerAlert.NO_RELAY -> AppAlert.NO_RELAY
     listenerAlert == ListenerAlert.IDENTITY_ELSEWHERE -> AppAlert.IDENTITY_ELSEWHERE
     listenerAlert == ListenerAlert.CLOCK_SKEW -> AppAlert.CLOCK_SKEW
     listenerAlert == ListenerAlert.CLOCK_CERTIFICATE -> AppAlert.CLOCK_CERTIFICATE
     !notificationsEnabled -> AppAlert.NOTIFICATIONS_OFF
+    listenerAlert == ListenerAlert.NO_BOOTSTRAP -> AppAlert.NO_BOOTSTRAP
     else -> null
 }
 
 @Composable
-private fun AlertSurface(alert: AppAlert, onDismiss: () -> Unit) {
+private fun AlertSurface(alert: AppAlert, onDismiss: () -> Unit, onOpenNodes: () -> Unit) {
     val context = LocalContext.current
     VmSurface(
         color = VmTheme.colors.bgCriticalSubtle,
@@ -191,6 +204,9 @@ private fun AlertSurface(alert: AppAlert, onDismiss: () -> Unit) {
                         text = stringResource(R.string.alert_notifications_action),
                         onClick = { openNotificationSettings(context) },
                     )
+                }
+                if (alert.opensNodes) {
+                    VmTextButton(text = stringResource(R.string.alert_no_node_action), onClick = onOpenNodes)
                 }
             }
             VmIconButton(

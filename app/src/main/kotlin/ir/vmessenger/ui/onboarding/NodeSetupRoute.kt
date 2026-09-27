@@ -33,8 +33,8 @@ import ir.vmessenger.core.designsystem.theme.VmTheme
  * The node question, asked once before an identity is created.
  *
  * A node is what makes reaching anyone possible, so this is a real choice rather than a screen to
- * tap through: the test nodes are offered with their expiry stated, adding or running your own is
- * offered inline, and skipping is allowed but only behind the warning that says what it costs.
+ * tap through: adding a node's address or setting one up is offered inline, and skipping is allowed
+ * but only behind the warning that says what it costs. The app ships no node of its own.
  */
 @Composable
 fun NodeSetupRoute(
@@ -71,7 +71,6 @@ fun NodeSetupRoute(
                     busy = busy,
                     onStep = viewModel::onStep,
                     onCreateNode = onCreateNode,
-                    onUseTestNodes = { viewModel.onUseTestNodes(onDone) },
                     onSkip = { confirmSkip = true },
                 )
                 NodeSetupStep.AddNode -> AddressStep(
@@ -97,15 +96,11 @@ fun NodeSetupRoute(
 }
 
 @Composable
-private fun Explainer(text: String, emphasis: Boolean = false) {
+private fun Explainer(text: String) {
     VmText(
         text = text,
         style = VmTheme.typography.bodyMd,
-        color = if (emphasis) {
-            VmTheme.colors.textCritical
-        } else {
-            VmTheme.colors.textSecondary
-        },
+        color = VmTheme.colors.textSecondary,
     )
 }
 
@@ -114,19 +109,10 @@ private fun ChooseStep(
     busy: Boolean,
     onStep: (NodeSetupStep) -> Unit,
     onCreateNode: () -> Unit,
-    onUseTestNodes: () -> Unit,
     onSkip: () -> Unit,
 ) {
     Explainer(stringResource(R.string.node_setup_body))
     VmButton(
-        text = stringResource(R.string.node_setup_use_test),
-        onClick = onUseTestNodes,
-        modifier = Modifier.fillMaxWidth(),
-        enabled = !busy,
-    )
-    // Stated up front rather than in a footnote: picking these is picking an expiry date.
-    Explainer(stringResource(R.string.node_setup_test_warning), emphasis = true)
-    VmOutlinedButton(
         text = stringResource(R.string.node_setup_add),
         onClick = { onStep(NodeSetupStep.AddNode) },
         modifier = Modifier.fillMaxWidth(),

@@ -16,16 +16,15 @@ data class NodeRankKey(
  * `priority DESC`, then `failCount ASC`, then `lastOkUnixMs DESC`. Within the unhealthy
  * bucket the node that failed longest ago comes first: when every candidate is failing, the one
  * that just failed yields to the others instead of winning again on priority — a broken
- * user-added relay would otherwise hold the listener forever while a working default waits. With the
- * default priorities (built-in 100, user 150, community 80) the built-in relay is
- * displaced only by a user-added relay or after three consecutive failures; a
- * successful connection (`markOk`) resets the counter and restores it.
+ * relay would otherwise hold the listener forever while a working one waits. With the
+ * default priorities (user 150, official 100, community 80) a node is displaced by a
+ * lower-priority one only after three consecutive failures; a successful connection
+ * (`markOk`) resets the counter and restores it.
  */
 object NodeRanking {
     /** A node with this many consecutive failures is tried after every healthier one. */
     const val UNHEALTHY_FAIL_COUNT = 3
 
-    const val PRIORITY_BUILT_IN = 100
     const val PRIORITY_USER = 150
     const val PRIORITY_OFFICIAL = 100
     const val PRIORITY_COMMUNITY = 80
@@ -43,7 +42,6 @@ object NodeRanking {
 
     /** Default priority for a freshly stored node of the given trust level. */
     fun defaultPriority(trust: NodeTrust): Int = when (trust) {
-        NodeTrust.BUILT_IN -> PRIORITY_BUILT_IN
         NodeTrust.USER -> PRIORITY_USER
         NodeTrust.OFFICIAL -> PRIORITY_OFFICIAL
         NodeTrust.COMMUNITY -> PRIORITY_COMMUNITY

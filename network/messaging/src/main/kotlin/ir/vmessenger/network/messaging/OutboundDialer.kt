@@ -3,7 +3,6 @@ package ir.vmessenger.network.messaging
 import ir.vmessenger.core.common.logging.AppLogger
 import ir.vmessenger.core.common.network.Endpoint
 import ir.vmessenger.core.common.network.EndpointSource
-import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.NetworkPath
 import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.common.network.TransportIds
@@ -94,14 +93,12 @@ internal class OutboundDialer(
 
 /**
  * Classifies the transport path a successful send used so debug tooling can show
- * whether traffic took a direct, relay, or user/community relay route. Direct
- * INTERNET endpoints are reported as [NetworkPath.DIRECT]; relay endpoints are
- * split into the central default relay versus a user/community relay.
+ * whether traffic went direct or through a relay. Direct INTERNET endpoints are
+ * reported as [NetworkPath.DIRECT], relay endpoints as [NetworkPath.RELAY].
  */
 internal fun Endpoint.toNetworkPath(): NetworkPath = when (transport) {
     TransportIds.INTERNET -> NetworkPath.DIRECT
     TransportIds.UDP -> NetworkPath.UDP_ATTEMPT
-    TransportIds.RELAY ->
-        if (address == NetworkConfig.DEFAULT_RELAY_URL) NetworkPath.DEFAULT_RELAY else NetworkPath.USER_RELAY
+    TransportIds.RELAY -> NetworkPath.RELAY
     else -> NetworkPath.UNKNOWN
 }

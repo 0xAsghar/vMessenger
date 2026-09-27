@@ -711,3 +711,24 @@ val MIGRATION_24_25_STATEMENTS: List<String> = listOf(
     """.trimIndent(),
     "CREATE UNIQUE INDEX IF NOT EXISTS `index_managed_node_host_sshPort` ON `managed_node` (`host`, `sshPort`)",
 )
+
+val MIGRATION_25_26 = object : Migration(25, 26) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_25_26_STATEMENTS.forEach(db::execSQL)
+    }
+}
+
+/**
+ * 2.2.2 removes the test node the app used to ship (`relay.vmessenger.ir`): its rows go from every
+ * phone on upgrade — the seeded ones (source and trust `BUILT_IN`) and any other row at that host, such
+ * as one learned from the DHT. No schema change; after this the phone has only the nodes the person
+ * added, and none if they added none. The host is named here only to delete it: nothing else in the
+ * app knows it any more, and the person can still add it by hand like any other node.
+ */
+val MIGRATION_25_26_STATEMENTS: List<String> = listOf("bootstrap_node", "relay_node").map { table ->
+    // The host ends the address, or a path, port, query or pin follows it; or it is a bare host:port.
+    "DELETE FROM `$table` WHERE source = 'BUILT_IN' OR trust = 'BUILT_IN' " +
+        "OR address LIKE '%://relay.vmessenger.ir' OR address LIKE '%://relay.vmessenger.ir/%' " +
+        "OR address LIKE '%://relay.vmessenger.ir:%' OR address LIKE '%://relay.vmessenger.ir?%' " +
+        "OR address LIKE '%://relay.vmessenger.ir#%' OR address LIKE 'relay.vmessenger.ir:%'"
+}

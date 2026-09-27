@@ -11,14 +11,12 @@ class P2PFlagDefaultsTest {
     fun snapshotDefaultsMatchRuntimeConfigDefaults() {
         P2PConfig.resetToDefaults()
         val snapshot = P2PFlagSnapshot()
-        assertEquals(P2PConfig.multiNodeEnabled, snapshot.multiNodeEnabled)
         assertEquals(P2PConfig.peerCacheEnabled, snapshot.peerCacheEnabled)
         assertEquals(P2PConfig.peerExchangeEnabled, snapshot.peerExchangeEnabled)
         assertEquals(P2PConfig.dhtParticipationEnabled, snapshot.dhtParticipationEnabled)
         assertEquals(P2PConfig.relayPeerModeEnabled, snapshot.relayPeerModeEnabled)
         assertEquals(P2PConfig.natTraversalEnabled, snapshot.natTraversalEnabled)
         assertEquals(P2PConfig.storeAndForwardEnabled, snapshot.storeAndForwardEnabled)
-        assertEquals(P2PConfig.reduceDefaultRelayEnabled, snapshot.reduceDefaultRelayEnabled)
     }
 
     /**
@@ -34,13 +32,11 @@ class P2PFlagDefaultsTest {
     @Test
     fun onlyTheDeliberatelyEnabledFlagsAreOnByDefault() {
         val snapshot = P2PFlagSnapshot()
-        assertTrue(snapshot.multiNodeEnabled)
         assertTrue(snapshot.peerCacheEnabled)
         assertTrue(snapshot.storeAndForwardEnabled)
         assertFalse(snapshot.peerExchangeEnabled)
         assertFalse(snapshot.dhtParticipationEnabled)
         assertFalse(snapshot.relayPeerModeEnabled)
         assertFalse(snapshot.natTraversalEnabled)
-        assertFalse(snapshot.reduceDefaultRelayEnabled)
     }
 }

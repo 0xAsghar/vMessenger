@@ -30,8 +30,6 @@ data class NetworkNode(
      */
     val trust: NodeTrust,
 ) {
-    val builtIn: Boolean get() = source == SOURCE_BUILT_IN
-
     /** The node's certificate key is pinned in its address (`#pin-sha256=…`). */
     val isPinned: Boolean get() = NodeUrl.parse(address)?.isPinned == true
 
@@ -41,7 +39,6 @@ data class NetworkNode(
     val community: Boolean get() = trust == NodeTrust.COMMUNITY
 
     companion object {
-        const val SOURCE_BUILT_IN = "BUILT_IN"
         const val SOURCE_USER = "USER"
         const val SOURCE_PEER_EXCHANGE = "PEER_EXCHANGE"
     }

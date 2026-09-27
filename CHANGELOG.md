@@ -9,9 +9,60 @@ GitHub Releases; they were never tracked here and are not reconstructed.
 
 Two version numbers move independently of this file and are stated where they matter: the **wire
 protocol major** (currently 2, [docs/Protocol.md](docs/Protocol.md)) and the **database schema
-version** (currently 25, [docs/Database.md](docs/Database.md)).
+version** (currently 26, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
+
+## [2.2.2] - 2026-09-27
+
+The app no longer carries a node of its own. Database schema 25 → 26 (data only); wire protocol major 2
+unchanged.
+
+### Removed
+
+- **The built-in experimental node, `relay.vmessenger.ir`.** The app ships no node: nothing is seeded,
+  nothing falls back to it, and the first-run answer *Use the test nodes*, with its 31 December 2026
+  warning, is gone. Upgrading deletes its rows from the phone, along with any other row at that host
+  (schema 26), so a phone that used it has no node until one is added. The server stays up until
+  31 December 2026 and can be added by hand like any other node; the handover package's
+  `Experimental-Node.pdf` describes it.
+- The *Default* badge on the Network nodes screen, and the "a built-in node cannot be removed" error:
+  every node can now be deleted.
+- The debug flags *Multiple nodes (P1)* and *Demote default relay (P9)* (`P2PConfig.multiNodeEnabled`,
+  `reduceDefaultRelayEnabled`): with no built-in node, the node list is the only one and there is no
+  default relay to demote. The DHT alias `relay.vmessenger.ir:8443` went with them.
+
+### Added
+
+- **A banner when no node is switched on**, on the home screen, with a button to Network nodes. It
+  names what is missing: no node at all, no relay (nothing reaches the phone), or no bootstrap node
+  (contacts cannot find it). Nothing else in the app said so; a phone that had its own relay and relied
+  on the built-in bootstrap node is left with the second after upgrading.
+- **One address adds a whole node.** Adding a vMessenger node's `/relay` address or link, at first run,
+  in Network nodes or by QR code, also adds its `/dht` (and back), with the same host, port and key pin;
+  a plain `/dht` address is taken as a bootstrap node. The other half never replaces a row the person
+  or the operator vouched for at its location; it does replace a disabled hint learned from the network.
+- The Network nodes sections say what an empty list means: no relay, no message reaches you; no
+  bootstrap node, contacts on other nodes cannot find you.
+
+### Changed
+
+- `BuiltInBootstrapProvider` is now `DevBootstrapProvider`: it offers only a debug build's developer
+  bootstrap (`10.0.2.2:46555`).
+- A phone with no bootstrap node no longer writes a failure line into the activity log on every start.
+- The reference node's default public host, used only when `VMESSENGER_PUBLIC_HOST` is unset (never by
+  `setup-node.sh`), is `localhost` instead of `relay.vmessenger.ir`, and such a node advertises no DHT
+  address of its own rather than one no phone can reach.
+- Adding a node that is already stored with a key the person set no longer writes "node added" into the
+  activity log.
+- `scripts/p2p-terminal-check.sh` checks a node's health only when `NODE_HEALTH_URL` is given.
+
+### Fixed
+
+- A relay counts as *Connected recently* as soon as its control channel opens. Before, a relay just
+  added read "never connected" in Network nodes for as long as the channel stayed up.
+- The debug screen's *Join and publish* set the developer bootstrap only after joining, so the first
+  join in dev mode never used it.
 
 ## [2.0.2] - 2026-09-26
 
@@ -703,7 +754,8 @@ before a 1.x build is installed**, and identity and contacts do not survive that
 - **The reference node was hardened**: connection and record limits, listener-proof freshness and
   replay rejection, record expiry, and rejection counters on `/healthz?verbose=1`.
 
-[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v2.0.2...HEAD
+[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v2.2.2...HEAD
+[2.2.2]: https://github.com/0xAsghar/vMessenger/compare/v2.0.2...v2.2.2
 [2.0.2]: https://github.com/0xAsghar/vMessenger/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/0xAsghar/vMessenger/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/0xAsghar/vMessenger/compare/v1.1.2...v2.0.0

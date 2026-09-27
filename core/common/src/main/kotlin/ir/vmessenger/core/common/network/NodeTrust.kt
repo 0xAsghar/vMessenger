@@ -4,14 +4,13 @@ package ir.vmessenger.core.common.network
  * How much the app trusts a bootstrap/relay node record. Persisted as the enum
  * name in `relay_node.trust` / `bootstrap_node.trust`.
  *
- * Only [BUILT_IN], [USER] and [OFFICIAL] nodes are enabled automatically;
- * [COMMUNITY] nodes learned from peers or the DHT are stored disabled until the
- * user turns them on (see [NodeRanking.autoEnabled]).
+ * Only [USER] and [OFFICIAL] nodes are enabled automatically; [COMMUNITY] nodes
+ * learned from peers or the DHT are stored disabled until the user turns them on
+ * (see [NodeRanking.autoEnabled]). Up to 2.0.2 a `BUILT_IN` level marked the test
+ * node compiled into the app; schema 26 deletes those rows, and a name this enum
+ * does not know reads as [COMMUNITY].
  */
 enum class NodeTrust {
-    /** Compiled into the app ([NetworkConfig]). */
-    BUILT_IN,
-
     /** Added by the user in the Nodes screen or via a `vmnode:` link. */
     USER,
 

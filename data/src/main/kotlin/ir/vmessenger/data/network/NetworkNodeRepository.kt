@@ -3,7 +3,6 @@ package ir.vmessenger.data.network
 import ir.vmessenger.core.common.AppError
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.logging.AppLogger
-import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.NodeAddressPolicy
 import ir.vmessenger.core.common.network.NodeRankKey
 import ir.vmessenger.core.common.network.NodeRanking
@@ -31,18 +30,19 @@ import javax.inject.Singleton
 
 /**
  * Single source of truth for the bootstrap/DHT and relay nodes the app knows
- * about. Replaces the single hardcoded relay/bootstrap dependency with a
- * health-ranked, user-extensible list.
+ * about: a health-ranked list the person builds. The app ships no node of its
+ * own since 2.2.2 (schema 26 deletes the test node's old rows), so an install
+ * with no node added reaches no one until one is.
  *
  * Trust rules (Milestone 3d):
- * - built-in and user-added nodes are enabled; nodes learned from peers or the
- *   DHT are stored as [NodeTrust.COMMUNITY], **disabled**, priority 80, until the
+ * - user-added nodes are enabled; nodes learned from peers or the DHT are
+ *   stored as [NodeTrust.COMMUNITY], **disabled**, priority 80, until the
  *   user enables them in the Nodes screen;
  * - a `SignedNodeRecord` signed by the operator key is [NodeTrust.OFFICIAL] and
  *   enabled with priority 100;
  * - every stored address passes [NodeAddressPolicy] (release: `wss://` only);
- * - ordering is [NodeRanking] over the unordered DAO result, so the built-in
- *   relay is displaced only by a user relay or after three consecutive failures;
+ * - ordering is [NodeRanking] over the unordered DAO result: a node is displaced
+ *   by a lower-priority one only after three consecutive failures;
  * - one row per node location ([NodeUrl.locationKey]), stored in canonical form. Only the
  *   person changes a location's key pin (an explicit add replaces the row); nothing learned
  *   from the network adds a second pin for a location already stored.
@@ -65,12 +65,6 @@ class NetworkNodeRepository(
         relayNodeDao: RelayNodeDao,
         activityLogger: ActivityLogger,
     ) : this(bootstrapNodeDao, relayNodeDao, activityLogger, { NodeAddressPolicy.current })
-
-    /** Ensures the built-in defaults exist so there is always a working fallback. */
-    suspend fun seedDefaults() {
-        seedBootstrapNode(NetworkConfig.DEFAULT_DHT_URL, SOURCE_BUILT_IN, NodeTrust.BUILT_IN)
-        seedRelayNode(NetworkConfig.DEFAULT_RELAY_URL, SOURCE_BUILT_IN, NodeTrust.BUILT_IN)
-    }
 
     suspend fun enabledBootstrapNodes(): List<BootstrapNode> =
         rankedEnabledBootstrap().map { entity ->
@@ -171,44 +165,49 @@ class NetworkNodeRepository(
         return bootstrap to relay
     }
 
+    /** Stores a person's bootstrap node; false when [mode] kept a row already at its location. */
     suspend fun addBootstrapNode(
         address: String,
         source: String = SOURCE_USER,
         mode: NodeAddMode = NodeAddMode.ReplaceByLocation,
-    ) {
-        val stored = bootstrapNodeDao.getAll().map { it.address }
-        if (!claimLocation(address, mode, stored, bootstrapNodeDao::deleteByAddress)) return
+    ): Boolean {
+        val stored = bootstrapNodeDao.getAll().map { it.address to NodeTrust.fromName(it.trust) }
+        if (!claimLocation(address, mode, stored, bootstrapNodeDao::deleteByAddress)) return false
         seedBootstrapNode(address, source, NodeTrust.USER)
         AppLogger.info("Nodes", "added bootstrap node $address")
+        return true
     }
 
+    /** Stores a person's relay node; false when [mode] kept a row already at its location. */
     suspend fun addRelayNode(
         address: String,
         source: String = SOURCE_USER,
         mode: NodeAddMode = NodeAddMode.ReplaceByLocation,
-    ) {
-        val stored = relayNodeDao.getAll().map { it.address }
-        if (!claimLocation(address, mode, stored, relayNodeDao::deleteByAddress)) return
+    ): Boolean {
+        val stored = relayNodeDao.getAll().map { it.address to NodeTrust.fromName(it.trust) }
+        if (!claimLocation(address, mode, stored, relayNodeDao::deleteByAddress)) return false
         seedRelayNode(address, source, NodeTrust.USER)
         AppLogger.info("Nodes", "added relay node $address")
+        return true
     }
 
     /**
      * Makes room for a user-added [address]: rows at the same location with another spelling or key
-     * are removed ([NodeAddMode.ReplaceByLocation]), or left alone and the add skipped
-     * ([NodeAddMode.KeepExisting]). False when the add should not happen.
+     * are removed ([NodeAddMode.ReplaceByLocation]), or, with [NodeAddMode.KeepExisting], left alone and
+     * the add skipped — unless they are all hints learned from the network, which never outrank an address
+     * the person gave. False when the add should not happen.
      */
     private suspend fun claimLocation(
         address: String,
         mode: NodeAddMode,
-        stored: List<String>,
+        stored: List<Pair<String, NodeTrust>>,
         delete: suspend (String) -> Unit,
     ): Boolean {
         val canonical = canonicalOf(address)
-        val others = stored.filter { locationOf(it) == locationOf(address) && it != canonical }
-        if (others.isNotEmpty() && mode == NodeAddMode.KeepExisting) return false
-        others.forEach { delete(it) }
-        return true
+        val others = stored.filter { (other, _) -> locationOf(other) == locationOf(address) && other != canonical }
+        val keep = mode == NodeAddMode.KeepExisting && others.any { (_, trust) -> trust != NodeTrust.COMMUNITY }
+        if (!keep) others.forEach { (other, _) -> delete(other) }
+        return !keep
     }
 
     suspend fun setBootstrapEnabled(address: String, enabled: Boolean) =
@@ -244,7 +243,7 @@ class NetworkNodeRepository(
         if (rejection != null) {
             return AppResult.Error(AppError.NodeAddressRejected(rejection, relay = role == NetworkNodeRole.RELAY))
         }
-        when (role) {
+        val stored = when (role) {
             NetworkNodeRole.BOOTSTRAP -> addBootstrapNode(address, mode = mode)
             NetworkNodeRole.RELAY -> addRelayNode(address, mode = mode)
         }
@@ -260,7 +259,7 @@ class NetworkNodeRepository(
         )
         // The address, not the link: a vmnode: link can carry more than the address, and only the
         // address is needed to answer "which node did I add, and when".
-        activityLogger.record(ActivityKind.NodeAdded, node.displayAddress)
+        if (stored) activityLogger.record(ActivityKind.NodeAdded, node.displayAddress)
         return AppResult.Success(node)
     }
 
@@ -272,13 +271,6 @@ class NetworkNodeRepository(
     }
 
     override suspend fun removeNode(address: String, role: NetworkNodeRole): AppResult<Unit> {
-        val source = when (role) {
-            NetworkNodeRole.BOOTSTRAP -> bootstrapNodeDao.getByAddress(address)?.source
-            NetworkNodeRole.RELAY -> relayNodeDao.getByAddress(address)?.source
-        }
-        if (source == SOURCE_BUILT_IN) {
-            return AppResult.Error(AppError.BuiltInNodeRemoval)
-        }
         when (role) {
             NetworkNodeRole.BOOTSTRAP -> removeBootstrapNode(address)
             NetworkNodeRole.RELAY -> removeRelayNode(address)
@@ -392,7 +384,7 @@ class NetworkNodeRepository(
 
     /**
      * Only a community row can be upgraded, and only by an explicit user add or an
-     * operator signature; BUILT_IN/USER/OFFICIAL rows never change trust here.
+     * operator signature; USER/OFFICIAL rows never change trust here.
      */
     private fun upgrades(existingTrust: String, incoming: NodeTrust): Boolean =
         NodeTrust.fromName(existingTrust) == NodeTrust.COMMUNITY &&
@@ -413,7 +405,6 @@ class NetworkNodeRepository(
     private fun RelayNodeEntity.isCommunity() = NodeTrust.fromName(trust) == NodeTrust.COMMUNITY
 
     companion object {
-        const val SOURCE_BUILT_IN = "BUILT_IN"
         const val SOURCE_USER = "USER"
         const val SOURCE_PEER_EXCHANGE = "PEER_EXCHANGE"
         const val SOURCE_CACHED_DHT = "CACHED_DHT"

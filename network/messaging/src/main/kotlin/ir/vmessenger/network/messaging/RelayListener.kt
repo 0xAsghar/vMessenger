@@ -163,6 +163,7 @@ class RelayListener @Inject constructor(
                 selected == null -> waitForARelay()
                 else -> {
                     relayless.value = false
+                    NetworkPathTracker.reportRelayMissing(false)
                     backoffMs = holdControlChannel(selected.url, credentials, backoffMs)
                 }
             }
@@ -173,6 +174,7 @@ class RelayListener @Inject constructor(
     private suspend fun waitForARelay() {
         if (!relayless.value) AppLogger.info(TAG, "no relay is enabled; not listening on any")
         relayless.value = true
+        NetworkPathTracker.reportRelayMissing(true)
         // Enabling or adding a relay calls reselect(), which restarts the loop at once.
         delay(NO_RELAY_RECHECK_MS)
     }
@@ -244,6 +246,9 @@ class RelayListener @Inject constructor(
         try {
             session.openLatch.await()
             connected.value = url
+            // Reached: record it now, not only when the channel ends, or a relay just added reads
+            // "never connected" in Network nodes for as long as it stays up.
+            relayDirectory.reportResult(url, ok = true)
             val keepAlive = scope.launch { keepAliveLoop(webSocket, session.closeLatch) }
             session.closeLatch.await()
             keepAlive.cancel()

@@ -59,8 +59,8 @@ open class RelayTransport @Inject constructor() : Transport {
     ): Result<Connection> =
         withContext(Dispatchers.IO) {
             runCatching {
-                // A relay endpoint without an address names no relay; dialling the built-in one in its
-                // place would reach a node the person may have switched off.
+                // A relay endpoint without an address names no relay, and there is no default relay
+                // to dial in its place.
                 val url = endpoint.address.ifBlank { error("relay endpoint without an address") }
                 require(relayTargetId.size == 32) { "relayTargetId must be 32 bytes" }
                 val hello = RelayHello.newBuilder()

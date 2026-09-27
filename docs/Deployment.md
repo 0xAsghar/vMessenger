@@ -47,9 +47,9 @@ domain, a Let's Encrypt certificate.
 - Operator overrides go in `/etc/vmessenger/node.env` (`VMESSENGER_*` variables — see
   [`NodeConfig`](../node/src/main/kotlin/ir/vmessenger/node/NodeConfig.kt) for the full list: limits, rate
   limits, proof skew, advertised DHT URL, peer nodes, `VMESSENGER_TRUST_PROXY`).
-- Apps reach the default node at `wss://relay.vmessenger.ir/{dht,relay}` (`NetworkConfig.kt`); any other node is
-  added in the app under **تنظیمات → گره‌های شبکه** with a `vmnode:bootstrap:wss://…/dht` /
-  `vmnode:relay:wss://…/relay` link or its QR (the installer prints both).
+- Apps have no default node (since 2.2.2): every node is added in the app under **تنظیمات → گره‌های شبکه**
+  with a `vmnode:bootstrap:wss://…/dht` / `vmnode:relay:wss://…/relay` link or its QR (the installer prints
+  both; either one adds the other too), at first run, or by New node.
 
 ## 2. Requirements
 
@@ -174,7 +174,7 @@ carry its key pin (`#pin-sha256=`, §8.6).
    (whose own certificate is what clients see) give out the addresses without `#pin-sha256=…`, and set the
    unpinned `VMESSENGER_ADVERTISED_DHT_URL` in `node.env`.
 
-## 5. Behind Arvan CDN (relay.vmessenger.ir)
+## 5. Behind Arvan CDN (as the experimental node relay.vmessenger.ir is)
 
 Panel checklist (labels vary by panel version):
 

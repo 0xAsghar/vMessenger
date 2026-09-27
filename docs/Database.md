@@ -1,8 +1,8 @@
 # vMessenger - Local Database
 
-The on-device store: Room over SQLCipher, **schema version 25**.
+The on-device store: Room over SQLCipher, **schema version 26**.
 
-Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/database/` and the exported schema `core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/25.json`.
+Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/database/` and the exported schema `core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/26.json`.
 
 ---
 
@@ -22,7 +22,7 @@ Everything below is read off `core/database/src/main/kotlin/ir/vmessenger/core/d
 ```kotlin
 Room.databaseBuilder(context, VMessengerDatabase::class.java, "vmessenger.db")
     .openHelperFactory(SupportOpenHelperFactory(passphrase))   // net.zetetic SQLCipher
-    .addMigrations(MIGRATION_1_2 … MIGRATION_24_25)
+    .addMigrations(MIGRATION_1_2 … MIGRATION_25_26)
     .build()
 ```
 
@@ -80,7 +80,7 @@ A second trap is documented on `ConversationDao.update`: never use `upsert` to m
 
 ## 4. Entities
 
-Types below are the SQLite affinities from `25.json`. `?` marks a nullable column.
+Types below are the SQLite affinities from `26.json`. `?` marks a nullable column.
 
 ### 4.1 `app_metadata`
 
@@ -294,7 +294,7 @@ Identical shape, one per role.
 |---|---|---|
 | `address` | TEXT | PK, **unique index** |
 | `publicKey` | BLOB? | |
-| `source` | TEXT | `BUILT_IN`, `USER`, `PEER_EXCHANGE`, `CACHED_DHT` |
+| `source` | TEXT | `USER`, `PEER_EXCHANGE`, `CACHED_DHT` (`BUILT_IN` up to 2.0.2; schema 26 deletes those rows) |
 | `enabled` | INTEGER | community nodes are stored **disabled** |
 | `lastOkUnixMs` | INTEGER? | |
 | `priority` | INTEGER | default 100 |
@@ -303,7 +303,7 @@ Identical shape, one per role.
 | `trust` | TEXT | `NodeTrust` name, default `COMMUNITY` |
 | `learnedFromHash` | BLOB? | identity hash of the peer that told us |
 
-Ranking is **not** done in SQL: `getEnabled()` returns rows unordered and `core/common/.../network/NodeRanking.kt` applies the policy — healthy bucket first (`failCount < 3`), then `priority DESC`, `failCount ASC`, `lastOkUnixMs DESC`; within the unhealthy bucket the node that failed longest ago comes first. Default priorities: user 150, built-in 100, official 100, community 80.
+Ranking is **not** done in SQL: `getEnabled()` returns rows unordered and `core/common/.../network/NodeRanking.kt` applies the policy — healthy bucket first (`failCount < 3`), then `priority DESC`, `failCount ASC`, `lastOkUnixMs DESC`; within the unhealthy bucket the node that failed longest ago comes first. Default priorities: user 150, official 100, community 80.
 
 ### 4.15 `location_share` and `location_sample`
 
@@ -456,7 +456,7 @@ reverse), excluded from backups, erased by a wipe.
 | `GroupMemberRole` | `CREATOR`, `ADMIN`, `MEMBER` | `chat_group_member.role` |
 | `MessageRevisionKind` | `EDIT`, `DELETE` | `message_edit_history.revision` |
 | `ActivityKind` | `IdentityCreated`, `AppUnlocked`, `AppLocked`, `NodeAdded`, `NodeRemoved`, `NodeProvisioned`, `NodeUpdated`, `NetworkConnected`, `NetworkDisconnected`, `PermissionGranted`, `PermissionDenied`, `LocationSharingStarted`, `LocationSharingStopped`, `CallPlaced`, `CallReceived`, `CallEnded`, `ContactAdded`, `ContactBlocked`, `AccountWiped`, `Failure` | `activity_log.kind` |
-| `NodeTrust` (not a converter) | `BUILT_IN`, `USER`, `OFFICIAL`, `COMMUNITY` | `relay_node.trust`, `bootstrap_node.trust` |
+| `NodeTrust` (not a converter) | `USER`, `OFFICIAL`, `COMMUNITY` (an unknown name, such as a 2.0.x `BUILT_IN`, reads as `COMMUNITY`) | `relay_node.trust`, `bootstrap_node.trust` |
 
 Several queries hard-code the stored names (`WHERE status = 'PENDING'`, `direction = 'INCOMING'`, `status != 'READ'`), so renaming an enum constant requires a migration.
 
@@ -505,7 +505,7 @@ Four projection types keep the UI off N+1 queries:
 
 ## 7. Migrations
 
-`core/database/.../migration/Migrations.kt`; all twenty-four are registered in `DatabaseModule`.
+`core/database/.../migration/Migrations.kt`; all twenty-five are registered in `DatabaseModule`.
 
 | Step | Adds |
 |---|---|
@@ -533,6 +533,7 @@ Four projection types keep the UI off N+1 queries:
 | 22 → 23 | `chat_group.auditRetention`; new `message_edit_history` table (+ its two indices); the `ADMIN` role |
 | 23 → 24 | new `activity_log` table (+ index on `atUnixMs`) |
 | 24 → 25 | new `managed_node` table (+ unique index on `host`, `sshPort`) |
+| 25 → 26 | no schema change: deletes the removed built-in test node's rows from `bootstrap_node` and `relay_node` |
 
 ### 20 → 21 in detail
 
@@ -568,7 +569,19 @@ upgrades simply starts logging from then on.
 Exported as `MIGRATION_24_25_STATEMENTS`. One `CREATE TABLE` and one unique index for `managed_node`
 (§4.21). Nothing existing changes; a device that upgrades has no servers until it sets one up.
 `MigrationTest` checks the table, its key, that no column is named for a secret, and that a second row for
-the same host and port is refused; `V1DatabaseUpgradeTest` carries a 1.1.2 database through to 25.
+the same host and port is refused.
+
+### 25 → 26 in detail
+
+Exported as `MIGRATION_25_26_STATEMENTS`. No schema change (`26.json` differs from `25.json` only in its
+version): 2.2.2 removed the test node the app used to ship, `relay.vmessenger.ir`, and this step deletes it
+from `bootstrap_node` and `relay_node` — every row whose `source` or `trust` is `BUILT_IN`, and every other
+row at that host (`%://relay.vmessenger.ir` followed by nothing, `/`, `:`, `?` or `#`, and a bare
+`relay.vmessenger.ir:<port>`), whether the person added it or it was learned. Nothing references those tables, so nothing cascades. A phone
+that used only that node has none afterwards; the home screen says so, and the node can be added again by
+hand. `MigrationTest` checks each of those clauses, that other nodes — including a host that merely starts with
+that name — stay, and that running it twice changes nothing; `V1DatabaseUpgradeTest` carries a 1.1.2
+database, with the test node's rows every 1.1.2 install had, through to 26.
 
 ### 18 → 19 in detail
 
@@ -617,11 +630,11 @@ The largest step so far, and the only one that recreates tables. SQLite cannot r
 - recreates `outbox` keyed on `(messageId, recipientIdentityHash)` and re-keys existing rows with `lower(substr(hex(contact.identityHash), 1, 32))`, joining through the conversation to its contact. A queued row whose contact vanished has no recipient to address and is dropped by the JOIN — which is what the dispatcher would have done with it anyway;
 - drops the dead `session` table (missed in migration 16).
 
-`MigrationTest` (`core/database/src/test/…/migration/`) replays the migration chain, every step through 25, on a real SQLite engine — `sqlite-jdbc` behind a `SupportSQLiteDatabase` built as a dynamic proxy that only implements `execSQL` — and for this step asserts the re-key, the dropped table, the nullable `contactId` and the unique-per-group constraint. Room does not type-check migration SQL, so without this a broken statement is only found on a user's device.
+`MigrationTest` (`core/database/src/test/…/migration/`) replays the migration chain, every step through 26, on a real SQLite engine — `sqlite-jdbc` behind a `SupportSQLiteDatabase` built as a dynamic proxy that only implements `execSQL` — and for this step asserts the re-key, the dropped table, the nullable `contactId` and the unique-per-group constraint. Room does not type-check migration SQL, so without this a broken statement is only found on a user's device.
 
 ### Gaps in the exported schema history
 
-`core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/` contains `1, 2, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25.json`. **Versions 3, 4, 5 and 11 have no exported JSON** because they were never committed as released database versions — the migrations exist (and run) but the intermediate schema was folded into the next commit before export. The gap is expected and is not a missing-file bug. Room validates an upgraded database only against the *current* schema, and the migration chain is continuous, so upgrades from any shipped version still work.
+`core/database/schemas/ir.vmessenger.core.database.VMessengerDatabase/` contains `1, 2, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26.json`. **Versions 3, 4, 5 and 11 have no exported JSON** because they were never committed as released database versions — the migrations exist (and run) but the intermediate schema was folded into the next commit before export. The gap is expected and is not a missing-file bug. Room validates an upgraded database only against the *current* schema, and the migration chain is continuous, so upgrades from any shipped version still work.
 
 ---
 

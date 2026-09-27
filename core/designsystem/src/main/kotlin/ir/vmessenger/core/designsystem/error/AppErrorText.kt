@@ -28,6 +28,7 @@ private val ERROR_TEXT: Map<KClass<out AppError>, Int> = mapOf(
     AppError.RequestNotFound::class to R.string.vm_error_request_not_found,
     AppError.ContactNotFound::class to R.string.vm_error_contact_not_found,
     AppError.NoNetwork::class to R.string.vm_error_no_network,
+    AppError.NoBootstrapNode::class to R.string.vm_error_no_bootstrap_node,
     AppError.SendFailed::class to R.string.vm_error_send_failed,
     AppError.PermissionDenied::class to R.string.vm_error_permission_denied,
     AppError.AttachmentFailed::class to R.string.vm_error_attachment_failed,
@@ -35,7 +36,6 @@ private val ERROR_TEXT: Map<KClass<out AppError>, Int> = mapOf(
     AppError.GroupClosed::class to R.string.vm_error_group_closed,
     AppError.NotGroupCreator::class to R.string.vm_error_not_group_creator,
     AppError.NoReachableMembers::class to R.string.vm_error_no_reachable_members,
-    AppError.BuiltInNodeRemoval::class to R.string.vm_error_node_built_in,
 )
 
 /**

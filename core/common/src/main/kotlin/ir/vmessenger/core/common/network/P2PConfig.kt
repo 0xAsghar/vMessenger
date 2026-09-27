@@ -5,28 +5,22 @@ package ir.vmessenger.core.common.network
  * design toward a serverless peer-to-peer network.
  *
  * Every experimental P2P path is gated here so it can be enabled/disabled at
- * runtime (debug screen) without rebuilding. The default relay remains available
- * as a last-resort fallback when demotion is enabled.
+ * runtime (debug screen) without rebuilding.
  *
- * 1.0 defaults: only multi-node selection and the verified peer cache are on.
- * Peer exchange, DHT participation, relay-peer mode, UDP attempts, store-and-
- * forward and default-relay demotion are half-features that only leak or waste
- * time today; their code paths stay safe but off. These defaults must agree
+ * Defaults: the verified peer cache and store-and-forward are on. Peer exchange, DHT
+ * participation, relay-peer mode and UDP attempts are half-features that only leak or
+ * waste time today; their code paths stay safe but off. Multi-node selection and
+ * default-relay demotion were flags here until 2.2.2: with no built-in node, the stored
+ * node list is the only one and there is no default relay to demote. These defaults must agree
  * with `P2PPreferences.P2P_DEFAULT_*` and `P2PFlagSnapshot` in core/datastore.
  */
 object P2PConfig {
-    const val DEFAULT_MULTI_NODE = true
     const val DEFAULT_PEER_CACHE = true
     const val DEFAULT_PEER_EXCHANGE = false
     const val DEFAULT_DHT_PARTICIPATION = false
     const val DEFAULT_RELAY_PEER_MODE = false
     const val DEFAULT_NAT_TRAVERSAL = false
     const val DEFAULT_STORE_AND_FORWARD = true
-    const val DEFAULT_REDUCE_DEFAULT_RELAY = false
-
-    /** Phase 1: try multiple bootstrap/relay nodes instead of a single hardcoded one. */
-    @Volatile
-    var multiNodeEnabled: Boolean = DEFAULT_MULTI_NODE
 
     /** Phase 3: consult the local verified peer/DHT-node cache before public infrastructure. */
     @Volatile
@@ -52,21 +46,15 @@ object P2PConfig {
     @Volatile
     var storeAndForwardEnabled: Boolean = DEFAULT_STORE_AND_FORWARD
 
-    /** Phase 9: demote the default relay to a last-resort path. */
-    @Volatile
-    var reduceDefaultRelayEnabled: Boolean = DEFAULT_REDUCE_DEFAULT_RELAY
-
     /**
      * Resets every flag to its default. Used by tests and the secure-wipe flow.
      */
     fun resetToDefaults() {
-        multiNodeEnabled = DEFAULT_MULTI_NODE
         peerCacheEnabled = DEFAULT_PEER_CACHE
         peerExchangeEnabled = DEFAULT_PEER_EXCHANGE
         dhtParticipationEnabled = DEFAULT_DHT_PARTICIPATION
         relayPeerModeEnabled = DEFAULT_RELAY_PEER_MODE
         natTraversalEnabled = DEFAULT_NAT_TRAVERSAL
         storeAndForwardEnabled = DEFAULT_STORE_AND_FORWARD
-        reduceDefaultRelayEnabled = DEFAULT_REDUCE_DEFAULT_RELAY
     }
 }

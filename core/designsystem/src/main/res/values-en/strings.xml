@@ -83,6 +83,7 @@
     <string name="vm_error_request_not_found">This request is no longer available</string>
     <string name="vm_error_contact_not_found">This contact is no longer available</string>
     <string name="vm_error_no_network">No network connection is available</string>
+    <string name="vm_error_no_bootstrap_node">No bootstrap node is switched on. Add your organization\'s node in Settings, under Network nodes.</string>
     <string name="vm_error_send_failed">Could not send the message</string>
     <string name="vm_error_permission_denied">The required permission has not been granted</string>
     <string name="vm_error_attachment_too_large">The file is larger than %1$s MB</string>
@@ -97,7 +98,6 @@
     <string name="vm_error_node_bootstrap_malformed">A bootstrap address must start with wss:// and include a host name</string>
     <string name="vm_error_node_insecure">An unencrypted connection (ws:// or host:port) is allowed only in development builds, for local nodes</string>
     <string name="vm_error_node_bad_pin">The key pin after # is not valid: it must be pin-sha256= followed by up to four 43-character keys, on a wss:// address</string>
-    <string name="vm_error_node_built_in">A built-in node cannot be removed; you can turn it off instead</string>
 
     <!-- Date and time picker -->
     <string name="vm_picker_previous_month">Previous month</string>

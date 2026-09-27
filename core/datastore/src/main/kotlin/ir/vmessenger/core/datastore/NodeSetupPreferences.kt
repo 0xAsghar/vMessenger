@@ -20,22 +20,19 @@ private val Context.nodeSetupDataStore: DataStore<Preferences> by preferencesDat
 private val NODE_SETUP_CHOICE_KEY = stringPreferencesKey("node_setup_choice")
 
 /**
- * What the user answered when first asked to configure a node.
+ * What the user answered when first asked to configure a node, asked before an identity exists.
  *
- * [NotAsked] is the value every install that predates the question has, and it deliberately behaves
- * like the old build: the built-in nodes are still seeded. Only [Skipped] means "genuinely none",
- * which is why the question has to be answered before the network is ever started.
+ * Up to 2.0.2 a third answer, "use the test nodes", seeded the built-in node. 2.2.2 removed that node,
+ * and the stored `TestNodes` now reads as [NotAsked]: an install that answered it but never created an
+ * identity is asked again, since it has no node. Once an identity exists the answer is not consulted.
  */
 enum class NodeSetupChoice {
     NotAsked,
 
-    /** The built-in test nodes, which is what every 1.x install used. */
-    TestNodes,
-
     /** The user added or created their own node. */
     Custom,
 
-    /** The user chose to continue with no node at all; nothing is seeded for them. */
+    /** The user chose to continue with no node for now. */
     Skipped,
 }
 
@@ -45,7 +42,6 @@ class NodeSetupPreferences @Inject constructor(
 ) {
     val choice: Flow<NodeSetupChoice> = context.nodeSetupDataStore.data.map { preferences ->
         when (preferences[NODE_SETUP_CHOICE_KEY]) {
-            NodeSetupChoice.TestNodes.name -> NodeSetupChoice.TestNodes
             NodeSetupChoice.Custom.name -> NodeSetupChoice.Custom
             NodeSetupChoice.Skipped.name -> NodeSetupChoice.Skipped
             else -> NodeSetupChoice.NotAsked

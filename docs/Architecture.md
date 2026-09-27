@@ -35,7 +35,7 @@ Related documents: [Network.md](Network.md), [Protocol.md](Protocol.md), [Securi
 ### 1.3 Constraints and assumptions
 
 - Minimum SDK 26 (Android 8.0); target and compile SDK 35.
-- The app uses direct TCP when possible and falls back to an encrypted circuit relay (`relay.vmessenger.ir` or user-configured nodes). ICE/STUN hole punching is not implemented.
+- The app uses direct TCP when possible and falls back to an encrypted circuit relay, on a node the person added: the app ships none of its own. ICE/STUN hole punching is not implemented.
 - Bootstrap nodes are used only to join the DHT; after joining, the verified peer-endpoint cache carries day-to-day resolution (see [DHT.md](DHT.md) Section 4.1).
 
 ---

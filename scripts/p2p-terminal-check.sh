@@ -7,7 +7,7 @@ cd "$ROOT"
 echo "=== vMessenger P2P terminal check ==="
 echo ""
 echo "P2PConfig defaults (from source):"
-grep -E 'var (multiNode|relayPeer|natTraversal)' core/common/src/main/kotlin/ir/vmessenger/core/common/network/P2PConfig.kt || true
+grep -E 'var (peerCache|relayPeer|natTraversal)' core/common/src/main/kotlin/ir/vmessenger/core/common/network/P2PConfig.kt || true
 echo ""
 
 echo "Running P2P-focused unit tests..."
@@ -20,10 +20,13 @@ echo "Running P2P-focused unit tests..."
   :network:dht:testDebugUnitTest --tests 'ir.vmessenger.network.dht.EmbeddedDhtRoutingTableTest' \
   --quiet
 
-NODE_URL="${NODE_HEALTH_URL:-https://relay.vmessenger.ir/healthz}"
+# The app ships no node of its own: check the one you run, e.g. NODE_HEALTH_URL=https://node.example.org/healthz
+NODE_URL="${NODE_HEALTH_URL:-}"
 echo ""
-echo "Node health (${NODE_URL}):"
-if command -v curl >/dev/null 2>&1; then
+echo "Node health (${NODE_URL:-no NODE_HEALTH_URL given}):"
+if [[ -z "$NODE_URL" ]]; then
+  echo "(skipped: set NODE_HEALTH_URL to your node's /healthz)"
+elif command -v curl >/dev/null 2>&1; then
   curl -fsSL --max-time 5 "$NODE_URL" || echo "(unreachable)"
 else
   echo "curl not installed"

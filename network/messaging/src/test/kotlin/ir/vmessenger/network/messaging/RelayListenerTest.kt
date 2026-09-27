@@ -3,7 +3,8 @@ package ir.vmessenger.network.messaging
 import com.goterl.lazysodium.LazySodiumJava
 import com.goterl.lazysodium.SodiumJava
 import ir.vmessenger.core.common.network.Endpoint
-import ir.vmessenger.core.common.network.RelaySource
+import ir.vmessenger.core.common.network.ListenerAlert
+import ir.vmessenger.core.common.network.NetworkPathTracker
 import ir.vmessenger.core.common.network.SelectedRelay
 import ir.vmessenger.core.common.network.TransportIds
 import ir.vmessenger.core.crypto.LazysodiumCryptoEngine
@@ -11,7 +12,9 @@ import ir.vmessenger.core.proto.relay.v1.RelayHello
 import ir.vmessenger.core.proto.relay.v1.RelayRole
 import ir.vmessenger.network.transport.RelayConnection
 import ir.vmessenger.network.transport.RelayTransport
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.Request
 import okhttp3.WebSocket
 import okio.ByteString
@@ -56,7 +59,7 @@ class RelayListenerTest {
     }
 
     private class FakeRelayDirectory : RelayDirectory {
-        override suspend fun activeRelay() = SelectedRelay("wss://relay.invalid/relay", RelaySource.DEFAULT)
+        override suspend fun activeRelay() = SelectedRelay("wss://relay.invalid/relay")
         override fun lastSelectedRelay(): SelectedRelay? = null
         override suspend fun reportResult(url: String, ok: Boolean) = Unit
     }
@@ -126,5 +129,24 @@ class RelayListenerTest {
         val listener = RelayListener(transport, RelayHelloFactory(crypto), FakeRelayDirectory())
         assertFalse(listener.acceptCircuit("wss://relay.invalid/relay", "circuit-3"))
         assertEquals("no dial without a handler", 0, transport.attempts)
+    }
+
+    @Test
+    fun withNoRelaySwitchedOnTheListenerWaitsAndRaisesTheAlert() = runBlocking {
+        val noRelay = object : RelayDirectory {
+            override suspend fun activeRelay(): SelectedRelay? = null
+            override fun lastSelectedRelay(): SelectedRelay? = null
+            override suspend fun reportResult(url: String, ok: Boolean) = Unit
+        }
+        val listener = RelayListener(ThrowingRelayTransport(), RelayHelloFactory(crypto), noRelay)
+        listener.configure(ByteArray(32) { 1 }, ByteArray(32) { 2 }, { ByteArray(64) { 3 } }) { }
+        try {
+            listener.start()
+            withTimeout(5_000) { listener.noRelay.first { it } }
+            assertEquals(ListenerAlert.NO_RELAY, NetworkPathTracker.listenerAlert.value)
+        } finally {
+            listener.stop()
+            NetworkPathTracker.clear()
+        }
     }
 }

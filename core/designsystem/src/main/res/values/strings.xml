@@ -83,6 +83,7 @@
     <string name="vm_error_request_not_found">این درخواست دیگر در دسترس نیست</string>
     <string name="vm_error_contact_not_found">این مخاطب دیگر در دسترس نیست</string>
     <string name="vm_error_no_network">اتصال شبکه در دسترس نیست</string>
+    <string name="vm_error_no_bootstrap_node">هیچ گرهٔ بوت‌استرپی روشن نیست. گرهٔ سازمانتان را در تنظیمات، بخش «گره‌های شبکه»، اضافه کنید.</string>
     <string name="vm_error_send_failed">ارسال پیام انجام نشد</string>
     <string name="vm_error_permission_denied">دسترسی لازم داده نشده است</string>
     <string name="vm_error_attachment_too_large">حجم فایل بیشتر از %1$s مگابایت است</string>
@@ -97,7 +98,6 @@
     <string name="vm_error_node_bootstrap_malformed">آدرس بوت‌استرپ باید با wss:// شروع شود و نام میزبان داشته باشد</string>
     <string name="vm_error_node_insecure">اتصال ناامن (ws:// یا host:port) فقط در نسخهٔ توسعه و برای گره‌های محلی مجاز است</string>
     <string name="vm_error_node_bad_pin">کلید سنجاق‌شدهٔ پس از # معتبر نیست: باید pin-sha256= و پس از آن حداکثر چهار کلید ۴۳ نویسه‌ای باشد، روی آدرس wss://</string>
-    <string name="vm_error_node_built_in">گرهٔ پیش‌فرض قابل حذف نیست؛ می‌توانید آن را غیرفعال کنید</string>
 
     <!-- Date and time picker -->
     <string name="vm_picker_previous_month">ماه قبل</string>

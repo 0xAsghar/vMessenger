@@ -117,6 +117,7 @@ fun HomeRoute(
             AppAlertBanner(
                 alert = alert,
                 onDismiss = { alertHost?.dismiss(it) },
+                onOpenNodes = navigation.onNavigateToNodes,
                 modifier = Modifier.windowInsetsPadding(TopInsets),
             )
             val bannerOnTop = alert != null

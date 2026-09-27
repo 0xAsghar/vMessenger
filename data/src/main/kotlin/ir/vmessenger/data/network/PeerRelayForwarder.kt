@@ -9,7 +9,7 @@ import javax.inject.Singleton
  * User-relay (relay-capable peer) circuit handling is not part of 1.0: every
  * secure frame is bound to its own session's ratchet, so opaque ciphertext
  * sealed under another session can never be forwarded. Circuit requests are
- * acknowledged as *not handled* so the sender falls back to the central relay.
+ * acknowledged as *not handled* so the sender falls back to a node's relay.
  */
 @Singleton
 class PeerRelayForwarder @Inject constructor() {

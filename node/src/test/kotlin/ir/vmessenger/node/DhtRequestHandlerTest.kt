@@ -36,9 +36,10 @@ class DhtRequestHandlerTest {
         maxRecordTtlMs: Long = 60 * 60 * 1000L,
         maxFutureSkewMs: Long = 5 * 60 * 1000L,
         peerNodes: List<String> = emptyList(),
+        advertised: String = ADVERTISED,
     ) = DhtRequestHandler(
         nodeId = nodeId,
-        advertisedAddress = ADVERTISED,
+        advertisedAddress = advertised,
         peerNodes = peerNodes,
         maxRecords = maxRecords,
         maxRecordTtlMs = maxRecordTtlMs,
@@ -241,6 +242,14 @@ class DhtRequestHandlerTest {
         assertArrayEquals(nodeId, nodes[0].nodeId.toByteArray())
         assertEquals(32, nodes[1].nodeId.size())
         assertFalse(nodes[1].nodeId == nodes[0].nodeId)
+    }
+
+    @Test
+    fun `a node with no public host advertises only its peers`() {
+        val response = handler(peerNodes = listOf(PEER), advertised = "").handle(
+            DhtRpcRequest.newBuilder().setFindNode(FindNodeRequest.newBuilder()).build(),
+        )
+        assertEquals(listOf(PEER), response.findNode.nodesList.map { it.address })
     }
 
     @Test

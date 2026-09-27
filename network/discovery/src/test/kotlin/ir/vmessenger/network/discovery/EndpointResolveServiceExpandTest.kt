@@ -18,6 +18,7 @@ class EndpointResolveServiceExpandTest {
     @After
     fun tearDown() {
         P2PConfig.resetToDefaults()
+        NetworkConfig.relayAddress = ""
     }
 
     @Test
@@ -50,25 +51,35 @@ class EndpointResolveServiceExpandTest {
     }
 
     @Test
-    fun emptyLookupFallsBackToDefaultRelay() = runTest {
+    fun emptyLookupFallsBackToOurOwnRelay() = runTest {
         P2PConfig.resetToDefaults()
+        NetworkConfig.relayAddress = OWN_RELAY
         val service = EndpointResolveService(FakeCache(null), DiscoveryManager(emptySet()))
         val result = service.resolve(ByteArray(32)) as AppResult.Success
         assertEquals(1, result.data.endpoints.size)
-        assertEquals(NetworkConfig.DEFAULT_RELAY_URL, result.data.endpoints.first().address)
+        assertEquals(OWN_RELAY, result.data.endpoints.first().address)
         assertEquals(TransportIds.RELAY, result.data.endpoints.first().transport)
     }
 
     @Test
-    fun discoveryErrorStillFallsBackToDefaultRelay() = runTest {
+    fun discoveryErrorStillFallsBackToOurOwnRelay() = runTest {
         P2PConfig.resetToDefaults()
+        NetworkConfig.relayAddress = OWN_RELAY
         val service = EndpointResolveService(FakeCache(null), DiscoveryManager(setOf(FailingProvider)))
         val result = service.resolve(ByteArray(32)) as AppResult.Success
         assertTrue(result.data.discoveryFailed)
         assertFalse(result.data.fromPeerCache)
         assertEquals(1, result.data.endpoints.size)
-        assertEquals(NetworkConfig.DEFAULT_RELAY_URL, result.data.endpoints.first().address)
+        assertEquals(OWN_RELAY, result.data.endpoints.first().address)
         assertEquals(TransportIds.RELAY, result.data.endpoints.first().transport)
+    }
+
+    @Test
+    fun withNoRelaySwitchedOnThereIsNothingToFallBackOn() = runTest {
+        P2PConfig.resetToDefaults()
+        val service = EndpointResolveService(FakeCache(null), DiscoveryManager(emptySet()))
+        val result = service.resolve(ByteArray(32)) as AppResult.Success
+        assertTrue("the app has no relay of its own", result.data.endpoints.isEmpty())
     }
 
     @Test
@@ -97,5 +108,10 @@ class EndpointResolveServiceExpandTest {
         override suspend fun lookup(identityHash: ByteArray) = endpoints
         override suspend fun store(record: EndpointRecord) = Unit
         override suspend fun evict(identityHash: ByteArray) = Unit
+    }
+
+    private companion object {
+        /** A relay the person added: the app has none of its own. */
+        const val OWN_RELAY = "wss://node.example.org/relay"
     }
 }

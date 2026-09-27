@@ -6,7 +6,6 @@ import com.goterl.lazysodium.SodiumJava
 import ir.vmessenger.core.common.AppResult
 import ir.vmessenger.core.common.network.Endpoint
 import ir.vmessenger.core.common.network.P2PConfig
-import ir.vmessenger.core.common.network.RelaySource
 import ir.vmessenger.core.common.network.SelectedRelay
 import ir.vmessenger.core.common.network.TransportId
 import ir.vmessenger.core.common.network.TransportIds
@@ -248,7 +247,7 @@ class MessagingServiceConcurrencyTest {
     }
 
     private class FakeRelayDirectory : RelayDirectory {
-        override suspend fun activeRelay() = SelectedRelay("wss://relay.invalid/relay", RelaySource.DEFAULT)
+        override suspend fun activeRelay() = SelectedRelay("wss://relay.invalid/relay")
         override fun lastSelectedRelay(): SelectedRelay? = null
         override suspend fun reportResult(url: String, ok: Boolean) = Unit
     }

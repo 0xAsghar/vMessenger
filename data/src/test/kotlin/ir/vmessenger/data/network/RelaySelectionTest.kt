@@ -3,65 +3,64 @@ package ir.vmessenger.data.network
 import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.NodeAddressPolicy
 import ir.vmessenger.data.activity.testActivityLogger
+import ir.vmessenger.domain.model.NetworkNodeRole
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RelaySelectionTest {
-    private val default = "wss://relay.vmessenger.ir/relay"
+    private val repo = NetworkNodeRepository(FakeBootstrapNodeDao(), FakeRelayNodeDao(), testActivityLogger()) {
+        NodeAddressPolicy.RELEASE
+    }
+    private val directory = RelayDirectoryImpl(repo)
 
-    @Test
-    fun picksHealthiestRankedRelayFirst() {
-        val ranked = listOf("wss://node-a/relay", "wss://node-b/relay")
-        assertEquals("wss://node-a/relay", selectActiveRelay(ranked, default))
+    @After
+    fun reset() {
+        NetworkConfig.relayAddress = ""
+        NetworkConfig.rankedRelayUrls = emptyList()
     }
 
     @Test
-    fun fallsBackOnlyWhenAFallbackIsGiven() {
-        // The legacy single-node mode passes the built-in relay as the fallback...
-        assertEquals(default, selectActiveRelay(emptyList(), default))
-        // ...multi-node mode passes none: with every relay switched off there is no relay.
-        assertNull(selectActiveRelay(emptyList(), null))
-    }
-
-    @Test
-    fun switchingOffTheBuiltInRelayLeavesNoRelay() = runTest {
-        val relayDao = FakeRelayNodeDao()
-        val repo = NetworkNodeRepository(FakeBootstrapNodeDao(), relayDao, testActivityLogger()) {
-            NodeAddressPolicy.RELEASE
-        }
-        repo.seedDefaults()
-        val directory = RelayDirectoryImpl(repo)
-        assertEquals(NetworkConfig.DEFAULT_RELAY_URL, directory.activeRelay()?.url)
-
-        repo.setRelayEnabled(NetworkConfig.DEFAULT_RELAY_URL, enabled = false)
-        assertNull("the built-in relay must not come back as a fallback", directory.activeRelay())
+    fun anAppWithNoNodeHasNoRelayAndNoFallback() = runTest {
+        assertNull("the app ships no relay of its own", directory.activeRelay())
+        assertEquals("", NetworkConfig.relayAddress)
         assertTrue(NetworkConfig.relayFallbackEndpoints().isEmpty())
-
-        repo.addNode("wss://relay.example.org/relay", ir.vmessenger.domain.model.NetworkNodeRole.RELAY)
-        assertEquals("wss://relay.example.org/relay", directory.activeRelay()?.url)
     }
 
     @Test
-    fun communityRelayIgnoredWhenDisabled() = runTest {
-        val relayDao = FakeRelayNodeDao()
-        val repo = NetworkNodeRepository(FakeBootstrapNodeDao(), relayDao, testActivityLogger()) {
-            NodeAddressPolicy.RELEASE
-        }
-        repo.seedDefaults()
+    fun picksTheHealthiestRelayThatIsSwitchedOn() = runTest {
+        repo.addNode("wss://node-a.example/relay", NetworkNodeRole.RELAY)
+        repo.addNode("wss://node-b.example/relay", NetworkNodeRole.RELAY)
+        repeat(3) { repo.recordRelayResult("wss://node-a.example/relay", ok = false) }
+
+        assertEquals("wss://node-b.example/relay", directory.activeRelay()?.url)
+        assertEquals("wss://node-b.example/relay", NetworkConfig.relayAddress)
+    }
+
+    @Test
+    fun switchingTheOnlyRelayOffLeavesNone() = runTest {
+        repo.addNode("wss://relay.example.org/relay", NetworkNodeRole.RELAY)
+        assertEquals("wss://relay.example.org/relay", directory.activeRelay()?.url)
+
+        repo.setRelayEnabled("wss://relay.example.org/relay", enabled = false)
+        assertNull(directory.activeRelay())
+        assertTrue(NetworkConfig.relayFallbackEndpoints().isEmpty())
+    }
+
+    @Test
+    fun communityRelayIgnoredUntilSwitchedOn() = runTest {
+        repo.addNode("wss://relay.example.org/relay", NetworkNodeRole.RELAY)
         // A peer advertises a relay: stored as community/disabled, so it never becomes the active relay...
         repo.importExchangedNodes(emptyList(), listOf("wss://evil.example/relay"))
-        assertEquals(NetworkConfig.DEFAULT_RELAY_URL, selectActiveRelay(repo.enabledRelayUrls(), default))
-        // ...and one failure of the built-in relay does not switch either.
-        repo.recordRelayResult(NetworkConfig.DEFAULT_RELAY_URL, ok = false)
-        assertEquals(NetworkConfig.DEFAULT_RELAY_URL, selectActiveRelay(repo.enabledRelayUrls(), default))
-        // Only after the user enables it does it become a (lower-priority) candidate.
+        assertEquals("wss://relay.example.org/relay", directory.activeRelay()?.url)
+        // ...and one failure of the person's relay does not switch either.
+        repo.recordRelayResult("wss://relay.example.org/relay", ok = false)
+        assertEquals("wss://relay.example.org/relay", directory.activeRelay()?.url)
+        // Only after the person switches it on does it become a (lower-priority) candidate.
         repo.setRelayEnabled("wss://evil.example/relay", enabled = true)
-        assertEquals(
-            listOf(NetworkConfig.DEFAULT_RELAY_URL, "wss://evil.example/relay"),
-            repo.enabledRelayUrls(),
-        )
+        assertEquals(listOf("wss://relay.example.org/relay", "wss://evil.example/relay"), repo.enabledRelayUrls())
     }
 }

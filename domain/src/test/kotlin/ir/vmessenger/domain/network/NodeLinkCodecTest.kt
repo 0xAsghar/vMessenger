@@ -47,4 +47,39 @@ class NodeLinkCodecTest {
         assertEquals("vmnode:relay:$address", link)
         assertEquals(address, NodeLinkCodec.decode(link)?.address)
     }
+
+    @Test
+    fun aNodeAddressNamesItsOtherHalfOnTheSameHostPortAndPin() {
+        val pin = PIN
+        assertEquals(
+            NodeLink(NetworkNodeRole.BOOTSTRAP, "wss://node.example.org/dht"),
+            NodeLinkCodec.companionOf(NetworkNodeRole.RELAY, "wss://node.example.org/relay"),
+        )
+        assertEquals(
+            NodeLink(NetworkNodeRole.RELAY, "wss://203.0.113.10:8443/relay#pin-sha256=$pin"),
+            NodeLinkCodec.companionOf(NetworkNodeRole.BOOTSTRAP, "wss://203.0.113.10:8443/dht#pin-sha256=$pin"),
+        )
+    }
+
+    @Test
+    fun anAddressOnAnotherPathHasNoKnownOtherHalf() {
+        assertNull(NodeLinkCodec.companionOf(NetworkNodeRole.RELAY, "wss://node.example.org/custom"))
+        assertNull(NodeLinkCodec.companionOf(NetworkNodeRole.RELAY, "wss://node.example.org/dht"))
+        assertNull(NodeLinkCodec.companionOf(NetworkNodeRole.RELAY, "wss://node.example.org/relay?x=1"))
+        assertNull(NodeLinkCodec.companionOf(NetworkNodeRole.BOOTSTRAP, "10.0.2.2:46555"))
+    }
+
+    @Test
+    fun aPlainAddressNamesItsRoleByItsPath() {
+        assertEquals(NetworkNodeRole.BOOTSTRAP, NodeLinkCodec.roleOfPath("wss://node.example.org/dht"))
+        assertEquals(NetworkNodeRole.RELAY, NodeLinkCodec.roleOfPath("wss://node.example.org/relay#pin-sha256=$PIN"))
+        assertNull(NodeLinkCodec.roleOfPath("wss://node.example.org/custom"))
+        // A link's own role decides, even when its address says otherwise.
+        assertNull(NodeLinkCodec.roleOfPath("vmnode:relay:wss://node.example.org/dht"))
+        assertNull(NodeLinkCodec.roleOfPath("not an address"))
+    }
+
+    private companion object {
+        const val PIN = "601FQOh6ckV1-Qbw-9F3cGprfojLs5_j4Hkn7DPKFfc"
+    }
 }

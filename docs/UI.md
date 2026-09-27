@@ -558,10 +558,12 @@ host), [`ContactRequestOverlay`](../app/src/main/kotlin/ir/vmessenger/ui/contact
 (the inbound contact-request dialog, which must appear over whatever is on screen), and
 [`AppAlertBanner`](../app/src/main/kotlin/ir/vmessenger/ui/network/AppAlertBanner.kt) (one dismissible
 banner above the tabs, ranked rather than stacked: this identity is active on another device; the
-device clock is making the relay reject it or TLS validation fail; notifications are off).
+device clock is making the relay reject it or TLS validation fail; notifications are off; no node, no relay or
+no bootstrap node is switched on, with a button to Network nodes).
 [`NodeSetupRoute`](../app/src/main/kotlin/ir/vmessenger/ui/onboarding/NodeSetupRoute.kt) is the
-first-run node question, asked once before an identity exists (*Use the test nodes*, *Add node* for
-an address or `vmnode:` link, *Create a new node*, or *Skip for now* behind a warning); as it ends the
+first-run node question, asked once before an identity exists (*Add node* for an address or `vmnode:`
+link, which adds a vMessenger node's other half too, *Create a new node*, or *Skip for now* behind a
+warning; the app ships no node of its own); as it ends the
 app asks for the battery-optimisation exemption (`OnboardingPermissions.kt`).
 [`ShareTargetRoute`](../app/src/main/kotlin/ir/vmessenger/ui/share/ShareTargetRoute.kt) is where
 content shared from another app lands: a one-tap pick of an existing conversation.
@@ -649,7 +651,7 @@ about that:
 - `feature/debug/src/main/res/values-fa/strings.xml` contains only `<resources />`.
 
 Copy is authored in Persian in the default `values/` folder and in English in `values-en/`. Nothing in
-the gate compares the two folders or fails if a hardcoded literal slips in; at 2.0.2 every
+the gate compares the two folders or fails if a hardcoded literal slips in; at 2.2.2 every
 `values/` string file has the same names as its `values-en/` counterpart.
 
 ### 6.3 Known deviations
@@ -658,8 +660,8 @@ A grep for string literals inside composables and ViewModels finds the following
 hidden:
 
 - **`feature:debug` is partly English and unlocalised.** `DebugRoute.kt` hardcodes "Active network
-  path", "Diagnostics", "Last delivery path", "P2P migration flags", each of the eight flag labels
-  (`P1`, `P3`–`P9`), and "Reset P2P flags to defaults". This screen is developer-mode gated and
+  path", "Diagnostics", "Last delivery path", "P2P migration flags", each of the six flag labels
+  (`P3`–`P8`), and "Reset P2P flags to defaults". This screen is developer-mode gated and
   unreachable in a release build without the seven-tap unlock, so it is a deliberate exception rather
   than an oversight — but the module's other strings *are* in `strings.xml`, so the file is
   inconsistent with itself. The adb command it displays is legitimately untranslated.

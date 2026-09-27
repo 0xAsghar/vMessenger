@@ -13,8 +13,7 @@ enum class NetworkPath {
     UDP_ATTEMPT,
     CACHED_PEER,
     COMMUNITY_NODE,
-    USER_RELAY,
-    DEFAULT_RELAY,
+    RELAY,
     STORE_AND_FORWARD,
     UNKNOWN,
 }
@@ -65,6 +64,22 @@ enum class ListenerAlert {
      * key listeners by identity, so a backup restored elsewhere evicts this one.
      */
     IDENTITY_ELSEWHERE,
+
+    /**
+     * Neither a relay nor a bootstrap node is switched on. The app ships no node
+     * of its own since 2.2.2: a phone that has not added one — or whose upgrade
+     * removed the old test node — is here until the person adds one.
+     */
+    NO_NODE,
+
+    /** No relay is switched on, so this device listens on none and nothing reaches it. */
+    NO_RELAY,
+
+    /**
+     * No bootstrap node is switched on, so this device is not in the DHT: it can
+     * neither publish where it is nor look its contacts up.
+     */
+    NO_BOOTSTRAP,
 }
 
 data class NetworkPathEvent(
@@ -116,9 +131,20 @@ object NetworkPathTracker {
 
     private val _listenerAlert = MutableStateFlow(ListenerAlert.NONE)
 
+    @Volatile
+    private var relayMissing = false
+
+    @Volatile
+    private var bootstrapMissing = false
+
+    private val NODE_ALERTS = setOf(ListenerAlert.NO_NODE, ListenerAlert.NO_RELAY, ListenerAlert.NO_BOOTSTRAP)
+
+    /** Alerts a clock or identity hint must not replace (see [raise], [settleNodeAlert]). */
+    private val OUTRANKING = setOf(ListenerAlert.IDENTITY_ELSEWHERE, ListenerAlert.NO_NODE, ListenerAlert.NO_RELAY)
+
     /**
      * The reachability fault the UI should be showing right now, or
-     * [ListenerAlert.NONE]. See [ListenerAlert] for why only these three qualify.
+     * [ListenerAlert.NONE]. See [ListenerAlert] for why only these qualify.
      */
     val listenerAlert: StateFlow<ListenerAlert> = _listenerAlert
 
@@ -229,9 +255,7 @@ object NetworkPathTracker {
      * not stop this device from dialling anywhere.
      */
     fun reportConnectionSuccess() {
-        if (_listenerAlert.value == ListenerAlert.CLOCK_CERTIFICATE) {
-            _listenerAlert.value = ListenerAlert.NONE
-        }
+        if (_listenerAlert.value == ListenerAlert.CLOCK_CERTIFICATE) settle()
     }
 
     /**
@@ -241,9 +265,7 @@ object NetworkPathTracker {
      * other device has taken the slot.
      */
     fun reportListenerAccepted() {
-        if (_listenerAlert.value != ListenerAlert.NONE) {
-            _listenerAlert.value = ListenerAlert.NONE
-        }
+        if (_listenerAlert.value != ListenerAlert.NONE) settle()
     }
 
     /**
@@ -257,6 +279,18 @@ object NetworkPathTracker {
         }
     }
 
+    /** The listener found no relay switched on ([missing]), or chose one. */
+    fun reportRelayMissing(missing: Boolean) {
+        relayMissing = missing
+        settleNodeAlert()
+    }
+
+    /** Joining the DHT found no bootstrap node switched on ([missing]), or found one. */
+    fun reportBootstrapMissing(missing: Boolean) {
+        bootstrapMissing = missing
+        settleNodeAlert()
+    }
+
     /** Another device installed a listener for this identity and took the slot. */
     fun reportListenerReplaced() {
         _listenerAlert.value = ListenerAlert.IDENTITY_ELSEWHERE
@@ -268,9 +302,39 @@ object NetworkPathTracker {
      * and sending the user off to check their clock would waste their time.
      */
     private fun raise(alert: ListenerAlert) {
-        if (_listenerAlert.value != ListenerAlert.IDENTITY_ELSEWHERE) {
+        if (_listenerAlert.value !in OUTRANKING) {
             _listenerAlert.value = alert
         }
+    }
+
+    /**
+     * Shows the missing-node alert the two flags call for, or clears one that no longer applies. Without
+     * a relay there is no listener slot to lose and no proof for a clock to spoil, so [ListenerAlert.NO_NODE]
+     * and [ListenerAlert.NO_RELAY] outrank everything; a missing bootstrap node alone yields to the others,
+     * and comes back when they clear ([settle]).
+     */
+    private fun settleNodeAlert() {
+        val nodeAlert = nodeAlert()
+        val current = _listenerAlert.value
+        when {
+            nodeAlert == ListenerAlert.NO_NODE || nodeAlert == ListenerAlert.NO_RELAY ->
+                _listenerAlert.value = nodeAlert
+            nodeAlert == ListenerAlert.NO_BOOTSTRAP && current in NODE_ALERTS + ListenerAlert.NONE ->
+                _listenerAlert.value = nodeAlert
+            nodeAlert == null && current in NODE_ALERTS -> _listenerAlert.value = ListenerAlert.NONE
+        }
+    }
+
+    private fun nodeAlert(): ListenerAlert? = when {
+        relayMissing && bootstrapMissing -> ListenerAlert.NO_NODE
+        relayMissing -> ListenerAlert.NO_RELAY
+        bootstrapMissing -> ListenerAlert.NO_BOOTSTRAP
+        else -> null
+    }
+
+    /** A cleared alert gives way to a missing node, if one is still missing. */
+    private fun settle() {
+        _listenerAlert.value = nodeAlert() ?: ListenerAlert.NONE
     }
 
     fun clear() {
@@ -278,6 +342,8 @@ object NetworkPathTracker {
         _lastPath.value = null
         _attempts.value = emptyList()
         _snapshot.value = NetworkDiagnosticsSnapshot()
+        relayMissing = false
+        bootstrapMissing = false
         _listenerAlert.value = ListenerAlert.NONE
     }
 

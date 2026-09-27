@@ -1,5 +1,6 @@
 package ir.vmessenger.domain.network
 
+import ir.vmessenger.core.common.network.NodeUrl
 import ir.vmessenger.domain.model.NetworkNodeRole
 
 data class NodeLink(
@@ -30,6 +31,35 @@ object NodeLinkCodec {
         val address = rest.substring(sep + 1).trim()
         if (address.isBlank()) return null
         return NodeLink(role = role, address = address)
+    }
+
+    /**
+     * The other half of a vMessenger node. Every node serves its DHT at `/dht` and its relay at
+     * `/relay` on one host, port and key, so either address names both. Null for an address on any
+     * other path: a node run some other way, whose other half the person adds by hand.
+     */
+    fun companionOf(role: NetworkNodeRole, address: String): NodeLink? {
+        val other = when (role) {
+            NetworkNodeRole.BOOTSTRAP -> NetworkNodeRole.RELAY
+            NetworkNodeRole.RELAY -> NetworkNodeRole.BOOTSTRAP
+        }
+        return NodeUrl.parse(address)
+            ?.takeIf { it.query == null && it.path == role.path() }
+            ?.let { NodeLink(role = other, address = it.withPath(other.path())) }
+    }
+
+    /**
+     * The role a plain address names by its path: `/dht` a bootstrap node, `/relay` a relay. Null for
+     * a `vmnode:` link (its own role decides) and for any other path.
+     */
+    fun roleOfPath(input: String): NetworkNodeRole? =
+        NodeUrl.parse(input)?.takeIf { decode(input) == null }?.path?.let { path ->
+            NetworkNodeRole.entries.firstOrNull { it.path() == path }
+        }
+
+    private fun NetworkNodeRole.path(): String = when (this) {
+        NetworkNodeRole.BOOTSTRAP -> "/dht"
+        NetworkNodeRole.RELAY -> "/relay"
     }
 
     private fun NetworkNodeRole.wire(): String = when (this) {

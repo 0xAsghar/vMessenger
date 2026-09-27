@@ -19,16 +19,13 @@ import javax.inject.Inject
 enum class NodeSetupStep { Choose, AddNode }
 
 /**
- * The node question, asked once before an identity exists.
- *
- * Choosing the test nodes records nothing but the choice: the built-in nodes are seeded by the
- * network join, as they always were, and only [NodeSetupChoice.Skipped] suppresses that. So "use
- * test nodes" and "skip" differ in exactly one stored value rather than in two seeding paths.
+ * The node question, asked once before an identity exists. The app ships no node of its own, so the
+ * answers are the person's node (an address, or one set up with New node) or none for now.
  */
 @HiltViewModel
 class NodeSetupViewModel @Inject constructor(
     private val nodeSetupPreferences: NodeSetupPreferences,
-    private val addNetworkNode: AddNetworkNodeUseCase,
+    private val addNode: AddNetworkNodeUseCase,
 ) : ViewModel() {
     private val _step = MutableStateFlow(NodeSetupStep.Choose)
     val step: StateFlow<NodeSetupStep> = _step.asStateFlow()
@@ -44,8 +41,6 @@ class NodeSetupViewModel @Inject constructor(
         _step.value = step
     }
 
-    fun onUseTestNodes(onDone: () -> Unit) = record(NodeSetupChoice.TestNodes, onDone)
-
     /** The New node wizard set a node up and added it. */
     fun onProvisioned(onDone: () -> Unit) = record(NodeSetupChoice.Custom, onDone)
 
@@ -55,12 +50,13 @@ class NodeSetupViewModel @Inject constructor(
     /**
      * Registers the address the user typed. A relay is assumed when the input carries no role of
      * its own: it is the node kind an install cannot do without, and a `vmnode:` link overrides it.
+     * A vMessenger node's other half (its `/dht` for a `/relay`, and back) is added with it.
      */
     fun onSubmitAddress(input: String, onDone: () -> Unit) {
         if (_busy.value || input.isBlank()) return
         _busy.value = true
         viewModelScope.launch {
-            when (val result = addNetworkNode(input.trim(), NetworkNodeRole.RELAY)) {
+            when (val result = addNode(input.trim(), NetworkNodeRole.RELAY)) {
                 is AppResult.Success -> record(NodeSetupChoice.Custom, onDone)
                 is AppResult.Error -> {
                     _error.value = result.error

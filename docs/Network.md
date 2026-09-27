@@ -201,14 +201,15 @@ is the one parser; the grammar is in [Protocol.md](Protocol.md) §19.
 - **One row per location.** Stored addresses are canonical (`NodeUrl.canonical`), and a location
   (`NodeUrl.locationKey`) has one row. An address the person adds with a new pin replaces that row and
   resets its health; imports from peers, the DHT or signed records never change a stored location's
-  pin; a backup restore (`NodeAddMode.KeepExisting`) keeps the row that is here. The Nodes screen shows
+  pin; a backup restore, or the other half of a node the person added (`NodeAddMode.KeepExisting`), keeps
+  a row the person or the operator vouched for, and replaces only a disabled hint learned from the network. The Nodes screen shows
   the address without its pin, left to right, and a «کلید سنجاق‌شده» / "Pinned key" badge.
 - **The published relay follows the listener.** The listener picks its relay afresh on every
   reconnect, and exposes the one it is on (`RelayListener.connectedRelay`); whenever that differs from
   the relay the endpoint record names, `NetworkCoordinator` publishes again and re-arms the announcer.
   Adding, enabling, disabling or removing a relay reconnects the listener at once (`RelayControl`).
   When every relay is failing, ranking tries the one that failed longest ago first, so a broken
-  user-added relay cannot hold the listener while a working default waits (`NodeRanking`).
+  relay cannot hold the listener while another, working relay waits (`NodeRanking`).
 - **Bounded.** Unpinned, untargeted sockets (most DHT requests) use the base client; pinned or
   targeted variants are kept in a 32-entry LRU, since their addresses can come from DHT peers. The
   shared dispatcher is uncapped: an open WebSocket holds its call for its whole life.
@@ -231,7 +232,7 @@ flowchart TD
 Selection policy:
 
 - Prefer the already-open session to the peer (session reuse).
-- Order by transport: direct `INTERNET` first, then `RELAY`; a transport `EndpointOrder` does not know is tried after the relay. With `P2PConfig.reduceDefaultRelayEnabled` (off by default) the built-in relay is tried after any other relay.
+- Order by transport: direct `INTERNET` first, then `RELAY`; a transport `EndpointOrder` does not know is tried after the relay.
 - On failure, fall back to the next candidate endpoint. A protocol-version or pinned-key failure stops the fallback, since every endpoint would give the same answer.
 - Future: prefer local/offline transports (Bluetooth/Wi-Fi Direct in the same room) and lower power and cost. Nothing ranks by cost, latency or power today.
 
@@ -244,9 +245,10 @@ Two transports are registered: `InternetTransport` (direct TCP) and `RelayTransp
 - Reliable, ordered byte stream over TCP, carrying length-delimited frames (see [Protocol.md](Protocol.md)). TLS-style transport encryption is unnecessary because every frame is already end-to-end encrypted; the Encryption layer authenticates the peer by identity key, which is stronger than CA-based TLS for this use case.
 - Listens on TCP port 48555 (`NetworkLifecycleService.DEFAULT_LISTEN_PORT`). A phone does not know an address others can reach it on, so a production build publishes only its relay endpoint; a direct `INTERNET` endpoint (`10.0.2.2:<forward port>`) is published only in the emulator dev setup ([Testing.md](Testing.md)). Voice calls exchange direct addresses in their own signalling and use their own media path ([Protocol.md](Protocol.md) §17 and §18).
 - Connection reuse: an established connection is cached per peer and reused for subsequent messages and location packets.
-- **Direct-first, relay-fallback:** the app tries direct `INTERNET` before `RELAY`. The relay — the first enabled one in **Network nodes**, built in `wss://relay.vmessenger.ir/relay` — bridges opaque E2E-encrypted frames when there is no direct path and never decrypts them. With every relay switched off there is none: since 2.0.2 the built-in relay is no longer used as a fallback, and only a direct path works ([DHT.md](DHT.md) §4.1). There are no UDP candidates: `UdpTransport` is not registered and nothing publishes a UDP endpoint, so `P2PConfig.natTraversalEnabled` (off by default) only changes how one would be ranked.
-- **Runtime flags (`core/common/.../network/P2PConfig.kt`):** endpoint resolution is cache-first, multiple bootstrap/relay nodes are health-ranked, and store-and-forward through approved contacts' mailboxes is on — all on by default. Peer exchange, embedded DHT participation, relay-peer mode, UDP attempts and default-relay demotion (`reduceDefaultRelayEnabled`) default to **false**; they are reachable code, not proven paths. See the "Known limitations" section of the [README](../README.md).
-- DHT bootstrap and store/find use `wss://relay.vmessenger.ir/dht` through Arvan CDN + nginx TLS.
+- **Direct-first, relay-fallback:** the app tries direct `INTERNET` before `RELAY`. The relay — the first enabled one in **Network nodes**, always one the person added — bridges opaque E2E-encrypted frames when there is no direct path and never decrypts them. The app has no relay of its own: with every relay switched off there is none, only a direct path works, and the home screen says no node is switched on ([DHT.md](DHT.md) §4.1). There are no UDP candidates: `UdpTransport` is not registered and nothing publishes a UDP endpoint, so `P2PConfig.natTraversalEnabled` (off by default) only changes how one would be ranked.
+- **Runtime flags (`core/common/.../network/P2PConfig.kt`):** cache-first endpoint resolution and store-and-forward through approved contacts' mailboxes are on by default. Peer exchange, embedded DHT participation, relay-peer mode and UDP attempts default to **false**; they are reachable code, not proven paths. See the "Known limitations" section of the [README](../README.md).
+- Bootstrap and relay nodes are health-ranked (`NodeRanking`), always; the multi-node flag that could turn that off went with the built-in node in 2.2.2.
+- DHT bootstrap and store/find use the enabled bootstrap nodes' `wss://<host>/dht`, TLS at nginx.
 - Local emulator dev can use raw TCP bootstrap (`10.0.2.2:46555`) via `NetworkConfig.useDevBootstrap`.
 - There is no NAT traversal: a `UdpTransport` class exists but is not registered, TCP endpoints are no longer mirrored as UDP candidates (`EndpointResolveService`), and there is no STUN/ICE candidate gathering, no hole punching and no connectivity checks. Full Kademlia routing and replication are likewise not implemented.
 

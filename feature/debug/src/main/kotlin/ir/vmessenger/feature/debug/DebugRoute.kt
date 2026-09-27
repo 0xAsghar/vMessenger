@@ -173,8 +173,6 @@ private fun DebugP2PFlagsSection(
     onResetFlags: () -> Unit,
 ) {
     SettingsSection(title = "P2P migration flags") {
-        DebugFlagRow("Multiple nodes (P1)", flags.multiNode) { onFlagChange(P2PFlag.MULTI_NODE, it) }
-        SettingsDivider()
         DebugFlagRow("Peer cache (P3)", flags.peerCache) { onFlagChange(P2PFlag.PEER_CACHE, it) }
         SettingsDivider()
         DebugFlagRow("Peer exchange (P4)", flags.peerExchange) { onFlagChange(P2PFlag.PEER_EXCHANGE, it) }
@@ -191,10 +189,6 @@ private fun DebugP2PFlagsSection(
         SettingsDivider()
         DebugFlagRow("Store & forward (P8)", flags.storeAndForward) {
             onFlagChange(P2PFlag.STORE_AND_FORWARD, it)
-        }
-        SettingsDivider()
-        DebugFlagRow("Demote default relay (P9)", flags.reduceDefaultRelay) {
-            onFlagChange(P2PFlag.REDUCE_DEFAULT_RELAY, it)
         }
         SettingsDivider()
         VmTextButton(

@@ -256,9 +256,10 @@ class MinimalDht @Inject constructor(
 
 /**
  * Maps a DHT node address to something the RPC client may dial: WebSocket URLs
- * the [policy] admits (release: `wss://` only), the official relay's DHT
- * endpoint, the emulator dev bootstrap, or an address the user explicitly
- * enabled as a bootstrap node ([trusted], already policy-checked when stored).
+ * the [policy] admits (release: `wss://` only), the emulator dev bootstrap, or
+ * an address the user explicitly enabled as a bootstrap node ([trusted], already
+ * policy-checked when stored). The legacy `relay.vmessenger.ir:8443` alias for
+ * the old built-in node was dropped with it in 2.2.2.
  * Anything else a peer or node hands us is ignored so the network cannot steer
  * us to arbitrary hosts.
  */
@@ -270,7 +271,6 @@ internal fun normalizeDhtRpcAddress(
     address in trusted -> address
     isWebSocketUrl(address) ->
         address.takeIf { policy.isBootstrapAllowed(it) }
-    address == "${NetworkConfig.RELAY_HOST}:8443" -> NetworkConfig.DEFAULT_DHT_URL
     address == NetworkConfig.DEV_BOOTSTRAP_ADDRESS -> address
     else -> null
 }

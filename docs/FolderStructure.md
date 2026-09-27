@@ -193,7 +193,7 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 - Depends on: `network:bootstrap`, `core:crypto`, `core:proto`, `core:common`, `core:database` (the embedded node's record store). Its build file also declares `network:transport`, which it does not use.
 
 ### network:bootstrap
-- The `BootstrapProvider` contract, the `BootstrapNode` value type, `BuiltInBootstrapProvider` (the single shipped default) and `BootstrapManager`, which merges every provider by descending priority and de-duplicates by address. The database-backed provider that supplies user, imported and community nodes lives in `data` because it needs the node repository. See [DHT.md](DHT.md) Section 4.1.
+- The `BootstrapProvider` contract, the `BootstrapNode` value type, `DevBootstrapProvider` (a debug build's emulator bootstrap only; the app ships no node) and `BootstrapManager`, which merges every provider by descending priority and de-duplicates by address. The database-backed provider that supplies user, imported and community nodes lives in `data` because it needs the node repository. See [DHT.md](DHT.md) Section 4.1.
 - Depends on: `core:common` (its build file also declares `core:crypto` and `core:proto`, which it does not use).
 
 ### network:transport

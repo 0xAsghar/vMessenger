@@ -1,33 +1,21 @@
 package ir.vmessenger.network.messaging
 
 import ir.vmessenger.core.common.network.Endpoint
-import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.P2PConfig
 import ir.vmessenger.core.common.network.TransportIds
 
 /**
- * Orders peer endpoints according to the Phase 9 preference stack while keeping
- * the default relay available as a last resort when [P2PConfig.reduceDefaultRelayEnabled].
+ * Orders peer endpoints by transport: a direct address first, then UDP (only while UDP attempts are
+ * on), then relays, then anything unknown. The sort is stable, so relays keep the order they were
+ * given in. There is no default relay to demote since 2.2.2 removed the built-in node.
  */
 object EndpointOrder {
-    fun order(endpoints: List<Endpoint>): List<Endpoint> =
-        endpoints.sortedWith(
-            compareBy(
-                { transportRank(it) },
-                { relayDemotionRank(it) },
-            ),
-        )
+    fun order(endpoints: List<Endpoint>): List<Endpoint> = endpoints.sortedBy { transportRank(it) }
 
     private fun transportRank(endpoint: Endpoint): Int = when (endpoint.transport) {
         TransportIds.INTERNET -> 0
         TransportIds.UDP -> if (P2PConfig.natTraversalEnabled) 1 else 99
         TransportIds.RELAY -> 2
         else -> 3
-    }
-
-    private fun relayDemotionRank(endpoint: Endpoint): Int {
-        if (endpoint.transport != TransportIds.RELAY) return 0
-        if (!P2PConfig.reduceDefaultRelayEnabled) return 0
-        return if (endpoint.address == NetworkConfig.DEFAULT_RELAY_URL) 1 else 0
     }
 }

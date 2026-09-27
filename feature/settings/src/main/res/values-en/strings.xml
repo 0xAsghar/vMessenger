@@ -62,7 +62,8 @@
     <string name="nodes_copy_code">Copy</string>
     <string name="nodes_bootstrap_section">Bootstrap nodes</string>
     <string name="nodes_relay_section">Relay nodes</string>
-    <string name="nodes_empty">No nodes</string>
+    <string name="nodes_bootstrap_empty">No bootstrap node. Without one, contacts on other nodes cannot find you.</string>
+    <string name="nodes_relay_empty">No relay node. Without one, no message reaches you.</string>
     <string name="nodes_add_title">Add node</string>
     <string name="nodes_add_hint">vmnode link or node address</string>
     <string name="nodes_scan_action">Scan QR code</string>
@@ -79,7 +80,6 @@
     <string name="nodes_share_title">Share node</string>
     <string name="nodes_copy_link">Copy link</string>
     <string name="nodes_close">Close</string>
-    <string name="nodes_builtin">Default</string>
     <string name="nodes_pinned">Pinned key</string>
     <string name="nodes_health_ok">Connected recently</string>
     <string name="nodes_health_fail">Connection error</string>

@@ -100,8 +100,9 @@ constructor(
         }
     }
 
+    // A node with no public host set advertises no address of its own, rather than one no phone can reach.
     private fun knownNodes(): List<DhtNodeInfo> =
-        listOf(nodeInfo(nodeId, advertisedAddress)) +
+        listOfNotNull(advertisedAddress.takeIf { it.isNotBlank() }?.let { nodeInfo(nodeId, it) }) +
             peerNodes.map { address -> nodeInfo(sha256(address.toByteArray(Charsets.UTF_8)), address) }
 
     private fun nodeInfo(id: ByteArray, address: String): DhtNodeInfo =

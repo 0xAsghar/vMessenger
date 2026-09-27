@@ -21,7 +21,7 @@ class NetworkPathTrackerTest {
 
     @Test
     fun lastPathReflectsMostRecentEvent() {
-        NetworkPathTracker.record(NetworkPath.DEFAULT_RELAY, "relay", atUnixMs = 1)
+        NetworkPathTracker.record(NetworkPath.RELAY, "relay", atUnixMs = 1)
         NetworkPathTracker.record(NetworkPath.DIRECT, "1.2.3.4:9", atUnixMs = 2)
 
         val last = NetworkPathTracker.lastPath.value
@@ -42,7 +42,7 @@ class NetworkPathTrackerTest {
 
     @Test
     fun clearResetsState() {
-        NetworkPathTracker.record(NetworkPath.USER_RELAY, "x")
+        NetworkPathTracker.record(NetworkPath.RELAY, "x")
         NetworkPathTracker.clear()
         assertNull(NetworkPathTracker.lastPath.value)
         assertEquals(0, NetworkPathTracker.events.value.size)
@@ -117,6 +117,39 @@ class NetworkPathTrackerTest {
         assertEquals(ListenerAlert.IDENTITY_ELSEWHERE, NetworkPathTracker.listenerAlert.value)
 
         NetworkPathTracker.reportListenerAccepted()
+        assertEquals(ListenerAlert.NONE, NetworkPathTracker.listenerAlert.value)
+    }
+
+    @Test
+    fun aMissingNodeIsNamedByWhatIsMissing() {
+        NetworkPathTracker.reportBootstrapMissing(true)
+        assertEquals(ListenerAlert.NO_BOOTSTRAP, NetworkPathTracker.listenerAlert.value)
+        NetworkPathTracker.reportRelayMissing(true)
+        assertEquals(ListenerAlert.NO_NODE, NetworkPathTracker.listenerAlert.value)
+        NetworkPathTracker.reportBootstrapMissing(false)
+        assertEquals(ListenerAlert.NO_RELAY, NetworkPathTracker.listenerAlert.value)
+        NetworkPathTracker.reportRelayMissing(false)
+        assertEquals(ListenerAlert.NONE, NetworkPathTracker.listenerAlert.value)
+    }
+
+    @Test
+    fun withNoRelayThereIsNoSlotToLoseSoTheNodeAlertOutranksTheTakeover() {
+        NetworkPathTracker.reportListenerReplaced()
+        NetworkPathTracker.reportRelayMissing(true)
+        assertEquals(ListenerAlert.NO_RELAY, NetworkPathTracker.listenerAlert.value)
+        // Nothing listens, so no clock hint can replace it either.
+        NetworkPathTracker.reportListenerRejected(RelayRejection.STALE_LISTENER_PROOF)
+        assertEquals(ListenerAlert.NO_RELAY, NetworkPathTracker.listenerAlert.value)
+    }
+
+    @Test
+    fun aMissingBootstrapNodeYieldsToAClockHintAndComesBackAfterIt() {
+        NetworkPathTracker.reportBootstrapMissing(true)
+        NetworkPathTracker.reportListenerRejected(RelayRejection.STALE_LISTENER_PROOF)
+        assertEquals(ListenerAlert.CLOCK_SKEW, NetworkPathTracker.listenerAlert.value)
+        NetworkPathTracker.reportListenerAccepted()
+        assertEquals(ListenerAlert.NO_BOOTSTRAP, NetworkPathTracker.listenerAlert.value)
+        NetworkPathTracker.clear()
         assertEquals(ListenerAlert.NONE, NetworkPathTracker.listenerAlert.value)
     }
 }

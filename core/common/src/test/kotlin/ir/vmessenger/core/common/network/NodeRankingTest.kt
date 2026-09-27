@@ -15,33 +15,33 @@ class NodeRankingTest {
         NodeRanking.rank(nodes.toList()) { it.key }.map { it.address }
 
     @Test
-    fun builtInNotDisplacedByOneFailure() {
-        val builtIn = node("wss://relay.vmessenger.ir/relay", NodeRanking.PRIORITY_BUILT_IN, failCount = 1)
+    fun officialNotDisplacedByOneFailure() {
+        val official = node("wss://official.example/relay", NodeRanking.PRIORITY_OFFICIAL, failCount = 1)
         val community = node("wss://community.example/relay", NodeRanking.PRIORITY_COMMUNITY, lastOk = 1_000L)
-        assertEquals(listOf(builtIn.address, community.address), rank(community, builtIn))
+        assertEquals(listOf(official.address, community.address), rank(community, official))
         // Two failures still keep it in the healthy bucket.
-        val twoFailures = builtIn.copy(key = builtIn.key.copy(failCount = 2))
-        assertEquals(listOf(builtIn.address, community.address), rank(community, twoFailures))
+        val twoFailures = official.copy(key = official.key.copy(failCount = 2))
+        assertEquals(listOf(official.address, community.address), rank(community, twoFailures))
     }
 
     @Test
     fun threeFailuresDemote() {
-        val builtIn = node("wss://relay.vmessenger.ir/relay", NodeRanking.PRIORITY_BUILT_IN, failCount = 3)
+        val official = node("wss://official.example/relay", NodeRanking.PRIORITY_OFFICIAL, failCount = 3)
         val community = node("wss://community.example/relay", NodeRanking.PRIORITY_COMMUNITY)
-        assertEquals(listOf(community.address, builtIn.address), rank(builtIn, community))
-        // markOk resets failCount and the built-in relay comes back on top.
-        val recovered = builtIn.copy(key = builtIn.key.copy(failCount = 0, lastOkUnixMs = 5_000L))
-        assertEquals(listOf(builtIn.address, community.address), rank(community, recovered))
+        assertEquals(listOf(community.address, official.address), rank(official, community))
+        // markOk resets failCount and the official relay comes back on top.
+        val recovered = official.copy(key = official.key.copy(failCount = 0, lastOkUnixMs = 5_000L))
+        assertEquals(listOf(official.address, community.address), rank(community, recovered))
     }
 
     @Test
-    fun userNodeOutranksBuiltIn() {
-        val builtIn = node("wss://relay.vmessenger.ir/relay", NodeRanking.PRIORITY_BUILT_IN, lastOk = 9_000L)
+    fun userNodeOutranksOfficial() {
+        val official = node("wss://official.example/relay", NodeRanking.PRIORITY_OFFICIAL, lastOk = 9_000L)
         val user = node("wss://my.example/relay", NodeRanking.PRIORITY_USER)
-        assertEquals(listOf(user.address, builtIn.address), rank(builtIn, user))
-        // ...but an unhealthy user node drops behind a healthy built-in one.
+        assertEquals(listOf(user.address, official.address), rank(official, user))
+        // ...but an unhealthy user node drops behind a healthy official one.
         val brokenUser = user.copy(key = user.key.copy(failCount = NodeRanking.UNHEALTHY_FAIL_COUNT))
-        assertEquals(listOf(builtIn.address, user.address), rank(brokenUser, builtIn))
+        assertEquals(listOf(official.address, user.address), rank(brokenUser, official))
     }
 
     @Test
@@ -56,22 +56,23 @@ class NodeRankingTest {
     @Test
     fun communityNeverAutoEnabled() {
         assertFalse(NodeRanking.autoEnabled(NodeTrust.COMMUNITY))
-        assertTrue(NodeRanking.autoEnabled(NodeTrust.BUILT_IN))
         assertTrue(NodeRanking.autoEnabled(NodeTrust.USER))
         assertTrue(NodeRanking.autoEnabled(NodeTrust.OFFICIAL))
         assertEquals(NodeRanking.PRIORITY_COMMUNITY, NodeRanking.defaultPriority(NodeTrust.COMMUNITY))
         assertEquals(NodeRanking.PRIORITY_USER, NodeRanking.defaultPriority(NodeTrust.USER))
-        assertEquals(NodeRanking.PRIORITY_BUILT_IN, NodeRanking.defaultPriority(NodeTrust.BUILT_IN))
+        assertEquals(NodeRanking.PRIORITY_OFFICIAL, NodeRanking.defaultPriority(NodeTrust.OFFICIAL))
         assertEquals(NodeTrust.COMMUNITY, NodeTrust.fromName("garbage"))
+        // A test-node row from 2.0.x, had one survived schema 26, would read as a community node.
+        assertEquals(NodeTrust.COMMUNITY, NodeTrust.fromName("BUILT_IN"))
     }
 
     @Test
     fun whenAllAreFailingTheOneThatFailedLongestAgoGoesFirst() {
         val brokenUser = NodeRankKey(NodeRanking.PRIORITY_USER, 7, lastOkUnixMs = null, lastFailUnixMs = 2_000)
-        val staleDefault = NodeRankKey(NodeRanking.PRIORITY_BUILT_IN, 10, lastOkUnixMs = 1, lastFailUnixMs = 1_000)
-        assertEquals(listOf(staleDefault, brokenUser), NodeRanking.rankKeys(listOf(brokenUser, staleDefault)))
-        // Once the default fails too, the user relay gets its turn again.
-        val justFailedDefault = staleDefault.copy(lastFailUnixMs = 3_000)
-        assertEquals(listOf(brokenUser, justFailedDefault), NodeRanking.rankKeys(listOf(brokenUser, justFailedDefault)))
+        val staleOfficial = NodeRankKey(NodeRanking.PRIORITY_OFFICIAL, 10, lastOkUnixMs = 1, lastFailUnixMs = 1_000)
+        assertEquals(listOf(staleOfficial, brokenUser), NodeRanking.rankKeys(listOf(brokenUser, staleOfficial)))
+        // Once the official relay fails too, the user relay gets its turn again.
+        val justFailed = staleOfficial.copy(lastFailUnixMs = 3_000)
+        assertEquals(listOf(brokenUser, justFailed), NodeRanking.rankKeys(listOf(brokenUser, justFailed)))
     }
 }

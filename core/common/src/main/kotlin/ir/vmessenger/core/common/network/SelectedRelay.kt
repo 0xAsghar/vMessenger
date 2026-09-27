@@ -1,16 +1,9 @@
 package ir.vmessenger.core.common.network
 
 /**
- * Result of selecting which relay URL to publish on and listen through.
+ * The relay chosen to publish on and listen through: the healthiest one switched on in the node list.
+ * There is no other kind since 2.2.2, which removed the built-in default relay.
  */
 data class SelectedRelay(
     val url: String,
-    val source: RelaySource,
 )
-
-enum class RelaySource {
-    /** Health-ranked relay from the user's node list. */
-    RANKED,
-    /** Built-in default relay fallback. */
-    DEFAULT,
-}

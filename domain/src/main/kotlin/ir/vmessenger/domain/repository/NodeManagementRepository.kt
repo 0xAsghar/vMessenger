@@ -38,6 +38,9 @@ enum class NodeAddMode {
     /** The person added it: their address replaces the stored one — a node's new key, or a fix. */
     ReplaceByLocation,
 
-    /** A backup being restored: what is stored now is newer than the backup, so it stays. */
+    /**
+     * A backup being restored, or a node's other half derived from the address the person gave: a row
+     * the person or the operator vouched for stays. A disabled hint learned from the network is replaced.
+     */
     KeepExisting,
 }

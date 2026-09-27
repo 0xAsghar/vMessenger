@@ -62,7 +62,8 @@
     <string name="nodes_copy_code">کپی</string>
     <string name="nodes_bootstrap_section">گره‌های بوت‌استرپ</string>
     <string name="nodes_relay_section">گره‌های رله</string>
-    <string name="nodes_empty">گره‌ای موجود نیست</string>
+    <string name="nodes_bootstrap_empty">گرهٔ بوت‌استرپی ندارید. بدون آن، مخاطبانی که روی گره‌های دیگرند شما را پیدا نمی‌کنند.</string>
+    <string name="nodes_relay_empty">گرهٔ رله‌ای ندارید. بدون آن، هیچ پیامی به شما نمی‌رسد.</string>
     <string name="nodes_add_title">افزودن گره</string>
     <string name="nodes_add_hint">لینک vmnode یا آدرس گره</string>
     <string name="nodes_scan_action">اسکن QR</string>
@@ -79,7 +80,6 @@
     <string name="nodes_share_title">اشتراک‌گذاری گره</string>
     <string name="nodes_copy_link">کپی لینک</string>
     <string name="nodes_close">بستن</string>
-    <string name="nodes_builtin">پیش‌فرض</string>
     <string name="nodes_pinned">کلید سنجاق‌شده</string>
     <string name="nodes_health_ok">اتصال موفق اخیر</string>
     <string name="nodes_health_fail">خطای اتصال</string>

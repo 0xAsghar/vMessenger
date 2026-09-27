@@ -24,15 +24,12 @@ class P2PConfigLoaderTest {
     @Test
     fun defaultsAgreeAcrossConfigPreferencesAndSnapshot() {
         val snapshot = P2PFlagSnapshot()
-        assertEquals(snapshot.multiNodeEnabled, P2PConfig.multiNodeEnabled)
         assertEquals(snapshot.peerCacheEnabled, P2PConfig.peerCacheEnabled)
         assertEquals(snapshot.peerExchangeEnabled, P2PConfig.peerExchangeEnabled)
         assertEquals(snapshot.dhtParticipationEnabled, P2PConfig.dhtParticipationEnabled)
         assertEquals(snapshot.relayPeerModeEnabled, P2PConfig.relayPeerModeEnabled)
         assertEquals(snapshot.natTraversalEnabled, P2PConfig.natTraversalEnabled)
         assertEquals(snapshot.storeAndForwardEnabled, P2PConfig.storeAndForwardEnabled)
-        assertEquals(snapshot.reduceDefaultRelayEnabled, P2PConfig.reduceDefaultRelayEnabled)
-        assertTrue(P2PConfig.multiNodeEnabled)
         assertTrue(P2PConfig.peerCacheEnabled)
         // On since 1.1, when the third-party half was wired; see P2PFlagDefaultsTest for why.
         assertTrue(P2PConfig.storeAndForwardEnabled)
@@ -40,15 +37,12 @@ class P2PConfigLoaderTest {
         assertFalse(P2PConfig.dhtParticipationEnabled)
         assertFalse(P2PConfig.relayPeerModeEnabled)
         assertFalse(P2PConfig.natTraversalEnabled)
-        assertFalse(P2PConfig.reduceDefaultRelayEnabled)
-        assertEquals(P2PPreferences.P2P_DEFAULT_MULTI_NODE, P2PConfig.DEFAULT_MULTI_NODE)
         assertEquals(P2PPreferences.P2P_DEFAULT_PEER_CACHE, P2PConfig.DEFAULT_PEER_CACHE)
         assertEquals(P2PPreferences.P2P_DEFAULT_PEER_EXCHANGE, P2PConfig.DEFAULT_PEER_EXCHANGE)
         assertEquals(P2PPreferences.P2P_DEFAULT_DHT, P2PConfig.DEFAULT_DHT_PARTICIPATION)
         assertEquals(P2PPreferences.P2P_DEFAULT_RELAY_PEER, P2PConfig.DEFAULT_RELAY_PEER_MODE)
         assertEquals(P2PPreferences.P2P_DEFAULT_NAT, P2PConfig.DEFAULT_NAT_TRAVERSAL)
         assertEquals(P2PPreferences.P2P_DEFAULT_STORE_FORWARD, P2PConfig.DEFAULT_STORE_AND_FORWARD)
-        assertEquals(P2PPreferences.P2P_DEFAULT_REDUCE_RELAY, P2PConfig.DEFAULT_REDUCE_DEFAULT_RELAY)
     }
 
     @Test
@@ -60,19 +54,17 @@ class P2PConfigLoaderTest {
 
     @Test
     fun snapshotRoundTripMatchesP2PConfig() {
-        P2PConfig.multiNodeEnabled = false
+        P2PConfig.peerExchangeEnabled = true
         P2PConfig.relayPeerModeEnabled = true
         val snapshot = P2PFlagSnapshot(
-            multiNodeEnabled = P2PConfig.multiNodeEnabled,
             peerCacheEnabled = P2PConfig.peerCacheEnabled,
             peerExchangeEnabled = P2PConfig.peerExchangeEnabled,
             dhtParticipationEnabled = P2PConfig.dhtParticipationEnabled,
             relayPeerModeEnabled = P2PConfig.relayPeerModeEnabled,
             natTraversalEnabled = P2PConfig.natTraversalEnabled,
             storeAndForwardEnabled = P2PConfig.storeAndForwardEnabled,
-            reduceDefaultRelayEnabled = P2PConfig.reduceDefaultRelayEnabled,
         )
-        assertEquals(false, snapshot.multiNodeEnabled)
+        assertEquals(true, snapshot.peerExchangeEnabled)
         assertEquals(true, snapshot.relayPeerModeEnabled)
     }
 }

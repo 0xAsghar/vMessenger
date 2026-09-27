@@ -24,7 +24,7 @@ Detekt is applied to every subproject from the root build with a shared config (
 
 ### Where the tests live
 
-163 test files across 21 modules:
+166 test files across 22 modules:
 
 | Module | Focus |
 |---|---|
@@ -35,9 +35,9 @@ Detekt is applied to every subproject from the root build with a shared config (
 | `:core:audio` | `JitterBuffer`, `OpusCodec` (voice calls) |
 | `:core:datastore`, `:core:designsystem` | preference defaults, DHT node id, theme mode; text direction, locale formatting, album rows, avatar seeds |
 | `:network:messaging` | `HandshakeTranscriptTest`, `SecureChannelFactoryTest`, `SymmetricRatchetTest`, `MessagingServiceFrameGuardTest`, `MessagingServiceKeyChangeTest`, `MessagingServiceConcurrencyTest`, `MessagingServiceProvisionalContactTest`, `FrameParserFuzzTest`, `RelayHelloProofInteropTest`, `RelayListenerTest`, `PeerRelayServiceTest`, `EndpointOrderingTest` |
-| `:network:dht`, `:network:discovery`, `:network:transport` | record verification, embedded-DHT routing, endpoint resolution, transport selection |
+| `:network:dht`, `:network:discovery`, `:network:transport`, `:network:bootstrap` | record verification, embedded-DHT routing, endpoint resolution, transport selection; `DevBootstrapProvider` (the developer bootstrap only) |
 | `:data` | inbound policy and collector, receipts, attachments, contact requests, mailbox seal/protocol, outbox error codes, relay selection vs. published endpoint, signature domain separation, backup, wipe plan, group control authority, per-recipient delivery and its aggregate; voice calls (state, media frames and session), location sharing and retention, message timers and group audit retention, the activity log export, the node repository and signed node records |
-| `:domain` | `NodeLinkCodec` (`vmnode:` links) |
+| `:domain` | `NodeLinkCodec` (`vmnode:` links, a node's other half, the role a path names), `AddNetworkNodeUseCase` (the other half with the same host, port and pin, a stored pin kept, one relay reselect) |
 | `:feature:identity` | display-name validation |
 | `:feature:chat`, `:feature:contacts`, `:feature:lock` | album grouping, chat-list rows, message timers, voice recording and playback; contact list state, location history; PIN entry |
 | `:feature:provision` | `ServerInputTest`: Persian digits, bidi marks and `user@host` normalised; shell-unsafe input refused; every `IssueCode` has words |
@@ -49,7 +49,7 @@ Two instrumented tests live in `app/src/androidTest` — `SwipeToGoBackTest` and
 
 ### Migrations are replayed on a real SQLite engine
 
-`core/database/src/test/.../migration/MigrationTest.kt` runs **every** migration 1 → 25 (the current schema) against an in-memory SQLite through `sqlite-jdbc`, and asserts what each step from 17 → 18 on produces: for 18 the re-keyed `outbox`, the dropped `session` table, the now-nullable `conversation.contactId`, the unique-per-group constraint and the new `message` columns; after it the edit, deletion, timer and album columns, group audit retention arriving off, the edit-history table (23), the activity log (24) and `managed_node` (25), which must hold no secret. `CascadeTest` beside it checks the foreign-key cascades.
+`core/database/src/test/.../migration/MigrationTest.kt` runs **every** migration 1 → 26 (the current schema) against an in-memory SQLite through `sqlite-jdbc`, and asserts what each step from 17 → 18 on produces: for 18 the re-keyed `outbox`, the dropped `session` table, the now-nullable `conversation.contactId`, the unique-per-group constraint and the new `message` columns; after it the edit, deletion, timer and album columns, group audit retention arriving off, the edit-history table (23), the activity log (24), `managed_node` (25), which must hold no secret, and the removal of the old test node's rows with every other node kept (26). `CascadeTest` beside it checks the foreign-key cascades.
 
 It needs no emulator and no Room. `JdbcSupportDatabase` builds a `SupportSQLiteDatabase` as a `java.lang.reflect.Proxy` that implements exactly one method — `execSQL` — and fails loudly on anything else; that is all a `Migration` ever calls, and it keeps the helper to a few lines instead of stubbing a ~50-method interface.
 
@@ -65,7 +65,7 @@ This exists because Room does not type-check migration SQL. Before this test, a 
 |---|---|
 | `core/proto` `V1WireCompatibilityTest` | 1.1.2's `.proto` files, copied verbatim from the `v1.1.2` tag into `src/test/resources/v1.1.2`, against the schema this build compiles: every field 1.1.2 knows keeps its number, type, cardinality and oneof, no number is removed unless reserved, no reserved number is reused, and every enum value 1.1.2 can send is still defined |
 | `core/proto` `V1WireRoundTripTest` | real bytes both ways, using 1.1.2's `messaging.proto` compiled under another package (`src/test/proto/v112`, kept identical to the released text but for its two package lines): a 1.1.2 message, file, receipt and group read intact and untimed; a timed message, an album image and a group with roles reach 1.1.2 as the message, image and group it knows; a call, a location request and a role change are nothing 1.1.2 can misread |
-| `core/database` `V1DatabaseUpgradeTest` | a database exactly as a fresh 1.1.2 install created it — from Room's own schema 20 (`schemas/…/20.json`), not rebuilt through the migration chain — with one fully filled row in every table, upgraded by 20 → 25: every row survives value for value, the result is exactly schema 25, and what 2.0 added reads as absent rather than zero |
+| `core/database` `V1DatabaseUpgradeTest` | a database exactly as a fresh 1.1.2 install created it — from Room's own schema 20 (`schemas/…/20.json`), not rebuilt through the migration chain — with one fully filled row in every table, upgraded by 20 → 26: every row survives value for value (the test node's rows aside, which 26 deletes), the result is exactly schema 26, and what 2.0 added reads as absent rather than zero |
 | `data` `V1PeerCompatibilityTest` | what 2.0 does with it: a 1.1.2 message is kept and no expiry sweep takes it; a group created on 1.1.2 arrives with plain members and audit retention off |
 | `core/common` `UserHashEncoderTest` | a `vm2-` ID, as 1.1.2 wrote them, still decodes to the same identity |
 
@@ -228,7 +228,7 @@ adb -s emulator-5556 forward tcp:48666 tcp:48555         # device B
 adb install -r -g app/build/outputs/apk/debug/app-arm64-v8a-debug.apk   # ABI splits: or app-universal-debug.apk
 ```
 
-Debug and locally built release APKs share `~/.android/debug.keystore`; a build signed with a *previous* debug key fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` and needs `adb uninstall ir.vmessenger.android` first. After `pm clear`, first run asks the node question («انتخاب گره»), then for the battery-optimisation exemption (a system dialog, unless the app is already exempt), creates the ID, asks for location, and only once past those screens explains notifications («اجازهٔ اعلان‌ها», «ادامه») before the system ALLOW dialog.
+Debug and locally built release APKs share `~/.android/debug.keystore`; a build signed with a *previous* debug key fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` and needs `adb uninstall ir.vmessenger.android` first. After `pm clear`, first run asks the node question («انتخاب گره»; the app ships no node, so answer «فعلاً رد می‌کنم» → «ادامه بدون گره» and use the dev bootstrap below, or add a node's address), then for the battery-optimisation exemption (a system dialog, unless the app is already exempt), creates the ID, asks for location, and only once past those screens explains notifications («اجازهٔ اعلان‌ها», «ادامه») before the system ALLOW dialog.
 
 `NetworkLifecycleService` is not exported, so switching a device to the dev bootstrap needs `adb root` first:
 
@@ -253,7 +253,8 @@ Typical flow: the node question → Intro "شروع" → name field → "ساخ�
 ### 3.7 Two traps
 
 - **Restoring the same backup on both emulators gives both the same identity**, which makes them fight over one relay listener slot (an endless `replaced=true` loop). Create a distinct identity on the second device afterwards.
-- Production relay checks do not need emulators at all; a stdlib WebSocket client against `wss://relay.vmessenger.ir/relay` is enough.
+- Relay checks against a server node do not need emulators at all; a stdlib WebSocket client against `wss://<host>/relay` is enough.
+- **The app has no node of its own.** For relay circuits and real-Internet timing, add a node by hand on each debug build: the §2.2 harness node, `./gradlew :node:run` (debug builds accept `ws://10.0.2.2:8443/relay` and its `/dht`), or the developer's experimental node while it runs (until 31 December 2026, `vmnode:relay:wss://relay.vmessenger.ir/relay`; one link adds both halves).
 
 ---
 

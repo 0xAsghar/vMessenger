@@ -3,13 +3,13 @@ package ir.vmessenger.data.network
 import com.goterl.lazysodium.LazySodiumJava
 import com.goterl.lazysodium.SodiumJava
 import ir.vmessenger.core.common.AppResult
-import ir.vmessenger.core.common.network.NetworkConfig
 import ir.vmessenger.core.common.network.NodeAddressPolicy
 import ir.vmessenger.core.common.network.NodeRanking
 import ir.vmessenger.core.common.network.NodeTrust
 import ir.vmessenger.core.crypto.KeyPair
 import ir.vmessenger.core.crypto.LazysodiumCryptoEngine
 import ir.vmessenger.core.proto.app.v1.NodeRole
+import ir.vmessenger.data.activity.FakeActivityLogDao
 import ir.vmessenger.data.activity.testActivityLogger
 import ir.vmessenger.domain.model.NetworkNodeRole
 import ir.vmessenger.domain.repository.NodeAddMode
@@ -40,9 +40,22 @@ class NetworkNodeRepositoryTest {
     )
 
     @Test
+    fun aNewInstallHasNoNodeUntilThePersonAddsOne() = runTest {
+        val repo = repository()
+        assertTrue("the app ships no node of its own", repo.enabledRelayUrls().isEmpty())
+        assertTrue(repo.enabledBootstrapNodes().isEmpty())
+        assertTrue(repo.observeNodes().first().isEmpty())
+        repo.addNode(MINE, NetworkNodeRole.RELAY)
+        assertEquals(listOf(MINE), repo.enabledRelayUrls())
+        // Every node can be removed: there is no built-in one left to protect.
+        assertTrue(repo.removeNode(MINE, NetworkNodeRole.RELAY) is AppResult.Success)
+        assertTrue(repo.enabledRelayUrls().isEmpty())
+    }
+
+    @Test
     fun exchangedNodesImportedDisabled() = runTest {
         val repo = repository()
-        repo.seedDefaults()
+        repo.addNode(MINE, NetworkNodeRole.RELAY)
         val peer = ByteArray(32) { 9 }
         repo.importExchangedNodes(
             bootstrapAddresses = listOf("wss://evil.example/dht"),
@@ -58,8 +71,8 @@ class NetworkNodeRepositoryTest {
         val bootstrap = bootstrapDao.getByAddress("wss://evil.example/dht")!!
         assertFalse(bootstrap.enabled)
         assertEquals(NodeTrust.COMMUNITY.name, bootstrap.trust)
-        // The active relay stays the built-in one.
-        assertEquals(listOf(NetworkConfig.DEFAULT_RELAY_URL), repo.enabledRelayUrls())
+        // The active relay stays the person's own.
+        assertEquals(listOf(MINE), repo.enabledRelayUrls())
         val shown = repo.observeNodes().first().first { it.address == "wss://evil.example/relay" }
         assertTrue(shown.community)
         assertFalse(shown.enabled)
@@ -68,16 +81,16 @@ class NetworkNodeRepositoryTest {
     @Test
     fun learnedDhtNodesImportedDisabledAndPeerCannotReenableUserChoice() = runTest {
         val repo = repository()
-        repo.seedDefaults()
+        repo.addNode(MINE, NetworkNodeRole.RELAY)
         repo.importLearnedBootstrapAddresses(setOf("wss://dht.example/dht"), NetworkNodeRepository.SOURCE_CACHED_DHT)
         assertFalse(bootstrapDao.getByAddress("wss://dht.example/dht")!!.enabled)
-        // User disables the built-in relay; a later exchange must not flip it back or change its trust.
-        repo.setRelayEnabled(NetworkConfig.DEFAULT_RELAY_URL, enabled = false)
-        repo.importExchangedNodes(emptyList(), listOf(NetworkConfig.DEFAULT_RELAY_URL))
-        val builtIn = relayDao.getByAddress(NetworkConfig.DEFAULT_RELAY_URL)!!
-        assertFalse(builtIn.enabled)
-        assertEquals(NodeTrust.BUILT_IN.name, builtIn.trust)
-        assertEquals(NodeRanking.PRIORITY_BUILT_IN, builtIn.priority)
+        // The person switches their relay off; a later exchange must not flip it back or change its trust.
+        repo.setRelayEnabled(MINE, enabled = false)
+        repo.importExchangedNodes(emptyList(), listOf(MINE))
+        val mine = relayDao.getByAddress(MINE)!!
+        assertFalse(mine.enabled)
+        assertEquals(NodeTrust.USER.name, mine.trust)
+        assertEquals(NodeRanking.PRIORITY_USER, mine.priority)
     }
 
     @Test
@@ -88,14 +101,14 @@ class NetworkNodeRepositoryTest {
         val verifier = SignedNodeRecordVerifier(crypto, operator.publicKey)
         val signer = SignedNodeRecordSigner(crypto, verifier)
         val expires = System.currentTimeMillis() + 60_000
-        val official = signer.signRelay("wss://relay2.vmessenger.ir/relay", operator, expires)
+        val official = signer.signRelay("wss://official.example.org/relay", operator, expires)
         val community = signer.signRelay("wss://community.example/relay", other, expires)
-        val insecureOfficial = signer.signRelay("ws://relay3.vmessenger.ir/relay", operator, expires)
+        val insecureOfficial = signer.signRelay("ws://official3.example.org/relay", operator, expires)
         val repo = repository()
-        repo.seedDefaults()
+        repo.addNode(MINE, NetworkNodeRole.RELAY)
         repo.importSignedNodeRecords(listOf(official, community, insecureOfficial), verifier)
 
-        val officialRow = relayDao.getByAddress("wss://relay2.vmessenger.ir/relay")!!
+        val officialRow = relayDao.getByAddress("wss://official.example.org/relay")!!
         assertTrue(officialRow.enabled)
         assertEquals(NodeTrust.OFFICIAL.name, officialRow.trust)
         assertEquals(NodeRanking.PRIORITY_OFFICIAL, officialRow.priority)
@@ -103,9 +116,9 @@ class NetworkNodeRepositoryTest {
         assertFalse(communityRow.enabled)
         assertEquals(NodeTrust.COMMUNITY.name, communityRow.trust)
         // Even an operator signature does not bypass the address policy.
-        assertNull(relayDao.getByAddress("ws://relay3.vmessenger.ir/relay"))
+        assertNull(relayDao.getByAddress("ws://official3.example.org/relay"))
         assertEquals(
-            setOf(NetworkConfig.DEFAULT_RELAY_URL, "wss://relay2.vmessenger.ir/relay"),
+            setOf(MINE, "wss://official.example.org/relay"),
             repo.enabledRelayUrls().toSet(),
         )
     }
@@ -117,12 +130,12 @@ class NetworkNodeRepositoryTest {
         val verifier = SignedNodeRecordVerifier(crypto, operator.publicKey)
         val signer = SignedNodeRecordSigner(crypto, verifier)
         val repo = repository()
-        repo.importExchangedNodes(emptyList(), listOf("wss://relay2.vmessenger.ir/relay"))
-        repo.recordRelayResult("wss://relay2.vmessenger.ir/relay", ok = false)
+        repo.importExchangedNodes(emptyList(), listOf("wss://official.example.org/relay"))
+        repo.recordRelayResult("wss://official.example.org/relay", ok = false)
         val expires = System.currentTimeMillis() + 60_000
-        val record = signer.signRelay("wss://relay2.vmessenger.ir/relay", operator, expires)
+        val record = signer.signRelay("wss://official.example.org/relay", operator, expires)
         repo.importSignedNodeRecords(listOf(record), verifier)
-        val row = relayDao.getByAddress("wss://relay2.vmessenger.ir/relay")!!
+        val row = relayDao.getByAddress("wss://official.example.org/relay")!!
         assertTrue(row.enabled)
         assertEquals(NodeTrust.OFFICIAL.name, row.trust)
         assertEquals(1, row.failCount)
@@ -131,7 +144,6 @@ class NetworkNodeRepositoryTest {
     @Test
     fun userAddPromotesCommunityRow() = runTest {
         val repo = repository()
-        repo.seedDefaults()
         repo.importExchangedNodes(
             bootstrapAddresses = listOf("wss://friend.example/dht"),
             relayAddresses = listOf("wss://friend.example/relay"),
@@ -149,8 +161,8 @@ class NetworkNodeRepositoryTest {
         assertEquals(NetworkNodeRepository.SOURCE_USER, relay.source)
         // Health history survives the upgrade.
         assertEquals(1, relay.failCount)
-        // A user relay now outranks the built-in one.
-        assertEquals(listOf("wss://friend.example/relay", NetworkConfig.DEFAULT_RELAY_URL), repo.enabledRelayUrls())
+        // Switched on by the add, it is now the active relay.
+        assertEquals(listOf("wss://friend.example/relay"), repo.enabledRelayUrls())
 
         assertTrue(repo.addNode("wss://friend.example/dht", NetworkNodeRole.BOOTSTRAP) is AppResult.Success)
         val bootstrap = bootstrapDao.getByAddress("wss://friend.example/dht")!!
@@ -160,21 +172,28 @@ class NetworkNodeRepositoryTest {
     }
 
     @Test
-    fun userAddNeverDowngradesBuiltInOrOfficialRow() = runTest {
+    fun userAddNeverDowngradesOfficialRow() = runTest {
+        val crypto = LazysodiumCryptoEngine(LazySodiumJava(SodiumJava()))
+        val operator = crypto.generateEd25519KeyPair()
+        val verifier = SignedNodeRecordVerifier(crypto, operator.publicKey)
+        val signer = SignedNodeRecordSigner(crypto, verifier)
+        val official = "wss://official.example.org/relay"
         val repo = repository()
-        repo.seedDefaults()
-        repo.setRelayEnabled(NetworkConfig.DEFAULT_RELAY_URL, enabled = false)
-        assertTrue(repo.addNode(NetworkConfig.DEFAULT_RELAY_URL, NetworkNodeRole.RELAY) is AppResult.Success)
-        val builtIn = relayDao.getByAddress(NetworkConfig.DEFAULT_RELAY_URL)!!
-        assertEquals(NodeTrust.BUILT_IN.name, builtIn.trust)
-        assertEquals(NodeRanking.PRIORITY_BUILT_IN, builtIn.priority)
-        assertFalse(builtIn.enabled)
+        repo.importSignedNodeRecords(
+            listOf(signer.signRelay(official, operator, System.currentTimeMillis() + 60_000)),
+            verifier,
+        )
+        repo.setRelayEnabled(official, enabled = false)
+        assertTrue(repo.addNode(official, NetworkNodeRole.RELAY) is AppResult.Success)
+        val row = relayDao.getByAddress(official)!!
+        assertEquals(NodeTrust.OFFICIAL.name, row.trust)
+        assertEquals(NodeRanking.PRIORITY_OFFICIAL, row.priority)
+        assertFalse(row.enabled)
     }
 
     @Test
     fun communityRowsCappedPerTable() = runTest {
         val repo = repository()
-        repo.seedDefaults()
         val peer = ByteArray(32) { 3 }
         // 20 per envelope; many envelopes from one (or many) peers must still hit the global cap.
         repeat(5) { batch ->
@@ -233,14 +252,16 @@ class NetworkNodeRepositoryTest {
     @Test
     fun enabledRelayUrlsAreRankedNotDaoOrdered() = runTest {
         val repo = repository()
+        val community = "wss://community.example/relay"
+        repo.importExchangedNodes(emptyList(), listOf(community))
+        repo.setRelayEnabled(community, enabled = true)
         repo.addRelayNode("wss://user.example/relay")
-        repo.seedDefaults()
-        // DAO order is user, built-in; ranking must put the user relay (150) first regardless.
-        assertEquals(listOf("wss://user.example/relay", NetworkConfig.DEFAULT_RELAY_URL), repo.enabledRelayUrls())
+        // DAO order is community, user; ranking must put the user relay (150) first regardless.
+        assertEquals(listOf("wss://user.example/relay", community), repo.enabledRelayUrls())
         repeat(3) { repo.recordRelayResult("wss://user.example/relay", ok = false) }
-        assertEquals(listOf(NetworkConfig.DEFAULT_RELAY_URL, "wss://user.example/relay"), repo.enabledRelayUrls())
+        assertEquals(listOf(community, "wss://user.example/relay"), repo.enabledRelayUrls())
         repo.recordRelayResult("wss://user.example/relay", ok = true)
-        assertEquals(listOf("wss://user.example/relay", NetworkConfig.DEFAULT_RELAY_URL), repo.enabledRelayUrls())
+        assertEquals(listOf("wss://user.example/relay", community), repo.enabledRelayUrls())
     }
 
     @Test
@@ -277,7 +298,34 @@ class NetworkNodeRepositoryTest {
         )
     }
 
+    @Test
+    fun aNodesOtherHalfReplacesAHintLearnedFromTheNetwork() = runTest {
+        val repo = repository()
+        // A disabled community row at the node's /dht location, with an old key.
+        repo.importLearnedBootstrapAddresses(
+            setOf("wss://203.0.113.10/dht#pin-sha256=$PIN_A"),
+            NetworkNodeRepository.SOURCE_CACHED_DHT,
+        )
+        repo.addNode("wss://203.0.113.10/dht#pin-sha256=$PIN_B", NetworkNodeRole.BOOTSTRAP, NodeAddMode.KeepExisting)
+        val row = bootstrapDao.getAll().single { "203.0.113.10" in it.address }
+        assertEquals("wss://203.0.113.10/dht#pin-sha256=$PIN_B", row.address)
+        assertTrue(row.enabled)
+        assertEquals(NodeTrust.USER.name, row.trust)
+    }
+
+    @Test
+    fun aKeptRowIsNotLoggedAsAdded() = runTest {
+        val log = FakeActivityLogDao()
+        val repo = NetworkNodeRepository(bootstrapDao, relayDao, testActivityLogger(log)) { NodeAddressPolicy.RELEASE }
+        repo.addNode("wss://203.0.113.10/relay#pin-sha256=$PIN_B", NetworkNodeRole.RELAY)
+        val logged = log.rows.size
+        repo.addNode("wss://203.0.113.10/relay#pin-sha256=$PIN_A", NetworkNodeRole.RELAY, NodeAddMode.KeepExisting)
+        assertEquals(listOf("wss://203.0.113.10/relay#pin-sha256=$PIN_B"), relayDao.getAll().map { it.address })
+        assertEquals("nothing was added, so nothing is logged", logged, log.rows.size)
+    }
+
     private companion object {
+        const val MINE = "wss://mine.example/relay"
         const val PIN_A = "601FQOh6ckV1-Qbw-9F3cGprfojLs5_j4Hkn7DPKFfc"
         const val PIN_B = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA"
     }

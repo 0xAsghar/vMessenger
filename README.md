@@ -11,7 +11,7 @@ vMessenger is a privacy-first messenger where each Android device is a peer that
 | Platform | Android 8.0+ (API 26), compile/target SDK 35 |
 | UI language | Persian (RTL, the default) and English (LTR); in-house design system on Compose Foundation, light/dark |
 | Wire protocol | **major 2** — not interoperable with 0.x builds ([docs/Protocol.md](docs/Protocol.md) §15) |
-| Database | Room over SQLCipher, **schema 25** ([docs/Database.md](docs/Database.md)) |
+| Database | Room over SQLCipher, **schema 26** ([docs/Database.md](docs/Database.md)) |
 | License | GPL-3.0 ([LICENSE](LICENSE)) |
 
 > ## Uninstall any 0.x build before installing 1.x or later
@@ -80,7 +80,7 @@ Implemented (the 1.0 core was verified on two emulators, [docs/Testing.md](docs/
 - **Attachments** — images, videos and files up to 25 MB, chunked at 128 KiB over a single session, with a plaintext SHA-256 the receiver verifies, and encrypted at rest in a `VMA1` container.
 - **Live location** — MapLibre map that works without choosing anyone, per-contact allow list (switching sharing on with nobody ticked shares with every approved contact and ticks them), mutual visibility, foreground service, encrypted location packets, retention limits. A contact's page shows their location history from the last 24 hours with the route on the map, and a contact whose safety number you verified can be asked to share.
 - **Discovery** — minimal DHT (bootstrap, store, find-value, TTL, re-announce), verified peer/endpoint cache, relay fallback.
-- **Multi-node network** — database-backed bootstrap and relay lists with health ranking and a trust tier (built-in / user / official / community); add, enable, share and import nodes with `vmnode:bootstrap:…` / `vmnode:relay:…` links or QR.
+- **Multi-node network** — database-backed bootstrap and relay lists with health ranking and a trust tier (user / official / community); add, enable, share and import nodes with `vmnode:bootstrap:…` / `vmnode:relay:…` links or QR. One address of a vMessenger node is enough: adding its `/relay` also adds its `/dht`, and back. The app ships no node of its own.
 - **Security** — MITM-resistant v2 handshake, per-contact X25519 key pinning, inbound authorization on every envelope kind, SQLCipher database, Keystore-wrapped keys (StrongBox where available), `FLAG_SECURE`, private lock-screen notifications, an app lock (PIN, with an optional strict mode in which the database key cannot be unsealed without authenticating to the device, at the cost of no message delivery while the app is locked), a local activity log of what was done in the app, boot-restart of the network service, and a complete secure wipe. See [docs/Security.md](docs/Security.md).
 - **Backup** — passphrase-protected backup bundle (Argon2id13 + XChaCha20-Poly1305) of the identity, contacts, location grants, user-added nodes and, optionally, one-to-one conversations with their messages (not group chats, not messages on a timer; attachment files are not included).
 - **New node** — give the app a server's SSH login (password or key) and it turns an Ubuntu/Debian server into a node and adds it: with or without a domain, always over TLS (a pinned certificate when no CA vouches for it), with an option to secure the server, and with common server problems found and fixed on the way. Everything it installs ships inside the app; nothing is downloaded from GitHub ([docs/Deployment.md](docs/Deployment.md) §0).
@@ -113,18 +113,17 @@ One more from that table, about nodes rather than messages:
 - **No NAT traversal.** A UDP transport exists and TCP endpoints can be mirrored as UDP candidates, but there is no STUN/ICE candidate gathering, no hole punching and no connectivity checks. Two phones behind carrier-grade NAT will not connect directly; they go through a relay. The UDP path is off by default.
 - **The node's DHT record store is in-memory.** `DhtRequestHandler` keeps records in a `ConcurrentHashMap`, `FIND_NODE` returns the configured peer nodes rather than the closest ones, and there is no replication, no parallel lookup and no k-bucket routing on the node side. A node restart drops every record it held; devices re-announce within 10 minutes.
 - **Embedded DHT participation on phones is experimental** and off by default. Most phones are not reachable from the public Internet, so it helps in limited cases at best.
-- **User-operated relay mode is off by default.** The circuit protocol, circuit table, TTL and a policy gate (off / contacts-only / Wi-Fi-only / charging-only) exist, but the path has not been through the same verification as the default relay.
+- **User-operated relay mode is off by default.** The circuit protocol, circuit table, TTL and a policy gate (off / contacts-only / Wi-Fi-only / charging-only) exist, but the path has not been through the same verification as the node relay path.
 - **Peer exchange of signed node records is off by default.** Records verify correctly and community records are stored disabled, but the flow is unverified end to end.
-- **The default relay remains a single operational dependency in practice.** Demotion (`P2PConfig.reduceDefaultRelayEnabled`) exists but is off, because the replacement paths above are not proven.
 - **Contacts on app versions before pinned addresses cannot reach you through a pinned node.** A node set up without a domain (or whose Let's Encrypt certificate could not be issued) is reached by its certificate pin, which older apps do not understand (Security L20).
 - **New node sets up Ubuntu 20.04+ and Debian 11+ servers only**, on x86-64 or ARM64 with systemd. Other systems need the manual runbook.
-- **Only one built-in node ships** (`relay.vmessenger.ir`, serving both `/dht` and `/relay`), so "decentralized" today means "self-hostable and multi-node capable", not "no default operator". The first-run node question offers it as *the test nodes*, which the app says "will be removed on 31 December 2026".
+- **No node ships with the app** (since 2.2.2). Every phone depends on the node or nodes its organization adds; without one it can neither join the DHT nor listen on a relay, and the home screen says so. First run offers *Add node*, *Create a new node* or *Skip for now*. Up to 2.0.2 the app carried the original developer's experimental node, `relay.vmessenger.ir`; upgrading to 2.2.2 deletes it from the phone (schema 26). That server stays up until 31 December 2026 and can be added by hand like any other node. Phones still on 2.0.x or 1.1.2 keep using it, so during a rollout old and new phones reach each other only through a node both have.
 
 ### Platform
 
 - **After a secure wipe the app does not come back to the foreground.** Android's background-activity-start restriction blocks the `AlarmManager` relaunch; the data is destroyed and the service restarts, but the user must tap the launcher icon.
-- **Room schemas 3, 4, 5 and 11 were never committed versions**, so the exported schema history has gaps. The migration chain itself is continuous and is replayed 1 → 25 on a real SQLite engine in a JVM test.
-- **Feature flags gate unproven code paths, not absent ones** (L14). Turning on peer exchange, embedded DHT, relay-peer mode, UDP attempts or relay demotion in the debug screen enables code that the default build does not exercise. (Store-and-forward left this list in 1.1 and is on by default.)
+- **Room schemas 3, 4, 5 and 11 were never committed versions**, so the exported schema history has gaps. The migration chain itself is continuous and is replayed 1 → 26 on a real SQLite engine in a JVM test.
+- **Feature flags gate unproven code paths, not absent ones** (L14). Turning on peer exchange, embedded DHT, relay-peer mode or UDP attempts in the debug screen enables code that the default build does not exercise. (Store-and-forward left this list in 1.1 and is on by default.)
 - **Map pin rendering has never been visually verified**, because `screencap` returns a black image on the software-GPU emulator MapLibre renders on. See [docs/UI.md](docs/UI.md) §8.
 - **Compose UI tests are almost absent, and there is no accessibility audit.** Two instrumented tests in `app/src/androidTest` (swipe-to-go-back and bidi text rendering) need a device and are not run by CI; otherwise the presentation layer is covered by ViewModel unit tests only.
 
@@ -134,7 +133,7 @@ One more from that table, about nodes rather than messages:
 
 - Kotlin, Clean Architecture + MVVM, Jetpack Compose with an in-house design system on Compose Foundation (Persian / RTL and English)
 - Hilt, Coroutines + Flow
-- Room over SQLCipher (schema 25), DataStore for preferences
+- Room over SQLCipher (schema 26), DataStore for preferences
 - Protocol Buffers (proto3) for every wire format
 - libsodium (Lazysodium): Ed25519, X25519, ChaCha20-Poly1305-IETF, XChaCha20-Poly1305 secretstream, `crypto_box_seal`, Argon2id13, HKDF-SHA256; Android Keystore (AES-256-GCM, StrongBox where available) for key wrapping
 - Concentus (a pure-Java Opus codec) for call audio
@@ -152,7 +151,7 @@ One more from that table, about nodes rather than messages:
 | [docs/Security.md](docs/Security.md) | threat model, handshake guarantees, key pinning, inbound authorization, encryption at rest, secure wipe, known limitations |
 | [docs/Discovery.md](docs/Discovery.md) | the Discovery layer, QR and User Hash pairing, DHT resolution |
 | [docs/DHT.md](docs/DHT.md) | the minimal DHT design, joining it, signed routing records, TTL and refresh |
-| [docs/Database.md](docs/Database.md) | schema 25: entities, enums, indices, DAOs, the 1→25 migration chain |
+| [docs/Database.md](docs/Database.md) | schema 26: entities, enums, indices, DAOs, the 1→26 migration chain |
 | [docs/Testing.md](docs/Testing.md) | unit tests, node tests, the two-emulator procedure, the M3 scenario matrix, release verification |
 | [docs/Deployment.md](docs/Deployment.md) | setting a node up from the app, and the operator runbook for running a relay/DHT node |
 | [docs/UI.md](docs/UI.md) | the design system, component catalogue, navigation, screens and the RTL/Persian rules |
@@ -203,8 +202,8 @@ Requirements: JDK 17 to run Gradle, which provisions the JDK 21 toolchain it com
 Updating `gradle/version.properties` on `main` runs a build-only check. Publishing requires a matching tag:
 
 ```bash
-git tag v2.0.2        # must equal versionName in gradle/version.properties
-git push origin v2.0.2
+git tag v2.2.2        # must equal versionName in gradle/version.properties
+git push origin v2.2.2
 ```
 
 The version is a single source of truth: `gradle/version.properties` sets it for the app and the

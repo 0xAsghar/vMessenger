@@ -8,7 +8,6 @@
     <ID>NoUnusedImports:MessagingService.kt$ir.vmessenger.network.messaging.MessagingService.kt</ID>
     <ID>NoUnusedImports:PeerRelayService.kt$ir.vmessenger.network.messaging.PeerRelayService.kt</ID>
     <ID>NoUnusedImports:RelayDirectory.kt$ir.vmessenger.network.messaging.RelayDirectory.kt</ID>
-    <ID>ReturnCount:EndpointOrder.kt$EndpointOrder$private fun relayDemotionRank(endpoint: Endpoint): Int</ID>
     <ID>ReturnCount:MessagingService.kt$MessagingService$private suspend fun processSecureFrame( session: ActiveSecureSession, contactId: String, frameBytes: ByteArray, )</ID>
     <ID>ReturnCount:PeerRelayService.kt$PeerRelayService$fun handleRelayData(envelope: MessageEnvelope): Boolean</ID>
     <ID>ReturnCount:PeerRelayService.kt$PeerRelayService$fun handleRelayOpen( envelope: MessageEnvelope, peerHash: ByteArray, policyAllowed: Boolean = true, ): MessageEnvelope?</ID>

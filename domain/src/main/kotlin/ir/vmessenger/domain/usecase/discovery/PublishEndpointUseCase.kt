@@ -24,7 +24,7 @@ class PublishNetworkEndpointsUseCase @Inject constructor(
                     ),
                 )
             }
-            // No relay means none is enabled: the record names none rather than the built-in one.
+            // No relay means none is enabled: the record names none. The app has no relay of its own.
             if (!relayUrl.isNullOrBlank()) {
                 add(Endpoint(transport = TransportIds.RELAY, address = relayUrl))
             }

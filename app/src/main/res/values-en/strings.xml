@@ -19,6 +19,13 @@
     <string name="alert_notifications_title">Notifications are off</string>
     <string name="alert_notifications_body">The app needs notification permission to receive messages in the background. While notifications are off, messages may arrive late, or not at all.</string>
     <string name="alert_notifications_action">Open notification settings</string>
+    <string name="alert_no_node_title">No node is switched on</string>
+    <string name="alert_no_node_body">Without a node no message reaches you, and you reach no one. Add your organization\'s node, or switch one on, in Settings → Network nodes.</string>
+    <string name="alert_no_node_action">Open Network nodes</string>
+    <string name="alert_no_relay_title">No relay is switched on</string>
+    <string name="alert_no_relay_body">Without a relay no message reaches you, and yours may not reach anyone. Add your organization\'s node, or switch its relay on, in Settings → Network nodes.</string>
+    <string name="alert_no_bootstrap_title">No bootstrap node is switched on</string>
+    <string name="alert_no_bootstrap_body">Without one, your contacts cannot find this phone, and it cannot find them. Add your organization\'s node, or switch its bootstrap node on, in Settings → Network nodes.</string>
 
     <!-- Destinations whose screens land in a later milestone (M5/M6). -->
     <string name="route_new_chat">New conversation</string>
@@ -30,10 +37,8 @@
     <string name="notification_permission_confirm">Continue</string>
     <string name="node_setup_title">Choose a node</string>
     <string name="node_setup_body">You need a node in order to reach your contacts. A node provides the path your messages travel; the contents of the messages remain end-to-end encrypted and are not readable by the node.</string>
-    <string name="node_setup_use_test">Use the test nodes</string>
-    <string name="node_setup_test_warning">These nodes are meant for testing and will be removed on 31 December 2026.</string>
     <string name="node_setup_add">Add node</string>
-    <string name="node_setup_add_body">Enter the address of a node you have access to. A vmnode: link is also accepted.</string>
+    <string name="node_setup_add_body">Enter your node\'s address or its vmnode: link. For a vMessenger node one of its two addresses is enough: the other is added too.</string>
     <string name="node_setup_create">Create a new node</string>
     <string name="node_setup_address_label">Node address</string>
     <string name="node_setup_address_save">Save and continue</string>

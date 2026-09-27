@@ -13,8 +13,9 @@ class NodeConfigTest {
 
         assertEquals(NodeConfig(), config)
         assertEquals(8443, config.port)
-        assertEquals("relay.vmessenger.ir", config.publicHost)
-        assertEquals("wss://relay.vmessenger.ir/dht", config.advertisedDhtUrl)
+        assertEquals("localhost", config.publicHost)
+        // No public host set: the node advertises no DHT address, not one pointing at itself.
+        assertEquals("", config.advertisedDhtUrl)
         assertTrue(config.peerNodes.isEmpty())
         assertEquals("./state", config.stateDir)
         assertFalse(config.trustProxy)

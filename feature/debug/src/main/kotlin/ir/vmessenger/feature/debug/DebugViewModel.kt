@@ -39,14 +39,12 @@ data class DebugUiState(
 )
 
 data class P2PFlagsUiState(
-    val multiNode: Boolean = P2PConfig.multiNodeEnabled,
     val peerCache: Boolean = P2PConfig.peerCacheEnabled,
     val peerExchange: Boolean = P2PConfig.peerExchangeEnabled,
     val dhtParticipation: Boolean = P2PConfig.dhtParticipationEnabled,
     val relayPeerMode: Boolean = P2PConfig.relayPeerModeEnabled,
     val natTraversal: Boolean = P2PConfig.natTraversalEnabled,
     val storeAndForward: Boolean = P2PConfig.storeAndForwardEnabled,
-    val reduceDefaultRelay: Boolean = P2PConfig.reduceDefaultRelayEnabled,
 )
 
 @HiltViewModel
@@ -109,14 +107,12 @@ class DebugViewModel @Inject constructor(
 
     fun setFlag(flag: P2PFlag, enabled: Boolean) {
         when (flag) {
-            P2PFlag.MULTI_NODE -> P2PConfig.multiNodeEnabled = enabled
             P2PFlag.PEER_CACHE -> P2PConfig.peerCacheEnabled = enabled
             P2PFlag.PEER_EXCHANGE -> P2PConfig.peerExchangeEnabled = enabled
             P2PFlag.DHT_PARTICIPATION -> P2PConfig.dhtParticipationEnabled = enabled
             P2PFlag.RELAY_PEER_MODE -> P2PConfig.relayPeerModeEnabled = enabled
             P2PFlag.UDP_ATTEMPTS -> P2PConfig.natTraversalEnabled = enabled
             P2PFlag.STORE_AND_FORWARD -> P2PConfig.storeAndForwardEnabled = enabled
-            P2PFlag.REDUCE_DEFAULT_RELAY -> P2PConfig.reduceDefaultRelayEnabled = enabled
         }
         AppLogger.info("Debug", "p2p flag ${flag.name}=$enabled")
         viewModelScope.launch {
@@ -134,20 +130,20 @@ class DebugViewModel @Inject constructor(
     }
 
     private fun currentFlags() = P2PFlagsUiState(
-        multiNode = P2PConfig.multiNodeEnabled,
         peerCache = P2PConfig.peerCacheEnabled,
         peerExchange = P2PConfig.peerExchangeEnabled,
         dhtParticipation = P2PConfig.dhtParticipationEnabled,
         relayPeerMode = P2PConfig.relayPeerModeEnabled,
         natTraversal = P2PConfig.natTraversalEnabled,
         storeAndForward = P2PConfig.storeAndForwardEnabled,
-        reduceDefaultRelay = P2PConfig.reduceDefaultRelayEnabled,
     )
 
     fun joinAndPublish() {
         viewModelScope.launch {
             val devMode = _uiState.value.devMode
             AppLogger.info("Debug", "joinAndPublish started (devMode=$devMode)")
+            // Before the join: the developer bootstrap is the only node a debug build has of its own.
+            NetworkConfig.useDevBootstrap = devMode
             when (val join = joinNetworkUseCase()) {
                 is AppResult.Success -> AppLogger.info("Debug", "join network success")
                 is AppResult.Error -> {
@@ -157,7 +153,6 @@ class DebugViewModel @Inject constructor(
             }
             val selectedRelay = relayDirectory.activeRelay()
             val publish = if (devMode) {
-                NetworkConfig.useDevBootstrap = true
                 val port = _uiState.value.forwardPort
                 AppLogger.info("Debug", "publishing dev endpoints 10.0.2.2:$port relay=${selectedRelay?.url}")
                 publishNetworkEndpointsUseCase(
@@ -166,8 +161,7 @@ class DebugViewModel @Inject constructor(
                     relayUrl = selectedRelay?.url,
                 )
             } else {
-                NetworkConfig.useDevBootstrap = false
-                AppLogger.info("Debug", "publishing production relay endpoint ${selectedRelay?.url}")
+                AppLogger.info("Debug", "publishing relay endpoint ${selectedRelay?.url}")
                 publishNetworkEndpointsUseCase(relayUrl = selectedRelay?.url)
             }
             when (publish) {
@@ -179,12 +173,10 @@ class DebugViewModel @Inject constructor(
 }
 
 enum class P2PFlag {
-    MULTI_NODE,
     PEER_CACHE,
     PEER_EXCHANGE,
     DHT_PARTICIPATION,
     RELAY_PEER_MODE,
     UDP_ATTEMPTS,
     STORE_AND_FORWARD,
-    REDUCE_DEFAULT_RELAY,
 }

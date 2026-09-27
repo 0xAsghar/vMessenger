@@ -1,6 +1,5 @@
 package ir.vmessenger.network.messaging
 
-import ir.vmessenger.core.common.network.RelaySource
 import ir.vmessenger.core.common.network.SelectedRelay
 
 /**
@@ -9,13 +8,13 @@ import ir.vmessenger.core.common.network.SelectedRelay
  * the app can rotate away from failing relays instead of depending on a single
  * hardcoded one.
  *
- * The implementation lives in the data layer (DB-backed). The built-in relay is seeded as one
- * entry the person can switch off like any other; with every relay switched off there is none.
+ * The implementation lives in the data layer (DB-backed). Every relay in it is one the person added or
+ * set up; the app ships none of its own, so with every relay switched off there is none.
  */
 interface RelayDirectory {
     /**
      * The relay URL to connect through right now (the healthiest enabled relay), or null when no relay
-     * is enabled — the person switched them all off, or declined the built-in nodes at first run.
+     * is enabled: the person has not added one yet, or switched them all off.
      */
     suspend fun activeRelay(): SelectedRelay?
 

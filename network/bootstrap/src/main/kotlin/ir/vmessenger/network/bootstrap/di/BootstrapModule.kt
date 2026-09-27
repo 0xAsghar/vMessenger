@@ -6,7 +6,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import ir.vmessenger.network.bootstrap.BootstrapProvider
-import ir.vmessenger.network.bootstrap.BuiltInBootstrapProvider
+import ir.vmessenger.network.bootstrap.DevBootstrapProvider
 import javax.inject.Singleton
 
 @Module
@@ -15,5 +15,5 @@ object BootstrapModule {
     @Provides
     @IntoSet
     @Singleton
-    fun provideBuiltInBootstrapProvider(provider: BuiltInBootstrapProvider): BootstrapProvider = provider
+    fun provideDevBootstrapProvider(provider: DevBootstrapProvider): BootstrapProvider = provider
 }

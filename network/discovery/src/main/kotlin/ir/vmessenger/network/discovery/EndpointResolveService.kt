@@ -10,8 +10,8 @@ import javax.inject.Singleton
 
 /**
  * Resolves peer endpoints with a cache-first policy.
- * Only endpoints the peer actually published are returned (plus the default
- * relay as a last resort); direct TCP endpoints are no longer mirrored as UDP
+ * Only endpoints the peer actually published are returned (plus this device's own
+ * relays as a last resort); direct TCP endpoints are no longer mirrored as UDP
  * candidates — UDP cannot carry a handshake and NAT traversal is off in 1.0.
  */
 @Singleton
@@ -37,9 +37,10 @@ class EndpointResolveService @Inject constructor(
 
     /**
      * Never fails outright: a relay circuit needs only the identity hash, so even
-     * when discovery itself errors (not bootstrapped, DHT down) the default relay
-     * is returned with [Resolved.discoveryFailed] set, and delivery via the relay
-     * does not depend on the DHT being reachable.
+     * when discovery itself errors (not bootstrapped, DHT down) this device's own
+     * relays are returned with [Resolved.discoveryFailed] set, and delivery via a
+     * relay does not depend on the DHT being reachable. With no relay switched on
+     * there are none, and the list is empty: the app has no relay of its own.
      */
     suspend fun resolve(identityHash: ByteArray): AppResult<Resolved> {
         if (P2PConfig.peerCacheEnabled) {
@@ -66,11 +67,11 @@ class EndpointResolveService @Inject constructor(
 
     /**
      * Relay circuits only need the peer identity hash, so when DHT/cache lookup
-     * returns nothing we still synthesize the default relay as a last-resort path.
+     * returns nothing we still try the peer through our own relays as a last resort.
      */
     private fun withRelayFallback(endpoints: List<Endpoint>): List<Endpoint> {
         if (endpoints.isNotEmpty()) return endpoints
-        AppLogger.info("Discovery", "no peer endpoints; falling back to default relay")
+        AppLogger.info("Discovery", "no peer endpoints; falling back to our own relays")
         return NetworkConfig.relayFallbackEndpoints()
     }
 }
