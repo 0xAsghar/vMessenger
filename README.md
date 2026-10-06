@@ -202,8 +202,8 @@ Requirements: JDK 17 to run Gradle, which provisions the JDK 21 toolchain it com
 Updating `gradle/version.properties` on `main` runs a build-only check. Publishing requires a matching tag:
 
 ```bash
-git tag v2.2.3        # must equal versionName in gradle/version.properties
-git push origin v2.2.3
+git tag v2.2.4        # must equal versionName in gradle/version.properties
+git push origin v2.2.4
 ```
 
 The version is a single source of truth: `gradle/version.properties` sets it for the app and the

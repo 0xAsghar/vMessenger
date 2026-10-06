@@ -13,6 +13,11 @@ version** (currently 26, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
 
+## [2.2.4] - 2026-10-07
+
+Typed text starts at the edge of its own script in every field. No database or wire changes: schema stays
+26, protocol major 2.
+
 ### Fixed
 
 - **Typed text no longer starts in the middle of a field.** With the app in Persian, English typed into

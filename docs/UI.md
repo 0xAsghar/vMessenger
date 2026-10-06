@@ -677,7 +677,7 @@ about that:
 - `feature/debug/src/main/res/values-fa/strings.xml` contains only `<resources />`.
 
 Copy is authored in Persian in the default `values/` folder and in English in `values-en/`. Nothing in
-the gate compares the two folders or fails if a hardcoded literal slips in; at 2.2.3 every
+the gate compares the two folders or fails if a hardcoded literal slips in; at 2.2.4 every
 `values/` string file has the same names as its `values-en/` counterpart.
 
 ### 6.3 Known deviations
