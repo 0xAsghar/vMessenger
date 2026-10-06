@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.RememberObserver
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -26,8 +27,10 @@ import ir.vmessenger.core.location.DeviceLocationProvider
  *
  * Nothing about it is driven from `AndroidView(update = …)`: markers, camera, style and puck are
  * each applied from their own keyed effect, so recomposing the caller (which happens on every
- * location sample) costs exactly nothing. The view itself is cached per activity, so switching
- * tabs detaches it rather than destroying the GL surface.
+ * location sample) costs exactly nothing. A persistent map's view is cached per activity, so
+ * switching tabs detaches it rather than destroying the GL surface; any other map owns its view,
+ * created with the composable and destroyed with it, so showing the same place in another
+ * composable means a new map, never the same view moved.
  *
  * @param content the pins to draw and what the camera should do; structural equality on it
  *  decides whether the map is touched at all.
@@ -68,11 +71,26 @@ private fun rememberMapBinding(locationProvider: DeviceLocationProvider?, persis
     val bitmaps = rememberMarkerBitmaps()
     val scope = rememberCoroutineScope()
     val engine = remember(locationProvider) { locationProvider?.let(::BusLocationEngine) }
-    val mapView = remember(owner) { MapViewCache.obtain(context, owner, savedState) }
+    val mapView = if (persistent) {
+        remember(owner) { MapViewCache.obtain(context, owner, savedState) }
+    } else {
+        remember(owner) { OwnedMapView(MapViewCache.createOwned(context, owner, savedState)) }.entry.view
+    }
     val controller = remember(mapView, bitmaps, engine, scope) {
-        MapController(context.applicationContext, mapView, bitmaps, engine, scope)
+        // A view made for this composable has never looked anywhere: its first move is a placement,
+        // not a flight from the whole world.
+        MapController(context.applicationContext, mapView, bitmaps, engine, scope, placeFirstMove = !persistent)
     }
     return remember(controller) { MapBinding(controller, mapView, savedState, owner) }
+}
+
+/** Ties an owned map view to the composition: it is torn down when the composable leaves. */
+private class OwnedMapView(val entry: MapViewEntry) : RememberObserver {
+    override fun onRemembered() = Unit
+
+    override fun onForgotten() = entry.release()
+
+    override fun onAbandoned() = entry.release()
 }
 
 @Composable

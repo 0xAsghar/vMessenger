@@ -22,6 +22,8 @@ internal class MapController(
     bitmaps: MarkerBitmaps,
     engine: LocationEngine?,
     scope: CoroutineScope,
+    /** True for a view that has never been positioned: its first camera move jumps instead of flying. */
+    placeFirstMove: Boolean = false,
 ) {
     /** Reassigned on every recomposition; the listeners below always read the current one. */
     var callbacks: VmMapCallbacks = VmMapCallbacks()
@@ -40,6 +42,7 @@ internal class MapController(
     private var styleGeneration: Int = 0
     private var fallbackApplied: Boolean = false
     private var onStyleReady: () -> Unit = {}
+    private var placed: Boolean = !placeFirstMove
 
     private val styleLoadedListener = Style.OnStyleLoaded { style ->
         // Before the markers, so the shared route is drawn under the pins rather than over them.
@@ -119,7 +122,10 @@ internal class MapController(
             MapCameraMode.Free -> request.focusId?.let { MapCamera.updateFor(markers, it, self) }
             MapCameraMode.FollowMe -> null
         }
-        move?.let(target::animateCamera)
+        move?.let { update ->
+            if (placed) target.animateCamera(update) else target.moveCamera(update)
+            placed = true
+        }
     }
 
     private fun onMapReady(ready: MapLibreMap) {

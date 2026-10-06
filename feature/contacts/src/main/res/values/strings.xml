@@ -68,6 +68,8 @@
     <string name="contact_detail_location_section">موقعیت</string>
     <string name="contact_detail_location_updated">آخرین به‌روزرسانی %1$s</string>
     <string name="contact_detail_location_map">موقعیت %1$s روی نقشه</string>
+    <string name="contact_detail_location_expand">نمایش نقشه در تمام‌صفحه</string>
+    <string name="contact_detail_location_collapse">بستن نقشهٔ تمام‌صفحه</string>
     <string name="contact_detail_privacy_section">حریم خصوصی</string>
     <string name="contact_detail_location_access">اجازهٔ دیدن موقعیت من</string>
     <string name="contact_detail_location_access_body">وقتی روشن باشد، این مخاطب موقعیت زندهٔ شما را می‌بیند.</string>

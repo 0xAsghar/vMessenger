@@ -1,9 +1,9 @@
 package ir.vmessenger.feature.contacts
 
-import androidx.compose.foundation.ScrollState
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -86,32 +87,34 @@ fun ContactDetailRoute(
     }
 
     val scroll = rememberScrollState()
-    VMessengerScaffold(
-        title = state.contact?.name ?: stringResource(R.string.contact_detail_title),
-        onNavigateBack = onNavigateBack,
-        scrolled = scroll.canScrollBackward,
-        snackbarHost = { VmSnackbarHost(snackbarHost) },
-    ) { padding ->
-        val contact = state.contact
-        if (contact == null) {
-            SkeletonList(modifier = Modifier.fillMaxSize().padding(padding), rows = SKELETON_ROWS)
-        } else {
-            ContactDetailContent(
-                state = state,
-                contact = contact,
-                padding = padding,
-                scroll = scroll,
-                callbacks = ContactDetailCallbacks(
-                    onStartChat = viewModel::onStartChat,
-                    onStartCall = { onStartCall(contact.id) },
-                    onResend = viewModel::onResendRequest,
-                    onAcceptKeyChange = viewModel::onAcceptKeyChange,
-                    onVerifiedChange = viewModel::onVerifiedChange,
-                    onLocationAccess = viewModel::onLocationAccessChange,
-                    onMenuAction = viewModel::onMenuAction,
-                ),
-            )
+    val locationMap = rememberContactLocationMap()
+    // The map opens over the whole screen, title bar and system bars included, so the screen draws it
+    // beside the scaffold rather than in it, and Back shuts it before it leaves the screen.
+    val openLocation = state.location?.takeIf { locationMap.expanded }
+    BackHandler(enabled = openLocation != null) { locationMap.collapse() }
+    Box(modifier = Modifier.fillMaxSize()) {
+        VMessengerScaffold(
+            title = state.contact?.name ?: stringResource(R.string.contact_detail_title),
+            onNavigateBack = onNavigateBack,
+            // What is under the open map is not for a screen reader to wander into.
+            modifier = if (openLocation != null) Modifier.clearAndSetSemantics {} else Modifier,
+            scrolled = scroll.canScrollBackward,
+            snackbarHost = { VmSnackbarHost(snackbarHost) },
+        ) { padding ->
+            val contact = state.contact
+            if (contact == null) {
+                SkeletonList(modifier = Modifier.fillMaxSize().padding(padding), rows = SKELETON_ROWS)
+            } else {
+                ContactDetailContent(
+                    state = state,
+                    contact = contact,
+                    callbacks = viewModel.callbacksFor(contact, onStartCall),
+                    locationMap = locationMap,
+                    modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(scroll),
+                )
+            }
         }
+        openLocation?.let { ContactLocationFullScreen(location = it, map = locationMap) }
     }
 
     ContactDialogHost(
@@ -124,19 +127,27 @@ fun ContactDetailRoute(
     )
 }
 
+private fun ContactDetailViewModel.callbacksFor(contact: ContactRow, onStartCall: (String) -> Unit) =
+    ContactDetailCallbacks(
+        onStartChat = ::onStartChat,
+        onStartCall = { onStartCall(contact.id) },
+        onResend = ::onResendRequest,
+        onAcceptKeyChange = ::onAcceptKeyChange,
+        onVerifiedChange = ::onVerifiedChange,
+        onLocationAccess = ::onLocationAccessChange,
+        onMenuAction = ::onMenuAction,
+    )
+
 @Composable
 private fun ContactDetailContent(
     state: ContactDetailUiState,
     contact: ContactRow,
-    padding: PaddingValues,
-    scroll: ScrollState,
     callbacks: ContactDetailCallbacks,
+    locationMap: ContactLocationMap,
+    modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(padding)
-            .verticalScroll(scroll),
+        modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(VmSpacing.md),
     ) {
         if (contact.keyChangePending) {
@@ -148,7 +159,7 @@ private fun ContactDetailContent(
             canResend = state.canResendRequest,
             callbacks = callbacks,
         )
-        state.location?.let { ContactLocationCard(location = it) }
+        state.location?.let { ContactLocationCard(location = it, map = locationMap) }
         if (contact.isApproved) ContactLocationHistory(history = state.locationHistory)
         state.safetyNumberKeys?.let { (local, remote) ->
             SafetyNumberDisplay(localPublicKey = local, remotePublicKey = remote)

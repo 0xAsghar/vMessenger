@@ -13,6 +13,15 @@ version** (currently 26, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
 
+### Added
+
+- **The map on a contact's page opens full screen.** A button in the map's bottom right corner opens
+  it over the whole screen, where it can be dragged, pinched and turned like the one in the Map tab;
+  a cross in its top right corner, or Back, puts it back. In the page the map stays a picture, so a
+  finger that lands on it still scrolls the page. Open, it follows the contact's live position until
+  it is moved by hand and then stays where it was put; shut again, it is centred on the contact. Both
+  buttons keep to the map's right-hand corners in Persian as well as in English.
+
 ## [2.2.2] - 2026-09-27
 
 The app no longer carries a node of its own. Database schema 25 → 26 (data only); wire protocol major 2

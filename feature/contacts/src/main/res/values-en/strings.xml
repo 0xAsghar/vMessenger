@@ -68,6 +68,8 @@
     <string name="contact_detail_location_section">Location</string>
     <string name="contact_detail_location_updated">Last updated %1$s</string>
     <string name="contact_detail_location_map">Location of %1$s on the map</string>
+    <string name="contact_detail_location_expand">Open the map full screen</string>
+    <string name="contact_detail_location_collapse">Close the full-screen map</string>
     <string name="contact_detail_privacy_section">Privacy</string>
     <string name="contact_detail_location_access">Can see my location</string>
     <string name="contact_detail_location_access_body">When this is on, this contact can see your live location.</string>

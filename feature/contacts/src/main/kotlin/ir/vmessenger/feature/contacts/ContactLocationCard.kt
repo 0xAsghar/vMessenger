@@ -1,14 +1,15 @@
 package ir.vmessenger.feature.contacts
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Fullscreen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
@@ -16,20 +17,15 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import ir.vmessenger.core.designsystem.component.SectionHeader
+import ir.vmessenger.core.designsystem.component.VmSmallFab
 import ir.vmessenger.core.designsystem.component.VmSurface
 import ir.vmessenger.core.designsystem.component.VmText
 import ir.vmessenger.core.designsystem.format.VmDateFormat
 import ir.vmessenger.core.designsystem.theme.VmShapes
 import ir.vmessenger.core.designsystem.theme.VmSpacing
 import ir.vmessenger.core.designsystem.theme.VmTheme
-import ir.vmessenger.core.map.CameraRequest
-import ir.vmessenger.core.map.MapCameraMode
-import ir.vmessenger.core.map.MapContent
 import ir.vmessenger.core.map.MapCoordinate
 import ir.vmessenger.core.map.MapMarker
-import ir.vmessenger.core.map.VmMapCallbacks
-import ir.vmessenger.core.map.VmMapOptions
-import ir.vmessenger.core.map.VmMapView
 import ir.vmessenger.domain.model.Contact
 import ir.vmessenger.domain.model.LocationSample
 import kotlinx.collections.immutable.ImmutableList
@@ -42,7 +38,13 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 private val MiniMapHeight = 200.dp
-private const val MILLIS_PER_SECOND = 1_000L
+
+/**
+ * The row along the bottom of the map that MapLibre keeps for its own logo and attribution button. In
+ * the Persian layout that row is in the same corner as the full-screen button, so the button sits
+ * above it, in both languages.
+ */
+private val MapLogoRow = 24.dp
 
 /**
  * A contact's position as the detail screen draws it: their pin, when it was taken, whether they are
@@ -121,24 +123,13 @@ private const val EARTH_RADIUS_M = 6_371_000.0
  * Until now the only place to see it was the map tab, and the detail screen offered nothing but
  * the switch for the opposite direction. The map here is a picture, not a second map tab: it
  * follows each new sample, takes no gestures, and lives and dies with this screen rather than
- * borrowing the tab's cached view.
+ * borrowing the tab's cached view. The button in its bottom right corner opens it full screen
+ * ([ContactLocationFullScreen]); [map] is what the card and the full screen share, and the card's
+ * own map is dropped while the full screen has the floor.
  */
 @Composable
-internal fun ContactLocationCard(location: ContactLocation, modifier: Modifier = Modifier) {
+internal fun ContactLocationCard(location: ContactLocation, map: ContactLocationMap, modifier: Modifier = Modifier) {
     val description = stringResource(R.string.contact_detail_location_map, location.marker.label)
-    // Keyed to the sample, so each new position re-centres the camera without touching it otherwise.
-    val content = remember(location) {
-        MapContent(
-            markers = persistentListOf(location.marker),
-            path = location.path,
-            camera = CameraRequest(
-                mode = MapCameraMode.FitAll,
-                token = (location.sampledAtUnixMs / MILLIS_PER_SECOND).toInt(),
-                focusId = location.marker.id,
-            ),
-        )
-    }
-    val callbacks = remember { VmMapCallbacks() }
     Column(modifier = modifier.fillMaxWidth()) {
         SectionHeader(title = stringResource(R.string.contact_detail_location_section))
         VmSurface(
@@ -149,23 +140,34 @@ internal fun ContactLocationCard(location: ContactLocation, modifier: Modifier =
                 .height(MiniMapHeight),
         ) {
             Box {
-                VmMapView(
-                    content = content,
-                    options = VmMapOptions(
-                        darkStyle = isSystemInDarkTheme(),
-                        interactive = false,
-                        persistent = false,
-                    ),
-                    callbacks = callbacks,
-                )
-                // Over the map, so a drag that starts on it still scrolls the screen: the map view
-                // would otherwise take the touch even with its own gestures switched off.
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .semantics { contentDescription = description }
-                        .pointerInput(Unit) {},
-                )
+                // While the map is open the card keeps its place and nothing else: the map is the
+                // one on the full screen.
+                if (!map.expanded) {
+                    map.Map(location)
+                    // Over the map, so a drag that starts on it still scrolls the screen: the map
+                    // view would otherwise take the touch even with its own gestures switched off.
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .semantics { contentDescription = description }
+                            .pointerInput(Unit) {},
+                    )
+                    MapCorner(
+                        alignment = Alignment.BottomEnd,
+                        modifier = Modifier.padding(
+                            start = VmSpacing.sm,
+                            top = VmSpacing.sm,
+                            end = VmSpacing.sm,
+                            bottom = VmSpacing.sm + MapLogoRow,
+                        ),
+                    ) {
+                        VmSmallFab(
+                            icon = Icons.Outlined.Fullscreen,
+                            contentDescription = stringResource(R.string.contact_detail_location_expand),
+                            onClick = map::expand,
+                        )
+                    }
+                }
             }
         }
         VmText(

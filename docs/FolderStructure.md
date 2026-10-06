@@ -156,7 +156,7 @@ Serialization (Protocol Buffers) lives in `core:proto`; the DHT and Bootstrap pi
 - Depends on: `domain`, `core:designsystem`, `core:common`, CameraX and ML Kit barcode scanning.
 
 ### feature:contacts
-- Contact list with relationship-status chips, incoming requests to approve or reject, and chat and call buttons on each row; the contact page with *Chat* and *Call*, verification (safety number), block/delete/rename, and a location card with the contact's position, the places they shared recently (kept for up to 24 hours, at most the newest 500 samples per share) and the route on a map. Chat disabled until `APPROVED`.
+- Contact list with relationship-status chips, incoming requests to approve or reject, and chat and call buttons on each row; the contact page with *Chat* and *Call*, verification (safety number), block/delete/rename, and a location card with the contact's position, the places they shared recently (kept for up to 24 hours, at most the newest 500 samples per share) and the route on a map, which opens full screen. Chat disabled until `APPROVED`.
 - Depends on: `domain`, `data` (`ContactRequestHandler`), `core:common`, `core:designsystem`, `core:location`, `core:map`.
 
 ### feature:chat

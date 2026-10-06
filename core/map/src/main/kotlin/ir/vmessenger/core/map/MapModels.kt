@@ -62,8 +62,9 @@ data class VmMapOptions(
     val styleToken: Int = 0,
     /**
      * True keeps the GL surface alive for the whole activity, so leaving and re-entering a tab
-     * costs nothing. False ties it to the current screen instead — the right choice for a map
-     * embedded in a detail screen, and the reason two maps never fight over one cached view.
+     * costs nothing. False gives the map a view of its own, made with the composable and destroyed
+     * with it — the right choice for a map embedded in a detail screen, and the reason two maps
+     * never fight over one cached view.
      */
     val persistent: Boolean = true,
 )

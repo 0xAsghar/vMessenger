@@ -454,6 +454,20 @@ while they share, otherwise where they last shared, with the route they shared d
 their location history: every place they shared with you inside the 24-hour retention window,
 newest first, with a stay (samples within 20 m of each other) collapsed into one entry timed when
 they arrived (`locationChanges` in `ContactLocationCard.kt`, listed by `ContactLocationHistory`).
+
+The map in the location card is a picture: it takes no gestures, and a transparent layer over it lets
+a drag that starts there scroll the page. A button in its bottom right corner opens it full screen
+(`ContactLocationMap.kt`): `ContactDetailRoute` draws a map over the whole screen, beside the scaffold
+so that it covers the title bar and the system bars too, with gestures on and a cross in its top right
+corner; system back shuts it as well. The two are different maps in turn, not one view moved: the
+card's is dropped while the full screen is open and made again when it shuts, because a live GL view
+moved to a parent of another size is not safe (§7). While it is open the camera follows the contact's
+position until the person moves the map, and the card that comes back is centred on the contact
+(`locationMapContent`); that the map is open survives a rotation. Both buttons are pinned to the map's
+right-hand corners in Persian as well as English (`MapCorner`, §6.1), and the card's sits above the row
+that MapLibre keeps for its logo and attribution button, which the Persian layout puts in the same
+corner.
+
 Formatting helpers — `distanceLabel`, `statusLabel`, `ContactStatusChip`, `KeyChangeShield` — live in
 `ContactFormatting.kt`.
 
@@ -623,7 +637,10 @@ the root, only technical text changes direction: IP addresses, ports, host names
 and logs are laid out left to right in both languages (`VmCodeBlock`, the `Ltr` wrapper in
 `feature:provision`, the addresses under *Your servers*) and keep ASCII digits. The time row of the
 date picker and the voice-message player are also laid out left to right, but their numbers use the
-language's digits. A few other files read `LocalLayoutDirection` rather than set it:
+language's digits. The buttons floating over the contact page's map — *full screen* and its cross —
+stay in the map's right-hand corners in both languages, because a map is not mirrored and neither
+are the controls on it: `MapCorner` pins the layout direction to left to right around them. A few
+other files read `LocalLayoutDirection` rather than set it:
 [`ComposerMicButton.kt`](../feature/chat/src/main/kotlin/ir/vmessenger/feature/chat/voice/ComposerMicButton.kt)
 to mirror the slide-to-cancel gesture and `ConversationList.kt` to mirror swipe-to-reply — a gesture
 direction is not something the framework can mirror for you — and `VmLinearProgress`,
@@ -682,6 +699,16 @@ puts Persian developer text into `AppError` messages; the UI never renders it, b
 Map rendering is factored into `:core:map` so `feature:map` contains no drawing code at all — it
 supplies a `MapContent` and reads back callbacks.
 
+A persistent map (the Map tab) takes its `MapView` from `MapViewCache`: one per activity, detached and
+attached again as the tab is left and re-entered, always at the same size. Any other map owns its
+view: it is made with the composable, forwarded the screen's lifecycle and destroyed when the
+composable leaves (`MapViewCache.createOwned`), and its first camera move places the camera instead
+of flying to it (`MapController`). A map that has to show in two places on one screen — the contact
+page's card and its full screen — is therefore two maps in turn, never one view moved between
+parents: a live GL view moved to a parent of another size kept its old size about one time in five
+with a `SurfaceView`, and with a `TextureView` it now and then stayed blank (`ContactLocationMap`,
+§5.3).
+
 Pins are **pre-rendered Android bitmaps pushed into a MapLibre `SymbolLayer`**, not Compose drawing.
 Three files implement this:
 
@@ -692,8 +719,8 @@ Three files implement this:
   (the triangle that puts the pin tip on the coordinate).
 - [`MarkerBitmaps.kt`](../core/map/src/main/kotlin/ir/vmessenger/core/map/MarkerBitmaps.kt) assembles
   and caches them. `rememberMarkerBitmaps()` builds a `MarkerChrome` from `VmTheme.colors`, so pins
-  follow the app's theme. The base map does not: `MapRoute` and `ContactLocationCard` pick the light
-  or dark vector style (`MapStyle.forTheme`) from `isSystemInDarkTheme()`, the phone's setting.
+  follow the app's theme. The base map does not: `MapRoute` and the contact page's map
+  (`ContactLocationMap`) pick the light or dark vector style (`MapStyle.forTheme`) from `isSystemInDarkTheme()`, the phone's setting.
   `bitmap(marker)` is an LRU cache of 32 entries keyed on `MapMarker.iconKey`, and `imageId(marker)` carries a palette tag so a theme flip does not
   serve a stale image under the same id.
 - [`MarkerLayer.kt`](../core/map/src/main/kotlin/ir/vmessenger/core/map/MarkerLayer.kt) owns one
