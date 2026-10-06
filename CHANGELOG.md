@@ -13,6 +13,13 @@ version** (currently 26, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Typed text no longer starts in the middle of a field.** With the app in Persian, English typed into
+  a field began about halfway along it, and with the app in English, Persian did. It affected the
+  message box, the search bars and every other text field. Text now starts at the edge of its own
+  script, the left for English and the right for Persian, in either language of the app.
+
 ## [2.2.3] - 2026-10-06
 
 The map on a contact's page opens full screen. No database or wire changes: schema stays 26, protocol

@@ -125,7 +125,7 @@ One more from that table, about nodes rather than messages:
 - **Room schemas 3, 4, 5 and 11 were never committed versions**, so the exported schema history has gaps. The migration chain itself is continuous and is replayed 1 → 26 on a real SQLite engine in a JVM test.
 - **Feature flags gate unproven code paths, not absent ones** (L14). Turning on peer exchange, embedded DHT, relay-peer mode or UDP attempts in the debug screen enables code that the default build does not exercise. (Store-and-forward left this list in 1.1 and is on by default.)
 - **Map pin rendering has never been visually verified**, because `screencap` returns a black image on the software-GPU emulator MapLibre renders on. See [docs/UI.md](docs/UI.md) §8.
-- **Compose UI tests are almost absent, and there is no accessibility audit.** Two instrumented tests in `app/src/androidTest` (swipe-to-go-back and bidi text rendering) need a device and are not run by CI; otherwise the presentation layer is covered by ViewModel unit tests only.
+- **Compose UI tests are almost absent, and there is no accessibility audit.** Three instrumented tests in `app/src/androidTest` (swipe-to-go-back, bidi text rendering and where typed text starts in a field) need a device and are not run by CI; otherwise the presentation layer is covered by ViewModel unit tests only.
 
 ---
 

@@ -81,7 +81,8 @@ fun VmSearchBar(
                     .weight(1f)
                     .focusRequester(focus),
                 decorationBox = { inner ->
-                    Box(contentAlignment = Alignment.CenterStart) {
+                    // propagateMinConstraints: the text fills the bar and takes its own direction's edge.
+                    Box(contentAlignment = Alignment.CenterStart, propagateMinConstraints = true) {
                         if (query.isEmpty()) {
                             VmText(text = placeholder, style = style, color = c.textPlaceholder, maxLines = 1)
                         }

@@ -161,8 +161,12 @@ internal fun FieldFrame(
                 ),
         ) {
             leadingIcon?.invoke()
+            // propagateMinConstraints: the text node inside a field is only as wide as its text (and ten
+            // characters, at least) unless the frame makes it fill. Left narrow, it sits at the layout's
+            // start edge and text running the other way lands at its far edge, in the middle of the field.
             Box(
                 contentAlignment = Alignment.CenterStart,
+                propagateMinConstraints = true,
                 modifier = Modifier
                     .weight(1f)
                     .padding(vertical = TEXT_VERTICAL),

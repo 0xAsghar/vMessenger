@@ -149,8 +149,11 @@ private fun ComposerField(
             .padding(vertical = VmSpacing.xxs)
             .heightIn(min = FIELD_MIN_HEIGHT - VmSpacing.xs, max = FIELD_MAX_HEIGHT),
         decorationBox = { inner ->
+            // propagateMinConstraints: so the text node fills the pill, and text takes the edge its own
+            // direction calls for instead of sitting inside a node ten characters wide (see VmTextField).
             Box(
                 contentAlignment = Alignment.CenterStart,
+                propagateMinConstraints = true,
                 modifier = Modifier
                     .background(c.bgSubtle, FieldShape)
                     .padding(horizontal = VmSpacing.lg, vertical = FIELD_TEXT_VERTICAL),

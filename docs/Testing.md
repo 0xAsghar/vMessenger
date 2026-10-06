@@ -45,7 +45,7 @@ Detekt is applied to every subproject from the root build with a shared config (
 | `:core:nodesetup` | `ContractTest` (the script's codes, steps and protocol match the Kotlin), `ProtocolTest`, `InstallResultTest`, `NodeSetupEngineTest` (a whole setup, resume after a dropped follow, host key changed or not trusted, decisions); `ProvisionE2eTest` runs only through the harness (§2.1) |
 | `:node` | see §2 |
 
-Two instrumented tests live in `app/src/androidTest` — `SwipeToGoBackTest` and `BidiRenderingTest`, which need a real text layout and gesture dispatch. They run on a device or emulator (`./gradlew :app:connectedDebugAndroidTest`) and are not part of `unitTests` or CI; everything else runs on the JVM.
+Three instrumented tests live in `app/src/androidTest` — `SwipeToGoBackTest`, `BidiRenderingTest` and `FieldAlignmentTest`, which need a real text layout, gesture dispatch and drawn pixels (`FieldAlignmentTest` renders the composer, the text field and the search bar in both layout directions with English and Persian text, and measures from a screenshot where the glyphs start; it also leaves the pictures in the app's external files directory, `field-alignment/`). They run on a device or emulator (`./gradlew :app:connectedDebugAndroidTest`) and are not part of `unitTests` or CI; everything else runs on the JVM. `connectedDebugAndroidTest` installs on every attached device, so with others attached (an emulator you want to keep as it is, say) build `:app:assembleDebug :app:assembleDebugAndroidTest`, `adb -s <serial> install -r -t` both APKs and run `adb -s <serial> shell am instrument -w ir.vmessenger.android.test/androidx.test.runner.AndroidJUnitRunner`.
 
 ### Migrations are replayed on a real SQLite engine
 

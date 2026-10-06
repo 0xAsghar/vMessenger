@@ -650,6 +650,15 @@ Because direction comes from the app language rather than from each layout, the 
 `android:supportsRtl="true"` matters only for the small amount of View-based surface (the map, the
 splash), and every Compose layout must use `start`/`end` rather than `left`/`right`.
 
+**A field's text starts at the edge of its own script.** Typed text takes its direction from its content
+like every other text (`TextDirection.Content`, above), so English sits at the left of a field and Persian
+at the right, whichever language the app is in. That only works if the text node fills the field. Compose
+makes it as wide as its text and at least ten characters, so a node left at that is parked at the layout's
+start edge, and text running the other way ends up at that node's far edge: the middle of the field. The
+three frames around a text node — `FieldFrame` (the shared field and the secret field), `Composer` and
+`VmSearchBar` — therefore pass their minimum constraints on to it (`propagateMinConstraints`), and
+`FieldAlignmentTest` measures where the glyphs land.
+
 ### 6.2 What is not enforced by the build
 
 Persian-first is decided at run time, not by the build configuration, and it is worth being precise
@@ -763,6 +772,6 @@ only when that service is not running), so the puck adds no location registratio
   (`DeliveryTicks` carries the state name, decorative icons are marked as such), but there
   has been no TalkBack pass, no contrast measurement against WCAG AA, and no test of the layouts
   under large system font scales.
-- **Compose UI tests are few.** Two instrumented tests in `app/src/androidTest` (`SwipeToGoBackTest`,
-  `BidiRenderingTest`) run on a device and are not part of CI; otherwise the presentation layer is
+- **Compose UI tests are few.** Three instrumented tests in `app/src/androidTest` (`SwipeToGoBackTest`,
+  `BidiRenderingTest`, `FieldAlignmentTest`) run on a device and are not part of CI; otherwise the presentation layer is
   covered by ViewModel and JVM unit tests only; see [Testing.md](Testing.md).

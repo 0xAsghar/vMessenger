@@ -378,7 +378,7 @@ from what the finished one left.
 - Data: coordinator and repository tests against hand-written fake DAOs and networking fakes (there is no Robolectric and no in-memory Room); migrations are replayed on an in-memory SQLite through `sqlite-jdbc` in `core:database`.
 - Crypto: known-answer tests and round-trip seal/open tests; negative tests for tampered frames and replays. See [Security.md](Security.md).
 - Network/DHT: deterministic tests using an in-memory transport and a simulated DHT; TTL/refresh/expiry behavior tests. See [DHT.md](DHT.md).
-- Presentation: JVM tests of UI-state mapping and screen logic in the feature modules (contacts, chat, identity, lock, provision); two instrumented Compose tests in `app/src/androidTest` (swipe-back gesture, bidi rendering) run on a device and are not part of `unitTests`.
+- Presentation: JVM tests of UI-state mapping and screen logic in the feature modules (contacts, chat, identity, lock, provision); three instrumented Compose tests in `app/src/androidTest` (swipe-back gesture, bidi rendering, where typed text starts in a field) run on a device and are not part of `unitTests`.
 - Shared fakes and fixtures live in each module's own `src/test` source set; there is no separate testing module. `./gradlew unitTests` runs every module's unit tests (Android `testDebugUnitTest` plus the JVM modules' `test`) — see [Testing.md](Testing.md).
 
 ---
