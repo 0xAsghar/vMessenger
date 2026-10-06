@@ -13,6 +13,11 @@ version** (currently 26, [docs/Database.md](docs/Database.md)).
 
 ## [Unreleased]
 
+## [2.2.3] - 2026-10-06
+
+The map on a contact's page opens full screen. No database or wire changes: schema stays 26, protocol
+major 2.
+
 ### Added
 
 - **The map on a contact's page opens full screen.** A button in the map's bottom right corner opens
