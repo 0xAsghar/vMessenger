@@ -24,7 +24,7 @@ Detekt is applied to every subproject from the root build with a shared config (
 
 ### Where the tests live
 
-166 test files across 22 modules:
+167 test files across 22 modules:
 
 | Module | Focus |
 |---|---|
