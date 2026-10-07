@@ -169,8 +169,8 @@ T3 = T2 || canon(step3)
 
 | Signature | Signer | Bytes signed |
 |---|---|---|
-| `sig2` (step 2) | responder identity key | `"vmessenger-hs-v2-sig-responder" || SHA256(T2)` |
-| `sig3` (step 3) | initiator identity key | `"vmessenger-hs-v2-sig-initiator" || SHA256(T3)` |
+| `sig2` (step 2) | responder identity key | `"vmessenger-hs-v2-sig-responder" \|\| SHA256(T2)` |
+| `sig3` (step 3) | initiator identity key | `"vmessenger-hs-v2-sig-initiator" \|\| SHA256(T3)` |
 
 The point of the v2 rewrite: `T2` includes the responder's own `e_R`, `s_R`, `id_R` and capabilities. In the 0.x protocol the responder signed only the initiator's first message, so an active attacker could replace the responder's DH keys and keep the signature valid. Per-role domain tags stop a signature from one role being replayed as the other.
 

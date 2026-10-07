@@ -203,7 +203,7 @@ The passphrase is created on first use, wrapped by the Keystore master key and s
 |---|---|
 | Master key | AES-256-GCM, alias `vmessenger_master`, non-exportable, in `AndroidKeyStore` |
 | Hardware | StrongBox requested on API 28+; **any** failure (not just `StrongBoxUnavailableException`) falls back to the TEE-backed key, because many devices advertise the API without the hardware and refusing would make the app permanently unusable there |
-| Blob format | `0x02 || iv(12) || ciphertext` — the version byte makes the format self-describing; unversioned 0.x dev blobs are **rejected**, never guessed at |
+| Blob format | `0x02 \|\| iv(12) \|\| ciphertext` — the version byte makes the format self-describing; unversioned 0.x dev blobs are **rejected**, never guessed at |
 | Associated data | `"vmessenger:" + alias` — so a blob wrapped for the database cannot be unwrapped as an attachment key or an identity key |
 | Aliases | `db`, `attachments`, `identity-ed25519`, `identity-x25519-static` — all under `vmessenger_master`. Strict mode wraps under a **separate** Keystore key, `vmessenger_app_lock`, with the AAD alias `db-strict` (§7.4) |
 
@@ -288,7 +288,7 @@ install that still opens rather than one that opens with neither key.
 | Screenshot / recents protection | `FLAG_SECURE` set in `MainActivity.onCreate` before anything renders, then driven by `PrivacyPreferences.screenSecurityEnabled` (default **on**). A screen holding a secret forces it on whatever that switch says (`RequireSecureWindow`, reference-counted in `SecureWindowRequests`); New node does |
 | Lock-screen privacy | The message channel and every message, location-request and contact-request notification are `VISIBILITY_PRIVATE`; the public version carries no sender and no preview. With "hide notification content" on it is `VISIBILITY_SECRET`, so nothing reaches the lock screen (`core/notifications/.../MessageNotificationManager.kt`). Calls are the exception: a ringing call names the caller over the lock screen (a `VISIBILITY_PUBLIC` channel and a full-screen call screen, `CallNotificationManager`), whatever that switch says |
 | No cloud backup of app data | `android:allowBackup="false"` |
-| Foreground service type | `remoteMessaging|dataSync` — `remoteMessaging` (API 34+) is exempt from Android 15's 6 h `dataSync` cap and from the Android 14 `BOOT_COMPLETED` start restriction |
+| Foreground service type | `remoteMessaging\|dataSync` — `remoteMessaging` (API 34+) is exempt from Android 15's 6 h `dataSync` cap and from the Android 14 `BOOT_COMPLETED` start restriction |
 | Microphone service only where a user action reached | `CallState.holdsMicrophoneService` is false in `Idle`, `IncomingRinging` and `Ending`, so a ringing phone holds a notification and nothing more; the microphone service starts on the answer (§13) |
 | Restart after reboot | `BootCompletedReceiver` restarts the network service without the user opening the app |
 | Debug surfaces gated | Debug and Logs screens require developer mode (`PrivacyPreferences.developerModeEnabled`, default false, unlocked by seven taps on the version row in About) |
