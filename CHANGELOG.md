@@ -780,7 +780,9 @@ before a 1.x build is installed**, and identity and contacts do not survive that
 - **The reference node was hardened**: connection and record limits, listener-proof freshness and
   replay rejection, record expiry, and rejection counters on `/healthz?verbose=1`.
 
-[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v2.2.2...HEAD
+[Unreleased]: https://github.com/0xAsghar/vMessenger/compare/v2.2.4...HEAD
+[2.2.4]: https://github.com/0xAsghar/vMessenger/compare/v2.2.3...v2.2.4
+[2.2.3]: https://github.com/0xAsghar/vMessenger/compare/v2.2.2...v2.2.3
 [2.2.2]: https://github.com/0xAsghar/vMessenger/compare/v2.0.2...v2.2.2
 [2.0.2]: https://github.com/0xAsghar/vMessenger/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/0xAsghar/vMessenger/compare/v2.0.0...v2.0.1
